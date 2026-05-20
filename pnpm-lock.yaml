@@ -35,6 +35,9 @@ importers:
       connect-pg-simple:
         specifier: ^10.0.0
         version: 10.0.0
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       express-session:
         specifier: ^1.19.0
         version: 1.19.0

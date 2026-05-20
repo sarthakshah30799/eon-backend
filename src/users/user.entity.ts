@@ -14,6 +14,12 @@ export class User {
   @Column()
   password: string;
 
+  @Column({ nullable: true })
+  countryCode: string;
+
+  @Column({ nullable: true })
+  mobileNumber: string;
+
   @Column({ default: true })
   isActive: boolean;
 

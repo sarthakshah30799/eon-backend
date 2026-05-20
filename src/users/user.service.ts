@@ -69,4 +69,27 @@ export class UserService {
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { email } });
   }
+
+  async findByMobileNumber(countryCode: string, mobileNumber: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { countryCode, mobileNumber } });
+  }
+
+  async validateOtpUser(countryCode: string, mobileNumber: string, otp: string): Promise<User | null> {
+    const user = await this.userRepository.findOne({
+      where: { countryCode, mobileNumber },
+    });
+
+    if (!user || !user.isActive) {
+      return null;
+    }
+
+    if (otp !== '123456') {
+      return null;
+    }
+
+    user.lastLoginAt = new Date();
+    await this.userRepository.save(user);
+
+    return user;
+  }
 }

@@ -15,6 +15,10 @@ export class AuthService {
     return this.userService.validateUser(loginUserDto);
   }
 
+  async validateOtpUser(verifyOtpDto: { countryCode: string, mobileNumber: string, otp: string }): Promise<User | null> {
+    return this.userService.validateOtpUser(verifyOtpDto.countryCode, verifyOtpDto.mobileNumber, verifyOtpDto.otp);
+  }
+
   async login(user: User, session: any): Promise<{ message: string; sessionsInvalidated: number }> {
     // Invalidate all previous sessions for this user
     await this.sessionService.invalidateUserSessions(user.id, session.id);
