@@ -35,6 +35,7 @@ export class ConfigService {
       username: this.get('DB_USERNAME'),
       password: this.get('DB_PASSWORD'),
       database: this.get('DB_DATABASE'),
+      database2: this.get('DB_DATABASE2'),
       synchronize: this.getBoolean('DB_SYNCHRONIZE') || false,
       migrationsRun: this.getBoolean('DB_MIGRATIONS_RUN') || true,
     };

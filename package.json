@@ -22,7 +22,13 @@
     "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
     "schema:sync": "npm run typeorm -- schema:sync -d src/database/data-source.ts",
-    "schema:drop": "npm run typeorm -- schema:drop -d src/database/data-source.ts"
+    "schema:drop": "npm run typeorm -- schema:drop -d src/database/data-source.ts",
+    "migration:generate:db2": "npm run typeorm -- migration:generate src/migrations2/Migration -d src/database/data-source2.ts",
+    "migration:create:db2": "npm run typeorm -- migration:create src/migrations2/Migration",
+    "migration:run:db2": "npm run typeorm -- migration:run -d src/database/data-source2.ts",
+    "migration:revert:db2": "npm run typeorm -- migration:revert -d src/database/data-source2.ts",
+    "schema:sync:db2": "npm run typeorm -- schema:sync -d src/database/data-source2.ts",
+    "schema:drop:db2": "npm run typeorm -- schema:drop -d src/database/data-source2.ts"
   },
   "keywords": [],
   "author": "",
