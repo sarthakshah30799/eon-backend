@@ -15,9 +15,9 @@ export class BaseEntity {
   @UpdateDateColumn({ type: "timestamptz" })
   updatedAt: Date;
 
-  @Column({ type: "uuid", default: false })
+  @Column({ type: "uuid" })
   createdBy: string;
 
-  @Column({ type: "uuid", default: false })
+  @Column({ type: "uuid" })
   updatedBy: string;
 }
