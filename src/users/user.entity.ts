@@ -1,34 +1,45 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+// user.entity.ts
+import { Entity, Column, Index } from "typeorm";
+import { BaseEntity } from "../base/base.entity";
 
-@Entity('users')
-export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+export enum UserStatus {
+  PENDING = "pending",
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+}
 
-  @Column({ unique: true })
-  email: string;
-
-  @Column()
-  name: string;
+@Entity("users")
+export class User extends BaseEntity {
+  @Column({ type: "citext", unique: true })
+  userCode: string;
 
   @Column()
   password: string;
 
-  @Column({ nullable: true })
+  @Column({ type: "citext" })
+  firstName: string;
+  
+  @Column({ type: "citext" })
+  lastName: string;
+
+  @Index()
+  @Column({ type: "citext", unique: true })
+  email: string;
+
+  @Column({ type: "char", length: 2, default: "IN" })
   countryCode: string;
 
-  @Column({ nullable: true })
-  mobileNumber: string;
+  @Column({ type: "text" })
+  phoneNumber: string;
 
-  @Column({ default: true })
-  isActive: boolean;
+  @Index()
+  @Column({ type: "enum", enum: UserStatus, default: UserStatus.PENDING })
+  status: UserStatus;
+
+  @Index()
+  @Column({ type: "boolean", default: false })
+  isHo: boolean;
 
   @Column({ nullable: true })
   lastLoginAt: Date;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
 }
