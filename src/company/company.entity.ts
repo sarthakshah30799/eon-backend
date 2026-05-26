@@ -1,9 +1,20 @@
 // company.entity.ts
-import { Entity, Column } from "typeorm";
+import { Entity, Column, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
+import { Branch } from "../branches/branch.entity";
+import { RolesMenuPermission } from "../roles-menu-permission/roles-menu-permission.entity";
 
 @Entity("company")
 export class Company extends BaseEntity {
+  @OneToMany(() => Branch, (branch) => branch.company)
+  branches: Branch[];
+
+  @OneToMany(
+    () => RolesMenuPermission,
+    (menuPermission) => menuPermission.company
+  )
+  menuPermissions: RolesMenuPermission[];
+
   @Column({ type: "citext" })
   name: string;
 

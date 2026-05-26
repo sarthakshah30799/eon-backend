@@ -1,6 +1,7 @@
 // user.entity.ts
-import { Entity, Column, Index } from "typeorm";
+import { Entity, Column, Index, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
+import { UserRole } from "../user-roles/user-role.entity";
 
 export enum UserStatus {
   PENDING = "pending",
@@ -10,6 +11,9 @@ export enum UserStatus {
 
 @Entity("users")
 export class User extends BaseEntity {
+  @OneToMany(() => UserRole, (userRole) => userRole.user)
+  userRoles: UserRole[];
+
   @Column({ type: "citext", unique: true })
   userCode: string;
 

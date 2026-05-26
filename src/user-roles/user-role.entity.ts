@@ -1,4 +1,4 @@
-// user-menu-permission.entity.ts
+// user-role.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -8,20 +8,24 @@ import {
   Unique,
 } from "typeorm";
 import { User } from "../users/user.entity";
+import { Role } from "../roles/role.entity";
 import { Branch } from "../branches/branch.entity";
 import { Counter } from "../counters/counter.entity";
-import { Menu } from "../menu/menu.entity";
-import { Permission } from "../permissions/permission.entity";
 
-@Entity("user_menu_permissions")
-@Unique(["user", "branch", "counter", "menu", "permission"])
-export class UserMenuPermission {
+@Entity("user_roles")
+@Unique(["user", "role", "branch", "counter"])
+export class UserRole {
   @PrimaryGeneratedColumn("uuid") id: string;
 
   @Index()
-  @ManyToOne(() => User, { onDelete: "CASCADE" })
+  @ManyToOne(() => User, (user) => user.userRoles, { onDelete: "CASCADE" })
   @JoinColumn({ name: "user_id" })
   user: User;
+
+  @Index()
+  @ManyToOne(() => Role, (role) => role.userRoles, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "role_id" })
+  role: Role;
 
   @Index()
   @ManyToOne(() => Branch, { onDelete: "CASCADE" })
@@ -32,14 +36,4 @@ export class UserMenuPermission {
   @ManyToOne(() => Counter, { onDelete: "CASCADE" })
   @JoinColumn({ name: "counter_id" })
   counter: Counter;
-
-  @Index()
-  @ManyToOne(() => Menu, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "menu_id" })
-  menu: Menu;
-
-  @Index()
-  @ManyToOne(() => Permission, { onDelete: "CASCADE" })
-  @JoinColumn({ name: "permission_id" })
-  permission: Permission;
 }

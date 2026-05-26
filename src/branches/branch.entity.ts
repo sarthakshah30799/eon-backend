@@ -1,9 +1,29 @@
 // branch.entity.ts
-import { Entity, Column, Index } from "typeorm";
+import {
+  Entity,
+  Column,
+  Index,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+} from "typeorm";
 import { BaseEntity } from "../base/base.entity";
+import { Company } from "../company/company.entity";
+import { Counter } from "../counters/counter.entity";
 
 @Entity("branches")
 export class Branch extends BaseEntity {
+  @OneToMany(() => Counter, (counter) => counter.branch)
+  counters: Counter[];
+
+  @Index()
+  @ManyToOne(() => Company, (company) => company.branches, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "company_id" })
+  company: Company;
+
   @Column({ type: "citext", unique: true })
   branchCode: string;
 
