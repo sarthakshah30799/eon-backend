@@ -10,6 +10,7 @@ export const AppDataSource2 = new DataSource({
   username: configService.database.username,
   password: configService.database.password,
   database: configService.database.database2,
+  ssl: configService.database.ssl,
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations2/*{.ts,.js}'],
   synchronize: configService.database.synchronize,

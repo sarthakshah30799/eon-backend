@@ -5,7 +5,27 @@ import { DataSource } from 'typeorm';
 export class SessionService {
   constructor(private readonly dataSource: DataSource) {}
 
+  private readonly sessionTableName = 'user_sessions';
+
+  private async ensureSessionTable(): Promise<void> {
+    await this.dataSource.query(`
+      CREATE TABLE IF NOT EXISTS "${this.sessionTableName}" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "${this.sessionTableName}_pkey" PRIMARY KEY ("sid")
+      )
+    `);
+
+    await this.dataSource.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_${this.sessionTableName}_expire"
+      ON "${this.sessionTableName}" ("expire")
+    `);
+  }
+
   async invalidateUserSessions(userId: string, currentSessionId?: string): Promise<void> {
+    await this.ensureSessionTable();
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -30,9 +50,11 @@ export class SessionService {
   }
 
   async getUserActiveSessions(userId: string): Promise<any[]> {
+    await this.ensureSessionTable();
+
     const result = await this.dataSource.query(
       `SELECT sid, sess, expire 
-       FROM user_sessions 
+       FROM "${this.sessionTableName}" 
        WHERE sess::jsonb ? 'userId' 
        AND (sess::jsonb->>'userId') = $1
        AND expire > NOW()
@@ -43,16 +65,20 @@ export class SessionService {
   }
 
   async invalidateSession(sessionId: string): Promise<void> {
+    await this.ensureSessionTable();
+
     await this.dataSource.query(
-      'DELETE FROM user_sessions WHERE sid = $1',
+      `DELETE FROM "${this.sessionTableName}" WHERE sid = $1`,
       [sessionId]
     );
   }
 
   async getSessionInfo(sessionId: string): Promise<any> {
+    await this.ensureSessionTable();
+
     const result = await this.dataSource.query(
       `SELECT sid, sess, expire 
-       FROM user_sessions 
+       FROM "${this.sessionTableName}" 
        WHERE sid = $1`,
       [sessionId]
     );

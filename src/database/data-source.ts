@@ -16,12 +16,9 @@ export const AppDataSource = new DataSource({
   username: configService.database.username,
   password: configService.database.password,
   database: configService.database.database,
+  ssl: configService.database.ssl,
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: configService.database.synchronize,
-  // Enable SSL when DB_SSL=true. Set DB_SSL_REJECT_UNAUTHORIZED=false to allow self-signed certs.
-  ssl: process.env.DB_SSL === 'true'
-    ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' }
-    : false,
   logging: true,
 });

@@ -11,10 +11,20 @@ export class SessionMiddleware implements NestMiddleware {
   private configService = new ConfigService();
 
   use(req: Request, res: Response, next: NextFunction) {
+    const ssl = this.configService.database.ssl;
+
     session({
       store: new PgSession({
-        conString: `postgresql://${this.configService.database.username}:${this.configService.database.password}@${this.configService.database.host}:${this.configService.database.port}/${this.configService.database.database}`,
+        conObject: {
+          host: this.configService.database.host,
+          port: this.configService.database.port,
+          user: this.configService.database.username,
+          password: this.configService.database.password,
+          database: this.configService.database.database,
+          ssl,
+        },
         tableName: 'user_sessions',
+        createTableIfMissing: true,
       }),
       secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
       resave: false,

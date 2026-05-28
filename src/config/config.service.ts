@@ -24,11 +24,20 @@ export class ConfigService {
     return value.toLowerCase() === 'true';
   }
 
+  getOptionalBoolean(key: string): boolean | undefined {
+    const value = process.env[key];
+    if (value === undefined) {
+      return undefined;
+    }
+    return value.toLowerCase() === 'true';
+  }
+
   get port(): number {
     return this.getNumber('PORT') || 3000;
   }
 
   get database() {
+    const sslEnabled = this.getOptionalBoolean('DB_SSL') === true;
     return {
       host: this.get('DB_HOST'),
       port: this.getNumber('DB_PORT'),
@@ -38,6 +47,9 @@ export class ConfigService {
       database2: this.get('DB_DATABASE2'),
       synchronize: this.getBoolean('DB_SYNCHRONIZE') || false,
       migrationsRun: this.getBoolean('DB_MIGRATIONS_RUN') || true,
+      ssl: sslEnabled
+        ? { rejectUnauthorized: this.getOptionalBoolean('DB_SSL_REJECT_UNAUTHORIZED') !== false }
+        : false,
     };
   }
 }
