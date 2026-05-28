@@ -1,12 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class SessionService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async invalidateUserSessions(userId: number, currentSessionId?: string): Promise<void> {
+  async invalidateUserSessions(userId: string, currentSessionId?: string): Promise<void> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -16,7 +15,7 @@ export class SessionService {
       await queryRunner.query(
         `DELETE FROM user_sessions 
          WHERE sess::jsonb ? 'userId' 
-         AND (sess::jsonb->>'userId')::integer = $1
+         AND (sess::jsonb->>'userId') = $1
          ${currentSessionId ? 'AND sid != $2' : ''}`,
         currentSessionId ? [userId, currentSessionId] : [userId]
       );
@@ -30,12 +29,12 @@ export class SessionService {
     }
   }
 
-  async getUserActiveSessions(userId: number): Promise<any[]> {
+  async getUserActiveSessions(userId: string): Promise<any[]> {
     const result = await this.dataSource.query(
       `SELECT sid, sess, expire 
        FROM user_sessions 
        WHERE sess::jsonb ? 'userId' 
-       AND (sess::jsonb->>'userId')::integer = $1
+       AND (sess::jsonb->>'userId') = $1
        AND expire > NOW()
        ORDER BY expire DESC`,
       [userId]

@@ -21,10 +21,15 @@ async function bootstrap() {
   // Swagger configuration
   const config = new DocumentBuilder()
     .setTitle('Maraekat API')
-    .setDescription('API documentation for Maraekat application with user authentication')
+    .setDescription('API documentation for Maraekat application with user authentication, CRUD operations for companies, branches, counters, roles, users, and dynamic menu system.')
     .setVersion('1.0')
-    .addTag('auth')
-    .addTag('users')
+    .addTag('auth', 'Authentication endpoints')
+    .addTag('users', 'User management')
+    .addTag('companies', 'Company management')
+    .addTag('branches', 'Branch management')
+    .addTag('counters', 'Counter management')
+    .addTag('roles', 'Role management')
+    .addTag('menus', 'Dynamic menu management')
     .addCookieAuth('sessionId')
     .build();
 
