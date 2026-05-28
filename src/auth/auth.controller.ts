@@ -88,8 +88,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user' })
   @ApiResponse({ status: 200, description: 'Current user data', type: UserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getCurrentUser(@Req() req): Promise<UserResponseDto> {
-    return this.userService.findById(req.session.userId);
+  async getCurrentUser(@Session() session: any): Promise<UserResponseDto> {
+    return this.userService.findById(session.userId);
   }
 
   @Get('check')

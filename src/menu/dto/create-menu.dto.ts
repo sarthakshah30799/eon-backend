@@ -1,0 +1,34 @@
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsInt, IsBoolean } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateMenuDto {
+  @ApiProperty({ description: 'Menu item name', example: 'Company Profile' })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty({ description: 'Route path', example: '/master/system-setups/company-profile', required: false })
+  @IsString()
+  @IsOptional()
+  path?: string;
+
+  @ApiProperty({ description: 'Icon identifier', required: false })
+  @IsString()
+  @IsOptional()
+  icon?: string;
+
+  @ApiProperty({ description: 'Parent menu ID (UUID)', required: false })
+  @IsUUID()
+  @IsOptional()
+  parentId?: string;
+
+  @ApiProperty({ description: 'Sort order', example: 0, required: false })
+  @IsInt()
+  @IsOptional()
+  sortOrder?: number;
+
+  @ApiProperty({ description: 'Is active', example: true, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+}

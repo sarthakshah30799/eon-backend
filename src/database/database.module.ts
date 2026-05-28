@@ -14,9 +14,10 @@ import { ConfigService } from '../config/config.service';
         username: configService.database.username,
         password: configService.database.password,
         database: configService.database.database,
+        ssl: configService.database.ssl,
         entities: [__dirname + '/../**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-        synchronize: false,
+        synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,
         logging: true,
       }),
@@ -32,6 +33,7 @@ import { ConfigService } from '../config/config.service';
         username: configService.database.username,
         password: configService.database.password,
         database: configService.database.database2,
+        ssl: configService.database.ssl,
         entities: [__dirname + '/../**/*.entity{.ts,.js}'], // Using the same entities, or you can separate them
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,

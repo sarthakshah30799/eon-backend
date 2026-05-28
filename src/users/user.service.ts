@@ -1,9 +1,10 @@
-import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User } from './user.entity';
+import { User, UserStatus } from './user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
@@ -14,7 +15,14 @@ export class UserService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
+  async findAll(): Promise<UserResponseDto[]> {
+    const users = await this.userRepository.find({
+      order: { createdAt: 'DESC' },
+    });
+    return users.map(UserResponseDto.fromEntity);
+  }
+
+  async create(createUserDto: CreateUserDto, userId?: string): Promise<UserResponseDto> {
     const existingUser = await this.userRepository.findOne({
       where: { email: createUserDto.email },
     });
@@ -23,15 +31,60 @@ export class UserService {
       throw new ConflictException('User with this email already exists');
     }
 
+    const existingCode = await this.userRepository.findOne({
+      where: { userCode: createUserDto.userCode },
+    });
+
+    if (existingCode) {
+      throw new ConflictException('User with this user code already exists');
+    }
+
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
     const user = this.userRepository.create({
       ...createUserDto,
       password: hashedPassword,
+      createdBy: userId || '00000000-0000-0000-0000-000000000000',
+      updatedBy: userId || '00000000-0000-0000-0000-000000000000',
     });
 
     const savedUser = await this.userRepository.save(user);
     return UserResponseDto.fromEntity(savedUser);
+  }
+
+  async update(id: string, dto: UpdateUserDto, userId: string): Promise<UserResponseDto> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+
+    if (dto.email && dto.email !== user.email) {
+      const existing = await this.userRepository.findOne({ where: { email: dto.email } });
+      if (existing) {
+        throw new ConflictException('User with this email already exists');
+      }
+    }
+
+    if (dto.userCode && dto.userCode !== user.userCode) {
+      const existing = await this.userRepository.findOne({ where: { userCode: dto.userCode } });
+      if (existing) {
+        throw new ConflictException('User with this user code already exists');
+      }
+    }
+
+    Object.assign(user, dto);
+    user.updatedBy = userId;
+    const saved = await this.userRepository.save(user);
+    return UserResponseDto.fromEntity(saved);
+  }
+
+  async delete(id: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    await this.userRepository.remove(user);
+    return { message: `User with id ${id} deleted successfully` };
   }
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
@@ -39,7 +92,7 @@ export class UserService {
       where: { email: loginUserDto.email },
     });
 
-    if (!user || !user.isActive) {
+    if (!user || user.status !== UserStatus.ACTIVE) {
       return null;
     }
 
@@ -56,7 +109,7 @@ export class UserService {
     return user;
   }
 
-  async findById(id: number): Promise<UserResponseDto> {
+  async findById(id: string): Promise<UserResponseDto> {
     const user = await this.userRepository.findOne({ where: { id } });
     
     if (!user) {
@@ -70,16 +123,16 @@ export class UserService {
     return this.userRepository.findOne({ where: { email } });
   }
 
-  async findByMobileNumber(countryCode: string, mobileNumber: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { countryCode, mobileNumber } });
+  async findByMobileNumber(countryCode: string, phoneNumber: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { countryCode, phoneNumber } });
   }
 
-  async validateOtpUser(countryCode: string, mobileNumber: string, otp: string): Promise<User | null> {
+  async validateOtpUser(countryCode: string, phoneNumber: string, otp: string): Promise<User | null> {
     const user = await this.userRepository.findOne({
-      where: { countryCode, mobileNumber },
+      where: { countryCode, phoneNumber },
     });
 
-    if (!user || !user.isActive) {
+    if (!user || user.status !== UserStatus.ACTIVE) {
       return null;
     }
 

@@ -40,7 +40,7 @@ export class AuthService {
     return { message: 'Logout successful' };
   }
 
-  async getActiveSessions(userId: number): Promise<any[]> {
+  async getActiveSessions(userId: string): Promise<any[]> {
     return this.sessionService.getUserActiveSessions(userId);
   }
 }

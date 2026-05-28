@@ -3,6 +3,11 @@ import { ConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
 import { UserModule } from './users/user.module';
 import { AuthModule } from './auth/auth.module';
+import { CompanyModule } from './company/company.module';
+import { BranchModule } from './branches/branch.module';
+import { CounterModule } from './counters/counter.module';
+import { RoleModule } from './roles/role.module';
+import { MenuModule } from './menu/menu.module';
 import { SessionMiddleware } from './auth/session.middleware';
 
 @Module({
@@ -11,6 +16,11 @@ import { SessionMiddleware } from './auth/session.middleware';
     DatabaseModule,
     UserModule,
     AuthModule,
+    CompanyModule,
+    BranchModule,
+    CounterModule,
+    RoleModule,
+    MenuModule,
   ],
 })
 export class AppModule implements NestModule {
