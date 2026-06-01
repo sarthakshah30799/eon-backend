@@ -6,6 +6,7 @@ import { LoginUserDto } from '../users/dto/login-user.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { SendOtpDto, VerifyOtpDto } from './dto/otp.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
 import { UserService } from '../users/user.service';
 import { AuthenticatedGuard } from './guards/authenticated.guard';
 
@@ -81,6 +82,25 @@ export class AuthController {
   async logout(@Session() session: any) {
     return this.authService.logout(session);
   }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset' })
+  @ApiResponse({ status: 200, description: 'Password reset link successfully generated and logged' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiBody({ type: ForgotPasswordDto })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset user password' })
+  @ApiResponse({ status: 200, description: 'Password successfully reset' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  @ApiBody({ type: ResetPasswordDto })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.email, dto.token, dto.password);
+  }
+
 
   @Get('me')
   @UseGuards(AuthenticatedGuard)
