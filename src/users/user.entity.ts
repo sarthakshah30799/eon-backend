@@ -46,4 +46,11 @@ export class User extends BaseEntity {
 
   @Column({ nullable: true })
   lastLoginAt: Date;
+
+  @Column({ nullable: true })
+  resetPasswordToken: string;
+
+  @Column({ type: "timestamp", nullable: true })
+  resetPasswordExpires: Date;
 }
+
