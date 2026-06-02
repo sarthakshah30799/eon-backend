@@ -201,4 +201,15 @@ export class UserService {
 
     return user;
   }
+
+  async save(user: User): Promise<User> {
+    return this.userRepository.save(user);
+  }
+
+  async findByResetToken(email: string, token: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { email, resetPasswordToken: token },
+    });
+  }
 }
+

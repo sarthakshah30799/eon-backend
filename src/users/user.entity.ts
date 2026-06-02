@@ -50,4 +50,13 @@ export class User extends BaseEntity {
 
   @Column()
   password: string;
+
+  @Column({ nullable: true })
+  lastLoginAt: Date;
+
+  @Column({ nullable: true })
+  resetPasswordToken: string;
+
+  @Column({ type: "timestamp", nullable: true })
+  resetPasswordExpires: Date;
 }
