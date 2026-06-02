@@ -5,10 +5,11 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { RoleResponseDto } from './dto/role-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @ApiTags('roles')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard)
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('roles')
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
@@ -58,4 +59,24 @@ export class RoleController {
   async delete(@Param('id') id: string): Promise<{ message: string }> {
     return this.roleService.delete(id);
   }
+
+  @Get(':id/permissions')
+  @ApiOperation({ summary: 'Get permissions matrix for a role' })
+  @ApiParam({ name: 'id', description: 'Role UUID' })
+  @ApiResponse({ status: 200, description: 'Permissions matrix' })
+  async getPermissions(@Param('id') id: string) {
+    return this.roleService.getRolePermissions(id);
+  }
+
+  @Post(':id/permissions')
+  @ApiOperation({ summary: 'Update permissions matrix for a role' })
+  @ApiParam({ name: 'id', description: 'Role UUID' })
+  @ApiResponse({ status: 200, description: 'Success message' })
+  async updatePermissions(
+    @Param('id') id: string,
+    @Body() body: Record<string, Record<string, boolean>>,
+  ) {
+    return this.roleService.updateRolePermissions(id, body);
+  }
 }
+

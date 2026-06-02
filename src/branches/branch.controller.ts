@@ -5,10 +5,11 @@ import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchResponseDto } from './dto/branch-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @ApiTags('branches')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard)
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('branches')
 export class BranchController {
   constructor(private readonly branchService: BranchService) {}

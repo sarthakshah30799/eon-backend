@@ -1,104 +1,141 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsUUID, IsNumber, IsDateString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBranchDto {
-  @ApiProperty({ description: 'Company ID (UUID)', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', required: false })
+  @ApiProperty({ description: 'Company ID (UUID)', required: false })
   @IsUUID()
   @IsOptional()
   companyId?: string;
 
-  @ApiProperty({ description: 'Unique branch code', example: 'BR-001' })
+  @ApiProperty({ description: 'Branch Code', example: 'BR-001', maxLength: 20 })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(20)
   branchCode: string;
 
-  @ApiProperty({ description: 'Unique branch number', example: 1 })
-  @IsInt()
+  @ApiProperty({ description: 'Branch Number', example: 101 })
+  @IsNumber()
   @IsNotEmpty()
   branchNumber: number;
 
-  @ApiProperty({ description: 'Address line 1', example: '123 Main Street' })
+  @ApiProperty({ description: 'Address Line 1', example: '123 Business Road', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(250)
   address1: string;
 
-  @ApiProperty({ description: 'Address line 2', required: false })
+  @ApiProperty({ description: 'Address Line 2', required: false, maxLength: 250 })
   @IsString()
   @IsOptional()
+  @MaxLength(250)
   address2?: string;
 
-  @ApiProperty({ description: 'Address line 3', required: false })
+  @ApiProperty({ description: 'Address Line 3', required: false, maxLength: 250 })
   @IsString()
   @IsOptional()
+  @MaxLength(250)
   address3?: string;
 
-  @ApiProperty({ description: 'Pincode', example: '400001' })
+  @ApiProperty({ description: 'City', example: 'Mumbai', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
-  pincode: string;
-
-  @ApiProperty({ description: 'City', example: 'Mumbai' })
-  @IsString()
-  @IsNotEmpty()
+  @MaxLength(250)
   city: string;
 
-  @ApiProperty({ description: 'State', example: 'Maharashtra' })
+  @ApiProperty({ description: 'State', example: 'Maharashtra', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(250)
   state: string;
 
-  @ApiProperty({ description: 'Country', example: 'India', required: false })
+  @ApiProperty({ description: 'GST State', required: false, maxLength: 250 })
   @IsString()
   @IsOptional()
-  country?: string;
+  @MaxLength(250)
+  gstState?: string;
 
-  @ApiProperty({ description: 'State code (2 chars)', example: 'MH' })
+  @ApiProperty({ description: 'Pin Code', example: '400001' })
   @IsString()
   @IsNotEmpty()
-  stateCode: string;
+  pinCode: string;
 
-  @ApiProperty({ description: 'GST state code', example: '27' })
-  @IsString()
-  @IsNotEmpty()
-  gstStateCode: string;
-
-  @ApiProperty({ description: 'Phone 1 country code', example: 'IN', required: false })
+  @ApiProperty({ description: 'GST No.', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  countryCode1?: string;
+  @MaxLength(20)
+  gstNo?: string;
 
-  @ApiProperty({ description: 'Phone number 1', example: '9876543210' })
-  @IsString()
-  @IsNotEmpty()
-  phoneNumber1: string;
-
-  @ApiProperty({ description: 'Phone 2 country code', example: 'IN', required: false })
+  @ApiProperty({ description: 'FX Reg No.', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  countryCode2?: string;
+  @MaxLength(20)
+  fxRegNo?: string;
 
-  @ApiProperty({ description: 'Phone number 2', required: false })
+  @ApiProperty({ description: 'FX Reg Date', required: false })
+  @IsDateString()
+  @IsOptional()
+  fxRegDate?: string;
+
+  @ApiProperty({ description: 'Contact Name', required: false, maxLength: 250 })
   @IsString()
   @IsOptional()
-  phoneNumber2?: string;
+  @MaxLength(250)
+  contactName?: string;
 
-  @ApiProperty({ description: 'Contact person name', required: false })
+  @ApiProperty({ description: 'Contact No.', required: false })
   @IsString()
   @IsOptional()
-  contactPersonName?: string;
+  contactNo?: string;
 
-  @ApiProperty({ description: 'Contact person country code', example: 'IN', required: false })
+  @ApiProperty({ description: 'Branch Email ID', required: false })
   @IsString()
   @IsOptional()
-  contactPersonCountryCode?: string;
+  branchEmailId?: string;
 
-  @ApiProperty({ description: 'Contact person phone', required: false })
+  @ApiProperty({ description: 'AEON Branch Lic', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  contactPersonPhone?: string;
+  @MaxLength(20)
+  aeonBranchLic?: string;
 
-  @ApiProperty({ description: 'Operation group', required: false })
+  @ApiProperty({ description: 'Location Type', required: false, maxLength: 250 })
   @IsString()
   @IsOptional()
-  operationGroup?: string;
+  @MaxLength(250)
+  locationType?: string;
+
+  @ApiProperty({ description: 'Cash Holding', required: false })
+  @IsNumber()
+  @IsOptional()
+  cashHolding?: number;
+
+  @ApiProperty({ description: 'Cash Holding Temp', required: false })
+  @IsNumber()
+  @IsOptional()
+  cashHoldingTemp?: number;
+
+  @ApiProperty({ description: 'Currency Holding', required: false })
+  @IsNumber()
+  @IsOptional()
+  currHolding?: number;
+
+  @ApiProperty({ description: 'Currency Holding Temp', required: false })
+  @IsNumber()
+  @IsOptional()
+  currHoldingTemp?: number;
+
+  @ApiProperty({ description: 'Is Head Office', default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isHeadOffice?: boolean;
+
+  @ApiProperty({ description: 'Is Active', default: true, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiProperty({ description: 'Connected counter IDs (UUIDs)', type: [String], required: false })
+  @IsUUID(undefined, { each: true })
+  @IsOptional()
+  counterIds?: string[];
 }

@@ -2,29 +2,45 @@ import { Injectable, ConflictException, UnauthorizedException, NotFoundException
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserStatus } from './user.entity';
+import { User } from './user.entity';
+import { UserRole } from '../user-roles/user-role.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { uppercaseFields } from '../utils/uppercase.util';
+
+const USER_RELATIONS = [
+  'userRoles',
+  'userRoles.role',
+  'userRoles.role.menuPermissions',
+  'userRoles.role.menuPermissions.menu',
+  'userRoles.role.menuPermissions.permission',
+  'userRoles.branch',
+  'userRoles.counter',
+];
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
   ) {}
 
   async findAll(): Promise<UserResponseDto[]> {
     const users = await this.userRepository.find({
+      relations: USER_RELATIONS,
       order: { createdAt: 'DESC' },
     });
     return users.map(UserResponseDto.fromEntity);
   }
 
   async create(createUserDto: CreateUserDto, userId?: string): Promise<UserResponseDto> {
+    const uppercased = uppercaseFields(createUserDto);
     const existingUser = await this.userRepository.findOne({
-      where: { email: createUserDto.email },
+      where: { emailId: uppercased.emailId },
     });
 
     if (existingUser) {
@@ -32,24 +48,39 @@ export class UserService {
     }
 
     const existingCode = await this.userRepository.findOne({
-      where: { userCode: createUserDto.userCode },
+      where: { userCode: uppercased.userCode },
     });
 
     if (existingCode) {
       throw new ConflictException('User with this user code already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    const rawPassword = uppercased.password || 'temp1234';
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    const { roleId, branchId, counterId, ...userFields } = uppercased;
 
     const user = this.userRepository.create({
-      ...createUserDto,
+      ...userFields,
       password: hashedPassword,
+      isActive: uppercased.isActive !== false,
       createdBy: userId || '00000000-0000-0000-0000-000000000000',
       updatedBy: userId || '00000000-0000-0000-0000-000000000000',
     });
 
     const savedUser = await this.userRepository.save(user);
-    return UserResponseDto.fromEntity(savedUser);
+
+    if (roleId || branchId || counterId) {
+      const userRole = this.userRoleRepository.create({
+        user: { id: savedUser.id } as any,
+        role: roleId ? { id: roleId } as any : null,
+        branch: branchId ? { id: branchId } as any : null,
+        counter: counterId ? { id: counterId } as any : null,
+      });
+      await this.userRoleRepository.save(userRole);
+    }
+
+    return this.findById(savedUser.id);
   }
 
   async update(id: string, dto: UpdateUserDto, userId: string): Promise<UserResponseDto> {
@@ -58,24 +89,40 @@ export class UserService {
       throw new NotFoundException(`User with id ${id} not found`);
     }
 
-    if (dto.email && dto.email !== user.email) {
-      const existing = await this.userRepository.findOne({ where: { email: dto.email } });
+    const uppercased = uppercaseFields(dto);
+
+    if (uppercased.emailId && uppercased.emailId !== user.emailId) {
+      const existing = await this.userRepository.findOne({ where: { emailId: uppercased.emailId } });
       if (existing) {
         throw new ConflictException('User with this email already exists');
       }
     }
 
-    if (dto.userCode && dto.userCode !== user.userCode) {
-      const existing = await this.userRepository.findOne({ where: { userCode: dto.userCode } });
+    if (uppercased.userCode && uppercased.userCode !== user.userCode) {
+      const existing = await this.userRepository.findOne({ where: { userCode: uppercased.userCode } });
       if (existing) {
         throw new ConflictException('User with this user code already exists');
       }
     }
 
-    Object.assign(user, dto);
+    const { roleId, branchId, counterId, ...userFields } = uppercased;
+
+    Object.assign(user, userFields);
     user.updatedBy = userId;
     const saved = await this.userRepository.save(user);
-    return UserResponseDto.fromEntity(saved);
+
+    if (roleId !== undefined || branchId !== undefined || counterId !== undefined) {
+      let userRole = await this.userRoleRepository.findOne({ where: { user: { id: saved.id } } });
+      if (!userRole) {
+        userRole = this.userRoleRepository.create({ user: { id: saved.id } as any });
+      }
+      if (roleId !== undefined) userRole.role = roleId ? { id: roleId } as any : null;
+      if (branchId !== undefined) userRole.branch = branchId ? { id: branchId } as any : null;
+      if (counterId !== undefined) userRole.counter = counterId ? { id: counterId } as any : null;
+      await this.userRoleRepository.save(userRole);
+    }
+
+    return this.findById(saved.id);
   }
 
   async delete(id: string): Promise<{ message: string }> {
@@ -89,10 +136,10 @@ export class UserService {
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
     const user = await this.userRepository.findOne({
-      where: { email: loginUserDto.email },
+      where: { emailId: loginUserDto.email },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || !user.isActive) {
       return null;
     }
 
@@ -102,15 +149,17 @@ export class UserService {
       return null;
     }
 
-    // Update last login
-    user.lastLoginAt = new Date();
+    user.lastLoginDate = new Date();
     await this.userRepository.save(user);
 
     return user;
   }
 
   async findById(id: string): Promise<UserResponseDto> {
-    const user = await this.userRepository.findOne({ where: { id } });
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: USER_RELATIONS,
+    });
     
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -120,19 +169,26 @@ export class UserService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email } });
+    return this.userRepository.findOne({
+      where: { emailId: email },
+      relations: USER_RELATIONS,
+    });
   }
 
   async findByMobileNumber(countryCode: string, phoneNumber: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { countryCode, phoneNumber } });
+    // Standard ERP contactNo
+    return this.userRepository.findOne({
+      where: { contactNo: phoneNumber },
+      relations: USER_RELATIONS,
+    });
   }
 
   async validateOtpUser(countryCode: string, phoneNumber: string, otp: string): Promise<User | null> {
     const user = await this.userRepository.findOne({
-      where: { countryCode, phoneNumber },
+      where: { contactNo: phoneNumber },
     });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user || !user.isActive) {
       return null;
     }
 
@@ -140,7 +196,7 @@ export class UserService {
       return null;
     }
 
-    user.lastLoginAt = new Date();
+    user.lastLoginDate = new Date();
     await this.userRepository.save(user);
 
     return user;

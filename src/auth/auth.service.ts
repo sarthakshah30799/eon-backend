@@ -25,7 +25,7 @@ export class AuthService {
     
     // Set current session
     session.userId = user.id;
-    session.email = user.email;
+    session.email = user.emailId;
     
     // Note: lastLoginAt is already updated in validateUser method
     

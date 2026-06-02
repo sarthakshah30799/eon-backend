@@ -1,6 +1,5 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsBoolean, IsInt, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { CounterStatus } from '../counter.entity';
 
 export class CreateCounterDto {
   @ApiProperty({ description: 'Branch ID (UUID)', required: false })
@@ -8,28 +7,35 @@ export class CreateCounterDto {
   @IsOptional()
   branchId?: string;
 
-  @ApiProperty({ description: 'Unique counter code', example: 'CTR-001' })
+  @ApiProperty({ description: 'Counter No.', example: 1 })
+  @IsInt()
+  @IsNotEmpty()
+  counterNo: number;
+
+  @ApiProperty({ description: 'Counter name', example: 'Counter 1', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
-  counterCode: string;
+  @MaxLength(250)
+  counterName: string;
 
-  @ApiProperty({ description: 'Counter name', example: 'Counter 1' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiProperty({ description: 'Description', required: false })
-  @IsString()
+  @ApiProperty({ description: 'Is Active', default: true, required: false })
+  @IsBoolean()
   @IsOptional()
-  description?: string;
+  isActive?: boolean;
 
-  @ApiProperty({ description: 'Remark', required: false })
-  @IsString()
+  @ApiProperty({ description: 'Is Retail Counter', default: false, required: false })
+  @IsBoolean()
   @IsOptional()
-  remark?: string;
+  isRetailCnt?: boolean;
 
-  @ApiProperty({ description: 'Status', enum: CounterStatus, default: CounterStatus.PENDING, required: false })
-  @IsEnum(CounterStatus)
+  @ApiProperty({ description: 'Is Bulk Counter', default: false, required: false })
+  @IsBoolean()
   @IsOptional()
-  status?: CounterStatus;
+  isBulkCnt?: boolean;
+
+  @ApiProperty({ description: 'Is Combine Counter', default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isCombineCnt?: boolean;
 }
+

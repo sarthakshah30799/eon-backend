@@ -5,10 +5,11 @@ import { CreateCounterDto } from './dto/create-counter.dto';
 import { UpdateCounterDto } from './dto/update-counter.dto';
 import { CounterResponseDto } from './dto/counter-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @ApiTags('counters')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard)
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('counters')
 export class CounterController {
   constructor(private readonly counterService: CounterService) {}

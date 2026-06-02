@@ -3,12 +3,6 @@ import { Entity, Column, Index, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { UserRole } from "../user-roles/user-role.entity";
 
-export enum UserStatus {
-  PENDING = "pending",
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-}
-
 @Entity("users")
 export class User extends BaseEntity {
   @OneToMany(() => UserRole, (userRole) => userRole.user)
@@ -17,33 +11,43 @@ export class User extends BaseEntity {
   @Column({ type: "citext", unique: true })
   userCode: string;
 
-  @Column()
-  password: string;
+  @Column({ type: "citext" })
+  userName: string;
 
-  @Column({ type: "citext" })
-  firstName: string;
-  
-  @Column({ type: "citext" })
-  lastName: string;
+  @Column({ type: "citext", nullable: true })
+  userGroupCode: string;
+
+  @Column({ type: "citext", nullable: true })
+  contactNo: string;
 
   @Index()
   @Column({ type: "citext", unique: true })
-  email: string;
+  emailId: string;
 
-  @Column({ type: "char", length: 2, default: "IN" })
-  countryCode: string;
+  @Column({ type: "citext", nullable: true })
+  employeeNo: string;
 
-  @Column({ type: "text" })
-  phoneNumber: string;
+  @Column({ type: "citext", nullable: true })
+  designation: string;
 
-  @Index()
-  @Column({ type: "enum", enum: UserStatus, default: UserStatus.PENDING })
-  status: UserStatus;
+  @Column({ type: "citext", nullable: true })
+  branchCode: string;
 
-  @Index()
+  @Column({ type: "citext", nullable: true })
+  userLicNo: string;
+
+  @Column({ type: "boolean", default: true })
+  isActive: boolean;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  lastLoginDate: Date;
+
   @Column({ type: "boolean", default: false })
-  isHo: boolean;
+  isLocked: boolean;
 
-  @Column({ nullable: true })
-  lastLoginAt: Date;
+  @Column({ type: "boolean", default: false })
+  isDormant: boolean;
+
+  @Column()
+  password: string;
 }

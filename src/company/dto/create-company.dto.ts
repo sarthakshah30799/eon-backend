@@ -1,59 +1,76 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsDateString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCompanyDto {
-  @ApiProperty({ description: 'Company name', example: 'Maraekat FX Pvt. Ltd.' })
+  @ApiProperty({ description: 'Short code', required: false, maxLength: 20 })
+  @IsString()
+  @IsOptional()
+  @MaxLength(20)
+  shortCode?: string;
+
+  @ApiProperty({ description: 'Company name', example: 'Maraekat FX Pvt. Ltd.', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  @MaxLength(250)
+  companyName: string;
 
-  @ApiProperty({ description: 'Designation', example: 'Regional Compliance Officer', required: false })
+  @ApiProperty({ description: 'Formerly known as', required: false, maxLength: 250 })
   @IsString()
   @IsOptional()
-  designation?: string;
+  @MaxLength(250)
+  formerlyKnownName?: string;
 
-  @ApiProperty({ description: 'RBI Name', example: 'RBI Main Office', required: false })
+  @ApiProperty({ description: 'CIN No.', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  rbiName?: string;
+  @MaxLength(20)
+  cinNo?: string;
 
-  @ApiProperty({ description: 'RBI Place', example: 'Mumbai', required: false })
+  @ApiProperty({ description: 'PAN No.', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  rbiPlace?: string;
+  @MaxLength(20)
+  panNo?: string;
 
-  @ApiProperty({ description: 'Address line 1', example: '12 Business Tower' })
-  @IsString()
-  @IsNotEmpty()
-  address1: string;
-
-  @ApiProperty({ description: 'Address line 2', example: 'Nariman Point', required: false })
+  @ApiProperty({ description: 'FX Reg No.', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  address2?: string;
+  @MaxLength(20)
+  fxRegNo?: string;
 
-  @ApiProperty({ description: 'Address line 3', example: 'Mumbai, Maharashtra', required: false })
+  @ApiProperty({ description: 'FX Reg Date', required: false })
+  @IsDateString()
+  @IsOptional()
+  fxRegDate?: string;
+
+  @ApiProperty({ description: 'From Date', required: false })
+  @IsDateString()
+  @IsOptional()
+  fromDate?: string;
+
+  @ApiProperty({ description: 'To Date', required: false })
+  @IsDateString()
+  @IsOptional()
+  toDate?: string;
+
+  @ApiProperty({ description: 'Logo URL/data', required: false })
   @IsString()
   @IsOptional()
-  address3?: string;
+  logo?: string;
 
-  @ApiProperty({ description: 'Pincode', example: '400021' })
-  @IsString()
-  @IsNotEmpty()
-  pincode: string;
-
-  @ApiProperty({ description: 'City', example: 'Mumbai' })
-  @IsString()
-  @IsNotEmpty()
-  city: string;
-
-  @ApiProperty({ description: 'State', example: 'Maharashtra' })
-  @IsString()
-  @IsNotEmpty()
-  state: string;
-
-  @ApiProperty({ description: 'Country', example: 'India', required: false })
+  @ApiProperty({ description: 'AEON Lic No.', required: false, maxLength: 20 })
   @IsString()
   @IsOptional()
-  country?: string;
+  @MaxLength(20)
+  aeonLicNo?: string;
+
+  @ApiProperty({ description: 'Website URL', required: false })
+  @IsString()
+  @IsOptional()
+  website?: string;
+
+  @ApiProperty({ description: 'Email ID', required: false })
+  @IsString()
+  @IsOptional()
+  emailId?: string;
 }

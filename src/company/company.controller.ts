@@ -5,10 +5,11 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyResponseDto } from './dto/company-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @ApiTags('companies')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard)
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('companies')
 export class CompanyController {
   constructor(private readonly companyService: CompanyService) {}

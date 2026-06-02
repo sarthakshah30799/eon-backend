@@ -6,6 +6,8 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyResponseDto } from './dto/company-response.dto';
 
+import { uppercaseFields } from '../utils/uppercase.util';
+
 @Injectable()
 export class CompanyService {
   constructor(
@@ -30,7 +32,7 @@ export class CompanyService {
 
   async create(dto: CreateCompanyDto, userId: string): Promise<CompanyResponseDto> {
     const company = this.companyRepository.create({
-      ...dto,
+      ...uppercaseFields(dto),
       createdBy: userId,
       updatedBy: userId,
     });
@@ -43,7 +45,7 @@ export class CompanyService {
     if (!company) {
       throw new NotFoundException(`Company with id ${id} not found`);
     }
-    Object.assign(company, dto);
+    Object.assign(company, uppercaseFields(dto));
     company.updatedBy = userId;
     const saved = await this.companyRepository.save(company);
     return CompanyResponseDto.fromEntity(saved);

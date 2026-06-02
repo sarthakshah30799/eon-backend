@@ -15,36 +15,42 @@ export class Company extends BaseEntity {
   )
   menuPermissions: RolesMenuPermission[];
 
-  @Column({ type: "citext" })
-  name: string;
-
   @Column({ type: "citext", nullable: true })
-  designation: string;
-
-  @Column({ type: "citext", nullable: true })
-  rbiName: string;
-
-  @Column({ type: "citext", nullable: true })
-  rbiPlace: string;
+  shortCode: string;
 
   @Column({ type: "citext" })
-  address1: string;
+  companyName: string;
 
   @Column({ type: "citext", nullable: true })
-  address2: string;
+  formerlyKnownName: string;
 
   @Column({ type: "citext", nullable: true })
-  address3: string;
+  cinNo: string;
 
-  @Column({ type: "text" })
-  pincode: string;
+  @Column({ type: "citext", nullable: true })
+  panNo: string;
 
-  @Column({ type: "citext" })
-  city: string;
+  @Column({ type: "citext", nullable: true })
+  fxRegNo: string;
 
-  @Column({ type: "citext" })
-  state: string;
+  @Column({ type: "timestamp with time zone", nullable: true })
+  fxRegDate: Date;
 
-  @Column({ type: "citext", default: "India" })
-  country: string;
+  @Column({ type: "timestamp with time zone", nullable: true })
+  fromDate: Date;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  toDate: Date;
+
+  @Column({ type: "text", nullable: true })
+  logo: string;
+
+  @Column({ type: "citext", nullable: true })
+  aeonLicNo: string;
+
+  @Column({ type: "citext", nullable: true })
+  website: string;
+
+  @Column({ type: "citext", nullable: true })
+  emailId: string;
 }

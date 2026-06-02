@@ -39,48 +39,57 @@ export class Branch extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   address3: string;
 
-  @Column({ type: "text" })
-  pincode: string;
-
   @Column({ type: "citext" })
   city: string;
 
   @Column({ type: "citext" })
   state: string;
 
-  @Column({ type: "citext", default: "India" })
-  country: string;
-
-  @Index()
-  @Column({ type: "char", length: 2 })
-  stateCode: string;
-
-  @Index()
-  @Column({ type: "text" })
-  gstStateCode: string;
-
-  @Column({ type: "char", length: 2, default: "IN" })
-  countryCode1: string;
+  @Column({ type: "citext", nullable: true })
+  gstState: string;
 
   @Column({ type: "text" })
-  phoneNumber1: string;
-
-  @Column({ type: "char", length: 2, default: "IN" })
-  countryCode2: string;
-
-  @Column({ type: "text", nullable: true })
-  phoneNumber2: string;
+  pinCode: string;
 
   @Column({ type: "citext", nullable: true })
-  contactPersonName: string;
+  gstNo: string;
 
-  @Column({ type: "char", length: 2, default: "IN" })
-  contactPersonCountryCode: string;
-
-  @Column({ type: "text", nullable: true })
-  contactPersonPhone: string;
-
-  @Index()
   @Column({ type: "citext", nullable: true })
-  operationGroup: string;
+  fxRegNo: string;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  fxRegDate: Date;
+
+  @Column({ type: "citext", nullable: true })
+  contactName: string;
+
+  @Column({ type: "citext", nullable: true })
+  contactNo: string;
+
+  @Column({ type: "citext", nullable: true })
+  branchEmailId: string;
+
+  @Column({ type: "citext", nullable: true })
+  aeonBranchLic: string;
+
+  @Column({ type: "citext", nullable: true })
+  locationType: string;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  cashHolding: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  cashHoldingTemp: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  currHolding: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  currHoldingTemp: number;
+
+  @Column({ type: "boolean", default: false })
+  isHeadOffice: boolean;
+
+  @Column({ type: "boolean", default: true })
+  isActive: boolean;
 }

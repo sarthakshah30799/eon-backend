@@ -6,6 +6,8 @@ import { CreateCounterDto } from './dto/create-counter.dto';
 import { UpdateCounterDto } from './dto/update-counter.dto';
 import { CounterResponseDto } from './dto/counter-response.dto';
 
+import { uppercaseFields } from '../utils/uppercase.util';
+
 @Injectable()
 export class CounterService {
   constructor(
@@ -33,7 +35,7 @@ export class CounterService {
   }
 
   async create(dto: CreateCounterDto, userId: string): Promise<CounterResponseDto> {
-    const { branchId, ...rest } = dto;
+    const { branchId, ...rest } = uppercaseFields(dto);
     const counter = this.counterRepository.create({
       ...rest,
       branch: branchId ? { id: branchId } as any : null,
@@ -49,7 +51,7 @@ export class CounterService {
     if (!counter) {
       throw new NotFoundException(`Counter with id ${id} not found`);
     }
-    const { branchId, ...rest } = dto;
+    const { branchId, ...rest } = uppercaseFields(dto);
     Object.assign(counter, rest);
     if (branchId !== undefined) {
       counter.branch = branchId ? { id: branchId } as any : null;

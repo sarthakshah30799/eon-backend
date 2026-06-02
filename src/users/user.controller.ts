@@ -5,6 +5,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @ApiTags('users')
 @Controller('users')
@@ -12,7 +13,7 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get()
-  @UseGuards(AuthenticatedGuard)
+  @UseGuards(AuthenticatedGuard, PermissionsGuard)
   @ApiCookieAuth('sessionId')
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'List of users', type: [UserResponseDto] })
@@ -22,7 +23,7 @@ export class UserController {
   }
 
   @Get(':id')
-  @UseGuards(AuthenticatedGuard)
+  @UseGuards(AuthenticatedGuard, PermissionsGuard)
   @ApiCookieAuth('sessionId')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiParam({ name: 'id', description: 'User UUID' })
@@ -44,7 +45,7 @@ export class UserController {
   }
 
   @Post()
-  @UseGuards(AuthenticatedGuard)
+  @UseGuards(AuthenticatedGuard, PermissionsGuard)
   @ApiCookieAuth('sessionId')
   @ApiOperation({ summary: 'Create a new user (admin)' })
   @ApiResponse({ status: 201, description: 'User created', type: UserResponseDto })
@@ -55,7 +56,7 @@ export class UserController {
   }
 
   @Put(':id')
-  @UseGuards(AuthenticatedGuard)
+  @UseGuards(AuthenticatedGuard, PermissionsGuard)
   @ApiCookieAuth('sessionId')
   @ApiOperation({ summary: 'Update a user' })
   @ApiParam({ name: 'id', description: 'User UUID' })
@@ -71,7 +72,7 @@ export class UserController {
   }
 
   @Delete(':id')
-  @UseGuards(AuthenticatedGuard)
+  @UseGuards(AuthenticatedGuard, PermissionsGuard)
   @ApiCookieAuth('sessionId')
   @ApiOperation({ summary: 'Delete a user' })
   @ApiParam({ name: 'id', description: 'User UUID' })

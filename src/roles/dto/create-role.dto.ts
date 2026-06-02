@@ -1,19 +1,91 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateRoleDto {
-  @ApiProperty({ description: 'Role name', example: 'Administrator' })
+  @ApiProperty({ description: 'User Group Code', example: 'ADMIN', maxLength: 20 })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  @MaxLength(20)
+  userGroupCode: string;
 
-  @ApiProperty({ description: 'Unique role code', example: 'ADMIN' })
+  @ApiProperty({ description: 'User Group Name', example: 'Administrator', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
-  code: string;
+  @MaxLength(250)
+  userGroupName: string;
 
-  @ApiProperty({ description: 'Description', required: false })
-  @IsString()
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
   @IsOptional()
-  description?: string;
+  isAdminGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isMdGroup?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isComplianceGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isSrFinanceGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isFinanceGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isBrnMgrGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isExecutiveGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isCardStkGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isDeliveryBoyGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isCashierGrp?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isSalesMgrGrp?: boolean;
+
+  @ApiProperty({ default: true, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isAeonAccess?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isDelPortalAccess?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isDelAppAccess?: boolean;
 }
