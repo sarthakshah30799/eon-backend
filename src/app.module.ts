@@ -8,6 +8,8 @@ import { BranchModule } from './branches/branch.module';
 import { CounterModule } from './counters/counter.module';
 import { RoleModule } from './roles/role.module';
 import { MenuModule } from './menu/menu.module';
+import { CountryModule } from './country/country.module';
+import { StateModule } from './state/state.module';
 import { SessionMiddleware } from './auth/session.middleware';
 
 @Module({
@@ -21,6 +23,8 @@ import { SessionMiddleware } from './auth/session.middleware';
     CounterModule,
     RoleModule,
     MenuModule,
+    CountryModule,
+    StateModule,
   ],
 })
 export class AppModule implements NestModule {
