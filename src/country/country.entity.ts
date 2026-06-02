@@ -1,5 +1,6 @@
-import { Column, Entity } from "typeorm";
+import { Column, Entity, OneToMany, Index } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
+import { State } from "../state/state.entity";
 
 export enum CountryRiskCategory {
   Low = "low",
@@ -12,14 +13,18 @@ export class Country extends BaseEntity {
   @Column({ type: "citext", unique: true })
   code: string;
 
+  @Index({ unique: true })
   @Column({ type: "citext" })
   name: string;
 
-  @Column({ type: "citext", nullable: true })
-  lrsCode: string;
+  @OneToMany(() => State, (state) => state.country)
+  states: State[];
 
   @Column({ type: "citext", nullable: true })
-  ctrCode: string;
+  lrsCountryCode: string;
+
+  @Column({ type: "citext", nullable: true })
+  ctrCountryCode: string;
 
   @Column({
     type: "enum",
@@ -29,11 +34,11 @@ export class Country extends BaseEntity {
   riskCategory: CountryRiskCategory;
 
   @Column({ type: "boolean", default: false })
-  isRestricted: boolean;
+  restrictedCountry: boolean;
 
   @Column({ type: "boolean", default: false })
-  isGreyList: boolean;
+  greyListCountry: boolean;
 
   @Column({ type: "boolean", default: false })
-  isBase: boolean;
+  baseCountry: boolean;
 }

@@ -208,8 +208,7 @@ export class UserService {
 
   async findByResetToken(email: string, token: string): Promise<User | null> {
     return this.userRepository.findOne({
-      where: { email, resetPasswordToken: token },
+      where: { emailId: email, resetPasswordToken: token },
     });
   }
 }
-

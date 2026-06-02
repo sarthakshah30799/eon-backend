@@ -28,6 +28,8 @@ async function bootstrap() {
     .addTag('companies', 'Company management')
     .addTag('branches', 'Branch management')
     .addTag('counters', 'Counter management')
+    .addTag('countries', 'Country management')
+    .addTag('states', 'State management')
     .addTag('roles', 'Role management')
     .addTag('menus', 'Dynamic menu management')
     .addCookieAuth('sessionId')
