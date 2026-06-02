@@ -6,28 +6,22 @@ export class UserResponseDto {
   id: string;
 
   @ApiProperty({ description: 'User Code', example: 'USR-001' })
-  userCode: string;
+  code: string;
 
   @ApiProperty({ description: 'User Name', example: 'Sarthak Kumar' })
-  userName: string;
-
-  @ApiProperty({ description: 'User Group Code', required: false })
-  userGroupCode: string;
+  name: string;
 
   @ApiProperty({ description: 'Contact No', required: false })
   contactNo: string;
 
-  @ApiProperty({ description: 'Email ID', example: 'user@example.com' })
-  emailId: string;
+  @ApiProperty({ description: 'Email', example: 'user@example.com' })
+  email: string;
 
   @ApiProperty({ description: 'Employee No', required: false })
   employeeNo: string;
 
   @ApiProperty({ description: 'Designation', required: false })
   designation: string;
-
-  @ApiProperty({ description: 'Branch Code', required: false })
-  branchCode: string;
 
   @ApiProperty({ description: 'User Lic No', required: false })
   userLicNo: string;
@@ -53,7 +47,7 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Role ID (UUID)', required: false })
   roleId?: string;
 
-  @ApiProperty({ description: 'Role name (User Group Name)', required: false })
+  @ApiProperty({ description: 'Role name', required: false })
   roleName?: string;
 
   @ApiProperty({ description: 'Branch ID (UUID)', required: false })
@@ -62,8 +56,11 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Counter ID (UUID)', required: false })
   counterId?: string;
 
-  @ApiProperty({ description: 'Counter code', required: false })
-  counterCode?: string;
+  @ApiProperty({ description: 'Counter No.', required: false })
+  counterNo?: number;
+
+  @ApiProperty({ description: 'Counter Name', required: false })
+  counterName?: string;
 
   @ApiProperty({ description: 'Permissions map', required: false })
   permissions?: Record<string, string[]>;
@@ -71,14 +68,12 @@ export class UserResponseDto {
   static fromEntity(user: User): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
-    dto.userCode = user.userCode;
-    dto.userName = user.userName;
-    dto.userGroupCode = user.userGroupCode;
+    dto.code = user.code;
+    dto.name = user.name;
     dto.contactNo = user.contactNo;
-    dto.emailId = user.emailId;
+    dto.email = user.email;
     dto.employeeNo = user.employeeNo;
     dto.designation = user.designation;
-    dto.branchCode = user.branchCode;
     dto.userLicNo = user.userLicNo;
     dto.isActive = user.isActive;
     dto.lastLoginDate = user.lastLoginDate;
@@ -91,10 +86,11 @@ export class UserResponseDto {
     if (user.userRoles && user.userRoles.length > 0) {
       const userRole = user.userRoles[0];
       dto.roleId = userRole.role?.id || null;
-      dto.roleName = userRole.role?.userGroupName || null;
+      dto.roleName = userRole.role?.name || null;
       dto.branchId = userRole.branch?.id || null;
       dto.counterId = userRole.counter?.id || null;
-      dto.counterCode = userRole.counter ? String(userRole.counter.counterNo) : null;
+      dto.counterNo = userRole.counter?.counterNo || null;
+      dto.counterName = userRole.counter?.name || null;
 
       if (userRole.role && userRole.role.menuPermissions) {
         for (const mp of userRole.role.menuPermissions) {

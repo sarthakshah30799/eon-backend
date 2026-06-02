@@ -25,7 +25,7 @@ export class Branch extends BaseEntity {
   company: Company;
 
   @Column({ type: "citext", unique: true })
-  branchCode: string;
+  code: string;
 
   @Column({ type: "int", unique: true })
   branchNumber: number;
@@ -67,7 +67,7 @@ export class Branch extends BaseEntity {
   contactNo: string;
 
   @Column({ type: "citext", nullable: true })
-  branchEmailId: string;
+  branchEmail: string;
 
   @Column({ type: "citext", nullable: true })
   aeonBranchLic: string;

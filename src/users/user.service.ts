@@ -40,7 +40,7 @@ export class UserService {
   async create(createUserDto: CreateUserDto, userId?: string): Promise<UserResponseDto> {
     const uppercased = uppercaseFields(createUserDto);
     const existingUser = await this.userRepository.findOne({
-      where: { emailId: uppercased.emailId },
+      where: { email: uppercased.email },
     });
 
     if (existingUser) {
@@ -48,7 +48,7 @@ export class UserService {
     }
 
     const existingCode = await this.userRepository.findOne({
-      where: { userCode: uppercased.userCode },
+      where: { code: uppercased.code },
     });
 
     if (existingCode) {
@@ -73,9 +73,9 @@ export class UserService {
     if (roleId || branchId || counterId) {
       const userRole = this.userRoleRepository.create({
         user: { id: savedUser.id } as any,
-        role: roleId ? { id: roleId } as any : null,
-        branch: branchId ? { id: branchId } as any : null,
-        counter: counterId ? { id: counterId } as any : null,
+        role: roleId ? ({ id: roleId } as any) : null,
+        branch: branchId ? ({ id: branchId } as any) : null,
+        counter: counterId ? ({ id: counterId } as any) : null,
       });
       await this.userRoleRepository.save(userRole);
     }
@@ -91,15 +91,15 @@ export class UserService {
 
     const uppercased = uppercaseFields(dto);
 
-    if (uppercased.emailId && uppercased.emailId !== user.emailId) {
-      const existing = await this.userRepository.findOne({ where: { emailId: uppercased.emailId } });
+    if (uppercased.email && uppercased.email !== user.email) {
+      const existing = await this.userRepository.findOne({ where: { email: uppercased.email } });
       if (existing) {
         throw new ConflictException('User with this email already exists');
       }
     }
 
-    if (uppercased.userCode && uppercased.userCode !== user.userCode) {
-      const existing = await this.userRepository.findOne({ where: { userCode: uppercased.userCode } });
+    if (uppercased.code && uppercased.code !== user.code) {
+      const existing = await this.userRepository.findOne({ where: { code: uppercased.code } });
       if (existing) {
         throw new ConflictException('User with this user code already exists');
       }
@@ -116,9 +116,9 @@ export class UserService {
       if (!userRole) {
         userRole = this.userRoleRepository.create({ user: { id: saved.id } as any });
       }
-      if (roleId !== undefined) userRole.role = roleId ? { id: roleId } as any : null;
-      if (branchId !== undefined) userRole.branch = branchId ? { id: branchId } as any : null;
-      if (counterId !== undefined) userRole.counter = counterId ? { id: counterId } as any : null;
+      if (roleId !== undefined) userRole.role = roleId ? ({ id: roleId } as any) : null;
+      if (branchId !== undefined) userRole.branch = branchId ? ({ id: branchId } as any) : null;
+      if (counterId !== undefined) userRole.counter = counterId ? ({ id: counterId } as any) : null;
       await this.userRoleRepository.save(userRole);
     }
 
@@ -136,7 +136,7 @@ export class UserService {
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
     const user = await this.userRepository.findOne({
-      where: { emailId: loginUserDto.email },
+      where: { email: loginUserDto.email },
     });
 
     if (!user || !user.isActive) {
@@ -170,7 +170,7 @@ export class UserService {
 
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOne({
-      where: { emailId: email },
+      where: { email },
       relations: USER_RELATIONS,
     });
   }
@@ -208,7 +208,7 @@ export class UserService {
 
   async findByResetToken(email: string, token: string): Promise<User | null> {
     return this.userRepository.findOne({
-      where: { emailId: email, resetPasswordToken: token },
+      where: { email, resetPasswordToken: token },
     });
   }
 }

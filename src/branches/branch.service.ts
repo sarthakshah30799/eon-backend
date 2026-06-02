@@ -41,7 +41,7 @@ export class BranchService {
     const { companyId, counterIds, ...rest } = uppercaseFields(dto);
     const branch = this.branchRepository.create({
       ...rest,
-      company: companyId ? { id: companyId } as any : null,
+      company: companyId ? ({ id: companyId } as any) : null,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -70,7 +70,7 @@ export class BranchService {
     const { companyId, counterIds, ...rest } = uppercaseFields(dto);
     Object.assign(branch, rest);
     if (companyId !== undefined) {
-      branch.company = companyId ? { id: companyId } as any : null;
+      branch.company = companyId ? ({ id: companyId } as any) : null;
     }
     branch.updatedBy = userId;
     await this.branchRepository.save(branch);

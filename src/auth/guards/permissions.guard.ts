@@ -23,7 +23,7 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException('User profile not found');
     }
 
-    const email = userDto.emailId?.toLowerCase();
+    const email = userDto.email?.toLowerCase();
     const path = request.route?.path || request.url;
     const method = request.method;
 

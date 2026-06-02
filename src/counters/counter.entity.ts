@@ -21,17 +21,17 @@ export class Counter extends BaseEntity {
   counterNo: number;
 
   @Column({ type: "citext" })
-  counterName: string;
+  name: string;
 
   @Column({ type: "boolean", default: true })
   isActive: boolean;
 
   @Column({ type: "boolean", default: false })
-  isRetailCnt: boolean;
+  isRetail: boolean;
 
   @Column({ type: "boolean", default: false })
-  isBulkCnt: boolean;
+  isBulk: boolean;
 
   @Column({ type: "boolean", default: false })
-  isCombineCnt: boolean;
+  isCombine: boolean;
 }

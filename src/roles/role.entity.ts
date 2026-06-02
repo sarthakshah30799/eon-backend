@@ -13,43 +13,43 @@ export class Role extends BaseEntity {
   userRoles: UserRole[];
 
   @Column({ type: "citext", unique: true })
-  userGroupCode: string;
+  code: string;
 
   @Column({ type: "citext" })
-  userGroupName: string;
+  name: string;
 
   @Column({ type: "boolean", default: false })
-  isAdminGrp: boolean;
+  isAdmin: boolean;
 
   @Column({ type: "boolean", default: false })
-  isMdGroup: boolean;
+  isMd: boolean;
 
   @Column({ type: "boolean", default: false })
-  isComplianceGrp: boolean;
+  isCompliance: boolean;
 
   @Column({ type: "boolean", default: false })
-  isSrFinanceGrp: boolean;
+  isSrFinance: boolean;
 
   @Column({ type: "boolean", default: false })
-  isFinanceGrp: boolean;
+  isFinance: boolean;
 
   @Column({ type: "boolean", default: false })
-  isBrnMgrGrp: boolean;
+  isBrnMgr: boolean;
 
   @Column({ type: "boolean", default: false })
-  isExecutiveGrp: boolean;
+  isExecutive: boolean;
 
   @Column({ type: "boolean", default: false })
-  isCardStkGrp: boolean;
+  isCardStk: boolean;
 
   @Column({ type: "boolean", default: false })
-  isDeliveryBoyGrp: boolean;
+  isDeliveryBoy: boolean;
 
   @Column({ type: "boolean", default: false })
-  isCashierGrp: boolean;
+  isCashier: boolean;
 
   @Column({ type: "boolean", default: false })
-  isSalesMgrGrp: boolean;
+  isSalesMgr: boolean;
 
   @Column({ type: "boolean", default: true })
   isActive: boolean;

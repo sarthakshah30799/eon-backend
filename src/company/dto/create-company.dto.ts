@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsDateString,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCompanyDto {
@@ -12,7 +18,7 @@ export class CreateCompanyDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
-  companyName: string;
+  name: string;
 
   @ApiProperty({ description: 'Formerly known as', required: false, maxLength: 250 })
   @IsString()
@@ -26,11 +32,11 @@ export class CreateCompanyDto {
   @MaxLength(20)
   cinNo?: string;
 
-  @ApiProperty({ description: 'PAN No.', required: false, maxLength: 20 })
+  @ApiProperty({ description: 'PAN No.', required: true, maxLength: 20 })
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   @MaxLength(20)
-  panNo?: string;
+  panNo: string;
 
   @ApiProperty({ description: 'FX Reg No.', required: false, maxLength: 20 })
   @IsString()
@@ -69,8 +75,8 @@ export class CreateCompanyDto {
   @IsOptional()
   website?: string;
 
-  @ApiProperty({ description: 'Email ID', required: false })
+  @ApiProperty({ description: 'Email', required: false })
   @IsString()
   @IsOptional()
-  emailId?: string;
+  email?: string;
 }

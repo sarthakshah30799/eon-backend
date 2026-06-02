@@ -3,7 +3,7 @@ import { Branch } from '../branch.entity';
 
 export class BranchResponseDto {
   @ApiProperty() id: string;
-  @ApiProperty() branchCode: string;
+  @ApiProperty() code: string;
   @ApiProperty() branchNumber: number;
   @ApiProperty() address1: string;
   @ApiProperty({ required: false }) address2: string;
@@ -17,7 +17,7 @@ export class BranchResponseDto {
   @ApiProperty({ required: false }) fxRegDate: Date;
   @ApiProperty({ required: false }) contactName: string;
   @ApiProperty({ required: false }) contactNo: string;
-  @ApiProperty({ required: false }) branchEmailId: string;
+  @ApiProperty({ required: false }) branchEmail: string;
   @ApiProperty({ required: false }) aeonBranchLic: string;
   @ApiProperty({ required: false }) locationType: string;
   @ApiProperty({ required: false }) cashHolding: number;
@@ -35,7 +35,7 @@ export class BranchResponseDto {
   static fromEntity(entity: Branch): BranchResponseDto {
     const dto = new BranchResponseDto();
     dto.id = entity.id;
-    dto.branchCode = entity.branchCode;
+    dto.code = entity.code;
     dto.branchNumber = entity.branchNumber;
     dto.address1 = entity.address1;
     dto.address2 = entity.address2;
@@ -49,7 +49,7 @@ export class BranchResponseDto {
     dto.fxRegDate = entity.fxRegDate;
     dto.contactName = entity.contactName;
     dto.contactNo = entity.contactNo;
-    dto.branchEmailId = entity.branchEmailId;
+    dto.branchEmail = entity.branchEmail;
     dto.aeonBranchLic = entity.aeonBranchLic;
     dto.locationType = entity.locationType;
     dto.cashHolding = entity.cashHolding !== null ? Number(entity.cashHolding) : null;
@@ -59,7 +59,7 @@ export class BranchResponseDto {
     dto.isHeadOffice = entity.isHeadOffice;
     dto.isActive = entity.isActive;
     dto.companyId = entity.company?.id || null;
-    dto.companyName = entity.company?.companyName || null;
+    dto.companyName = entity.company?.name || null;
     dto.counterIds = entity.counters ? entity.counters.map(c => c.id) : [];
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;

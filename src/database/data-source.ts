@@ -3,6 +3,7 @@ import 'dotenv/config';
 
 import { DataSource } from 'typeorm';
 import { ConfigService } from '../config/config.service';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 // Ensure TypeScript recognizes the CommonJS `__dirname` global when compiled via ts-node
 declare const __dirname: string;
@@ -20,5 +21,6 @@ export const AppDataSource = new DataSource({
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: configService.database.synchronize,
+  namingStrategy: new SnakeNamingStrategy(),
   logging: true,
 });

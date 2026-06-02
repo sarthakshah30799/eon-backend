@@ -9,29 +9,23 @@ export class User extends BaseEntity {
   userRoles: UserRole[];
 
   @Column({ type: "citext", unique: true })
-  userCode: string;
+  code: string;
 
   @Column({ type: "citext" })
-  userName: string;
-
-  @Column({ type: "citext", nullable: true })
-  userGroupCode: string;
+  name: string;
 
   @Column({ type: "citext", nullable: true })
   contactNo: string;
 
   @Index()
   @Column({ type: "citext", unique: true })
-  emailId: string;
+  email: string;
 
   @Column({ type: "citext", nullable: true })
   employeeNo: string;
 
   @Column({ type: "citext", nullable: true })
   designation: string;
-
-  @Column({ type: "citext", nullable: true })
-  branchCode: string;
 
   @Column({ type: "citext", nullable: true })
   userLicNo: string;

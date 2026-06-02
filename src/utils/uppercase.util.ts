@@ -3,14 +3,14 @@ export function uppercaseFields<T extends Record<string, any>>(obj: T): T {
 
   const fieldsToUpper = [
     'shortCode',
-    'companyName',
+    'name',
     'formerlyKnownName',
     'cinNo',
     'panNo',
     'fxRegNo',
     'aeonLicNo',
-    'emailId',
-    'branchCode',
+    'email',
+    'code',
     'branchName',
     'address1',
     'address2',
@@ -21,14 +21,12 @@ export function uppercaseFields<T extends Record<string, any>>(obj: T): T {
     'gstNo',
     'contactName',
     'contactNo',
-    'branchEmailId',
+    'branchEmail',
     'aeonBranchLic',
     'locationType',
-    'counterName',
-    'userGroupCode',
-    'userGroupName',
-    'userCode',
-    'userName',
+    'counterNo',
+    'code',
+    'email',
     'employeeNo',
     'designation',
     'userLicNo',
@@ -45,4 +43,3 @@ export function uppercaseFields<T extends Record<string, any>>(obj: T): T {
   }
   return result as T;
 }
-

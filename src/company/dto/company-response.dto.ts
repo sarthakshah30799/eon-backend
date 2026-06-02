@@ -9,7 +9,7 @@ export class CompanyResponseDto {
   shortCode: string;
 
   @ApiProperty({ description: 'Company name' })
-  companyName: string;
+  name: string;
 
   @ApiProperty({ description: 'Formerly known as', required: false })
   formerlyKnownName: string;
@@ -41,8 +41,8 @@ export class CompanyResponseDto {
   @ApiProperty({ description: 'Website URL', required: false })
   website: string;
 
-  @ApiProperty({ description: 'Email ID', required: false })
-  emailId: string;
+  @ApiProperty({ description: 'Email', required: false })
+  email: string;
 
   @ApiProperty({ description: 'Created at timestamp' })
   createdAt: Date;
@@ -54,7 +54,7 @@ export class CompanyResponseDto {
     const dto = new CompanyResponseDto();
     dto.id = entity.id;
     dto.shortCode = entity.shortCode;
-    dto.companyName = entity.companyName;
+    dto.name = entity.name;
     dto.formerlyKnownName = entity.formerlyKnownName;
     dto.cinNo = entity.cinNo;
     dto.panNo = entity.panNo;
@@ -65,7 +65,7 @@ export class CompanyResponseDto {
     dto.logo = entity.logo;
     dto.aeonLicNo = entity.aeonLicNo;
     dto.website = entity.website;
-    dto.emailId = entity.emailId;
+    dto.email = entity.email;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

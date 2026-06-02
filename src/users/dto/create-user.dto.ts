@@ -6,7 +6,7 @@ export class CreateUserDto {
   @IsString()
   @MinLength(1)
   @MaxLength(20)
-  userCode: string;
+  code: string;
 
   @ApiProperty({ description: 'User password', example: 'password123', minLength: 6, required: false })
   @IsString()
@@ -18,22 +18,16 @@ export class CreateUserDto {
   @IsString()
   @MinLength(1)
   @MaxLength(250)
-  userName: string;
-
-  @ApiProperty({ description: 'User Group Code', required: false, maxLength: 20 })
-  @IsString()
-  @IsOptional()
-  @MaxLength(20)
-  userGroupCode?: string;
+  name: string;
 
   @ApiProperty({ description: 'Contact No', required: false })
   @IsString()
   @IsOptional()
   contactNo?: string;
 
-  @ApiProperty({ description: 'Email ID', example: 'user@example.com' })
+  @ApiProperty({ description: 'Email', example: 'user@example.com' })
   @IsEmail()
-  emailId: string;
+  email: string;
 
   @ApiProperty({ description: 'Employee No', required: false })
   @IsString()
@@ -44,12 +38,6 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   designation?: string;
-
-  @ApiProperty({ description: 'Branch Code', required: false, maxLength: 20 })
-  @IsString()
-  @IsOptional()
-  @MaxLength(20)
-  branchCode?: string;
 
   @ApiProperty({ description: 'User Lic No', required: false })
   @IsString()

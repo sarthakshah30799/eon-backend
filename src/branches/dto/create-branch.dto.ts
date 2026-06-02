@@ -11,7 +11,7 @@ export class CreateBranchDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
-  branchCode: string;
+  code: string;
 
   @ApiProperty({ description: 'Branch Number', example: 101 })
   @IsNumber()
@@ -87,10 +87,10 @@ export class CreateBranchDto {
   @IsOptional()
   contactNo?: string;
 
-  @ApiProperty({ description: 'Branch Email ID', required: false })
+  @ApiProperty({ description: 'Branch Email', required: false })
   @IsString()
   @IsOptional()
-  branchEmailId?: string;
+  branchEmail?: string;
 
   @ApiProperty({ description: 'AEON Branch Lic', required: false, maxLength: 20 })
   @IsString()

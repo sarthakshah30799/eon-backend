@@ -27,7 +27,7 @@ export class AuthService {
     
     // Set current session
     session.userId = user.id;
-    session.email = user.emailId;
+    session.email = user.email;
     
     // Note: lastLoginAt is already updated in validateUser method
     
@@ -95,4 +95,3 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 }
-

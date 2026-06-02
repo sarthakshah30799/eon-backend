@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Company } from './company.entity';
@@ -36,6 +40,12 @@ export class CompanyService {
       createdBy: userId,
       updatedBy: userId,
     });
+    const existingPan = await this.companyRepository.findOne({
+      where: { panNo: company.panNo },
+    });
+    if (existingPan) {
+      throw new ConflictException('Company with this PAN already exists');
+    }
     const saved = await this.companyRepository.save(company);
     return CompanyResponseDto.fromEntity(saved);
   }
@@ -45,7 +55,16 @@ export class CompanyService {
     if (!company) {
       throw new NotFoundException(`Company with id ${id} not found`);
     }
-    Object.assign(company, uppercaseFields(dto));
+    const uppercased = uppercaseFields(dto);
+    if (uppercased.panNo && uppercased.panNo !== company.panNo) {
+      const existingPan = await this.companyRepository.findOne({
+        where: { panNo: uppercased.panNo },
+      });
+      if (existingPan) {
+        throw new ConflictException('Company with this PAN already exists');
+      }
+    }
+    Object.assign(company, uppercased);
     company.updatedBy = userId;
     const saved = await this.companyRepository.save(company);
     return CompanyResponseDto.fromEntity(saved);

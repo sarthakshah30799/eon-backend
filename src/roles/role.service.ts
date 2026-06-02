@@ -148,9 +148,9 @@ export class RoleService implements OnModuleInit {
 
   async create(rawDto: CreateRoleDto, userId: string): Promise<RoleResponseDto> {
     const dto = uppercaseFields(rawDto);
-    const existing = await this.roleRepository.findOne({ where: { userGroupCode: dto.userGroupCode } });
+    const existing = await this.roleRepository.findOne({ where: { code: dto.code } });
     if (existing) {
-      throw new ConflictException(`Role with code "${dto.userGroupCode}" already exists`);
+      throw new ConflictException(`Role with code "${dto.code}" already exists`);
     }
     const role = this.roleRepository.create({
       ...dto,
@@ -167,10 +167,10 @@ export class RoleService implements OnModuleInit {
     if (!role) {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
-    if (dto.userGroupCode && dto.userGroupCode !== role.userGroupCode) {
-      const existing = await this.roleRepository.findOne({ where: { userGroupCode: dto.userGroupCode } });
+    if (dto.code && dto.code !== role.code) {
+      const existing = await this.roleRepository.findOne({ where: { code: dto.code } });
       if (existing) {
-        throw new ConflictException(`Role with code "${dto.userGroupCode}" already exists`);
+        throw new ConflictException(`Role with code "${dto.code}" already exists`);
       }
     }
     Object.assign(role, dto);
@@ -188,4 +188,3 @@ export class RoleService implements OnModuleInit {
     return { message: `Role with id ${id} deleted successfully` };
   }
 }
-

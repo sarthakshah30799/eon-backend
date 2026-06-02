@@ -16,7 +16,7 @@ export class CreateCounterDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
-  counterName: string;
+  name: string;
 
   @ApiProperty({ description: 'Is Active', default: true, required: false })
   @IsBoolean()
@@ -26,16 +26,15 @@ export class CreateCounterDto {
   @ApiProperty({ description: 'Is Retail Counter', default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isRetailCnt?: boolean;
+  isRetail?: boolean;
 
   @ApiProperty({ description: 'Is Bulk Counter', default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isBulkCnt?: boolean;
+  isBulk?: boolean;
 
   @ApiProperty({ description: 'Is Combine Counter', default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isCombineCnt?: boolean;
+  isCombine?: boolean;
 }
-

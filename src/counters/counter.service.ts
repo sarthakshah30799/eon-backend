@@ -38,7 +38,7 @@ export class CounterService {
     const { branchId, ...rest } = uppercaseFields(dto);
     const counter = this.counterRepository.create({
       ...rest,
-      branch: branchId ? { id: branchId } as any : null,
+      branch: branchId ? ({ id: branchId } as any) : null,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -54,7 +54,7 @@ export class CounterService {
     const { branchId, ...rest } = uppercaseFields(dto);
     Object.assign(counter, rest);
     if (branchId !== undefined) {
-      counter.branch = branchId ? { id: branchId } as any : null;
+      counter.branch = branchId ? ({ id: branchId } as any) : null;
     }
     counter.updatedBy = userId;
     await this.counterRepository.save(counter);

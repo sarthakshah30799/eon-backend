@@ -2,72 +2,72 @@ import { IsString, IsNotEmpty, IsOptional, IsBoolean, MaxLength } from 'class-va
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateRoleDto {
-  @ApiProperty({ description: 'User Group Code', example: 'ADMIN', maxLength: 20 })
+  @ApiProperty({ description: 'Role Code', example: 'ADMIN', maxLength: 20 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
-  userGroupCode: string;
+  code: string;
 
-  @ApiProperty({ description: 'User Group Name', example: 'Administrator', maxLength: 250 })
+  @ApiProperty({ description: 'Role Name', example: 'Administrator', maxLength: 250 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
-  userGroupName: string;
+  name: string;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isAdminGrp?: boolean;
+  isAdmin?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isMdGroup?: boolean;
+  isMd?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isComplianceGrp?: boolean;
+  isCompliance?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isSrFinanceGrp?: boolean;
+  isSrFinance?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isFinanceGrp?: boolean;
+  isFinance?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isBrnMgrGrp?: boolean;
+  isBrnMgr?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isExecutiveGrp?: boolean;
+  isExecutive?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isCardStkGrp?: boolean;
+  isCardStk?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isDeliveryBoyGrp?: boolean;
+  isDeliveryBoy?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isCashierGrp?: boolean;
+  isCashier?: boolean;
 
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
-  isSalesMgrGrp?: boolean;
+  isSalesMgr?: boolean;
 
   @ApiProperty({ default: true, required: false })
   @IsBoolean()

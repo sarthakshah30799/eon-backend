@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '../config/config.service';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ConfigService } from '../config/config.service';
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,
         logging: true,
+        namingStrategy: new SnakeNamingStrategy(),
       }),
     }),
     // Secondary Database Connection
