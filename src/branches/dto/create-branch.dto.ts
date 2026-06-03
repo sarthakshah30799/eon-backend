@@ -7,6 +7,16 @@ export class CreateBranchDto {
   @IsOptional()
   companyId?: string;
 
+  @ApiProperty({ description: 'Country ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  countryId: string;
+
+  @ApiProperty({ description: 'State ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  stateId: string;
+
   @ApiProperty({ description: 'Branch Code', example: 'BR-001', maxLength: 20 })
   @IsString()
   @IsNotEmpty()
@@ -41,12 +51,6 @@ export class CreateBranchDto {
   @IsNotEmpty()
   @MaxLength(250)
   city: string;
-
-  @ApiProperty({ description: 'State', example: 'Maharashtra', maxLength: 250 })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(250)
-  state: string;
 
   @ApiProperty({ description: 'GST State', required: false, maxLength: 250 })
   @IsString()

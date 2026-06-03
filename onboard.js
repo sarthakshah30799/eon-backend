@@ -94,6 +94,195 @@ async function upsertMenu(client, menu) {
   return inserted.rows[0].id;
 }
 
+async function upsertRole(client, role) {
+  const existing = await client.query(
+    `
+    SELECT "id"
+    FROM "roles"
+    WHERE "code" = $1
+    LIMIT 1
+    `,
+    [role.code],
+  );
+
+  if (existing.rowCount > 0) {
+    const existingId = existing.rows[0].id;
+    await client.query(
+      `
+      UPDATE "roles"
+      SET "name" = $2,
+          "is_admin" = $3,
+          "is_md" = $4,
+          "is_compliance" = $5,
+          "is_sr_finance" = $6,
+          "is_finance" = $7,
+          "is_brn_mgr" = $8,
+          "is_executive" = $9,
+          "is_card_stk" = $10,
+          "is_delivery_boy" = $11,
+          "is_cashier" = $12,
+          "is_sales_mgr" = $13,
+          "is_active" = $14,
+          "is_aeon_access" = $15,
+          "is_del_portal_access" = $16,
+          "is_del_app_access" = $17,
+          "updated_by" = $18,
+          "updated_at" = NOW()
+      WHERE "id" = $19
+      `,
+      [
+        role.name,
+        role.isAdmin,
+        role.isMd,
+        role.isCompliance,
+        role.isSrFinance,
+        role.isFinance,
+        role.isBrnMgr,
+        role.isExecutive,
+        role.isCardStk,
+        role.isDeliveryBoy,
+        role.isCashier,
+        role.isSalesMgr,
+        role.isActive,
+        role.isAeonAccess,
+        role.isDelPortalAccess,
+        role.isDelAppAccess,
+        role.updatedBy,
+        existingId,
+      ],
+    );
+    return existingId;
+  }
+
+  const inserted = await client.query(
+    `
+    INSERT INTO "roles" (
+      "code", "name", "is_admin", "is_md", "is_compliance",
+      "is_sr_finance", "is_finance", "is_brn_mgr", "is_executive",
+      "is_card_stk", "is_delivery_boy", "is_cashier", "is_sales_mgr",
+      "is_active", "is_aeon_access", "is_del_portal_access", "is_del_app_access",
+      "created_by", "updated_by"
+    ) VALUES (
+      $1, $2, $3, $4, $5,
+      $6, $7, $8, $9,
+      $10, $11, $12, $13,
+      $14, $15, $16, $17,
+      $18, $19
+    )
+    RETURNING "id"
+    `,
+    [
+      role.code,
+      role.name,
+      role.isAdmin,
+      role.isMd,
+      role.isCompliance,
+      role.isSrFinance,
+      role.isFinance,
+      role.isBrnMgr,
+      role.isExecutive,
+      role.isCardStk,
+      role.isDeliveryBoy,
+      role.isCashier,
+      role.isSalesMgr,
+      role.isActive,
+      role.isAeonAccess,
+      role.isDelPortalAccess,
+      role.isDelAppAccess,
+      role.createdBy,
+      role.updatedBy,
+    ],
+  );
+
+  return inserted.rows[0].id;
+}
+
+async function upsertUser(client, user) {
+  const existing = await client.query(
+    `
+    SELECT "id"
+    FROM "users"
+    WHERE "code" = $1 OR "email" = $2
+    LIMIT 1
+    `,
+    [user.code, user.email],
+  );
+
+  if (existing.rowCount > 0) {
+    const existingId = existing.rows[0].id;
+    await client.query(
+      `
+      UPDATE "users"
+      SET "code" = $2,
+          "password" = $3,
+          "name" = $4,
+          "contact_no" = $5,
+          "email" = $6,
+          "employee_no" = $7,
+          "designation" = $8,
+          "user_lic_no" = $9,
+          "is_active" = $10,
+          "is_locked" = $11,
+          "is_dormant" = $12,
+          "updated_by" = $13,
+          "updated_at" = NOW()
+      WHERE "id" = $14
+      `,
+      [
+        user.code,
+        user.code,
+        user.password,
+        user.name,
+        user.contactNo,
+        user.email,
+        user.employeeNo,
+        user.designation,
+        user.userLicNo,
+        user.isActive,
+        user.isLocked,
+        user.isDormant,
+        user.updatedBy,
+        existingId,
+      ],
+    );
+    return existingId;
+  }
+
+  const inserted = await client.query(
+    `
+    INSERT INTO "users" (
+      "code", "password", "name",
+      "contact_no", "email", "employee_no", "designation",
+      "user_lic_no", "is_active", "is_locked", "is_dormant",
+      "created_by", "updated_by"
+    ) VALUES (
+      $1, $2, $3,
+      $4, $5, $6, $7,
+      $8, $9, $10, $11,
+      $12, $13
+    )
+    RETURNING "id"
+    `,
+    [
+      user.code,
+      user.password,
+      user.name,
+      user.contactNo,
+      user.email,
+      user.employeeNo,
+      user.designation,
+      user.userLicNo,
+      user.isActive,
+      user.isLocked,
+      user.isDormant,
+      user.createdBy,
+      user.updatedBy,
+    ],
+  );
+
+  return inserted.rows[0].id;
+}
+
 async function main() {
   const client = new Client({
     host: getRequiredEnv('DB_HOST'),
@@ -104,9 +293,7 @@ async function main() {
     ssl: getSslConfig(),
   });
 
-  const companyId = '11111111-1111-4111-b111-111111111111';
   const systemUserId = '00000000-0000-0000-0000-000000000000';
-  const adminUserId = '22222222-2222-2222-2222-222222222222';
   const adminEmail = process.argv[2] || process.env.SEED_ADMIN_EMAIL || 'admin@maraekat.com';
   const adminPassword = process.argv[3] || process.env.SEED_ADMIN_PASSWORD || 'password123';
 
@@ -114,104 +301,10 @@ async function main() {
     await client.connect();
     console.log('Connected to PostgreSQL successfully.');
 
-    console.log('Clearing entire database (truncating all tables)...');
-    await client.query(`
-      DO $$ DECLARE
-          r RECORD;
-      BEGIN
-          FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'migrations') LOOP
-              EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
-          END LOOP;
-      END $$;
-    `);
-    console.log('Database cleared successfully.');
-
     console.log(`Hashing password for ${adminEmail}...`);
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
-    console.log('Onboarding company "Maraekat FX Pvt. Ltd."...');
-    await client.query(
-      `
-      INSERT INTO "company" (
-        "id", "short_code", "name", "formerly_known_name", "cin_no", "pan_no",
-        "fx_reg_no", "fx_reg_date", "from_date", "to_date", "logo", "aeon_lic_no",
-        "website", "email", "created_by", "updated_by"
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-      )
-      ON CONFLICT ("id") DO UPDATE SET
-        "short_code" = EXCLUDED."short_code",
-        "name" = EXCLUDED."name",
-        "formerly_known_name" = EXCLUDED."formerly_known_name",
-        "cin_no" = EXCLUDED."cin_no",
-        "pan_no" = EXCLUDED."pan_no",
-        "fx_reg_no" = EXCLUDED."fx_reg_no",
-        "fx_reg_date" = EXCLUDED."fx_reg_date",
-        "from_date" = EXCLUDED."from_date",
-        "to_date" = EXCLUDED."to_date",
-        "logo" = EXCLUDED."logo",
-        "aeon_lic_no" = EXCLUDED."aeon_lic_no",
-        "website" = EXCLUDED."website",
-        "email" = EXCLUDED."email",
-        "updated_by" = EXCLUDED."updated_by";
-    `,
-      [
-        companyId,
-        'MARAEKAT',
-        'Maraekat FX Pvt. Ltd.'.toUpperCase(),
-        'Formerly Known As Maraekat'.toUpperCase(),
-        'U72200MH2000PTC123456',
-        'AAACM1234A',
-        'FX-REG-12345',
-        new Date(),
-        new Date(),
-        new Date('2030-12-31'),
-        null,
-        'AEON-LIC-98765',
-        'https://maraekat.com',
-        'info@maraekat.com'.toUpperCase(),
-        systemUserId,
-        systemUserId,
-      ],
-    );
-    console.log('Company onboarded successfully.');
-
-    console.log(`Onboarding admin user "${adminEmail}"...`);
-    await client.query('DELETE FROM "users" WHERE "email" = $1 OR "code" = $2;', [
-      adminEmail,
-      'ADM001',
-    ]);
-
-    await client.query(
-      `
-      INSERT INTO "users" (
-        "id", "code", "password", "name",
-        "contact_no", "email", "employee_no", "designation",
-        "user_lic_no", "is_active", "is_locked", "is_dormant", "created_by", "updated_by"
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-      );
-    `,
-      [
-        adminUserId,
-        'ADM001',
-        hashedPassword,
-        'Sarthak Kumar'.toUpperCase(),
-        '9876543210',
-        adminEmail.toUpperCase(),
-        'EMP001',
-        'Administrator'.toUpperCase(),
-        'LIC001',
-        true,
-        false,
-        false,
-        systemUserId,
-        systemUserId,
-      ],
-    );
-    console.log('Admin user onboarded successfully.');
-
-    console.log('Onboarding menu tree...');
+    console.log('Onboarding basic menu tree...');
     const masterMenuId = await upsertMenu(client, {
       name: 'Master',
       path: null,
@@ -233,188 +326,87 @@ async function main() {
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
-    await upsertMenu(client, {
-      name: 'Roles Profile',
-      path: '/master/system-setups/user-role',
-      icon: 'shield',
-      parentId: systemSetupMenuId,
-      sortOrder: 1,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
 
-    await upsertMenu(client, {
-      name: 'User Profile',
-      path: '/master/system-setups/user-profile',
-      icon: 'users',
-      parentId: systemSetupMenuId,
-      sortOrder: 2,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    await upsertMenu(client, {
-      name: 'Product Profile',
-      path: '/master/system-setups/product-profile',
-      icon: 'archive',
-      parentId: systemSetupMenuId,
-      sortOrder: 3,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    await upsertMenu(client, {
-      name: 'Country Profile',
-      path: '/master/system-setups/country-profile',
-      icon: 'globe',
-      parentId: systemSetupMenuId,
-      sortOrder: 4,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    await upsertMenu(client, {
-      name: 'State Profile',
-      path: '/master/system-setups/state-profile',
-      icon: 'map',
-      parentId: systemSetupMenuId,
-      sortOrder: 5,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    await upsertMenu(client, {
-      name: 'Company Profile',
-      path: '/master/system-setups/company-profile',
-      icon: 'briefcase',
-      parentId: systemSetupMenuId,
-      sortOrder: 6,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    await upsertMenu(client, {
-      name: 'Branch Profile',
-      path: '/master/system-setups/branch-profile',
-      icon: 'home',
-      parentId: systemSetupMenuId,
-      sortOrder: 7,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    await upsertMenu(client, {
-      name: 'Counter Profile',
-      path: '/master/system-setups/counter-profile',
-      icon: 'monitor',
-      parentId: systemSetupMenuId,
-      sortOrder: 8,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-    console.log('Menu tree onboarded successfully.');
-
-
-    console.log('Onboarding permissions...');
-    const requiredPermissions = [
-      { code: 'add', name: 'Add', description: 'Permission to add records' },
-      { code: 'modify', name: 'Modify', description: 'Permission to modify records' },
-      { code: 'delete', name: 'Delete', description: 'Permission to delete records' },
-      { code: 'view', name: 'View', description: 'Permission to view records' },
-      { code: 'export', name: 'Export', description: 'Permission to export data' },
-      { code: 'authorized', name: 'Authorized', description: 'Permission to authorize records' },
-      { code: 'rejected', name: 'Rejected', description: 'Permission to reject records' },
+    const basicMenus = [
+      { name: 'User Role', path: '/master/system-setups/user-role', icon: 'shield' },
+      { name: 'User Profile', path: '/master/system-setups/user-profile', icon: 'users' },
+      { name: 'Company Profile', path: '/master/system-setups/company-profile', icon: 'briefcase' },
+      { name: 'Branch Profile', path: '/master/system-setups/branch-profile', icon: 'home' },
+      { name: 'Counter Profile', path: '/master/system-setups/counter-profile', icon: 'monitor' },
+      { name: 'Country Profile', path: '/master/system-setups/country-profile', icon: 'globe' },
+      { name: 'State Profile', path: '/master/system-setups/state-profile', icon: 'map' },
+      { name: 'Product Profile', path: '/master/system-setups/product-profile', icon: 'archive' },
     ];
 
-    const permissionIds = [];
-    for (const p of requiredPermissions) {
-      const existing = await client.query(
-        'SELECT "id" FROM "permissions" WHERE "code" = $1 LIMIT 1;',
-        [p.code]
-      );
-      let permId;
-      if (existing.rowCount > 0) {
-        permId = existing.rows[0].id;
-      } else {
-        const inserted = await client.query(
-          `
-          INSERT INTO "permissions" (
-            "code", "name", "description", "created_by", "updated_by"
-          ) VALUES (
-            $1, $2, $3, $4, $5
-          ) RETURNING "id"
-          `,
-          [p.code, p.name, p.description, systemUserId, systemUserId]
-        );
-        permId = inserted.rows[0].id;
-      }
-      permissionIds.push(permId);
+    for (let index = 0; index < basicMenus.length; index += 1) {
+      const menu = basicMenus[index];
+      await upsertMenu(client, {
+        name: menu.name,
+        path: menu.path,
+        icon: menu.icon,
+        parentId: systemSetupMenuId,
+        sortOrder: index + 1,
+        isActive: true,
+        createdBy: systemUserId,
+        updatedBy: systemUserId,
+      });
     }
-    console.log('Permissions onboarded successfully.');
+    console.log('Menu tree onboarded successfully.');
 
     console.log('Onboarding Admin role...');
-    const adminRoleCode = 'ADMIN';
-    const adminRoleName = 'ADMIN';
-    const adminRoleId = '33333333-3333-3333-3333-333333333333';
-
-    await client.query('DELETE FROM "roles" WHERE "code" = $1 OR "id" = $2;', [
-      adminRoleCode,
-      adminRoleId
-    ]);
-
-    await client.query(
-      `
-      INSERT INTO "roles" (
-        "id", "code", "name", "is_admin", "is_active", "created_by", "updated_by"
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7
-      )
-      `,
-      [adminRoleId, adminRoleCode, adminRoleName, true, true, systemUserId, systemUserId]
-    );
+    const adminRoleId = await upsertRole(client, {
+      code: 'ADMIN',
+      name: 'Admin',
+      isAdmin: true,
+      isMd: false,
+      isCompliance: false,
+      isSrFinance: false,
+      isFinance: false,
+      isBrnMgr: false,
+      isExecutive: false,
+      isCardStk: false,
+      isDeliveryBoy: false,
+      isCashier: false,
+      isSalesMgr: false,
+      isActive: true,
+      isAeonAccess: false,
+      isDelPortalAccess: false,
+      isDelAppAccess: false,
+      createdBy: systemUserId,
+      updatedBy: systemUserId,
+    });
     console.log('Admin role onboarded successfully.');
 
-    console.log('Granting all permissions to Admin role...');
-    // Clean up existing permissions for this role first
-    await client.query('DELETE FROM "roles_menu_permissions" WHERE "role_id" = $1;', [adminRoleId]);
-
-    // Get all menus
-    const allMenus = await client.query('SELECT "id" FROM "menus";');
-    for (const menuRow of allMenus.rows) {
-      for (const permId of permissionIds) {
-        await client.query(
-          `
-          INSERT INTO "roles_menu_permissions" (
-            "role_id", "company_id", "menu_id", "permission_id"
-          ) VALUES (
-            $1, $2, $3, $4
-          ) ON CONFLICT DO NOTHING;
-          `,
-          [adminRoleId, companyId, menuRow.id, permId]
-        );
-      }
-    }
-    console.log('Permissions granted successfully.');
+    console.log(`Onboarding admin user "${adminEmail}"...`);
+    const adminUserDbId = await upsertUser(client, {
+      code: 'ADM001',
+      password: hashedPassword,
+      name: 'Admin',
+      contactNo: '9876543210',
+      email: adminEmail.toLowerCase(),
+      employeeNo: 'EMP001',
+      designation: 'Administrator',
+      userLicNo: 'LIC001',
+      isActive: true,
+      isLocked: false,
+      isDormant: false,
+      createdBy: systemUserId,
+      updatedBy: systemUserId,
+    });
+    console.log('Admin user onboarded successfully.');
 
     console.log('Assigning Admin role to admin user...');
-    await client.query('DELETE FROM "user_roles" WHERE "user_id" = $1;', [adminUserId]);
+    await client.query('DELETE FROM "user_roles" WHERE "user_id" = $1;', [adminUserDbId]);
     await client.query(
       `
       INSERT INTO "user_roles" (
         "user_id", "role_id", "branch_id", "counter_id"
       ) VALUES (
         $1, $2, NULL, NULL
-      );
+      )
+      ON CONFLICT DO NOTHING
       `,
-      [adminUserId, adminRoleId]
+      [adminUserDbId, adminRoleId],
     );
     console.log('Admin role assigned successfully.');
 

@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Branch } from './branch.entity';
 import { Counter } from '../counters/counter.entity';
+import { Country } from '../country/country.entity';
+import { State } from '../state/state.entity';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchResponseDto } from './dto/branch-response.dto';
@@ -16,11 +18,15 @@ export class BranchService {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Counter)
     private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(Country)
+    private readonly countryRepository: Repository<Country>,
+    @InjectRepository(State)
+    private readonly stateRepository: Repository<State>,
   ) {}
 
   async findAll(): Promise<BranchResponseDto[]> {
     const branches = await this.branchRepository.find({
-      relations: ['company', 'counters'],
+      relations: ['company', 'counters', 'country', 'state'],
       order: { createdAt: 'DESC' },
     });
     return branches.map(BranchResponseDto.fromEntity);
@@ -29,7 +35,7 @@ export class BranchService {
   async findById(id: string): Promise<BranchResponseDto> {
     const branch = await this.branchRepository.findOne({
       where: { id },
-      relations: ['company', 'counters'],
+      relations: ['company', 'counters', 'country', 'state'],
     });
     if (!branch) {
       throw new NotFoundException(`Branch with id ${id} not found`);
@@ -38,9 +44,33 @@ export class BranchService {
   }
 
   async create(dto: CreateBranchDto, userId: string): Promise<BranchResponseDto> {
-    const { companyId, counterIds, ...rest } = uppercaseFields(dto);
+    const { companyId, countryId, stateId, counterIds, ...rest } = uppercaseFields(dto);
+
+    const country = await this.countryRepository.findOne({
+      where: { id: countryId },
+    });
+
+    if (!country) {
+      throw new NotFoundException(`Country with id ${countryId} not found`);
+    }
+
+    const state = await this.stateRepository.findOne({
+      where: { id: stateId },
+      relations: ['country'],
+    });
+
+    if (!state) {
+      throw new NotFoundException(`State with id ${stateId} not found`);
+    }
+
+    if (state.country?.id !== country.id) {
+      throw new NotFoundException('Selected state does not belong to the selected country');
+    }
+
     const branch = this.branchRepository.create({
       ...rest,
+      country,
+      state,
       company: companyId ? ({ id: companyId } as any) : null,
       createdBy: userId,
       updatedBy: userId,
@@ -62,16 +92,56 @@ export class BranchService {
   async update(id: string, dto: UpdateBranchDto, userId: string): Promise<BranchResponseDto> {
     const branch = await this.branchRepository.findOne({
       where: { id },
-      relations: ['counters'],
+      relations: ['counters', 'company', 'country', 'state'],
     });
     if (!branch) {
       throw new NotFoundException(`Branch with id ${id} not found`);
     }
-    const { companyId, counterIds, ...rest } = uppercaseFields(dto);
+
+    const { companyId, countryId, stateId, counterIds, ...rest } = uppercaseFields(dto);
+
+    let country = branch.country;
+    let state = branch.state;
+
+    if (countryId !== undefined) {
+      const nextCountry = await this.countryRepository.findOne({
+        where: { id: countryId },
+      });
+
+      if (!nextCountry) {
+        throw new NotFoundException(`Country with id ${countryId} not found`);
+      }
+
+      country = nextCountry;
+    }
+
+    if (stateId !== undefined) {
+      const nextState = await this.stateRepository.findOne({
+        where: { id: stateId },
+        relations: ['country'],
+      });
+
+      if (!nextState) {
+        throw new NotFoundException(`State with id ${stateId} not found`);
+      }
+
+      state = nextState;
+    }
+
+    if (!country && state?.country) {
+      country = state.country;
+    }
+
+    if (country && state && state.country?.id !== country.id) {
+      throw new NotFoundException('Selected state does not belong to the selected country');
+    }
+
     Object.assign(branch, rest);
     if (companyId !== undefined) {
       branch.company = companyId ? ({ id: companyId } as any) : null;
     }
+    branch.country = country ? ({ id: country.id } as any) : null;
+    branch.state = state ? ({ id: state.id } as any) : null;
     branch.updatedBy = userId;
     await this.branchRepository.save(branch);
 

@@ -10,6 +10,8 @@ import {
 import { BaseEntity } from "../base/base.entity";
 import { Company } from "../company/company.entity";
 import { Counter } from "../counters/counter.entity";
+import { Country } from "../country/country.entity";
+import { State } from "../state/state.entity";
 
 @Entity("branches")
 export class Branch extends BaseEntity {
@@ -23,6 +25,22 @@ export class Branch extends BaseEntity {
   })
   @JoinColumn({ name: "company_id" })
   company: Company;
+
+  @Index()
+  @ManyToOne(() => Country, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "country_id" })
+  country: Country;
+
+  @Index()
+  @ManyToOne(() => State, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "state_id" })
+  state: State;
 
   @Column({ type: "citext", unique: true })
   code: string;
@@ -41,9 +59,6 @@ export class Branch extends BaseEntity {
 
   @Column({ type: "citext" })
   city: string;
-
-  @Column({ type: "citext" })
-  state: string;
 
   @Column({ type: "citext", nullable: true })
   gstState: string;
