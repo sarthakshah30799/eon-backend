@@ -4,9 +4,9 @@ import { Menu } from '../menu.entity';
 export class MenuResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() name: string;
-  @ApiProperty({ required: false }) path: string;
-  @ApiProperty({ required: false }) icon: string;
-  @ApiProperty({ required: false }) parentId: string;
+  @ApiProperty({ required: false, nullable: true }) path: string | null;
+  @ApiProperty({ required: false, nullable: true }) icon: string | null;
+  @ApiProperty({ required: false, nullable: true }) parentId: string | null;
   @ApiProperty() sortOrder: number;
   @ApiProperty() isActive: boolean;
   @ApiProperty({ type: () => [MenuResponseDto], required: false })

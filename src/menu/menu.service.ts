@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Menu } from './menu.entity';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
@@ -14,13 +14,34 @@ export class MenuService {
   ) {}
 
   async findTree(): Promise<MenuResponseDto[]> {
-    // Fetch root-level menus (no parent) with all nested children
-    const roots = await this.menuRepository.find({
-      where: { parent: IsNull(), isActive: true },
-      relations: ['children', 'children.children', 'children.children.children'],
+    const menus = await this.menuRepository.find({
+      where: { isActive: true },
+      relations: ['parent'],
       order: { sortOrder: 'ASC' },
     });
-    return roots.map(root => MenuResponseDto.fromEntity(root, true));
+
+    const flatMenus = menus.map(menu => MenuResponseDto.fromEntity(menu, false));
+    const childrenByParent = new Map<string | null, MenuResponseDto[]>();
+
+    for (const menu of flatMenus) {
+      const parentId = menu.parentId ?? null;
+      const items = childrenByParent.get(parentId) ?? [];
+      items.push(menu);
+      childrenByParent.set(parentId, items);
+    }
+
+    const sortMenus = (items: MenuResponseDto[]) =>
+      items.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+
+    const buildTree = (parentId: string | null): MenuResponseDto[] => {
+      const items = sortMenus(childrenByParent.get(parentId) ?? []);
+      return items.map(menu => ({
+        ...menu,
+        children: buildTree(menu.id),
+      }));
+    };
+
+    return buildTree(null);
   }
 
   async findAll(): Promise<MenuResponseDto[]> {
