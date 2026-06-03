@@ -2,6 +2,11 @@ import { IsString, IsNotEmpty, IsOptional, IsUUID, IsInt, IsBoolean } from 'clas
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateMenuDto {
+  @ApiProperty({ description: 'Marks the menu as an admin menu', example: true, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isAdmin?: boolean;
+
   @ApiProperty({ description: 'Menu item name', example: 'Company Profile' })
   @IsString()
   @IsNotEmpty()

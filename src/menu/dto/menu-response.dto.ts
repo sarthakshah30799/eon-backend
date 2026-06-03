@@ -3,6 +3,7 @@ import { Menu } from '../menu.entity';
 
 export class MenuResponseDto {
   @ApiProperty() id: string;
+  @ApiProperty() isAdmin: boolean;
   @ApiProperty() name: string;
   @ApiProperty({ required: false, nullable: true }) path: string | null;
   @ApiProperty({ required: false, nullable: true }) icon: string | null;
@@ -15,6 +16,7 @@ export class MenuResponseDto {
   static fromEntity(entity: Menu, includeChildren = false): MenuResponseDto {
     const dto = new MenuResponseDto();
     dto.id = entity.id;
+    dto.isAdmin = entity.isAdmin;
     dto.name = entity.name;
     dto.path = entity.path;
     dto.icon = entity.icon;
