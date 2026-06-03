@@ -10,6 +10,7 @@ import { RoleModule } from './roles/role.module';
 import { MenuModule } from './menu/menu.module';
 import { CountryModule } from './country/country.module';
 import { StateModule } from './state/state.module';
+import { SelectOptionModule } from './category-options/category-option.module';
 import { SessionMiddleware } from './auth/session.middleware';
 
 @Module({
@@ -25,6 +26,7 @@ import { SessionMiddleware } from './auth/session.middleware';
     MenuModule,
     CountryModule,
     StateModule,
+    SelectOptionModule,
   ],
 })
 export class AppModule implements NestModule {
