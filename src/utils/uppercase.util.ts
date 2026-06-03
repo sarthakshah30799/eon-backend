@@ -23,7 +23,6 @@ export function uppercaseFields<T extends Record<string, any>>(obj: T): T {
     'contactNo',
     'branchEmail',
     'aeonBranchLic',
-    'locationType',
     'counterNo',
     'code',
     'email',

@@ -1,12 +1,12 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Post,
   Put,
   UseGuards,
+  Session,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -44,6 +44,29 @@ export class SelectOptionController {
     return this.selectOptionService.getCodes();
   }
 
+  @Get("all")
+  @ApiOperation({ summary: "Get all select options" })
+  @ApiResponse({
+    status: 200,
+    description: "List of select options",
+    type: [SelectOptionResponseDto],
+  })
+  async getAllOptions(): Promise<SelectOptionResponseDto[]> {
+    return this.selectOptionService.getAllOptions();
+  }
+
+  @Get("item/:id")
+  @ApiOperation({ summary: "Get a select option by id" })
+  @ApiParam({ name: "id", description: "Select option UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Select option details",
+    type: SelectOptionResponseDto,
+  })
+  async getOptionById(@Param("id") id: string): Promise<SelectOptionResponseDto> {
+    return this.selectOptionService.getOptionById(id);
+  }
+
   @Get(":code")
   @ApiOperation({ summary: "Get select options by code" })
   @ApiParam({ name: "code", description: "Lookup code" })
@@ -65,8 +88,9 @@ export class SelectOptionController {
   })
   async create(
     @Body() dto: CreateSelectOptionDto,
+    @Session() session: any,
   ): Promise<SelectOptionResponseDto> {
-    return this.selectOptionService.create(dto);
+    return this.selectOptionService.create(dto, session.userId);
   }
 
   @Post("bulk-upsert")
@@ -78,8 +102,9 @@ export class SelectOptionController {
   })
   async bulkUpsert(
     @Body() dto: CreateSelectOptionDto[],
+    @Session() session: any,
   ): Promise<SelectOptionResponseDto[]> {
-    return this.selectOptionService.bulkUpsert(dto);
+    return this.selectOptionService.bulkUpsert(dto, session.userId);
   }
 
   @Put(":id")
@@ -93,15 +118,9 @@ export class SelectOptionController {
   async update(
     @Param("id") id: string,
     @Body() dto: UpdateSelectOptionDto,
+    @Session() session: any,
   ): Promise<SelectOptionResponseDto> {
-    return this.selectOptionService.update(id, dto);
+    return this.selectOptionService.update(id, dto, session.userId);
   }
 
-  @Delete(":id")
-  @ApiOperation({ summary: "Delete a select option" })
-  @ApiParam({ name: "id", description: "Select option UUID" })
-  @ApiResponse({ status: 200, description: "Select option deleted" })
-  async delete(@Param("id") id: string): Promise<{ message: string }> {
-    return this.selectOptionService.delete(id);
-  }
 }

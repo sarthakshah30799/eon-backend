@@ -5,9 +5,11 @@ import { Branch } from './branch.entity';
 import { Counter } from '../counters/counter.entity';
 import { Country } from '../country/country.entity';
 import { State } from '../state/state.entity';
+import { SelectOption } from '../category-options/category-option.entity';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchResponseDto } from './dto/branch-response.dto';
+import { SelectOptionResponseDto } from '../category-options/dto/category-option-response.dto';
 
 import { uppercaseFields } from '../utils/uppercase.util';
 
@@ -22,14 +24,52 @@ export class BranchService {
     private readonly countryRepository: Repository<Country>,
     @InjectRepository(State)
     private readonly stateRepository: Repository<State>,
+    @InjectRepository(SelectOption)
+    private readonly selectOptionRepository: Repository<SelectOption>,
   ) {}
+
+  private normalizeComparableValue(value: unknown): string {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  private async getLocationTypeLookup(): Promise<
+    Map<string, SelectOptionResponseDto>
+  > {
+    const options = await this.selectOptionRepository.find({
+      where: { code: 'locationType' },
+      order: { sortOrder: 'ASC', label: 'ASC' },
+    });
+
+    const lookup = new Map<string, SelectOptionResponseDto>();
+
+    options.forEach(option => {
+      const response = SelectOptionResponseDto.fromEntity(option);
+      lookup.set(this.normalizeComparableValue(option.id), response);
+      lookup.set(this.normalizeComparableValue(option.value), response);
+      lookup.set(this.normalizeComparableValue(option.label), response);
+    });
+
+    return lookup;
+  }
+
+  private toResponseDto(
+    branch: Branch,
+    locationTypeLookup: Map<string, SelectOptionResponseDto>,
+  ): BranchResponseDto {
+    const locationTypeOption = locationTypeLookup.get(
+      this.normalizeComparableValue(branch.locationType),
+    );
+
+    return BranchResponseDto.fromEntity(branch, locationTypeOption ?? null);
+  }
 
   async findAll(): Promise<BranchResponseDto[]> {
     const branches = await this.branchRepository.find({
       relations: ['company', 'counters', 'country', 'state'],
       order: { createdAt: 'DESC' },
     });
-    return branches.map(BranchResponseDto.fromEntity);
+    const locationTypeLookup = await this.getLocationTypeLookup();
+    return branches.map(branch => this.toResponseDto(branch, locationTypeLookup));
   }
 
   async findById(id: string): Promise<BranchResponseDto> {
@@ -40,7 +80,8 @@ export class BranchService {
     if (!branch) {
       throw new NotFoundException(`Branch with id ${id} not found`);
     }
-    return BranchResponseDto.fromEntity(branch);
+    const locationTypeLookup = await this.getLocationTypeLookup();
+    return this.toResponseDto(branch, locationTypeLookup);
   }
 
   async create(dto: CreateBranchDto, userId: string): Promise<BranchResponseDto> {

@@ -4,12 +4,16 @@ import { Branch } from './branch.entity';
 import { Counter } from '../counters/counter.entity';
 import { Country } from '../country/country.entity';
 import { State } from '../state/state.entity';
+import { SelectOption } from '../category-options/category-option.entity';
 import { BranchService } from './branch.service';
 import { BranchController } from './branch.controller';
 import { UserModule } from '../users/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Branch, Counter, Country, State]), UserModule],
+  imports: [
+    TypeOrmModule.forFeature([Branch, Counter, Country, State, SelectOption]),
+    UserModule,
+  ],
   controllers: [BranchController],
   providers: [BranchService],
   exports: [BranchService],

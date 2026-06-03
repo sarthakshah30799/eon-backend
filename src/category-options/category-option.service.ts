@@ -14,6 +14,7 @@ type CacheEntry = {
 
 @Injectable()
 export class SelectOptionService {
+  private readonly systemUserId = '00000000-0000-0000-0000-000000000000';
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inflight = new Map<string, Promise<SelectOptionResponseDto[]>>();
   private readonly cacheTtlMs = 5 * 60 * 1000;
@@ -86,7 +87,32 @@ export class SelectOptionService {
     return this.loadOptionsByCode(code);
   }
 
-  async create(dto: CreateSelectOptionDto): Promise<SelectOptionResponseDto> {
+  async getAllOptions(): Promise<SelectOptionResponseDto[]> {
+    const options = await this.selectOptionRepository.find({
+      order: {
+        code: 'ASC',
+        sortOrder: 'ASC',
+        label: 'ASC',
+      },
+    });
+
+    return options.map(SelectOptionResponseDto.fromEntity);
+  }
+
+  async getOptionById(id: string): Promise<SelectOptionResponseDto> {
+    const option = await this.selectOptionRepository.findOne({ where: { id } });
+
+    if (!option) {
+      throw new NotFoundException(`Select option with id ${id} not found`);
+    }
+
+    return SelectOptionResponseDto.fromEntity(option);
+  }
+
+  async create(
+    dto: CreateSelectOptionDto,
+    userId?: string,
+  ): Promise<SelectOptionResponseDto> {
     const normalizedCode = this.normalizeCode(dto.code);
     const normalizedValue = dto.value.trim();
     const normalizedLabel = dto.label.trim();
@@ -108,6 +134,8 @@ export class SelectOptionService {
       label: normalizedLabel,
       sortOrder: dto.sortOrder ?? 0,
       isActive: dto.isActive ?? true,
+      createdBy: userId || this.systemUserId,
+      updatedBy: userId || this.systemUserId,
     });
 
     const saved = await this.selectOptionRepository.save(option);
@@ -115,7 +143,11 @@ export class SelectOptionService {
     return SelectOptionResponseDto.fromEntity(saved);
   }
 
-  async update(id: string, dto: UpdateSelectOptionDto): Promise<SelectOptionResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateSelectOptionDto,
+    userId?: string,
+  ): Promise<SelectOptionResponseDto> {
     const option = await this.selectOptionRepository.findOne({ where: { id } });
 
     if (!option) {
@@ -145,6 +177,7 @@ export class SelectOptionService {
     option.label = nextLabel;
     option.sortOrder = nextSortOrder;
     option.isActive = nextIsActive;
+    option.updatedBy = userId || this.systemUserId;
 
     const saved = await this.selectOptionRepository.save(option);
     this.invalidateCache(previousCode);
@@ -152,19 +185,10 @@ export class SelectOptionService {
     return SelectOptionResponseDto.fromEntity(saved);
   }
 
-  async delete(id: string): Promise<{ message: string }> {
-    const option = await this.selectOptionRepository.findOne({ where: { id } });
-
-    if (!option) {
-      throw new NotFoundException(`Select option with id ${id} not found`);
-    }
-
-    await this.selectOptionRepository.remove(option);
-    this.invalidateCache(option.code);
-    return { message: `Select option with id ${id} deleted successfully` };
-  }
-
-  async bulkUpsert(options: CreateSelectOptionDto[]): Promise<SelectOptionResponseDto[]> {
+  async bulkUpsert(
+    options: CreateSelectOptionDto[],
+    userId?: string,
+  ): Promise<SelectOptionResponseDto[]> {
     const result: SelectOptionResponseDto[] = [];
 
     for (const item of options) {
@@ -179,6 +203,7 @@ export class SelectOptionService {
         existing.label = item.label.trim();
         existing.sortOrder = item.sortOrder ?? existing.sortOrder;
         existing.isActive = item.isActive ?? existing.isActive;
+        existing.updatedBy = userId || this.systemUserId;
         const saved = await this.selectOptionRepository.save(existing);
         this.invalidateCache(saved.code);
         result.push(SelectOptionResponseDto.fromEntity(saved));
@@ -192,6 +217,8 @@ export class SelectOptionService {
           label: item.label.trim(),
           sortOrder: item.sortOrder ?? 0,
           isActive: item.isActive ?? true,
+          createdBy: userId || this.systemUserId,
+          updatedBy: userId || this.systemUserId,
         }),
       );
       this.invalidateCache(created.code);

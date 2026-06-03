@@ -1,16 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Branch } from '../branch.entity';
+import { CountryResponseDto } from '../../country/dto/country-response.dto';
+import { StateResponseDto } from '../../state/dto/state-response.dto';
+import { SelectOptionResponseDto } from '../../category-options/dto/category-option-response.dto';
 
 export class BranchResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() code: string;
   @ApiProperty() branchNumber: number;
-  @ApiProperty({ required: false }) countryId: string;
-  @ApiProperty({ required: false }) countryCode: string;
-  @ApiProperty({ required: false }) countryName: string;
-  @ApiProperty({ required: false }) stateId: string;
-  @ApiProperty({ required: false }) stateCode: string;
-  @ApiProperty({ required: false }) stateName: string;
+  @ApiProperty({ required: false, type: CountryResponseDto })
+  country: CountryResponseDto | null;
+  @ApiProperty({ required: false, type: StateResponseDto })
+  state: StateResponseDto | null;
   @ApiProperty() address1: string;
   @ApiProperty({ required: false }) address2: string;
   @ApiProperty({ required: false }) address3: string;
@@ -24,7 +25,8 @@ export class BranchResponseDto {
   @ApiProperty({ required: false }) contactNo: string;
   @ApiProperty({ required: false }) branchEmail: string;
   @ApiProperty({ required: false }) aeonBranchLic: string;
-  @ApiProperty({ required: false }) locationType: string;
+  @ApiProperty({ required: false, type: SelectOptionResponseDto })
+  locationType: SelectOptionResponseDto | null;
   @ApiProperty({ required: false }) cashHolding: number;
   @ApiProperty({ required: false }) cashHoldingTemp: number;
   @ApiProperty({ required: false }) currHolding: number;
@@ -37,17 +39,16 @@ export class BranchResponseDto {
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
 
-  static fromEntity(entity: Branch): BranchResponseDto {
+  static fromEntity(
+    entity: Branch,
+    locationType?: SelectOptionResponseDto | null,
+  ): BranchResponseDto {
     const dto = new BranchResponseDto();
     dto.id = entity.id;
     dto.code = entity.code;
     dto.branchNumber = entity.branchNumber;
-    dto.countryId = entity.country?.id || null;
-    dto.countryCode = entity.country?.code || null;
-    dto.countryName = entity.country?.name || null;
-    dto.stateId = entity.state?.id || null;
-    dto.stateCode = entity.state?.code || null;
-    dto.stateName = entity.state?.name || null;
+    dto.country = entity.country ? CountryResponseDto.fromEntity(entity.country) : null;
+    dto.state = entity.state ? StateResponseDto.fromEntity(entity.state) : null;
     dto.address1 = entity.address1;
     dto.address2 = entity.address2;
     dto.address3 = entity.address3;
@@ -61,7 +62,7 @@ export class BranchResponseDto {
     dto.contactNo = entity.contactNo;
     dto.branchEmail = entity.branchEmail;
     dto.aeonBranchLic = entity.aeonBranchLic;
-    dto.locationType = entity.locationType;
+    dto.locationType = locationType ?? null;
     dto.cashHolding = entity.cashHolding !== null ? Number(entity.cashHolding) : null;
     dto.cashHoldingTemp = entity.cashHoldingTemp !== null ? Number(entity.cashHoldingTemp) : null;
     dto.currHolding = entity.currHolding !== null ? Number(entity.currHolding) : null;
