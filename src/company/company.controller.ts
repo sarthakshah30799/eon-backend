@@ -1,18 +1,32 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Session } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Session,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyResponseDto } from './dto/company-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { UserService } from '../users/user.service';
 
 @ApiTags('companies')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard, PermissionsGuard)
+@UseGuards(AuthenticatedGuard)
 @Controller('companies')
 export class CompanyController {
-  constructor(private readonly companyService: CompanyService) {}
+  constructor(
+    private readonly companyService: CompanyService,
+    private readonly userService: UserService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get all companies' })
@@ -38,6 +52,10 @@ export class CompanyController {
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async create(@Body() dto: CreateCompanyDto, @Session() session: any): Promise<CompanyResponseDto> {
+    const user = await this.userService.findById(session.userId);
+    if (!user.isAdmin) {
+      throw new ForbiddenException('Only admin users can create company profiles');
+    }
     return this.companyService.create(dto, session.userId);
   }
 
@@ -52,6 +70,10 @@ export class CompanyController {
     @Body() dto: UpdateCompanyDto,
     @Session() session: any,
   ): Promise<CompanyResponseDto> {
+    const user = await this.userService.findById(session.userId);
+    if (!user.isAdmin) {
+      throw new ForbiddenException('Only admin users can update company profiles');
+    }
     return this.companyService.update(id, dto, session.userId);
   }
 
@@ -61,7 +83,11 @@ export class CompanyController {
   @ApiResponse({ status: 200, description: 'Company deleted' })
   @ApiResponse({ status: 404, description: 'Company not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async delete(@Param('id') id: string): Promise<{ message: string }> {
+  async delete(@Param('id') id: string, @Session() session: any): Promise<{ message: string }> {
+    const user = await this.userService.findById(session.userId);
+    if (!user.isAdmin) {
+      throw new ForbiddenException('Only admin users can delete company profiles');
+    }
     return this.companyService.delete(id);
   }
 }

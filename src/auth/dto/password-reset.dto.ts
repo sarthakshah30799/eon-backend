@@ -25,3 +25,11 @@ export class ResetPasswordDto {
   @MinLength(6, { message: 'Password must be at least 6 characters long' })
   password: string;
 }
+
+export class SetupPasswordDto {
+  @ApiProperty({ description: 'New password', example: 'newsecurepassword123' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6, { message: 'Password must be at least 6 characters long' })
+  password: string;
+}

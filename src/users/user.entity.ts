@@ -45,6 +45,9 @@ export class User extends BaseEntity {
   @Column()
   password: string;
 
+  @Column({ type: "boolean", default: false })
+  mustChangePassword: boolean;
+
   @Column({ nullable: true })
   lastLoginAt: Date;
 

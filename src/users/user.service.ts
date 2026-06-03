@@ -20,6 +20,8 @@ const USER_RELATIONS = [
   'userRoles.counter',
 ];
 
+const TEMP_INITIAL_PASSWORD = 'Temp@1234';
+
 @Injectable()
 export class UserService {
   constructor(
@@ -55,14 +57,13 @@ export class UserService {
       throw new ConflictException('User with this user code already exists');
     }
 
-    const rawPassword = uppercased.password || 'temp1234';
-    const hashedPassword = await bcrypt.hash(rawPassword, 10);
-
     const { roleId, branchId, counterId, ...userFields } = uppercased;
+    const hashedPassword = await bcrypt.hash(TEMP_INITIAL_PASSWORD, 10);
 
     const user = this.userRepository.create({
       ...userFields,
       password: hashedPassword,
+      mustChangePassword: true,
       isActive: uppercased.isActive !== false,
       createdBy: userId || '00000000-0000-0000-0000-000000000000',
       updatedBy: userId || '00000000-0000-0000-0000-000000000000',
@@ -153,6 +154,13 @@ export class UserService {
     await this.userRepository.save(user);
 
     return user;
+  }
+
+  async findEntityById(id: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { id },
+      relations: USER_RELATIONS,
+    });
   }
 
   async findById(id: string): Promise<UserResponseDto> {

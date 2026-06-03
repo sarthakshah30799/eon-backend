@@ -6,7 +6,7 @@ import { LoginUserDto } from '../users/dto/login-user.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { SendOtpDto, VerifyOtpDto } from './dto/otp.dto';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
+import { ForgotPasswordDto, ResetPasswordDto, SetupPasswordDto } from './dto/password-reset.dto';
 import { UserService } from '../users/user.service';
 import { AuthenticatedGuard } from './guards/authenticated.guard';
 
@@ -42,6 +42,16 @@ export class AuthController {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    if (user.mustChangePassword) {
+      session.pendingPasswordSetupUserId = user.id;
+      session.pendingPasswordSetupEmail = user.email;
+      return {
+        message: 'Password setup required',
+        requiresPasswordChange: true,
+      };
+    }
+
     return this.authService.login(user, session);
   }
 
@@ -99,6 +109,19 @@ export class AuthController {
   @ApiBody({ type: ResetPasswordDto })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.email, dto.token, dto.password);
+  }
+
+  @Post('setup-password')
+  @ApiCookieAuth('sessionId')
+  @ApiOperation({ summary: 'Complete initial password setup' })
+  @ApiResponse({ status: 200, description: 'Password successfully updated' })
+  @ApiResponse({ status: 400, description: 'Invalid password setup session' })
+  @ApiBody({ type: SetupPasswordDto })
+  async setupPassword(
+    @Body() dto: SetupPasswordDto,
+    @Session() session: any,
+  ) {
+    return this.authService.completeInitialPasswordSetup(session, dto.password);
   }
 
 

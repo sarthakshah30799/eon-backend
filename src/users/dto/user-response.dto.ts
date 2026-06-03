@@ -69,6 +69,9 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Is Admin Role', required: false })
   isAdmin?: boolean;
 
+  @ApiProperty({ description: 'Must change password on next login', required: false })
+  mustChangePassword?: boolean;
+
   static fromEntity(user: User): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
@@ -83,6 +86,7 @@ export class UserResponseDto {
     dto.lastLoginDate = user.lastLoginDate;
     dto.isLocked = user.isLocked;
     dto.isDormant = user.isDormant;
+    dto.mustChangePassword = user.mustChangePassword;
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
 

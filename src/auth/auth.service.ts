@@ -37,6 +37,35 @@ export class AuthService {
     };
   }
 
+  async completeInitialPasswordSetup(session: any, newPassword: string): Promise<{ message: string }> {
+    const pendingUserId = session?.pendingPasswordSetupUserId;
+    if (!pendingUserId) {
+      throw new BadRequestException('No pending password setup session found');
+    }
+
+    const user = await this.userService.findEntityById(pendingUserId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.mustChangePassword) {
+      throw new BadRequestException('Password setup is not required for this user');
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.mustChangePassword = false;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await this.userService.save(user);
+
+    await this.sessionService.invalidateUserSessions(user.id);
+
+    session.pendingPasswordSetupUserId = null;
+    session.pendingPasswordSetupEmail = null;
+
+    return { message: 'Password updated successfully' };
+  }
+
   async logout(session: any): Promise<{ message: string }> {
     session.destroy();
     return { message: 'Logout successful' };
@@ -82,6 +111,7 @@ export class AuthService {
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
+    user.mustChangePassword = false;
 
     // Clear reset token and expiration
     user.resetPasswordToken = null;

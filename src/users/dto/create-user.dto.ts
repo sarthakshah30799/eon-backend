@@ -8,12 +8,6 @@ export class CreateUserDto {
   @MaxLength(20)
   code: string;
 
-  @ApiProperty({ description: 'User password', example: 'password123', minLength: 6, required: false })
-  @IsString()
-  @MinLength(6)
-  @IsOptional()
-  password?: string;
-
   @ApiProperty({ description: 'User Name', example: 'Sarthak Kumar', maxLength: 250 })
   @IsString()
   @MinLength(1)
