@@ -18,12 +18,11 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException('User not authenticated');
     }
 
-    const userDto = await this.userService.findById(userId);
+    const userDto = await this.userService.findById(userId, userId);
     if (!userDto) {
       throw new UnauthorizedException('User profile not found');
     }
 
-    const email = userDto.email?.toLowerCase();
     const path = request.route?.path || request.url;
     const method = request.method;
 
@@ -50,7 +49,7 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // 3. User with isAdmin role always has absolute access to everything
+    // 3. Users marked as admin always have absolute access to everything
     if (userDto.isAdmin) {
       return true;
     }

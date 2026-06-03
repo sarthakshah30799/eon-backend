@@ -132,7 +132,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Current user data', type: UserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getCurrentUser(@Session() session: any): Promise<UserResponseDto> {
-    return this.userService.findById(session.userId);
+    return this.userService.findById(session.userId, session.userId);
   }
 
   @Get('check')
@@ -143,6 +143,7 @@ export class AuthController {
       authenticated: !!session.userId,
       userId: session.userId || null,
       email: session.email || null,
+      isAdmin: session.isAdmin === true,
     };
   }
 

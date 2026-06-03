@@ -35,7 +35,7 @@ export class MenuController {
     @Session() session: any,
     @Query('includeAdmin') includeAdmin?: string,
   ): Promise<MenuResponseDto[]> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     const shouldIncludeAdmin =
       includeAdmin === undefined ? user.isAdmin === true : includeAdmin === 'true';
     return this.menuService.findTree(
@@ -51,7 +51,7 @@ export class MenuController {
     @Session() session: any,
     @Query('includeAdmin') includeAdmin?: string,
   ): Promise<MenuResponseDto[]> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     const shouldIncludeAdmin =
       includeAdmin === undefined ? user.isAdmin === true : includeAdmin === 'true';
     return this.menuService.findAll(
@@ -66,7 +66,7 @@ export class MenuController {
   @ApiResponse({ status: 200, description: 'Menu details', type: MenuResponseDto })
   @ApiResponse({ status: 404, description: 'Menu not found' })
   async findById(@Param('id') id: string, @Session() session: any): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     return this.menuService.findById(id, user.isAdmin === true, user.isAdmin === true);
   }
 
@@ -74,7 +74,7 @@ export class MenuController {
   @ApiOperation({ summary: 'Create a new menu item' })
   @ApiResponse({ status: 201, description: 'Menu created', type: MenuResponseDto })
   async create(@Body() dto: CreateMenuDto, @Session() session: any): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     return this.menuService.create(
       dto,
       session.userId,
@@ -93,7 +93,7 @@ export class MenuController {
     @Body() dto: UpdateMenuDto,
     @Session() session: any,
   ): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     return this.menuService.update(
       id,
       dto,
@@ -112,7 +112,7 @@ export class MenuController {
     @Param('id') id: string,
     @Session() session: any,
   ): Promise<{ message: string }> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     return this.menuService.delete(id, user.isAdmin === true, user.isAdmin === true);
   }
 }

@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from './role.entity';
+import { User } from '../users/user.entity';
 import { Permission } from '../permissions/permission.entity';
 import { RolesMenuPermission } from '../roles-menu-permission/roles-menu-permission.entity';
 import { Company } from '../company/company.entity';
@@ -16,6 +17,8 @@ export class RoleService implements OnModuleInit {
   constructor(
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     @InjectRepository(Permission)
     private readonly permissionRepository: Repository<Permission>,
     @InjectRepository(RolesMenuPermission)
@@ -23,6 +26,15 @@ export class RoleService implements OnModuleInit {
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
   ) {}
+
+  private async isRequesterAdmin(userId?: string): Promise<boolean> {
+    if (!userId) {
+      return false;
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    return user?.isAdmin === true;
+  }
 
   async onModuleInit() {
     const requiredPermissions = [
@@ -53,9 +65,16 @@ export class RoleService implements OnModuleInit {
     }
   }
 
-  async getRolePermissions(roleId: string): Promise<Record<string, Record<string, boolean>>> {
+  async getRolePermissions(
+    roleId: string,
+    currentUserId?: string,
+  ): Promise<Record<string, Record<string, boolean>>> {
     const role = await this.roleRepository.findOne({ where: { id: roleId } });
     if (!role) {
+      throw new NotFoundException(`Role with id ${roleId} not found`);
+    }
+
+    if (role.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
       throw new NotFoundException(`Role with id ${roleId} not found`);
     }
 
@@ -89,9 +108,14 @@ export class RoleService implements OnModuleInit {
   async updateRolePermissions(
     roleId: string,
     grid: Record<string, Record<string, boolean>>,
+    currentUserId?: string,
   ): Promise<{ message: string }> {
     const role = await this.roleRepository.findOne({ where: { id: roleId } });
     if (!role) {
+      throw new NotFoundException(`Role with id ${roleId} not found`);
+    }
+
+    if (role.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
       throw new NotFoundException(`Role with id ${roleId} not found`);
     }
 
@@ -131,16 +155,26 @@ export class RoleService implements OnModuleInit {
     return { message: 'Permissions updated successfully' };
   }
 
-  async findAll(): Promise<RoleResponseDto[]> {
+  async findAll(currentUserId?: string): Promise<RoleResponseDto[]> {
     const roles = await this.roleRepository.find({
       order: { createdAt: 'DESC' },
     });
-    return roles.map(RoleResponseDto.fromEntity);
+
+    if (await this.isRequesterAdmin(currentUserId)) {
+      return roles.map(RoleResponseDto.fromEntity);
+    }
+
+    return roles
+      .filter(role => role.isAdmin !== true)
+      .map(RoleResponseDto.fromEntity);
   }
 
-  async findById(id: string): Promise<RoleResponseDto> {
+  async findById(id: string, currentUserId?: string): Promise<RoleResponseDto> {
     const role = await this.roleRepository.findOne({ where: { id } });
     if (!role) {
+      throw new NotFoundException(`Role with id ${id} not found`);
+    }
+    if (role.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
     return RoleResponseDto.fromEntity(role);
@@ -148,6 +182,12 @@ export class RoleService implements OnModuleInit {
 
   async create(rawDto: CreateRoleDto, userId: string): Promise<RoleResponseDto> {
     const dto = uppercaseFields(rawDto);
+    const requesterIsAdmin = await this.isRequesterAdmin(userId);
+
+    if (dto.isAdmin && !requesterIsAdmin) {
+      throw new ForbiddenException('Admin role can only be managed by admin users');
+    }
+
     const existing = await this.roleRepository.findOne({ where: { code: dto.code } });
     if (existing) {
       throw new ConflictException(`Role with code "${dto.code}" already exists`);
@@ -163,9 +203,16 @@ export class RoleService implements OnModuleInit {
 
   async update(id: string, rawDto: UpdateRoleDto, userId: string): Promise<RoleResponseDto> {
     const dto = uppercaseFields(rawDto);
+    const requesterIsAdmin = await this.isRequesterAdmin(userId);
     const role = await this.roleRepository.findOne({ where: { id } });
     if (!role) {
       throw new NotFoundException(`Role with id ${id} not found`);
+    }
+    if (role.isAdmin && !requesterIsAdmin) {
+      throw new NotFoundException(`Role with id ${id} not found`);
+    }
+    if (dto.isAdmin && !requesterIsAdmin) {
+      throw new ForbiddenException('Admin role can only be managed by admin users');
     }
     if (dto.code && dto.code !== role.code) {
       const existing = await this.roleRepository.findOne({ where: { code: dto.code } });
@@ -183,6 +230,9 @@ export class RoleService implements OnModuleInit {
     const role = await this.roleRepository.findOne({ where: { id } });
     if (!role) {
       throw new NotFoundException(`Role with id ${id} not found`);
+    }
+    if (role.isAdmin) {
+      throw new BadRequestException('Admin role cannot be deleted');
     }
     await this.roleRepository.remove(role);
     return { message: `Role with id ${id} deleted successfully` };

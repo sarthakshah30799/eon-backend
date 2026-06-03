@@ -17,8 +17,8 @@ export class RoleController {
   @Get()
   @ApiOperation({ summary: 'Get all roles' })
   @ApiResponse({ status: 200, description: 'List of roles', type: [RoleResponseDto] })
-  async findAll(): Promise<RoleResponseDto[]> {
-    return this.roleService.findAll();
+  async findAll(@Session() session: any): Promise<RoleResponseDto[]> {
+    return this.roleService.findAll(session.userId);
   }
 
   @Get(':id')
@@ -26,8 +26,8 @@ export class RoleController {
   @ApiParam({ name: 'id', description: 'Role UUID' })
   @ApiResponse({ status: 200, description: 'Role details', type: RoleResponseDto })
   @ApiResponse({ status: 404, description: 'Role not found' })
-  async findById(@Param('id') id: string): Promise<RoleResponseDto> {
-    return this.roleService.findById(id);
+  async findById(@Param('id') id: string, @Session() session: any): Promise<RoleResponseDto> {
+    return this.roleService.findById(id, session.userId);
   }
 
   @Post()
@@ -56,7 +56,7 @@ export class RoleController {
   @ApiParam({ name: 'id', description: 'Role UUID' })
   @ApiResponse({ status: 200, description: 'Role deleted' })
   @ApiResponse({ status: 404, description: 'Role not found' })
-  async delete(@Param('id') id: string): Promise<{ message: string }> {
+  async delete(@Param('id') id: string, @Session() session: any): Promise<{ message: string }> {
     return this.roleService.delete(id);
   }
 
@@ -64,8 +64,8 @@ export class RoleController {
   @ApiOperation({ summary: 'Get permissions matrix for a role' })
   @ApiParam({ name: 'id', description: 'Role UUID' })
   @ApiResponse({ status: 200, description: 'Permissions matrix' })
-  async getPermissions(@Param('id') id: string) {
-    return this.roleService.getRolePermissions(id);
+  async getPermissions(@Param('id') id: string, @Session() session: any) {
+    return this.roleService.getRolePermissions(id, session.userId);
   }
 
   @Post(':id/permissions')
@@ -75,8 +75,8 @@ export class RoleController {
   async updatePermissions(
     @Param('id') id: string,
     @Body() body: Record<string, Record<string, boolean>>,
+    @Session() session: any,
   ) {
-    return this.roleService.updateRolePermissions(id, body);
+    return this.roleService.updateRolePermissions(id, body, session.userId);
   }
 }
-

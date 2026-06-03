@@ -52,7 +52,7 @@ export class CompanyController {
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async create(@Body() dto: CreateCompanyDto, @Session() session: any): Promise<CompanyResponseDto> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     if (!user.isAdmin) {
       throw new ForbiddenException('Only admin users can create company profiles');
     }
@@ -70,7 +70,7 @@ export class CompanyController {
     @Body() dto: UpdateCompanyDto,
     @Session() session: any,
   ): Promise<CompanyResponseDto> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     if (!user.isAdmin) {
       throw new ForbiddenException('Only admin users can update company profiles');
     }
@@ -84,7 +84,7 @@ export class CompanyController {
   @ApiResponse({ status: 404, description: 'Company not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async delete(@Param('id') id: string, @Session() session: any): Promise<{ message: string }> {
-    const user = await this.userService.findById(session.userId);
+    const user = await this.userService.findById(session.userId, session.userId);
     if (!user.isAdmin) {
       throw new ForbiddenException('Only admin users can delete company profiles');
     }

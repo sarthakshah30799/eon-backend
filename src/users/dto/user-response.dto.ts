@@ -66,7 +66,7 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Permissions map', required: false })
   permissions?: Record<string, string[]>;
 
-  @ApiProperty({ description: 'Is Admin Role', required: false })
+  @ApiProperty({ description: 'Is Admin User', required: false })
   isAdmin?: boolean;
 
   @ApiProperty({ description: 'Must change password on next login', required: false })
@@ -86,6 +86,7 @@ export class UserResponseDto {
     dto.lastLoginDate = user.lastLoginDate;
     dto.isLocked = user.isLocked;
     dto.isDormant = user.isDormant;
+    dto.isAdmin = user.isAdmin || false;
     dto.mustChangePassword = user.mustChangePassword;
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
@@ -95,7 +96,6 @@ export class UserResponseDto {
       const userRole = user.userRoles[0];
       dto.roleId = userRole.role?.id || null;
       dto.roleName = userRole.role?.name || null;
-      dto.isAdmin = userRole.role?.isAdmin || false;
       dto.branchId = userRole.branch?.id || null;
       dto.counterId = userRole.counter?.id || null;
       dto.counterNo = userRole.counter?.counterNo || null;

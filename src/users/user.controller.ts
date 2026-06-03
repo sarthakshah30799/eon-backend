@@ -18,8 +18,8 @@ export class UserController {
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'List of users', type: [UserResponseDto] })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findAll(): Promise<UserResponseDto[]> {
-    return this.userService.findAll();
+  async findAll(@Session() session: any): Promise<UserResponseDto[]> {
+    return this.userService.findAll(session.userId);
   }
 
   @Get(':id')
@@ -30,8 +30,8 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'User details', type: UserResponseDto })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findById(@Param('id') id: string): Promise<UserResponseDto> {
-    return this.userService.findById(id);
+  async findById(@Param('id') id: string, @Session() session: any): Promise<UserResponseDto> {
+    return this.userService.findById(id, session.userId);
   }
 
   @Post('register')
@@ -79,8 +79,8 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'User deleted' })
   @ApiResponse({ status: 404, description: 'User not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async delete(@Param('id') id: string): Promise<{ message: string }> {
-    return this.userService.delete(id);
+  async delete(@Param('id') id: string, @Session() session: any): Promise<{ message: string }> {
+    return this.userService.delete(id, session.userId);
   }
 
   @Get('profile/me')
@@ -90,6 +90,6 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'User profile data', type: UserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getProfile(@Session() session: any): Promise<UserResponseDto> {
-    return this.userService.findById(session.userId);
+    return this.userService.findById(session.userId, session.userId);
   }
 }

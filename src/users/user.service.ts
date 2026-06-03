@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
+import { Role } from '../roles/role.entity';
 import { UserRole } from '../user-roles/user-role.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -27,16 +28,37 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
   ) {}
 
-  async findAll(): Promise<UserResponseDto[]> {
+  private async isRequesterAdmin(userId?: string): Promise<boolean> {
+    if (!userId) {
+      return false;
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    return user?.isAdmin === true;
+  }
+
+  async findAll(currentUserId?: string): Promise<UserResponseDto[]> {
     const users = await this.userRepository.find({
       relations: USER_RELATIONS,
       order: { createdAt: 'DESC' },
     });
-    return users.map(UserResponseDto.fromEntity);
+
+    if (await this.isRequesterAdmin(currentUserId)) {
+      return users.map(UserResponseDto.fromEntity);
+    }
+
+    return users
+      .filter(user => user.isAdmin !== true)
+      .map(UserResponseDto.fromEntity);
   }
 
   async create(createUserDto: CreateUserDto, userId?: string): Promise<UserResponseDto> {
@@ -59,11 +81,22 @@ export class UserService {
 
     const { roleId, branchId, counterId, ...userFields } = uppercased;
     const hashedPassword = await bcrypt.hash(TEMP_INITIAL_PASSWORD, 10);
+    const requesterIsAdmin = await this.isRequesterAdmin(userId);
+    const selectedRole = roleId
+      ? await this.roleRepository.findOne({
+          where: { id: roleId },
+        })
+      : null;
+
+    if (selectedRole?.isAdmin && !requesterIsAdmin) {
+      throw new ConflictException('Admin role cannot be assigned to non-admin users');
+    }
 
     const user = this.userRepository.create({
       ...userFields,
       password: hashedPassword,
       mustChangePassword: true,
+      isAdmin: false,
       isActive: uppercased.isActive !== false,
       createdBy: userId || '00000000-0000-0000-0000-000000000000',
       updatedBy: userId || '00000000-0000-0000-0000-000000000000',
@@ -90,7 +123,21 @@ export class UserService {
       throw new NotFoundException(`User with id ${id} not found`);
     }
 
+    const requesterIsAdmin = await this.isRequesterAdmin(userId);
+    if (user.isAdmin && !requesterIsAdmin) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+
     const uppercased = uppercaseFields(dto);
+    const selectedRole = uppercased.roleId
+      ? await this.roleRepository.findOne({
+          where: { id: uppercased.roleId },
+        })
+      : null;
+
+    if (selectedRole?.isAdmin && !requesterIsAdmin) {
+      throw new ConflictException('Admin role cannot be assigned to non-admin users');
+    }
 
     if (uppercased.email && uppercased.email !== user.email) {
       const existing = await this.userRepository.findOne({ where: { email: uppercased.email } });
@@ -117,7 +164,9 @@ export class UserService {
       if (!userRole) {
         userRole = this.userRoleRepository.create({ user: { id: saved.id } as any });
       }
-      if (roleId !== undefined) userRole.role = roleId ? ({ id: roleId } as any) : null;
+      if (roleId !== undefined) {
+        userRole.role = roleId ? ({ id: roleId } as any) : null;
+      }
       if (branchId !== undefined) userRole.branch = branchId ? ({ id: branchId } as any) : null;
       if (counterId !== undefined) userRole.counter = counterId ? ({ id: counterId } as any) : null;
       await this.userRoleRepository.save(userRole);
@@ -126,9 +175,12 @@ export class UserService {
     return this.findById(saved.id);
   }
 
-  async delete(id: string): Promise<{ message: string }> {
+  async delete(id: string, userId?: string): Promise<{ message: string }> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+    if (user.isAdmin && !(await this.isRequesterAdmin(userId))) {
       throw new NotFoundException(`User with id ${id} not found`);
     }
     await this.userRepository.remove(user);
@@ -163,7 +215,7 @@ export class UserService {
     });
   }
 
-  async findById(id: string): Promise<UserResponseDto> {
+  async findById(id: string, currentUserId?: string): Promise<UserResponseDto> {
     const user = await this.userRepository.findOne({
       where: { id },
       relations: USER_RELATIONS,
@@ -171,6 +223,10 @@ export class UserService {
     
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+
+    if (user.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
+      throw new NotFoundException(`User with id ${id} not found`);
     }
 
     return UserResponseDto.fromEntity(user);

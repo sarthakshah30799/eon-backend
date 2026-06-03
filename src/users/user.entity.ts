@@ -42,6 +42,9 @@ export class User extends BaseEntity {
   @Column({ type: "boolean", default: false })
   isDormant: boolean;
 
+  @Column({ type: "boolean", default: false })
+  isAdmin: boolean;
+
   @Column()
   password: string;
 

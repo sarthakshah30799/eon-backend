@@ -7,6 +7,7 @@ import { Permission } from '../permissions/permission.entity';
 import { RolesMenuPermission } from '../roles-menu-permission/roles-menu-permission.entity';
 import { Menu } from '../menu/menu.entity';
 import { Company } from '../company/company.entity';
+import { User } from '../users/user.entity';
 import { UserModule } from '../users/user.module';
 
 @Module({
@@ -17,6 +18,7 @@ import { UserModule } from '../users/user.module';
       RolesMenuPermission,
       Menu,
       Company,
+      User,
     ]),
     UserModule,
   ],
@@ -25,4 +27,3 @@ import { UserModule } from '../users/user.module';
   exports: [RoleService],
 })
 export class RoleModule {}
-

@@ -28,6 +28,7 @@ export class AuthService {
     // Set current session
     session.userId = user.id;
     session.email = user.email;
+    session.isAdmin = user.isAdmin === true;
     
     // Note: lastLoginAt is already updated in validateUser method
     

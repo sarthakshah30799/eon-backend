@@ -224,9 +224,10 @@ async function upsertUser(client, user) {
           "is_active" = $10,
           "is_locked" = $11,
           "is_dormant" = $12,
-          "updated_by" = $13,
+          "is_admin" = $13,
+          "updated_by" = $14,
           "updated_at" = NOW()
-      WHERE "id" = $14
+      WHERE "id" = $15
       `,
       [
         user.code,
@@ -241,6 +242,7 @@ async function upsertUser(client, user) {
         user.isActive,
         user.isLocked,
         user.isDormant,
+        user.isAdmin ?? false,
         user.updatedBy,
         existingId,
       ],
@@ -253,13 +255,13 @@ async function upsertUser(client, user) {
     INSERT INTO "users" (
       "code", "password", "name",
       "contact_no", "email", "employee_no", "designation",
-      "user_lic_no", "is_active", "is_locked", "is_dormant",
+      "user_lic_no", "is_active", "is_locked", "is_dormant", "is_admin",
       "created_by", "updated_by"
     ) VALUES (
       $1, $2, $3,
       $4, $5, $6, $7,
-      $8, $9, $10, $11,
-      $12, $13
+      $8, $9, $10, $11, $12,
+      $13, $14
     )
     RETURNING "id"
     `,
@@ -275,6 +277,7 @@ async function upsertUser(client, user) {
       user.isActive,
       user.isLocked,
       user.isDormant,
+      user.isAdmin ?? false,
       user.createdBy,
       user.updatedBy,
     ],
@@ -353,30 +356,6 @@ async function main() {
     }
     console.log('Menu tree onboarded successfully.');
 
-    console.log('Onboarding Admin role...');
-    const adminRoleId = await upsertRole(client, {
-      code: 'ADMIN',
-      name: 'Admin',
-      isAdmin: true,
-      isMd: false,
-      isCompliance: false,
-      isSrFinance: false,
-      isFinance: false,
-      isBrnMgr: false,
-      isExecutive: false,
-      isCardStk: false,
-      isDeliveryBoy: false,
-      isCashier: false,
-      isSalesMgr: false,
-      isActive: true,
-      isAeonAccess: false,
-      isDelPortalAccess: false,
-      isDelAppAccess: false,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-    console.log('Admin role onboarded successfully.');
-
     console.log(`Onboarding admin user "${adminEmail}"...`);
     const adminUserDbId = await upsertUser(client, {
       code: 'ADM001',
@@ -390,25 +369,13 @@ async function main() {
       isActive: true,
       isLocked: false,
       isDormant: false,
+      isAdmin: true,
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
     console.log('Admin user onboarded successfully.');
-
-    console.log('Assigning Admin role to admin user...');
     await client.query('DELETE FROM "user_roles" WHERE "user_id" = $1;', [adminUserDbId]);
-    await client.query(
-      `
-      INSERT INTO "user_roles" (
-        "user_id", "role_id", "branch_id", "counter_id"
-      ) VALUES (
-        $1, $2, NULL, NULL
-      )
-      ON CONFLICT DO NOTHING
-      `,
-      [adminUserDbId, adminRoleId],
-    );
-    console.log('Admin role assigned successfully.');
+    console.log('Cleared legacy role assignments for admin user.');
 
     console.log('\n--- Login Credentials ---');
     console.log(`Email:    ${adminEmail}`);
