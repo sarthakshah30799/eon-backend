@@ -5,6 +5,7 @@ import { Menu } from './menu.entity';
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
 import { MenuResponseDto } from './dto/menu-response.dto';
+import { normalizeMenuPath } from './menu-path.util';
 
 @Injectable()
 export class MenuService {
@@ -65,8 +66,10 @@ export class MenuService {
 
   async create(dto: CreateMenuDto, userId: string): Promise<MenuResponseDto> {
     const { parentId, ...rest } = dto;
+    const path = normalizeMenuPath(rest.path);
     const menu = this.menuRepository.create({
       ...rest,
+      path,
       parent: parentId ? { id: parentId } as any : null,
       createdBy: userId,
       updatedBy: userId,
@@ -81,7 +84,10 @@ export class MenuService {
       throw new NotFoundException(`Menu with id ${id} not found`);
     }
     const { parentId, ...rest } = dto;
-    Object.assign(menu, rest);
+    Object.assign(menu, {
+      ...rest,
+      path: normalizeMenuPath(rest.path),
+    });
     if (parentId !== undefined) {
       menu.parent = parentId ? { id: parentId } as any : null;
     }

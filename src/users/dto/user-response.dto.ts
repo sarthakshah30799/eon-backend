@@ -1,5 +1,6 @@
 import { User } from '../user.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { normalizeMenuPath } from '../../menu/menu-path.util';
 
 export class UserResponseDto {
   @ApiProperty({ description: 'User ID (UUID)' })
@@ -99,7 +100,7 @@ export class UserResponseDto {
       if (userRole.role && userRole.role.menuPermissions) {
         for (const mp of userRole.role.menuPermissions) {
           if (mp.menu && mp.permission) {
-            const menuPath = mp.menu.path || mp.menu.name;
+            const menuPath = normalizeMenuPath(mp.menu.path) || mp.menu.name;
             if (!permissions[menuPath]) {
               permissions[menuPath] = [];
             }

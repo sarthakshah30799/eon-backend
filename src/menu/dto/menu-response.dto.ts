@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Menu } from '../menu.entity';
+import { normalizeMenuPath } from '../menu-path.util';
 
 export class MenuResponseDto {
   @ApiProperty() id: string;
@@ -18,7 +19,7 @@ export class MenuResponseDto {
     dto.id = entity.id;
     dto.isAdmin = entity.isAdmin;
     dto.name = entity.name;
-    dto.path = entity.path;
+    dto.path = normalizeMenuPath(entity.path);
     dto.icon = entity.icon;
     dto.parentId = entity.parent?.id || null;
     dto.sortOrder = entity.sortOrder;
