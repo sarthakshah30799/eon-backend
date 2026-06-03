@@ -65,6 +65,9 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Permissions map', required: false })
   permissions?: Record<string, string[]>;
 
+  @ApiProperty({ description: 'Is Admin Role', required: false })
+  isAdmin?: boolean;
+
   static fromEntity(user: User): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
@@ -87,6 +90,7 @@ export class UserResponseDto {
       const userRole = user.userRoles[0];
       dto.roleId = userRole.role?.id || null;
       dto.roleName = userRole.role?.name || null;
+      dto.isAdmin = userRole.role?.isAdmin || false;
       dto.branchId = userRole.branch?.id || null;
       dto.counterId = userRole.counter?.id || null;
       dto.counterNo = userRole.counter?.counterNo || null;

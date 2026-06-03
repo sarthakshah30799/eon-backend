@@ -58,10 +58,10 @@ async function upsertMenu(client, menu) {
       `
       UPDATE "menus"
       SET "icon" = $2,
-          "sortOrder" = $3,
-          "isActive" = $4,
-          "updatedBy" = $5,
-          "updatedAt" = NOW()
+          "sort_order" = $3,
+          "is_active" = $4,
+          "updated_by" = $5,
+          "updated_at" = NOW()
       WHERE "id" = $1
       `,
       [existingId, menu.icon, menu.sortOrder, menu.isActive, menu.updatedBy],
@@ -73,7 +73,7 @@ async function upsertMenu(client, menu) {
     `
     INSERT INTO "menus" (
       "name", "path", "icon", "parent_id",
-      "sortOrder", "isActive", "createdBy", "updatedBy"
+      "sort_order", "is_active", "created_by", "updated_by"
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8
     )
@@ -133,27 +133,27 @@ async function main() {
     await client.query(
       `
       INSERT INTO "company" (
-        "id", "shortCode", "companyName", "formerlyKnownName", "cinNo", "panNo",
-        "fxRegNo", "fxRegDate", "fromDate", "toDate", "logo", "aeonLicNo",
-        "website", "emailId", "createdBy", "updatedBy"
+        "id", "short_code", "name", "formerly_known_name", "cin_no", "pan_no",
+        "fx_reg_no", "fx_reg_date", "from_date", "to_date", "logo", "aeon_lic_no",
+        "website", "email", "created_by", "updated_by"
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       ON CONFLICT ("id") DO UPDATE SET
-        "shortCode" = EXCLUDED."shortCode",
-        "companyName" = EXCLUDED."companyName",
-        "formerlyKnownName" = EXCLUDED."formerlyKnownName",
-        "cinNo" = EXCLUDED."cinNo",
-        "panNo" = EXCLUDED."panNo",
-        "fxRegNo" = EXCLUDED."fxRegNo",
-        "fxRegDate" = EXCLUDED."fxRegDate",
-        "fromDate" = EXCLUDED."fromDate",
-        "toDate" = EXCLUDED."toDate",
+        "short_code" = EXCLUDED."short_code",
+        "name" = EXCLUDED."name",
+        "formerly_known_name" = EXCLUDED."formerly_known_name",
+        "cin_no" = EXCLUDED."cin_no",
+        "pan_no" = EXCLUDED."pan_no",
+        "fx_reg_no" = EXCLUDED."fx_reg_no",
+        "fx_reg_date" = EXCLUDED."fx_reg_date",
+        "from_date" = EXCLUDED."from_date",
+        "to_date" = EXCLUDED."to_date",
         "logo" = EXCLUDED."logo",
-        "aeonLicNo" = EXCLUDED."aeonLicNo",
+        "aeon_lic_no" = EXCLUDED."aeon_lic_no",
         "website" = EXCLUDED."website",
-        "emailId" = EXCLUDED."emailId",
-        "updatedBy" = EXCLUDED."updatedBy";
+        "email" = EXCLUDED."email",
+        "updated_by" = EXCLUDED."updated_by";
     `,
       [
         companyId,
@@ -177,7 +177,7 @@ async function main() {
     console.log('Company onboarded successfully.');
 
     console.log(`Onboarding admin user "${adminEmail}"...`);
-    await client.query('DELETE FROM "users" WHERE "emailId" = $1 OR "userCode" = $2;', [
+    await client.query('DELETE FROM "users" WHERE "email" = $1 OR "code" = $2;', [
       adminEmail,
       'ADM001',
     ]);
@@ -185,11 +185,11 @@ async function main() {
     await client.query(
       `
       INSERT INTO "users" (
-        "id", "userCode", "password", "userName", "userGroupCode",
-        "contactNo", "emailId", "employeeNo", "designation", "branchCode",
-        "userLicNo", "isActive", "isLocked", "isDormant", "createdBy", "updatedBy"
+        "id", "code", "password", "name",
+        "contact_no", "email", "employee_no", "designation",
+        "user_lic_no", "is_active", "is_locked", "is_dormant", "created_by", "updated_by"
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
       );
     `,
       [
@@ -197,12 +197,10 @@ async function main() {
         'ADM001',
         hashedPassword,
         'Sarthak Kumar'.toUpperCase(),
-        'ADMIN',
         '9876543210',
         adminEmail.toUpperCase(),
         'EMP001',
         'Administrator'.toUpperCase(),
-        null,
         'LIC001',
         true,
         false,
@@ -289,7 +287,41 @@ async function main() {
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
+
+    await upsertMenu(client, {
+      name: 'Company Profile',
+      path: '/master/system-setups/company-profile',
+      icon: 'briefcase',
+      parentId: systemSetupMenuId,
+      sortOrder: 6,
+      isActive: true,
+      createdBy: systemUserId,
+      updatedBy: systemUserId,
+    });
+
+    await upsertMenu(client, {
+      name: 'Branch Profile',
+      path: '/master/system-setups/branch-profile',
+      icon: 'home',
+      parentId: systemSetupMenuId,
+      sortOrder: 7,
+      isActive: true,
+      createdBy: systemUserId,
+      updatedBy: systemUserId,
+    });
+
+    await upsertMenu(client, {
+      name: 'Counter Profile',
+      path: '/master/system-setups/counter-profile',
+      icon: 'monitor',
+      parentId: systemSetupMenuId,
+      sortOrder: 8,
+      isActive: true,
+      createdBy: systemUserId,
+      updatedBy: systemUserId,
+    });
     console.log('Menu tree onboarded successfully.');
+
 
     console.log('Onboarding permissions...');
     const requiredPermissions = [
@@ -315,7 +347,7 @@ async function main() {
         const inserted = await client.query(
           `
           INSERT INTO "permissions" (
-            "code", "name", "description", "createdBy", "updatedBy"
+            "code", "name", "description", "created_by", "updated_by"
           ) VALUES (
             $1, $2, $3, $4, $5
           ) RETURNING "id"
@@ -333,7 +365,7 @@ async function main() {
     const adminRoleName = 'ADMIN';
     const adminRoleId = '33333333-3333-3333-3333-333333333333';
 
-    await client.query('DELETE FROM "roles" WHERE "userGroupCode" = $1 OR "id" = $2;', [
+    await client.query('DELETE FROM "roles" WHERE "code" = $1 OR "id" = $2;', [
       adminRoleCode,
       adminRoleId
     ]);
@@ -341,7 +373,7 @@ async function main() {
     await client.query(
       `
       INSERT INTO "roles" (
-        "id", "userGroupCode", "userGroupName", "isAdminGrp", "isActive", "createdBy", "updatedBy"
+        "id", "code", "name", "is_admin", "is_active", "created_by", "updated_by"
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7
       )

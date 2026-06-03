@@ -39,7 +39,10 @@ export class PermissionsGuard implements CanActivate {
     const isCounterRoute = path.includes('/counters');
 
     if (isCompanyRoute || isBranchRoute || isCounterRoute) {
-      if (email !== 'admin@maraekat.com') {
+      if (method === 'GET' && (isBranchRoute || isCounterRoute)) {
+        return true;
+      }
+      if (!userDto.isAdmin) {
         throw new ForbiddenException(
           'Access to Company, Branch, and Counter profiles is restricted to the master administrator.',
         );
@@ -47,12 +50,12 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // 3. admin@maraekat.com always has absolute access to everything
-    if (email === 'admin@maraekat.com') {
+    // 3. User with isAdmin role always has absolute access to everything
+    if (userDto.isAdmin) {
       return true;
     }
 
-    // 4. Role-Based Access Control for Role and User profiles
+    // 4. Role-Based Access Control for other profiles
     let menuPath = '';
     if (path.includes('/roles')) {
       menuPath = '/master/system-setups/user-role';
@@ -61,6 +64,10 @@ export class PermissionsGuard implements CanActivate {
       const isSelf = method === 'GET' && request.params.id === userId;
       if (isSelf) return true;
       menuPath = '/master/system-setups/user-profile';
+    } else if (path.includes('/countries')) {
+      menuPath = '/master/system-setups/country-profile';
+    } else if (path.includes('/states')) {
+      menuPath = '/master/system-setups/state-profile';
     }
 
     if (!menuPath) {
