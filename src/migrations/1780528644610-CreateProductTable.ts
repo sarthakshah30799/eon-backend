@@ -1,0 +1,16 @@
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class CreateProductTable1780528644610 implements MigrationInterface {
+    name = 'CreateProductTable1780528644610'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`CREATE TABLE "products" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "product_code" citext NOT NULL, "product_description" citext NOT NULL, "ac_of_issuer" citext, "commission_ac" citext, "fake_account" citext, "bulk_pur_ac" citext, "open_ac" citext, "closing_ac" citext, "expense_ac" citext, "bulk_sale_ac" citext, "purchase_ac" citext, "sale_ac" citext, "profit_ac" citext, "bulk_profic_ac" citext, "purchase_ret_canc_ac" citext, "purchase_blk_canc_ac" citext, "sale_ret_canc_ac" citext, "sale_blk_canc_ac" citext, "branch_pur_ac" citext, "branch_sale_ac" citext, "profit_ac_brn_sale" citext, "retail" citext, "bulk_fee" citext, "comm_limit" citext, "max_amt_comm" citext, "allow_fraction_in_fe_amount" boolean NOT NULL DEFAULT false, "separate_settlement_for_each_instrument" boolean NOT NULL DEFAULT false, "pick_sale_rate_avg_as_settlement_rate" boolean NOT NULL DEFAULT false, "reload" boolean NOT NULL DEFAULT false, "automate_settlement_rate" boolean NOT NULL DEFAULT false, "is_active_product" boolean NOT NULL DEFAULT false, "split_and_store_blank_stock_received" boolean NOT NULL DEFAULT false, "product_requires_settlement" boolean NOT NULL DEFAULT false, "level_priority" citext, "pass_auto_receipt_of_stock_when_sold" boolean NOT NULL DEFAULT false, "reversal_effect_of_profits" boolean NOT NULL DEFAULT false, "allow_changing_denomination_in_sales" boolean NOT NULL DEFAULT false, "allow_multicard" boolean NOT NULL DEFAULT false, "ask_reference" boolean NOT NULL DEFAULT false, "available_in_retail_buying" boolean NOT NULL DEFAULT false, "retail_buying_series_applicable" boolean NOT NULL DEFAULT false, "available_in_retail_selling" boolean NOT NULL DEFAULT false, "retail_selling_series_applicable" boolean NOT NULL DEFAULT false, "available_in_bulk_buying" boolean NOT NULL DEFAULT false, "bulk_buying_series_applicable" boolean NOT NULL DEFAULT false, "available_in_bulk_selling" boolean NOT NULL DEFAULT false, "bulk_selling_series_applicable" boolean NOT NULL DEFAULT false, "allow_product_cancellation" boolean NOT NULL DEFAULT false, "maintain_blank_stock_of_product" boolean NOT NULL DEFAULT false, "denomination_applicable" boolean NOT NULL DEFAULT false, "allow_add_on_linking" boolean NOT NULL DEFAULT false, "instrument_issuing_authority_required" boolean NOT NULL DEFAULT false, CONSTRAINT "UQ_70b3f77ca8de13149b7f08d725c" UNIQUE ("product_code"), CONSTRAINT "PK_0806c755e0aca124e67c0cf6d7d" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_70b3f77ca8de13149b7f08d725" ON "products" ("product_code") `);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`DROP INDEX "public"."IDX_70b3f77ca8de13149b7f08d725"`);
+        await queryRunner.query(`DROP TABLE "products"`);
+    }
+
+}

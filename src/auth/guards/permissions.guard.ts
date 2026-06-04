@@ -67,6 +67,8 @@ export class PermissionsGuard implements CanActivate {
       menuPath = '/master/system-setups/country-profile';
     } else if (path.includes('/states')) {
       menuPath = '/master/system-setups/state-profile';
+    } else if (path.includes('/products')) {
+      menuPath = '/master/system-setups/product-profile';
     }
 
     if (!menuPath) {
