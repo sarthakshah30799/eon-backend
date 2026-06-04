@@ -28,7 +28,7 @@ export class UppercaseSubscriber implements EntitySubscriberInterface {
 
     // Verify it is one of our core user-facing entities
     const entityClassName = entity.constructor?.name || metadata.targetName;
-    const targetEntities = ['Company', 'Branch', 'Counter', 'Role', 'User'];
+    const targetEntities = ['Company', 'Branch', 'Counter', 'Currency', 'Role', 'User'];
     if (!targetEntities.includes(entityClassName)) {
       return;
     }
