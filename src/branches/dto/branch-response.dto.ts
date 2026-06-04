@@ -7,6 +7,7 @@ import { SelectOptionResponseDto } from '../../category-options/dto/category-opt
 export class BranchResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() code: string;
+  @ApiProperty() name: string;
   @ApiProperty() branchNumber: number;
   @ApiProperty({ required: false, type: CountryResponseDto })
   country: CountryResponseDto | null;
@@ -46,6 +47,7 @@ export class BranchResponseDto {
     const dto = new BranchResponseDto();
     dto.id = entity.id;
     dto.code = entity.code;
+    dto.name = entity.name;
     dto.branchNumber = entity.branchNumber;
     dto.country = entity.country ? CountryResponseDto.fromEntity(entity.country) : null;
     dto.state = entity.state ? StateResponseDto.fromEntity(entity.state) : null;

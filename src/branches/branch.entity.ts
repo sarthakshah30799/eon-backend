@@ -45,6 +45,9 @@ export class Branch extends BaseEntity {
   @Column({ type: "citext", unique: true })
   code: string;
 
+  @Column({ type: "citext" })
+  name: string;
+
   @Column({ type: "int", unique: true })
   branchNumber: number;
 

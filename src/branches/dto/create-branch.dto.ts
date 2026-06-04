@@ -23,6 +23,12 @@ export class CreateBranchDto {
   @MaxLength(20)
   code: string;
 
+  @ApiProperty({ description: 'Branch Name', example: 'Mumbai Main Branch', maxLength: 250 })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(250)
+  name: string;
+
   @ApiProperty({ description: 'Branch Number', example: 101 })
   @IsNumber()
   @IsNotEmpty()
