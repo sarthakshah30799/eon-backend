@@ -13,6 +13,7 @@ import { StateModule } from './state/state.module';
 import { SelectOptionModule } from './category-options/category-option.module';
 import { ProductModule } from './products/product.module';
 import { CurrencyModule } from './currencies/currency.module';
+import { AdditionalSettingModule } from './additional-settings/additional-setting.module';
 import { SessionMiddleware } from './auth/session.middleware';
 
 @Module({
@@ -31,6 +32,7 @@ import { SessionMiddleware } from './auth/session.middleware';
     SelectOptionModule,
     ProductModule,
     CurrencyModule,
+    AdditionalSettingModule,
   ],
 })
 export class AppModule implements NestModule {
