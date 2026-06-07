@@ -15,6 +15,9 @@ import { ProductModule } from './products/product.module';
 import { CurrencyModule } from './currencies/currency.module';
 import { AdditionalSettingModule } from './additional-settings/additional-setting.module';
 import { SessionMiddleware } from './auth/session.middleware';
+import { FinancialCodeModule } from './financial-codes/financial-code.module';
+import { FinancialSubProfileModule } from './financial-sub-profiles/financial-sub-profile.module';
+import { AccountProfileModule } from './account-profiles/account-profile.module';
 
 @Module({
   imports: [
@@ -33,6 +36,9 @@ import { SessionMiddleware } from './auth/session.middleware';
     ProductModule,
     CurrencyModule,
     AdditionalSettingModule,
+    FinancialCodeModule,
+    FinancialSubProfileModule,
+    AccountProfileModule,
   ],
 })
 export class AppModule implements NestModule {
