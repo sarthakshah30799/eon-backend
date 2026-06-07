@@ -1,5 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Country, CountryRiskCategory } from "../country.entity";
+import { CountryGroupResponseDto } from "../../country-groups/dto/country-group-response.dto";
 
 export class CountryResponseDto {
   @ApiProperty()
@@ -29,6 +30,12 @@ export class CountryResponseDto {
   @ApiProperty()
   baseCountry: boolean;
 
+  @ApiPropertyOptional()
+  countryGroupId?: string;
+
+  @ApiPropertyOptional({ type: () => CountryGroupResponseDto })
+  countryGroup?: CountryGroupResponseDto;
+
   @ApiProperty()
   createdAt: Date;
 
@@ -46,6 +53,12 @@ export class CountryResponseDto {
     dto.restrictedCountry = entity.restrictedCountry;
     dto.greyListCountry = entity.greyListCountry;
     dto.baseCountry = entity.baseCountry;
+    
+    if (entity.countryGroup) {
+      dto.countryGroupId = entity.countryGroup.id;
+      dto.countryGroup = CountryGroupResponseDto.fromEntity(entity.countryGroup);
+    }
+
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

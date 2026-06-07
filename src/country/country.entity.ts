@@ -1,6 +1,7 @@
-import { Column, Entity, OneToMany, Index } from "typeorm";
+import { Column, Entity, OneToMany, Index, ManyToOne, JoinColumn } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { State } from "../state/state.entity";
+import { CountryGroup } from "../country-groups/country-group.entity";
 
 export enum CountryRiskCategory {
   Low = "low",
@@ -16,6 +17,13 @@ export class Country extends BaseEntity {
   @Index({ unique: true })
   @Column({ type: "citext" })
   name: string;
+
+  @ManyToOne(() => CountryGroup, (group) => group.countries, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "country_group_id" })
+  countryGroup: CountryGroup;
 
   @OneToMany(() => State, (state) => state.country)
   states: State[];

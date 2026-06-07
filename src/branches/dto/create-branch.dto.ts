@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsUUID, IsNumber, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsUUID, IsNumber, IsDateString, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBranchDto {
@@ -73,6 +73,9 @@ export class CreateBranchDto {
   @IsString()
   @IsOptional()
   @MaxLength(20)
+  @Matches(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[A-Z0-9]{1}Z[A-Z0-9]{1}$/i, {
+    message: 'GST No. must follow the strict GSTIN format (e.g., 27AAAAA1111A1Z5)',
+  })
   gstNo?: string;
 
   @ApiProperty({ description: 'FX Reg No.', required: false, maxLength: 20 })

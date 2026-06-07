@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsDateString,
   MaxLength,
+  Matches,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -36,6 +37,9 @@ export class CreateCompanyDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i, {
+    message: 'PAN No. must follow the strict format: five letters, four digits, and one letter (e.g., ABCDE1234F)',
+  })
   panNo: string;
 
   @ApiProperty({ description: 'FX Reg No.', required: false, maxLength: 20 })

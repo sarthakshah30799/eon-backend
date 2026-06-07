@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, IsUUID } from "class-validator";
 import { CountryRiskCategory } from "../country.entity";
 
 export class CreateCountryDto {
@@ -50,4 +50,9 @@ export class CreateCountryDto {
   @IsBoolean()
   @IsOptional()
   baseCountry?: boolean;
+
+  @ApiPropertyOptional({ description: "Country group UUID" })
+  @IsUUID()
+  @IsOptional()
+  countryGroupId?: string;
 }

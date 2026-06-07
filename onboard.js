@@ -442,6 +442,52 @@ async function upsertFinancialSubProfile(client, fsp) {
   return inserted.rows[0].id;
 }
 
+async function upsertCountryGroup(client, group) {
+  const existing = await client.query(
+    `
+    SELECT "id"
+    FROM "country_groups"
+    WHERE "code" = $1
+    LIMIT 1
+    `,
+    [group.code],
+  );
+
+  if (existing.rowCount > 0) {
+    const existingId = existing.rows[0].id;
+    await client.query(
+      `
+      UPDATE "country_groups"
+      SET "name" = $2,
+          "updated_by" = $3,
+          "updated_at" = NOW()
+      WHERE "id" = $1
+      `,
+      [existingId, group.name, group.updatedBy],
+    );
+    return existingId;
+  }
+
+  const inserted = await client.query(
+    `
+    INSERT INTO "country_groups" (
+      "name", "code", "created_by", "updated_by"
+    ) VALUES (
+      $1, $2, $3, $4
+    )
+    RETURNING "id"
+    `,
+    [
+      group.name,
+      group.code,
+      group.createdBy,
+      group.updatedBy,
+    ],
+  );
+
+  return inserted.rows[0].id;
+}
+
 async function main() {
   const client = new Client({
     host: getRequiredEnv('DB_HOST'),
@@ -639,6 +685,21 @@ async function main() {
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
+
+    console.log('Onboarding default country groups...');
+    const defaultCountryGroups = [
+      { name: 'EUROPE', code: 'EUROPE' },
+      { name: 'NORTH AMERICA', code: 'NORTH_AMERICA' },
+      { name: 'GULF COUNTRIES', code: 'GULF_COUNTRIES' },
+      { name: 'MIDDLE EAST', code: 'MIDDLE_EAST' },
+    ];
+    for (const group of defaultCountryGroups) {
+      await upsertCountryGroup(client, {
+        ...group,
+        createdBy: systemUserId,
+        updatedBy: systemUserId,
+      });
+    }
 
     console.log('\n--- Login Credentials ---');
     console.log(`Email:    ${adminEmail}`);

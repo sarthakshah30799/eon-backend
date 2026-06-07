@@ -18,6 +18,7 @@ import { SessionMiddleware } from './auth/session.middleware';
 import { FinancialCodeModule } from './financial-codes/financial-code.module';
 import { FinancialSubProfileModule } from './financial-sub-profiles/financial-sub-profile.module';
 import { AccountProfileModule } from './account-profiles/account-profile.module';
+import { CountryGroupModule } from './country-groups/country-group.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AccountProfileModule } from './account-profiles/account-profile.module'
     FinancialCodeModule,
     FinancialSubProfileModule,
     AccountProfileModule,
+    CountryGroupModule,
   ],
 })
 export class AppModule implements NestModule {

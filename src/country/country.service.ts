@@ -31,7 +31,7 @@ export class CountryService {
   ) {}
 
   async create(dto: CreateCountryDto, userId: string): Promise<CountryResponseDto> {
-    const normalized = normalizeCountryDto(dto);
+    const { countryGroupId, ...normalized } = normalizeCountryDto(dto);
 
     const existingCountry = await this.countryRepository.findOne({
       where: { code: normalized.code },
@@ -43,6 +43,7 @@ export class CountryService {
 
     const country = this.countryRepository.create({
       ...normalized,
+      countryGroup: countryGroupId ? ({ id: countryGroupId } as any) : null,
       riskCategory: normalized.riskCategory ?? CountryRiskCategory.Low,
       restrictedCountry: normalized.restrictedCountry ?? false,
       greyListCountry: normalized.greyListCountry ?? false,
@@ -52,7 +53,7 @@ export class CountryService {
     });
 
     const saved = await this.countryRepository.save(country);
-    return CountryResponseDto.fromEntity(saved);
+    return this.findById(saved.id);
   }
 
   async update(id: string, dto: UpdateCountryDto, userId: string): Promise<CountryResponseDto> {
@@ -62,7 +63,7 @@ export class CountryService {
       throw new NotFoundException(`Country with id ${id} not found`);
     }
 
-    const normalized = normalizeCountryDto(dto);
+    const { countryGroupId, ...normalized } = normalizeCountryDto(dto);
 
     if (normalized.code && normalized.code !== country.code) {
       const existingCountry = await this.countryRepository.findOne({
@@ -80,14 +81,21 @@ export class CountryService {
     });
     Object.assign(country, updates);
 
+    if (countryGroupId !== undefined) {
+      country.countryGroup = countryGroupId ? ({ id: countryGroupId } as any) : null;
+    }
+
     country.updatedBy = userId;
 
     const saved = await this.countryRepository.save(country);
-    return CountryResponseDto.fromEntity(saved);
+    return this.findById(saved.id);
   }
 
   async findById(id: string): Promise<CountryResponseDto> {
-    const country = await this.countryRepository.findOne({ where: { id } });
+    const country = await this.countryRepository.findOne({
+      where: { id },
+      relations: ["countryGroup"],
+    });
 
     if (!country) {
       throw new NotFoundException(`Country with id ${id} not found`);
@@ -101,7 +109,7 @@ export class CountryService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const qb = this.countryRepository.createQueryBuilder("country");
+    const qb = this.countryRepository.createQueryBuilder("country").leftJoinAndSelect("country.countryGroup", "countryGroup");
 
     if (query.search) {
       qb.andWhere(
