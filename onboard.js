@@ -535,11 +535,11 @@ async function main() {
     });
 
     const basicMenus = [
-      { name: 'User Role', path: '/master/system-setups/user-role', icon: 'shield' },
-      { name: 'User Profile', path: '/master/system-setups/user-profile', icon: 'users' },
-      { name: 'Country Profile', path: '/master/system-setups/country-profile', icon: 'globe' },
-      { name: 'State Profile', path: '/master/system-setups/state-profile', icon: 'map' },
-      { name: 'Product Profile', path: '/master/system-setups/product-profile', icon: 'archive' },
+      { name: 'User Role', path: '/admin/user-role', icon: 'shield' },
+      { name: 'User Profile', path: '/admin/user-profile', icon: 'users' },
+      { name: 'Country Profile', path: '/admin/country-profile', icon: 'globe' },
+      { name: 'State Profile', path: '/admin/state-profile', icon: 'map' },
+      { name: 'Product Profile', path: '/admin/product-profile', icon: 'archive' },
     ];
 
     for (let index = 0; index < basicMenus.length; index += 1) {

@@ -56,11 +56,11 @@ BEGIN
 
   -- Insert "Roles Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Roles Profile', '/master/system-setups/roles-profile', 'shield', v_system_setup_id, 1, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'User Role', '/admin/user-role', 'shield', v_system_setup_id, 1, true, v_system_user, v_system_user);
 
   -- Insert "User Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'User Profile', '/master/system-setups/user-profile', 'users', v_system_setup_id, 2, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'User Profile', '/admin/user-profile', 'users', v_system_setup_id, 2, true, v_system_user, v_system_user);
 
   RAISE NOTICE 'Menu seed completed. Master ID: %, System Setup ID: %', v_master_id, v_system_setup_id;
 END $$;

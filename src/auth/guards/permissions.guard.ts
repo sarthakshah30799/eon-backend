@@ -57,18 +57,18 @@ export class PermissionsGuard implements CanActivate {
     // 4. Role-Based Access Control for other profiles
     let menuPath = '';
     if (path.includes('/roles')) {
-      menuPath = '/master/system-setups/user-role';
+      menuPath = '/admin/user-role';
     } else if (path.includes('/users')) {
       // Allow self-lookup (GET /users/:id matching logged-in user id)
       const isSelf = method === 'GET' && request.params.id === userId;
       if (isSelf) return true;
-      menuPath = '/master/system-setups/user-profile';
+      menuPath = '/admin/user-profile';
     } else if (path.includes('/countries')) {
-      menuPath = '/master/system-setups/country-profile';
+      menuPath = '/admin/country-profile';
     } else if (path.includes('/states')) {
-      menuPath = '/master/system-setups/state-profile';
+      menuPath = '/admin/state-profile';
     } else if (path.includes('/products')) {
-      menuPath = '/master/system-setups/product-profile';
+      menuPath = '/admin/product-profile';
     }
 
     if (!menuPath) {

@@ -12,7 +12,7 @@ export class CreateMenuDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ description: 'Route path', example: '/master/system-setups/company-profile', required: false })
+  @ApiProperty({ description: 'Route path', example: '/admin/company-profile', required: false })
   @IsString()
   @IsOptional()
   path?: string;
