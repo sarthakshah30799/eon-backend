@@ -44,6 +44,18 @@ BEGIN
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'Menu Management', '/admin/menu-management', 'menu', v_admin_id, 5, true, v_system_user, v_system_user);
 
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Financial Profile', '/admin/financial-profile', 'dollar-sign', v_admin_id, 6, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Accounts Profile', '/admin/accounts-profile', 'book', v_admin_id, 7, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Additional Settings', '/admin/additional-settings', 'settings', v_admin_id, 8, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Corporate Client Profile', '/admin/corporate-client-profile', 'users', v_admin_id, 9, true, v_system_user, v_system_user);
+
   -- Insert "Master" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'Master', NULL, 'grid', NULL, 1, true, v_system_user, v_system_user)
@@ -61,6 +73,22 @@ BEGIN
   -- Insert "User Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'User Profile', '/admin/user-profile', 'users', v_system_setup_id, 2, true, v_system_user, v_system_user);
+
+  -- Insert "Country Profile" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Country Profile', '/admin/country-profile', 'globe', v_system_setup_id, 3, true, v_system_user, v_system_user);
+
+  -- Insert "State Profile" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'State Profile', '/admin/state-profile', 'map', v_system_setup_id, 4, true, v_system_user, v_system_user);
+
+  -- Insert "Product Profile" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Product Profile', '/admin/product-profile', 'archive', v_system_setup_id, 5, true, v_system_user, v_system_user);
+
+  -- Insert "Currency Profile" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Currency Profile', '/admin/currency-profile', 'dollar-sign', v_system_setup_id, 6, true, v_system_user, v_system_user);
 
   RAISE NOTICE 'Menu seed completed. Master ID: %, System Setup ID: %', v_master_id, v_system_setup_id;
 END $$;

@@ -540,6 +540,7 @@ async function main() {
       { name: 'Country Profile', path: '/admin/country-profile', icon: 'globe' },
       { name: 'State Profile', path: '/admin/state-profile', icon: 'map' },
       { name: 'Product Profile', path: '/admin/product-profile', icon: 'archive' },
+      { name: 'Currency Profile', path: '/admin/currency-profile', icon: 'dollar-sign' },
     ];
 
     for (let index = 0; index < basicMenus.length; index += 1) {
@@ -562,7 +563,7 @@ async function main() {
       path: null,
       icon: 'shield',
       parentId: null,
-      sortOrder: 2,
+      sortOrder: 0,
       isActive: true,
       createdBy: systemUserId,
       updatedBy: systemUserId,
@@ -570,13 +571,15 @@ async function main() {
     });
 
     const adminSubMenus = [
-      { name: 'Company Profile', path: '/admin/company-profile', icon: 'briefcase' },
-      { name: 'Branch Profile', path: '/admin/branch-profile', icon: 'home' },
-      { name: 'Counter Profile', path: '/admin/counter-profile', icon: 'monitor' },
-      { name: 'Category Options', path: '/admin/category-options', icon: 'list' },
+      { name: 'Company Profile', path: '/admin/company-profile', icon: 'building' },
+      { name: 'Branch Profile', path: '/admin/branch-profile', icon: 'sitemap' },
+      { name: 'Counter Profile', path: '/admin/counter-profile', icon: 'counter' },
+      { name: 'Category Options', path: '/admin/category-options', icon: 'tags' },
       { name: 'Menu Management', path: '/admin/menu-management', icon: 'menu' },
       { name: 'Financial Profile', path: '/admin/financial-profile', icon: 'dollar-sign' },
       { name: 'Accounts Profile', path: '/admin/accounts-profile', icon: 'book' },
+      { name: 'Additional Settings', path: '/admin/additional-settings', icon: 'settings' },
+      { name: 'Corporate Client Profile', path: '/admin/corporate-client-profile', icon: 'users' },
     ];
 
     for (let index = 0; index < adminSubMenus.length; index += 1) {
@@ -637,6 +640,25 @@ async function main() {
       { code: 'bankNature', value: 'CURRENT A/C', label: 'CURRENT A/C', sortOrder: 2 },
       { code: 'bankNature', value: 'OVERDRAFT A/C', label: 'OVERDRAFT A/C', sortOrder: 3 },
       { code: 'bankNature', value: 'NONE', label: 'NONE', sortOrder: 4 },
+      // KYC Risk Category
+      { code: 'kycRiskCategory', value: 'LOW RISK CATEGORY', label: 'LOW RISK CATEGORY', sortOrder: 1 },
+      { code: 'kycRiskCategory', value: 'MEDIUM RISK CATEGORY', label: 'MEDIUM RISK CATEGORY', sortOrder: 2 },
+      { code: 'kycRiskCategory', value: 'HIGH RISK CATEGORY', label: 'HIGH RISK CATEGORY', sortOrder: 3 },
+      // Entity Type
+      { code: 'entityType', value: 'COMPANY', label: 'COMPANY', sortOrder: 1 },
+      { code: 'entityType', value: 'INDIVIDUAL', label: 'INDIVIDUAL', sortOrder: 2 },
+      { code: 'entityType', value: 'PARTNERSHIP', label: 'PARTNERSHIP', sortOrder: 3 },
+      { code: 'entityType', value: 'PROPRIETORSHIP', label: 'PROPRIETORSHIP', sortOrder: 4 },
+      // Default Agent, Group, Marketing Executive, Business Nature, Location
+      { code: 'defaultAgent', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      { code: 'group', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      { code: 'marketingExecutive', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      { code: 'businessNature', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      { code: 'locationType', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      // TDS Group
+      { code: 'tdsGroup', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      { code: 'tdsGroup', value: 'A', label: 'A', sortOrder: 2 },
+      { code: 'tdsGroup', value: 'B', label: 'B', sortOrder: 3 },
     ];
     for (const opt of defaultOptions) {
       await upsertCategoryOption(client, {

@@ -1,0 +1,313 @@
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  IsBoolean,
+  IsEmail,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Min,
+} from "class-validator";
+
+export class CreateCorporateClientDto {
+  @ApiProperty({ description: "Date of Introduction", example: "2026-06-09T00:00:00Z" })
+  @IsString()
+  @IsOptional()
+  dateOfIntro?: string;
+
+  @ApiProperty({ description: "Client Code", example: "SHREENATH", minLength: 4, maxLength: 20 })
+  @IsString()
+  @IsNotEmpty()
+  @Length(4, 20, { message: "Code must be between 4 and 20 characters" })
+  code: string;
+
+  @ApiProperty({ description: "Client Name", example: "SHREENATH ENTERPRISES" })
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiPropertyOptional({ description: "Individual category customer status flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  isIndividual?: boolean;
+
+  @ApiPropertyOptional({ description: "Credit Limit", example: -1 })
+  @IsNumber()
+  @Min(-1)
+  @IsOptional()
+  creditLimit?: number;
+
+  @ApiPropertyOptional({ description: "Credit Days", example: -1 })
+  @IsInt()
+  @Min(-1)
+  @IsOptional()
+  creditDays?: number;
+
+  @ApiPropertyOptional({ description: "Temporary Credit Limit", example: 0 })
+  @IsNumber()
+  @Min(-1)
+  @IsOptional()
+  temporaryCreditLimit?: number;
+
+  @ApiPropertyOptional({ description: "Temporary Credit Days", example: 0 })
+  @IsInt()
+  @Min(-1)
+  @IsOptional()
+  temporaryCreditDays?: number;
+
+  @ApiPropertyOptional({ description: "Permanent Credit Limit", example: 0 })
+  @IsNumber()
+  @Min(-1)
+  @IsOptional()
+  permanentCreditLimit?: number;
+
+  @ApiPropertyOptional({ description: "Permanent Credit Days", example: 0 })
+  @IsInt()
+  @Min(-1)
+  @IsOptional()
+  permanentCreditDays?: number;
+
+  @ApiPropertyOptional({ description: "Address Line 1" })
+  @IsString()
+  @IsNotEmpty()
+  address1: string;
+
+  @ApiPropertyOptional({ description: "Address Line 2" })
+  @IsString()
+  @IsOptional()
+  address2?: string;
+
+  @ApiPropertyOptional({ description: "Address Line 3" })
+  @IsString()
+  @IsOptional()
+  address3?: string;
+
+  @ApiPropertyOptional({ description: "City" })
+  @IsString()
+  @IsNotEmpty()
+  city: string;
+
+  @ApiPropertyOptional({ description: "Pin Code" })
+  @IsString()
+  @IsNotEmpty()
+  pinCode: string;
+
+  @ApiPropertyOptional({ description: "KYC Approval Number" })
+  @IsString()
+  @IsOptional()
+  kycApprovalNumber?: string;
+
+  @ApiPropertyOptional({ description: "KYC Risk Category" })
+  @IsString()
+  @IsOptional()
+  kycRiskCategory?: string;
+
+  @ApiPropertyOptional({ description: "Cheque Transaction Limit", example: -1 })
+  @IsNumber()
+  @Min(-1)
+  @IsOptional()
+  chqTrxnLimit?: number;
+
+  @ApiPropertyOptional({ description: "Default Handling Charges", example: 0 })
+  @IsNumber()
+  @IsOptional()
+  defaultHandlingCharges?: number;
+
+  @ApiPropertyOptional({ description: "Default Agent" })
+  @IsString()
+  @IsOptional()
+  defaultAgent?: string;
+
+  @ApiPropertyOptional({ description: "Phone No" })
+  @IsString()
+  @IsOptional()
+  phoneNo?: string;
+
+  @ApiPropertyOptional({ description: "Block Date From" })
+  @IsString()
+  @IsOptional()
+  blockDateFrom?: string;
+
+  @ApiPropertyOptional({ description: "Establishment Date" })
+  @IsString()
+  @IsOptional()
+  establishmentDate?: string;
+
+  @ApiPropertyOptional({ description: "Remarks" })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+
+  @ApiPropertyOptional({ description: "Email Address" })
+  @IsEmail()
+  @IsOptional()
+  email?: string;
+
+  @ApiPropertyOptional({ description: "Contact Name" })
+  @IsString()
+  @IsOptional()
+  contactName?: string;
+
+  @ApiPropertyOptional({ description: "Designation" })
+  @IsString()
+  @IsOptional()
+  designation?: string;
+
+  @ApiPropertyOptional({ description: "Group" })
+  @IsString()
+  @IsOptional()
+  group?: string;
+
+  @ApiPropertyOptional({ description: "Entity Type" })
+  @IsString()
+  @IsOptional()
+  entityType?: string;
+
+  @ApiPropertyOptional({ description: "PAN Name" })
+  @IsString()
+  @IsOptional()
+  panName?: string;
+
+  @ApiPropertyOptional({ description: "PAN Date of Birth" })
+  @IsString()
+  @IsOptional()
+  panDob?: string;
+
+  @ApiPropertyOptional({ description: "PAN No" })
+  @IsString()
+  @IsOptional()
+  panNo?: string;
+
+  @ApiPropertyOptional({ description: "Marketing Executive" })
+  @IsString()
+  @IsOptional()
+  marketingExecutive?: string;
+
+  @ApiPropertyOptional({ description: "Business Nature" })
+  @IsString()
+  @IsOptional()
+  businessNature?: string;
+
+  @ApiPropertyOptional({ description: "Is TDS Deducted flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  isTdsDeducted?: boolean;
+
+  @ApiPropertyOptional({ description: "TDS" })
+  @IsString()
+  @IsOptional()
+  tds?: string;
+
+  @ApiPropertyOptional({ description: "TDS Group" })
+  @IsString()
+  @IsOptional()
+  tdsGroup?: string;
+
+  @ApiPropertyOptional({ description: "Active status flag", default: true })
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+
+  @ApiPropertyOptional({ description: "System isActive flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ description: "Print Address flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  printAddress?: boolean;
+
+  @ApiPropertyOptional({ description: "EEFC Client flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  eefcClient?: boolean;
+
+  @ApiPropertyOptional({ description: "Sale flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  sale?: boolean;
+
+  @ApiPropertyOptional({ description: "Purchase flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  purchase?: boolean;
+
+  @ApiPropertyOptional({ description: "Apply Tax flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  applyTax?: boolean;
+
+  @ApiPropertyOptional({ description: "IGST Only flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  igstOnly?: boolean;
+
+  @ApiPropertyOptional({ description: "GST Number" })
+  @IsString()
+  @IsOptional()
+  gstNo?: string;
+
+  @ApiPropertyOptional({ description: "SGST Number" })
+  @IsString()
+  @IsOptional()
+  sgstNo?: string;
+
+  @ApiPropertyOptional({ description: "IGST Number" })
+  @IsString()
+  @IsOptional()
+  igstNo?: string;
+
+  @ApiPropertyOptional({ description: "GST State ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  gstStateId?: string;
+
+  @ApiPropertyOptional({ description: "Origin Branch ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  originBranchId?: string;
+
+  @ApiPropertyOptional({ description: "Location" })
+  @IsString()
+  @IsOptional()
+  location?: string;
+
+  @ApiPropertyOptional({ description: "Website" })
+  @IsString()
+  @IsOptional()
+  webSite?: string;
+
+  @ApiPropertyOptional({ description: "Account Holder Name" })
+  @IsString()
+  @IsOptional()
+  accountHolderName?: string;
+
+  @ApiPropertyOptional({ description: "Bank Name" })
+  @IsString()
+  @IsOptional()
+  bankName?: string;
+
+  @ApiPropertyOptional({ description: "Account Number" })
+  @IsString()
+  @IsOptional()
+  accountNumber?: string;
+
+  @ApiPropertyOptional({ description: "IFSC Code" })
+  @IsString()
+  @IsOptional()
+  ifscCode?: string;
+
+  @ApiPropertyOptional({ description: "Bank Address" })
+  @IsString()
+  @IsOptional()
+  bankAddress?: string;
+
+  @ApiPropertyOptional({ description: "Cancelled Cheque Copy file path" })
+  @IsString()
+  @IsOptional()
+  cancelledChequeCopy?: string;
+}

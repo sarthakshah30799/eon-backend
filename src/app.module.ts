@@ -19,6 +19,7 @@ import { FinancialCodeModule } from './financial-codes/financial-code.module';
 import { FinancialSubProfileModule } from './financial-sub-profiles/financial-sub-profile.module';
 import { AccountProfileModule } from './account-profiles/account-profile.module';
 import { CountryGroupModule } from './country-groups/country-group.module';
+import { CorporateClientModule } from './corporate-clients/corporate-client.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CountryGroupModule } from './country-groups/country-group.module';
     FinancialSubProfileModule,
     AccountProfileModule,
     CountryGroupModule,
+    CorporateClientModule,
   ],
 })
 export class AppModule implements NestModule {

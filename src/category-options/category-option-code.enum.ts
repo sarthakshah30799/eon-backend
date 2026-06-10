@@ -7,4 +7,11 @@ export enum CategoryOptionCodeEnum {
   AccountType = "accountType",
   SubLedger = "subLedger",
   BankNature = "bankNature",
+  KycRiskCategory = "kycRiskCategory",
+  EntityType = "entityType",
+  DefaultAgent = "defaultAgent",
+  Group = "group",
+  MarketingExecutive = "marketingExecutive",
+  BusinessNature = "businessNature",
+  TdsGroup = "tdsGroup",
 }
