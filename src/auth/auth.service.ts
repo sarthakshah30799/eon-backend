@@ -5,12 +5,14 @@ import { User } from '../users/user.entity';
 import { SessionService } from './session.service';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { PasswordPolicyService } from '../password-policy/password-policy.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly sessionService: SessionService,
+    private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
@@ -53,8 +55,15 @@ export class AuthService {
       throw new BadRequestException('Password setup is not required for this user');
     }
 
+    const policy = await this.passwordPolicyService.getPasswordPolicy();
+    this.passwordPolicyService.validatePassword(newPassword, {
+      ...policy,
+    });
+
     user.password = await bcrypt.hash(newPassword, 10);
     user.mustChangePassword = false;
+    user.isLocked = false;
+    user.failedPasswordAttempts = 0;
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
     await this.userService.save(user);
@@ -109,10 +118,15 @@ export class AuthService {
       throw new BadRequestException('Reset token has expired');
     }
 
+    const policy = await this.passwordPolicyService.getPasswordPolicy();
+    this.passwordPolicyService.validatePassword(newPassword, { ...policy });
+
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.mustChangePassword = false;
+    user.isLocked = false;
+    user.failedPasswordAttempts = 0;
 
     // Clear reset token and expiration
     user.resetPasswordToken = null;
@@ -125,4 +139,5 @@ export class AuthService {
 
     return { message: 'Password has been reset successfully' };
   }
+
 }

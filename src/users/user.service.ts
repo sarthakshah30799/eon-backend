@@ -10,6 +10,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { uppercaseFields } from '../utils/uppercase.util';
+import { PasswordPolicyService } from '../password-policy/password-policy.service';
 
 const USER_RELATIONS = [
   'userRoles',
@@ -18,6 +19,7 @@ const USER_RELATIONS = [
   'userRoles.role.menuPermissions.menu',
   'userRoles.role.menuPermissions.permission',
   'userRoles.branch',
+  'userRoles.branch.company',
   'userRoles.counter',
 ];
 
@@ -32,6 +34,7 @@ export class UserService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
 
   private async isRequesterAdmin(userId?: string): Promise<boolean> {
@@ -196,12 +199,36 @@ export class UserService {
       return null;
     }
 
+    if (user.isLocked) {
+      throw this.passwordPolicyService.lockedAccountException();
+    }
+
+    const policy = await this.passwordPolicyService.getPasswordPolicy();
     const isPasswordValid = await bcrypt.compare(loginUserDto.password, user.password);
 
     if (!isPasswordValid) {
+      if (policy.maxInvalidAttempts <= 0) {
+        user.failedPasswordAttempts = 0;
+        await this.userRepository.save(user);
+        return null;
+      }
+
+      user.failedPasswordAttempts = (user.failedPasswordAttempts || 0) + 1;
+
+      if (
+        policy.maxInvalidAttempts > 0 &&
+        user.failedPasswordAttempts >= policy.maxInvalidAttempts
+      ) {
+        user.isLocked = true;
+        await this.userRepository.save(user);
+        throw this.passwordPolicyService.lockedAccountException();
+      }
+
+      await this.userRepository.save(user);
       return null;
     }
 
+    user.failedPasswordAttempts = 0;
     user.lastLoginDate = new Date();
     await this.userRepository.save(user);
 
@@ -256,10 +283,15 @@ export class UserService {
       return null;
     }
 
+    if (user.isLocked) {
+      throw this.passwordPolicyService.lockedAccountException();
+    }
+
     if (otp !== '123456') {
       return null;
     }
 
+    user.failedPasswordAttempts = 0;
     user.lastLoginDate = new Date();
     await this.userRepository.save(user);
 

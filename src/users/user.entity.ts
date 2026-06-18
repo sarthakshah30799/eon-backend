@@ -39,6 +39,9 @@ export class User extends BaseEntity {
   @Column({ type: "boolean", default: false })
   isLocked: boolean;
 
+  @Column({ type: "integer", name: "failed_password_attempts", default: 0 })
+  failedPasswordAttempts: number;
+
   @Column({ type: "boolean", default: false })
   isDormant: boolean;
 
