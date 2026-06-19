@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { AdvancedSetting, NodeType } from '../additional-settings/advanced-setting.entity';
 import { User } from '../users/user.entity';
 import {
-  DEFAULT_SESSION_POLICY,
   SessionPolicyConfig,
   SessionPolicyResponseDto,
   SESSION_POLICY_CHILDREN,
@@ -122,20 +121,22 @@ export class SessionPolicyService {
     );
   }
 
-  private normalizeOptionalCount(value: unknown): number {
+  private normalizeOptionalCount(value: unknown): number | undefined {
     const parsed = this.toSafeInteger(value);
-    return parsed && parsed > 0 ? parsed : 0;
+    return parsed === null ? undefined : parsed >= 0 ? parsed : undefined;
   }
 
   buildConfigFromRows(rows: AdvancedSetting[]): SessionPolicyConfig {
     const rowMap = new Map<string, AdvancedSetting>();
     for (const row of rows) {
-      rowMap.set(row.code?.trim().toUpperCase(), row);
+      const key = row.code?.trim().toUpperCase();
+      if (key) {
+        rowMap.set(key, row);
+      }
     }
 
     return this.validatePolicyConfig({
-      allowMultipleLogin:
-        rowMap.get(SessionPolicyCodeEnum.AllowMultipleLogin)?.valueBoolean ?? false,
+      allowMultipleLogin: rowMap.get(SessionPolicyCodeEnum.AllowMultipleLogin)?.valueBoolean,
       idleTimeoutSeconds: this.normalizeOptionalCount(
         rowMap.get(SessionPolicyCodeEnum.IdleTimeoutSeconds)?.valueNumber,
       ),
@@ -144,11 +145,11 @@ export class SessionPolicyService {
 
   validatePolicyConfig(config: SessionPolicyConfig): SessionPolicyConfig {
     const normalized: SessionPolicyConfig = {
-      allowMultipleLogin: config.allowMultipleLogin === true,
+      allowMultipleLogin: config.allowMultipleLogin,
       idleTimeoutSeconds: this.normalizeOptionalCount(config.idleTimeoutSeconds),
     };
 
-    if (normalized.idleTimeoutSeconds < 0) {
+    if (normalized.idleTimeoutSeconds !== undefined && normalized.idleTimeoutSeconds < 0) {
       throw this.createPolicyException(
         SessionPolicyValidationCodeEnum.InvalidPolicyConfig,
         'Idle timeout cannot be negative',
@@ -182,9 +183,7 @@ export class SessionPolicyService {
     }
 
     const category = await this.getSessionPolicyEntity();
-    const config = category
-      ? this.buildConfigFromRows(category.children || [])
-      : DEFAULT_SESSION_POLICY;
+    const config = category ? this.buildConfigFromRows(category.children || []) : {};
 
     this.cachedPolicy = config;
     return config;
@@ -208,15 +207,14 @@ export class SessionPolicyService {
 
   applyPolicyToSession(session: any, policy: SessionPolicyConfig): void {
     const resolved = this.validatePolicyConfig(policy);
-    session.lastActivityAt = session.lastActivityAt ?? Date.now();
-    session.cookie.maxAge =
-      resolved.idleTimeoutSeconds > 0
-        ? resolved.idleTimeoutSeconds * 1000
-        : 24 * 60 * 60 * 1000;
+    if (resolved.idleTimeoutSeconds !== undefined && resolved.idleTimeoutSeconds > 0) {
+      session.lastActivityAt = session.lastActivityAt ?? Date.now();
+      session.cookie.maxAge = resolved.idleTimeoutSeconds * 1000;
+    }
   }
 
   shouldInvalidatePriorSessions(policy: SessionPolicyConfig): boolean {
-    return !this.validatePolicyConfig(policy).allowMultipleLogin;
+    return this.validatePolicyConfig(policy).allowMultipleLogin !== true;
   }
 
   async applyLoginSessionPolicy(
@@ -234,8 +232,11 @@ export class SessionPolicyService {
     session.userId = user.id;
     session.email = user.email;
     session.isAdmin = user.isAdmin === true;
-    this.applyPolicyToSession(session, policy);
-    this.touchSession(session);
+    const resolved = this.validatePolicyConfig(policy);
+    if (resolved.idleTimeoutSeconds !== undefined && resolved.idleTimeoutSeconds > 0) {
+      this.applyPolicyToSession(session, resolved);
+      this.touchSession(session);
+    }
 
     return {
       message: shouldInvalidate
@@ -251,7 +252,7 @@ export class SessionPolicyService {
 
   isSessionExpired(session: any, policy: SessionPolicyConfig): boolean {
     const resolved = this.validatePolicyConfig(policy);
-    if (resolved.idleTimeoutSeconds <= 0) {
+    if (resolved.idleTimeoutSeconds === undefined || resolved.idleTimeoutSeconds <= 0) {
       return false;
     }
 

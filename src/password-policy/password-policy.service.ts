@@ -3,18 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdvancedSetting, NodeType, ValueType } from '../additional-settings/advanced-setting.entity';
 import { Company } from '../company/company.entity';
-import {
-  DEFAULT_PASSWORD_POLICY,
-  PASSWORD_POLICY_CHILDREN,
-  PasswordPolicyConfig,
-  PasswordPolicyResponseDto,
-} from './password-policy.dto';
+import { PasswordPolicyConfig, PasswordPolicyResponseDto } from './password-policy.dto';
 import {
   PasswordPolicyCodeEnum,
   PasswordValidationCodeEnum,
 } from './password-policy.enum';
-
-const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 @Injectable()
 export class PasswordPolicyService {
@@ -36,14 +29,20 @@ export class PasswordPolicyService {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  private normalizeOptionalCount(value: unknown): number {
+  private normalizeOptionalCount(value: unknown): number | undefined {
     const parsed = this.toSafeInteger(value);
-    return parsed && parsed > 0 ? parsed : 0;
+    if (parsed === null) {
+      return undefined;
+    }
+    return parsed >= 0 ? parsed : undefined;
   }
 
-  private normalizeRequiredCount(value: unknown, fallback: number): number {
+  private normalizeRequiredCount(value: unknown): number | undefined {
     const parsed = this.toSafeInteger(value);
-    return parsed && parsed > 0 ? parsed : fallback;
+    if (parsed === null || parsed < 0) {
+      return undefined;
+    }
+    return parsed;
   }
 
   parsePolicyInteger(
@@ -109,23 +108,20 @@ export class PasswordPolicyService {
     );
   }
 
-  private getPolicyTemplate() {
-    return PASSWORD_POLICY_CHILDREN;
-  }
-
   buildConfigFromRows(rows: AdvancedSetting[]): PasswordPolicyConfig {
     const rowMap = new Map<string, AdvancedSetting>();
     for (const row of rows) {
-      rowMap.set(row.code?.trim().toUpperCase(), row);
+      const key = row.code?.trim().toUpperCase();
+      if (key) {
+        rowMap.set(key, row);
+      }
     }
 
     const minLength = this.normalizeRequiredCount(
       rowMap.get(PasswordPolicyCodeEnum.MinLength)?.valueNumber,
-      DEFAULT_PASSWORD_POLICY.minLength,
     );
     const maxLength = this.normalizeRequiredCount(
       rowMap.get(PasswordPolicyCodeEnum.MaxLength)?.valueNumber,
-      DEFAULT_PASSWORD_POLICY.maxLength,
     );
     const minSpecialCharCount = this.normalizeOptionalCount(
       rowMap.get(PasswordPolicyCodeEnum.MinSpecialCharCount)?.valueNumber,
@@ -152,15 +148,19 @@ export class PasswordPolicyService {
 
   validatePolicyConfig(config: PasswordPolicyConfig): PasswordPolicyConfig {
     const normalized: PasswordPolicyConfig = {
-      minLength: this.normalizeRequiredCount(config.minLength, DEFAULT_PASSWORD_POLICY.minLength),
-      maxLength: this.normalizeRequiredCount(config.maxLength, DEFAULT_PASSWORD_POLICY.maxLength),
+      minLength: this.normalizeRequiredCount(config.minLength),
+      maxLength: this.normalizeRequiredCount(config.maxLength),
       minSpecialCharCount: this.normalizeOptionalCount(config.minSpecialCharCount),
       minNumericCount: this.normalizeOptionalCount(config.minNumericCount),
       minAlphaCount: this.normalizeOptionalCount(config.minAlphaCount),
       maxInvalidAttempts: this.normalizeOptionalCount(config.maxInvalidAttempts),
     };
 
-    if (normalized.minLength > normalized.maxLength) {
+    if (
+      normalized.minLength !== undefined &&
+      normalized.maxLength !== undefined &&
+      normalized.minLength > normalized.maxLength
+    ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.InvalidPolicyConfig,
         'Minimum password length cannot exceed maximum password length',
@@ -176,7 +176,7 @@ export class PasswordPolicyService {
       ['minNumericCount', normalized.minNumericCount],
       ['minAlphaCount', normalized.minAlphaCount],
     ] as const) {
-      if (value > normalized.maxLength) {
+      if (value !== undefined && normalized.maxLength !== undefined && value > normalized.maxLength) {
         throw this.createPolicyException(
           PasswordValidationCodeEnum.InvalidPolicyConfig,
           `${key} cannot exceed maximum password length`,
@@ -211,94 +211,10 @@ export class PasswordPolicyService {
     return rows[0] || null;
   }
 
-  async ensurePasswordPolicySeed(): Promise<AdvancedSetting | null> {
-    const company = await this.getCompany();
-    if (!company) {
-      return null;
-    }
-
-    const existingCategory = await this.settingRepository.findOne({
-      where: {
-        companyId: company.id,
-        code: PasswordPolicyCodeEnum.Policy,
-        nodeType: NodeType.Category,
-      },
-      relations: ['children'],
-    });
-
-    if (existingCategory) {
-      const missingChildren = this.getPolicyTemplate().filter(
-        template =>
-          !(existingCategory.children || []).some(
-            child => child.code?.trim().toUpperCase() === template.code,
-          ),
-      );
-
-      for (const missing of missingChildren) {
-        const sortOrder = this.getPolicyTemplate().findIndex(
-          template => template.code === missing.code,
-        );
-        const child = this.settingRepository.create({
-          companyId: company.id,
-          parentId: existingCategory.id,
-          code: missing.code,
-          label: missing.label,
-          description: missing.label,
-          nodeType: NodeType.Setting,
-          valueType: ValueType.Number,
-          valueNumber: missing.defaultValue,
-          sortOrder: sortOrder >= 0 ? sortOrder : 0,
-          createdBy: SYSTEM_USER_ID,
-          updatedBy: SYSTEM_USER_ID,
-        });
-        await this.settingRepository.save(child);
-      }
-
-      return this.settingRepository.findOne({
-        where: {
-          id: existingCategory.id,
-        },
-        relations: ['children'],
-      });
-    }
-
-    const category = this.settingRepository.create({
-      companyId: company.id,
-      code: PasswordPolicyCodeEnum.Policy,
-      label: 'Password Policy',
-      nodeType: NodeType.Category,
-      createdBy: SYSTEM_USER_ID,
-      updatedBy: SYSTEM_USER_ID,
-    });
-    const savedCategory = await this.settingRepository.save(category);
-
-    for (const [index, template] of this.getPolicyTemplate().entries()) {
-      const child = this.settingRepository.create({
-        companyId: company.id,
-        parentId: savedCategory.id,
-        code: template.code,
-        label: template.label,
-        description: template.label,
-        nodeType: NodeType.Setting,
-        valueType: ValueType.Number,
-        valueNumber: template.defaultValue,
-        sortOrder: index,
-        createdBy: SYSTEM_USER_ID,
-        updatedBy: SYSTEM_USER_ID,
-      });
-      await this.settingRepository.save(child);
-    }
-
-    return this.settingRepository.findOne({
-      where: { id: savedCategory.id },
-      relations: ['children'],
-    });
-  }
-
   async getPasswordPolicy(): Promise<PasswordPolicyResponseDto> {
     const category = await this.getPasswordPolicyEntity();
     if (!category) {
-      return PasswordPolicyResponseDto.fromConfig(DEFAULT_PASSWORD_POLICY);
+      return PasswordPolicyResponseDto.fromConfig({});
     }
 
     const config = this.validatePolicyConfig(this.buildConfigFromRows(category.children || []));
@@ -309,7 +225,7 @@ export class PasswordPolicyService {
     const normalized = this.validatePolicyConfig(policy);
     const passwordLength = password.length;
 
-    if (passwordLength < normalized.minLength) {
+    if (normalized.minLength !== undefined && passwordLength < normalized.minLength) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.TooShort,
         `Password must be at least ${normalized.minLength} characters long`,
@@ -317,7 +233,7 @@ export class PasswordPolicyService {
       );
     }
 
-    if (passwordLength > normalized.maxLength) {
+    if (normalized.maxLength !== undefined && passwordLength > normalized.maxLength) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.TooLong,
         `Password must be at most ${normalized.maxLength} characters long`,
@@ -329,7 +245,11 @@ export class PasswordPolicyService {
     const numericCount = (password.match(/[0-9]/g) || []).length;
     const alphaCount = (password.match(/[A-Za-z]/g) || []).length;
 
-    if (normalized.minSpecialCharCount > 0 && specialCharCount < normalized.minSpecialCharCount) {
+    if (
+      normalized.minSpecialCharCount !== undefined &&
+      normalized.minSpecialCharCount > 0 &&
+      specialCharCount < normalized.minSpecialCharCount
+    ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.MissingSpecialChars,
         `Password must contain at least ${normalized.minSpecialCharCount} special character(s)`,
@@ -337,7 +257,11 @@ export class PasswordPolicyService {
       );
     }
 
-    if (normalized.minNumericCount > 0 && numericCount < normalized.minNumericCount) {
+    if (
+      normalized.minNumericCount !== undefined &&
+      normalized.minNumericCount > 0 &&
+      numericCount < normalized.minNumericCount
+    ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.MissingNumericChars,
         `Password must contain at least ${normalized.minNumericCount} numeric character(s)`,
@@ -345,7 +269,11 @@ export class PasswordPolicyService {
       );
     }
 
-    if (normalized.minAlphaCount > 0 && alphaCount < normalized.minAlphaCount) {
+    if (
+      normalized.minAlphaCount !== undefined &&
+      normalized.minAlphaCount > 0 &&
+      alphaCount < normalized.minAlphaCount
+    ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.MissingAlphaChars,
         `Password must contain at least ${normalized.minAlphaCount} alphabetic character(s)`,

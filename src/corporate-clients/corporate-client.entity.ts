@@ -187,4 +187,14 @@ export class CorporateClient extends BaseEntity {
 
   @Column({ type: "text", nullable: true })
   cancelledChequeCopy: string;
+
+  // ── FFMC-specific fields ──────────────────────────────────────────────────
+  @Column({ type: "boolean", default: false })
+  isFfmc: boolean;
+
+  @Column({ type: "citext", nullable: true })
+  ffmcRegNo: string;
+
+  @Column({ type: "timestamptz", nullable: true })
+  ffmcRegDate: Date;
 }

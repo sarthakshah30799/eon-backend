@@ -187,6 +187,15 @@ export class CorporateClientResponseDto {
   @ApiPropertyOptional({ description: "Cancelled Cheque Copy" })
   cancelledChequeCopy?: string;
 
+  @ApiProperty({ description: "FFMC Client flag" })
+  isFfmc: boolean;
+
+  @ApiPropertyOptional({ description: "FFMC Registration Number" })
+  ffmcRegNo?: string;
+
+  @ApiPropertyOptional({ description: "FFMC Registration Date" })
+  ffmcRegDate?: Date;
+
   @ApiProperty({ description: "Created at timestamp" })
   createdAt: Date;
 
@@ -257,6 +266,9 @@ export class CorporateClientResponseDto {
     dto.ifscCode = entity.ifscCode;
     dto.bankAddress = entity.bankAddress;
     dto.cancelledChequeCopy = entity.cancelledChequeCopy;
+    dto.isFfmc = entity.isFfmc;
+    dto.ffmcRegNo = entity.ffmcRegNo;
+    dto.ffmcRegDate = entity.ffmcRegDate;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;
