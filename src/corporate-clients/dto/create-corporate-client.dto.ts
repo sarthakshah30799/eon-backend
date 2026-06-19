@@ -310,4 +310,19 @@ export class CreateCorporateClientDto {
   @IsString()
   @IsOptional()
   cancelledChequeCopy?: string;
+
+  @ApiPropertyOptional({ description: "FFMC Client flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  isFfmc?: boolean;
+
+  @ApiPropertyOptional({ description: "FFMC Registration Number" })
+  @IsString()
+  @IsOptional()
+  ffmcRegNo?: string;
+
+  @ApiPropertyOptional({ description: "FFMC Registration Date" })
+  @IsString()
+  @IsOptional()
+  ffmcRegDate?: string;
 }

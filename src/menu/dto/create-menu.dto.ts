@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsInt, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsInt, IsBoolean, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateMenuDto {
@@ -22,10 +22,11 @@ export class CreateMenuDto {
   @IsOptional()
   icon?: string;
 
-  @ApiProperty({ description: 'Parent menu ID (UUID)', required: false })
+  @ApiProperty({ description: 'Parent menu ID (UUID)', required: false, nullable: true })
+  @ValidateIf(o => o.parentId != null)  // skip UUID validation when explicitly null
   @IsUUID()
   @IsOptional()
-  parentId?: string;
+  parentId?: string | null;
 
   @ApiProperty({ description: 'Sort order', example: 0, required: false })
   @IsInt()
