@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AdvancedSetting, NodeType, ValueType } from "./advanced-setting.entity";
@@ -16,6 +16,25 @@ export class AdditionalSettingService {
     private readonly settingRepository: Repository<AdvancedSetting>,
     private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
+
+  private getPasswordPolicyConfigKey(code: PasswordPolicyCodeEnum): keyof PasswordPolicyConfig | null {
+    switch (code) {
+      case PasswordPolicyCodeEnum.MinLength:
+        return 'minLength';
+      case PasswordPolicyCodeEnum.MaxLength:
+        return 'maxLength';
+      case PasswordPolicyCodeEnum.MinSpecialCharCount:
+        return 'minSpecialCharCount';
+      case PasswordPolicyCodeEnum.MinNumericCount:
+        return 'minNumericCount';
+      case PasswordPolicyCodeEnum.MinAlphaCount:
+        return 'minAlphaCount';
+      case PasswordPolicyCodeEnum.MaxInvalidAttempts:
+        return 'maxInvalidAttempts';
+      default:
+        return null;
+    }
+  }
 
   private parseAndSetValue(setting: AdvancedSetting, value: string, valueType: ValueType) {
     setting.valueType = valueType;
@@ -97,81 +116,35 @@ export class AdditionalSettingService {
     if (savedCategory.code?.trim().toUpperCase() === PasswordPolicyCodeEnum.Policy) {
       try {
         const policyChildren = PASSWORD_POLICY_CHILDREN;
-        const findIncomingValue = (code: PasswordPolicyCodeEnum, fallback: number) => {
-          const incoming = (dto.subcategories || []).find(
-            sub => sub.code?.trim().toUpperCase() === code,
-          );
-          return incoming?.value ?? String(fallback);
-        };
-        const proposedPolicy: PasswordPolicyConfig = {
-        minLength: this.passwordPolicyService.parsePolicyInteger(
-          findIncomingValue(PasswordPolicyCodeEnum.MinLength, policyChildren[0].defaultValue),
-          'Minimum Length',
-          false,
-        ),
-          maxLength: this.passwordPolicyService.parsePolicyInteger(
-            findIncomingValue(PasswordPolicyCodeEnum.MaxLength, policyChildren[1].defaultValue),
-            'Maximum Length',
-            false,
-          ),
-        minSpecialCharCount: this.passwordPolicyService.parsePolicyInteger(
-          findIncomingValue(
-            PasswordPolicyCodeEnum.MinSpecialCharCount,
-            policyChildren[2].defaultValue,
-          ),
-          'Minimum Special Characters',
-          true,
-          true,
-        ),
-        minNumericCount: this.passwordPolicyService.parsePolicyInteger(
-          findIncomingValue(
-            PasswordPolicyCodeEnum.MinNumericCount,
-            policyChildren[3].defaultValue,
-          ),
-          'Minimum Numeric Characters',
-          true,
-          true,
-        ),
-        minAlphaCount: this.passwordPolicyService.parsePolicyInteger(
-          findIncomingValue(
-            PasswordPolicyCodeEnum.MinAlphaCount,
-            policyChildren[4].defaultValue,
-          ),
-          'Minimum Alpha Characters',
-          true,
-          true,
-        ),
-        maxInvalidAttempts: this.passwordPolicyService.parsePolicyInteger(
-          findIncomingValue(
-            PasswordPolicyCodeEnum.MaxInvalidAttempts,
-            policyChildren[5].defaultValue,
-          ),
-          'Maximum Invalid Attempts',
-          true,
-          true,
-        ),
-      };
-        this.passwordPolicyService.validatePolicyConfig(proposedPolicy);
+        const allowedCodes = new Set<string>(policyChildren.map(template => template.code));
+        const proposedPolicy: Partial<PasswordPolicyConfig> = {};
 
-        for (const [index, template] of policyChildren.entries()) {
-          const numericValue =
-            template.code === PasswordPolicyCodeEnum.MinLength
-              ? proposedPolicy.minLength
-              : template.code === PasswordPolicyCodeEnum.MaxLength
-                ? proposedPolicy.maxLength
-                : template.code === PasswordPolicyCodeEnum.MinSpecialCharCount
-                  ? proposedPolicy.minSpecialCharCount
-                  : template.code === PasswordPolicyCodeEnum.MinNumericCount
-                    ? proposedPolicy.minNumericCount
-                    : template.code === PasswordPolicyCodeEnum.MinAlphaCount
-                      ? proposedPolicy.minAlphaCount
-                      : proposedPolicy.maxInvalidAttempts;
+        for (const [index, sub] of (dto.subcategories || []).entries()) {
+          const code = sub.code?.trim().toUpperCase();
+          if (!code || !allowedCodes.has(code)) {
+            throw new BadRequestException(`Invalid password policy setting code: ${sub.code}`);
+          }
+
+          const configKey = this.getPasswordPolicyConfigKey(code as PasswordPolicyCodeEnum);
+          const template = policyChildren.find(item => item.code === code);
+          const numericValue = this.passwordPolicyService.parsePolicyInteger(
+            sub.value,
+            template?.label || sub.title,
+            code === PasswordPolicyCodeEnum.MinLength || code === PasswordPolicyCodeEnum.MaxLength
+              ? false
+              : true,
+          );
+
+          if (configKey) {
+            proposedPolicy[configKey] = numericValue;
+          }
+
           const child = this.settingRepository.create({
             companyId,
             parentId: savedCategory.id,
-            code: template.code,
-            label: template.label,
-            description: template.label,
+            code,
+            label: template?.label || sub.title,
+            description: template?.label || sub.title,
             nodeType: NodeType.Setting,
             sortOrder: index,
             createdBy: userId,
@@ -180,6 +153,8 @@ export class AdditionalSettingService {
           this.parseAndSetValue(child, String(numericValue), ValueType.Number);
           await this.settingRepository.save(child);
         }
+
+        this.passwordPolicyService.validatePolicyConfig(proposedPolicy);
       } catch (error) {
         await this.settingRepository.delete({ id: savedCategory.id });
         throw error;

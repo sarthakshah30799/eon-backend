@@ -16,6 +16,7 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
         password: configService.database.password,
         database: configService.database.database,
         ssl: configService.database.ssl,
+        autoLoadEntities: true,
         entities: [__dirname + '/../**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/../migrations/*{.ts,.js}'],
         synchronize: false, // Ensure you handle schema changes properly
