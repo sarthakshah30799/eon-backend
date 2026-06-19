@@ -5,6 +5,7 @@ import { AdditionalSettingService } from "./additional-setting.service";
 import { AdditionalSettingController } from "./additional-setting.controller";
 import { UserModule } from "../users/user.module";
 import { PasswordPolicyModule } from "../password-policy/password-policy.module";
+import { SessionPolicyModule } from "../session-policy/session-policy.module";
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { PasswordPolicyModule } from "../password-policy/password-policy.module"
     ]),
     UserModule,
     PasswordPolicyModule,
+    SessionPolicyModule,
   ],
   providers: [AdditionalSettingService],
   controllers: [AdditionalSettingController],

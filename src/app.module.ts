@@ -21,6 +21,7 @@ import { AccountProfileModule } from './account-profiles/account-profile.module'
 import { CountryGroupModule } from './country-groups/country-group.module';
 import { CorporateClientModule } from './corporate-clients/corporate-client.module';
 import { AuditLogModule } from './audit-logs/audit-log.module';
+import { SessionPolicyModule } from './session-policy/session-policy.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AuditLogModule } from './audit-logs/audit-log.module';
     ProductModule,
     CurrencyModule,
     AdditionalSettingModule,
+    SessionPolicyModule,
     FinancialCodeModule,
     FinancialSubProfileModule,
     AccountProfileModule,
@@ -46,6 +48,7 @@ import { AuditLogModule } from './audit-logs/audit-log.module';
     CorporateClientModule,
     AuditLogModule,
   ],
+  providers: [SessionMiddleware],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

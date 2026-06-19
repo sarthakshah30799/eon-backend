@@ -6,6 +6,7 @@ import { SessionService } from './session.service';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PasswordPolicyService } from '../password-policy/password-policy.service';
+import { SessionPolicyService } from '../session-policy/session-policy.service';
 
 @Injectable()
 export class AuthService {
@@ -13,6 +14,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly sessionService: SessionService,
     private readonly passwordPolicyService: PasswordPolicyService,
+    private readonly sessionPolicyService: SessionPolicyService,
   ) {}
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
@@ -24,20 +26,13 @@ export class AuthService {
   }
 
   async login(user: User, session: any): Promise<{ message: string; sessionsInvalidated: number }> {
-    // Invalidate all previous sessions for this user
-    await this.sessionService.invalidateUserSessions(user.id, session.id);
-    
-    // Set current session
-    session.userId = user.id;
-    session.email = user.email;
-    session.isAdmin = user.isAdmin === true;
-    
     // Note: lastLoginAt is already updated in validateUser method
-    
-    return { 
-      message: 'Login successful - previous sessions have been invalidated',
-      sessionsInvalidated: 1 // We'll get actual count if needed
-    };
+    return this.sessionPolicyService.applyLoginSessionPolicy(
+      user,
+      session,
+      (userId: string, currentSessionId?: string) =>
+        this.sessionService.invalidateUserSessions(userId, currentSessionId),
+    );
   }
 
   async completeInitialPasswordSetup(session: any, newPassword: string): Promise<{ message: string }> {
