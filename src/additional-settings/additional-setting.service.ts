@@ -88,72 +88,34 @@ export class AdditionalSettingService {
     return {
       [PasswordPolicyCodeEnum.Policy]: {
         createChildren: async ({ dto, savedCategory, companyId, userId }) => {
-          const findIncomingValue = (code: PasswordPolicyCodeEnum) => {
-            const incoming = (dto.subcategories || []).find(
-              sub => normalizeCode(sub.code) === code,
-            );
-            return incoming?.value ?? '';
-          };
+          const createdChildren: AdvancedSetting[] = [];
 
-          const proposedPolicy: PasswordPolicyConfig = {
-            minLength: this.passwordPolicyService.parsePolicyInteger(
-              findIncomingValue(PasswordPolicyCodeEnum.MinLength),
-              'Minimum Length',
-              false,
-            ),
-            maxLength: this.passwordPolicyService.parsePolicyInteger(
-              findIncomingValue(PasswordPolicyCodeEnum.MaxLength),
-              'Maximum Length',
-              false,
-            ),
-            minSpecialCharCount: this.passwordPolicyService.parsePolicyInteger(
-              findIncomingValue(PasswordPolicyCodeEnum.MinSpecialCharCount),
-              'Minimum Special Characters',
-              true,
-              true,
-            ),
-            minNumericCount: this.passwordPolicyService.parsePolicyInteger(
-              findIncomingValue(PasswordPolicyCodeEnum.MinNumericCount),
-              'Minimum Numeric Characters',
-              true,
-              true,
-            ),
-            minAlphaCount: this.passwordPolicyService.parsePolicyInteger(
-              findIncomingValue(PasswordPolicyCodeEnum.MinAlphaCount),
-              'Minimum Alpha Characters',
-              true,
-              true,
-            ),
-            maxInvalidAttempts: this.passwordPolicyService.parsePolicyInteger(
-              findIncomingValue(PasswordPolicyCodeEnum.MaxInvalidAttempts),
-              'Maximum Invalid Attempts',
-              true,
-              true,
-            ),
-          };
+          for (const [index, sub] of (dto.subcategories || []).entries()) {
+            const code = normalizeCode(sub.code) as PasswordPolicyCodeEnum;
+            let numericValue: number;
 
-          this.passwordPolicyService.validatePolicyConfig(proposedPolicy);
-
-          for (const [index, template] of PASSWORD_POLICY_CHILDREN.entries()) {
-            const numericValue =
-              template.code === PasswordPolicyCodeEnum.MinLength
-                ? proposedPolicy.minLength
-                : template.code === PasswordPolicyCodeEnum.MaxLength
-                  ? proposedPolicy.maxLength
-                  : template.code === PasswordPolicyCodeEnum.MinSpecialCharCount
-                    ? proposedPolicy.minSpecialCharCount
-                    : template.code === PasswordPolicyCodeEnum.MinNumericCount
-                      ? proposedPolicy.minNumericCount
-                      : template.code === PasswordPolicyCodeEnum.MinAlphaCount
-                        ? proposedPolicy.minAlphaCount
-                        : proposedPolicy.maxInvalidAttempts;
+            if (code === PasswordPolicyCodeEnum.MinLength) {
+              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Length', false);
+            } else if (code === PasswordPolicyCodeEnum.MaxLength) {
+              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Length', false);
+            } else if (code === PasswordPolicyCodeEnum.MinSpecialCharCount) {
+              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Special Characters', true);
+            } else if (code === PasswordPolicyCodeEnum.MinNumericCount) {
+              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Numeric Characters', true);
+            } else if (code === PasswordPolicyCodeEnum.MinAlphaCount) {
+              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Alpha Characters', true);
+            } else if (code === PasswordPolicyCodeEnum.MaxInvalidAttempts) {
+              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Invalid Attempts', true);
+            } else {
+              numericValue = parseInt(sub.value, 10);
+            }
 
             const child = this.settingRepository.create({
               companyId,
               parentId: savedCategory.id,
-              code: template.code,
-              label: template.label,
-              description: template.label,
+              code,
+              label: sub.title.trim(),
+              description: sub.title.trim(),
               nodeType: NodeType.Setting,
               sortOrder: index,
               createdBy: userId,
@@ -161,6 +123,16 @@ export class AdditionalSettingService {
             });
 
             this.parseAndSetValue(child, String(numericValue), ValueType.Number);
+            createdChildren.push(child);
+          }
+
+          if (createdChildren.length > 0) {
+            this.passwordPolicyService.validatePolicyConfig(
+              this.passwordPolicyService.buildConfigFromRows(createdChildren),
+            );
+          }
+
+          for (const child of createdChildren) {
             await this.settingRepository.save(child);
           }
         },
@@ -196,51 +168,42 @@ export class AdditionalSettingService {
       },
       [SessionPolicyCodeEnum.Policy]: {
         createChildren: async ({ dto, savedCategory, companyId, userId }) => {
-          const findIncomingValue = (code: SessionPolicyCodeEnum) => {
-            const incoming = (dto.subcategories || []).find(
-              sub => normalizeCode(sub.code) === code,
-            );
-            return incoming?.value ?? '';
-          };
+          const createdChildren: AdvancedSetting[] = [];
 
-          const proposedPolicy: SessionPolicyConfig = {
-            allowMultipleLogin: this.sessionPolicyService.parsePolicyBoolean(
-              findIncomingValue(SessionPolicyCodeEnum.AllowMultipleLogin),
-              'Allow Multiple Login',
-            ),
-            idleTimeoutSeconds: this.sessionPolicyService.parsePolicyInteger(
-              findIncomingValue(SessionPolicyCodeEnum.IdleTimeoutSeconds),
-              'Idle Timeout Seconds',
-              true,
-              true,
-            ),
-          };
-
-          this.sessionPolicyService.validatePolicyConfig(proposedPolicy);
-
-          for (const [index, template] of SESSION_POLICY_CHILDREN.entries()) {
+          for (const [index, sub] of (dto.subcategories || []).entries()) {
+            const code = normalizeCode(sub.code) as SessionPolicyCodeEnum;
             const child = this.settingRepository.create({
               companyId,
               parentId: savedCategory.id,
-              code: template.code,
-              label: template.label,
-              description: template.label,
+              code,
+              label: sub.title.trim(),
+              description: sub.title.trim(),
               nodeType: NodeType.Setting,
               sortOrder: index,
               createdBy: userId,
               updatedBy: userId,
             });
 
-            if (template.code === SessionPolicyCodeEnum.AllowMultipleLogin) {
-              this.parseAndSetValue(
-                child,
-                proposedPolicy.allowMultipleLogin ? 'YES' : 'NO',
-                ValueType.Boolean,
-              );
+            if (code === SessionPolicyCodeEnum.AllowMultipleLogin) {
+              const boolVal = this.sessionPolicyService.parsePolicyBoolean(sub.value, 'Allow Multiple Login');
+              this.parseAndSetValue(child, boolVal ? 'YES' : 'NO', ValueType.Boolean);
+            } else if (code === SessionPolicyCodeEnum.IdleTimeoutSeconds) {
+              const numVal = this.sessionPolicyService.parsePolicyInteger(sub.value, 'Idle Timeout Seconds', true);
+              this.parseAndSetValue(child, String(numVal), ValueType.Number);
             } else {
-              this.parseAndSetValue(child, String(proposedPolicy.idleTimeoutSeconds), ValueType.Number);
+              this.parseAndSetValue(child, sub.value, sub.valueType);
             }
 
+            createdChildren.push(child);
+          }
+
+          if (createdChildren.length > 0) {
+            this.sessionPolicyService.validatePolicyConfig(
+              this.sessionPolicyService.buildConfigFromRows(createdChildren),
+            );
+          }
+
+          for (const child of createdChildren) {
             await this.settingRepository.save(child);
           }
         },
