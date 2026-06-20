@@ -364,6 +364,102 @@ export class AdditionalSettingService {
     category.updatedBy = userId;
     await this.settingRepository.save(category);
 
+    const isPasswordPolicy = normalizeCode(category.code) === PasswordPolicyCodeEnum.Policy;
+    const isSessionPolicy = normalizeCode(category.code) === SessionPolicyCodeEnum.Policy;
+
+    if (dto.subcategories) {
+      const currentChildren = await this.settingRepository.find({
+        where: { parentId: id, nodeType: NodeType.Setting },
+      });
+
+      const incomingCodes = new Set(dto.subcategories.map(sub => normalizeCode(sub.code)));
+
+      // Delete children not in incoming request
+      for (const child of currentChildren) {
+        if (!incomingCodes.has(normalizeCode(child.code))) {
+          await this.settingRepository.delete({ id: child.id });
+        }
+      }
+
+      const updatedChildren: AdvancedSetting[] = [];
+
+      // Validate and instantiate/update incoming children
+      for (const [index, sub] of dto.subcategories.entries()) {
+        const code = normalizeCode(sub.code);
+        let child = currentChildren.find(c => normalizeCode(c.code) === code);
+        if (!child) {
+          child = this.settingRepository.create({
+            companyId: category.companyId,
+            parentId: category.id,
+            code,
+            nodeType: NodeType.Setting,
+            createdBy: userId,
+          });
+        }
+
+        child.label = sub.title.trim();
+        child.description = sub.title.trim();
+        child.updatedBy = userId;
+        child.sortOrder = index;
+
+        if (isPasswordPolicy) {
+          let numericValue: number;
+          const pCode = code as PasswordPolicyCodeEnum;
+          if (pCode === PasswordPolicyCodeEnum.MinLength) {
+            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Length', false);
+          } else if (pCode === PasswordPolicyCodeEnum.MaxLength) {
+            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Length', false);
+          } else if (pCode === PasswordPolicyCodeEnum.MinSpecialCharCount) {
+            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Special Characters', true);
+          } else if (pCode === PasswordPolicyCodeEnum.MinNumericCount) {
+            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Numeric Characters', true);
+          } else if (pCode === PasswordPolicyCodeEnum.MinAlphaCount) {
+            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Alpha Characters', true);
+          } else if (pCode === PasswordPolicyCodeEnum.MaxInvalidAttempts) {
+            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Invalid Attempts', true);
+          } else {
+            numericValue = parseInt(sub.value, 10);
+          }
+          this.parseAndSetValue(child, String(numericValue), ValueType.Number);
+        } else if (isSessionPolicy) {
+          const sCode = code as SessionPolicyCodeEnum;
+          if (sCode === SessionPolicyCodeEnum.AllowMultipleLogin) {
+            const boolVal = this.sessionPolicyService.parsePolicyBoolean(sub.value, 'Allow Multiple Login');
+            this.parseAndSetValue(child, boolVal ? 'YES' : 'NO', ValueType.Boolean);
+          } else if (sCode === SessionPolicyCodeEnum.IdleTimeoutSeconds) {
+            const numVal = this.sessionPolicyService.parsePolicyInteger(sub.value, 'Idle Timeout Seconds', true);
+            this.parseAndSetValue(child, String(numVal), ValueType.Number);
+          } else {
+            this.parseAndSetValue(child, sub.value, sub.valueType);
+          }
+        } else {
+          this.parseAndSetValue(child, sub.value, sub.valueType);
+        }
+
+        updatedChildren.push(child);
+      }
+
+      // Run overall policy configuration check
+      if (isPasswordPolicy && updatedChildren.length > 0) {
+        this.passwordPolicyService.validatePolicyConfig(
+          this.passwordPolicyService.buildConfigFromRows(updatedChildren),
+        );
+      } else if (isSessionPolicy && updatedChildren.length > 0) {
+        this.sessionPolicyService.validatePolicyConfig(
+          this.sessionPolicyService.buildConfigFromRows(updatedChildren),
+        );
+      }
+
+      // Save all updated/created children
+      for (const child of updatedChildren) {
+        await this.settingRepository.save(child);
+      }
+    }
+
+    if (isSessionPolicy) {
+      this.sessionPolicyService.invalidateCache();
+    }
+
     return this.settingRepository.findOne({
       where: { id },
       relations: ['children'],
