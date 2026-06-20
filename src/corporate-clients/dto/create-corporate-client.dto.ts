@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -11,6 +12,7 @@ import {
   Length,
   Min,
 } from "class-validator";
+import { ClientType } from "../corporate-client.entity";
 
 export class CreateCorporateClientDto {
   @ApiProperty({ description: "Date of Introduction", example: "2026-06-09T00:00:00Z" })
@@ -311,11 +313,6 @@ export class CreateCorporateClientDto {
   @IsOptional()
   cancelledChequeCopy?: string;
 
-  @ApiPropertyOptional({ description: "FFMC Client flag", default: false })
-  @IsBoolean()
-  @IsOptional()
-  isFfmc?: boolean;
-
   @ApiPropertyOptional({ description: "FFMC Registration Number" })
   @IsString()
   @IsOptional()
@@ -325,4 +322,9 @@ export class CreateCorporateClientDto {
   @IsString()
   @IsOptional()
   ffmcRegDate?: string;
+
+  @ApiPropertyOptional({ description: "Client Profile Type", enum: ClientType, default: ClientType.CORPORATE_CLIENT })
+  @IsEnum(ClientType)
+  @IsOptional()
+  type?: ClientType;
 }

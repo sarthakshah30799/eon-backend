@@ -20,7 +20,7 @@ import { FinancialSubProfileModule } from './financial-sub-profiles/financial-su
 import { AccountProfileModule } from './account-profiles/account-profile.module';
 import { CountryGroupModule } from './country-groups/country-group.module';
 import { CorporateClientModule } from './corporate-clients/corporate-client.module';
-import { FfmcClientModule } from './ffmc-clients/ffmc-client.module';
+
 import { AuditLogModule } from './audit-logs/audit-log.module';
 import { SessionPolicyModule } from './session-policy/session-policy.module';
 
@@ -47,7 +47,7 @@ import { SessionPolicyModule } from './session-policy/session-policy.module';
     AccountProfileModule,
     CountryGroupModule,
     CorporateClientModule,
-    FfmcClientModule,
+
     AuditLogModule,
   ],
   providers: [SessionMiddleware],

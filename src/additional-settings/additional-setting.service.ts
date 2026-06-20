@@ -41,7 +41,7 @@ export class AdditionalSettingService {
     private readonly settingRepository: Repository<AdvancedSetting>,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly sessionPolicyService: SessionPolicyService,
-  ) {}
+  ) { }
 
   private parseAndSetValue(setting: AdvancedSetting, value: string, valueType: ValueType) {
     setting.valueType = valueType;
@@ -179,9 +179,9 @@ export class AdditionalSettingService {
           const merged = children.map(child =>
             child.id === subcategoryId
               ? {
-                  ...child,
-                  valueNumber: numericValue,
-                }
+                ...child,
+                valueNumber: numericValue,
+              }
               : child,
           );
 
@@ -258,9 +258,9 @@ export class AdditionalSettingService {
             const merged = children.map(child =>
               child.id === subcategoryId
                 ? {
-                    ...child,
-                    valueBoolean: booleanValue,
-                  }
+                  ...child,
+                  valueBoolean: booleanValue,
+                }
                 : child,
             );
 
@@ -284,9 +284,9 @@ export class AdditionalSettingService {
           const merged = children.map(child =>
             child.id === subcategoryId
               ? {
-                  ...child,
-                  valueNumber: numericValue,
-                }
+                ...child,
+                valueNumber: numericValue,
+              }
               : child,
           );
 

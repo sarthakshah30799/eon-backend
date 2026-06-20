@@ -3,6 +3,16 @@ import { BaseEntity } from "../base/base.entity";
 import { State } from "../state/state.entity";
 import { Branch } from "../branches/branch.entity";
 
+export enum ClientType {
+  CORPORATE_CLIENT = 'corporate_client',
+  FFMC = 'ffmc',
+  AUTHORISED_DEALER = 'authorised_dealer',
+  RMC = 'rmc',
+  FRANCHISE = 'franchise',
+  AGENT = 'agent',
+  FOREIGN_CORRESPONDENT = 'foreign_respondent'
+}
+
 @Entity("corporate_clients")
 export class CorporateClient extends BaseEntity {
   @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
@@ -188,10 +198,10 @@ export class CorporateClient extends BaseEntity {
   @Column({ type: "text", nullable: true })
   cancelledChequeCopy: string;
 
-  // ── FFMC-specific fields ──────────────────────────────────────────────────
-  @Column({ type: "boolean", default: false })
-  isFfmc: boolean;
+  @Column({ type: "varchar", default: ClientType.CORPORATE_CLIENT })
+  type: ClientType;
 
+  // ── FFMC-specific fields ──────────────────────────────────────────────────
   @Column({ type: "citext", nullable: true })
   ffmcRegNo: string;
 

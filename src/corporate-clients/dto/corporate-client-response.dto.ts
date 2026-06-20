@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { CorporateClient } from "../corporate-client.entity";
+import { CorporateClient, ClientType } from "../corporate-client.entity";
 
 export class CorporateClientResponseDto {
   @ApiProperty({ description: "UUID of the corporate client" })
@@ -187,14 +187,14 @@ export class CorporateClientResponseDto {
   @ApiPropertyOptional({ description: "Cancelled Cheque Copy" })
   cancelledChequeCopy?: string;
 
-  @ApiProperty({ description: "FFMC Client flag" })
-  isFfmc: boolean;
-
   @ApiPropertyOptional({ description: "FFMC Registration Number" })
   ffmcRegNo?: string;
 
   @ApiPropertyOptional({ description: "FFMC Registration Date" })
   ffmcRegDate?: Date;
+
+  @ApiProperty({ description: "Client Profile Type", enum: ClientType })
+  type: ClientType;
 
   @ApiProperty({ description: "Created at timestamp" })
   createdAt: Date;
@@ -266,9 +266,9 @@ export class CorporateClientResponseDto {
     dto.ifscCode = entity.ifscCode;
     dto.bankAddress = entity.bankAddress;
     dto.cancelledChequeCopy = entity.cancelledChequeCopy;
-    dto.isFfmc = entity.isFfmc;
     dto.ffmcRegNo = entity.ffmcRegNo;
     dto.ffmcRegDate = entity.ffmcRegDate;
+    dto.type = entity.type;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

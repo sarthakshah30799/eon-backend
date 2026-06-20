@@ -16,7 +16,7 @@ export class PasswordPolicyService {
     private readonly settingRepository: Repository<AdvancedSetting>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
-  ) {}
+  ) { }
 
   private toSafeInteger(value: unknown): number | null {
     if (value === null || value === undefined || value === '') {
@@ -193,6 +193,7 @@ export class PasswordPolicyService {
 
   async getCompany(): Promise<Company | null> {
     return this.companyRepository.findOne({
+      where: {},
       order: { createdAt: 'ASC' },
     });
   }

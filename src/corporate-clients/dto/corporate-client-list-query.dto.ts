@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsBoolean, IsInt, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
+import { ClientType } from "../corporate-client.entity";
 
 export class CorporateClientListQueryDto {
   @ApiPropertyOptional({ description: "Search query by code, name, or city" })
@@ -23,6 +24,11 @@ export class CorporateClientListQueryDto {
   @IsOptional()
   @Type(() => Boolean)
   active?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by Corporate Client type", enum: ClientType })
+  @IsEnum(ClientType)
+  @IsOptional()
+  type?: ClientType;
 
   @ApiPropertyOptional({ description: "Page number", default: 1 })
   @IsInt()

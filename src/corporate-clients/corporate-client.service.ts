@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
-import { CorporateClient } from "./corporate-client.entity";
+import { CorporateClient, ClientType } from "./corporate-client.entity";
 import { Branch } from "../branches/branch.entity";
 import { State } from "../state/state.entity";
 import { CreateCorporateClientDto } from "./dto/create-corporate-client.dto";
@@ -39,6 +39,18 @@ export class CorporateClientService {
     @InjectRepository(State)
     private readonly stateRepository: Repository<State>,
   ) {}
+
+  getTypes() {
+    return [
+      { value: ClientType.CORPORATE_CLIENT, label: 'Corporate Client' },
+      { value: ClientType.FFMC, label: 'FFMC' },
+      { value: ClientType.AUTHORISED_DEALER, label: 'Authorised Dealer' },
+      { value: ClientType.RMC, label: 'RMC' },
+      { value: ClientType.FRANCHISE, label: 'Franchise' },
+      { value: ClientType.AGENT, label: 'Agent' },
+      { value: ClientType.FOREIGN_CORRESPONDENT, label: 'Foreign Correspondent' }
+    ];
+  }
 
   async create(dto: CreateCorporateClientDto, userId: string): Promise<CorporateClientResponseDto> {
     const normalized = normalizeDto(dto);
@@ -179,8 +191,10 @@ export class CorporateClientService {
 
     const qb = this.corporateClientRepository.createQueryBuilder("cc")
       .leftJoinAndSelect("cc.gstState", "gstState")
-      .leftJoinAndSelect("cc.originBranch", "originBranch")
-      .where("cc.isFfmc = :isFfmc", { isFfmc: false });
+      .leftJoinAndSelect("cc.originBranch", "originBranch");
+
+    const type = query.type ?? ClientType.CORPORATE_CLIENT;
+    qb.where("cc.type = :type", { type });
 
     if (query.search) {
       qb.andWhere(

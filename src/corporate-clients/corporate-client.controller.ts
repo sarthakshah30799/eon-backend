@@ -35,6 +35,13 @@ import { CorporateClientService } from "./corporate-client.service";
 export class CorporateClientController {
   constructor(private readonly corporateClientService: CorporateClientService) {}
 
+  @Get("types")
+  @ApiOperation({ summary: "Get all corporate client profile types as key-value pairs" })
+  @ApiResponse({ status: 200, description: "List of profile types" })
+  async getTypes(): Promise<{ value: string; label: string }[]> {
+    return this.corporateClientService.getTypes();
+  }
+
   @Get()
   @ApiOperation({ summary: "Get all corporate clients (paginated/filtered)" })
   @ApiResponse({
