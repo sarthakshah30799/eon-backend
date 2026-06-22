@@ -42,16 +42,16 @@ export class PartyProfileService {
 
   getTypes() {
     return [
-      { value: ClientType.CORPORATE_CLIENT, label: 'Party Profile' },
+      { value: ClientType.CORPORATE_CLIENT, label: 'CORPORATE CLIENT' },
       { value: ClientType.FFMC, label: 'FFMC' },
-      { value: ClientType.AUTHORISED_DEALER, label: 'Authorised Dealer' },
+      { value: ClientType.AUTHORISED_DEALER, label: 'AUTHORISED DEALER' },
       { value: ClientType.RMC, label: 'RMC' },
-      { value: ClientType.FRANCHISE, label: 'Franchise' },
-      { value: ClientType.AGENT, label: 'Agent' },
-      { value: ClientType.FOREIGN_CORRESPONDENT, label: 'Foreign Correspondent' },
-      { value: ClientType.MARKETING_EXECUTIVE, label: 'Marketing Executive' },
-      { value: ClientType.CARD_ISSUER_PROFILE, label: 'Card Issuer Profile' },
-      { value: ClientType.MISC_PROFILE, label: 'MISC Profile' }
+      { value: ClientType.FRANCHISE, label: 'FRANCHISE' },
+      { value: ClientType.AGENT, label: 'AGENT' },
+      { value: ClientType.FOREIGN_CORRESPONDENT, label: 'FOREIGN CORRESPONDENT' },
+      { value: ClientType.MARKETING_EXECUTIVE, label: 'MARKETING EXECUTIVE' },
+      { value: ClientType.CARD_ISSUER_PROFILE, label: 'CARD ISSUER PROFILE' },
+      { value: ClientType.MISC_PROFILE, label: 'MISC PROFILE' }
     ];
   }
 
