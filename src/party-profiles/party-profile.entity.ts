@@ -6,16 +6,16 @@ import { User } from "../users/user.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 
 export enum ClientType {
-  CORPORATE_CLIENT = 'corporate_client',
-  FFMC = 'ffmc',
-  AUTHORISED_DEALER = 'authorised_dealer',
-  RMC = 'rmc',
-  FRANCHISE = 'franchise',
-  AGENT = 'agent',
-  FOREIGN_CORRESPONDENT = 'foreign_respondent',
-  MARKETING_EXECUTIVE = 'marketing_executive',
-  CARD_ISSUER_PROFILE = 'card_issuer_profile',
-  MISC_PROFILE = 'misc_profile'
+  CORPORATE_CLIENT = 'CORPORATE_CLIENT',
+  FFMC = 'FFMC',
+  AUTHORISED_DEALER = 'AUTHORISED_DEALER',
+  RMC = 'RMC',
+  FRANCHISE = 'FRANCHISE',
+  AGENT = 'AGENT',
+  FOREIGN_CORRESPONDENT = 'FOREIGN_CORRESPONDENT',
+  MARKETING_EXECUTIVE = 'MARKETING_EXECUTIVE',
+  CARD_ISSUER_PROFILE = 'CARD_ISSUER_PROFILE',
+  MISC_PROFILE = 'MISC_PROFILE'
 }
 
 @Entity("party_profiles")
@@ -220,7 +220,11 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "text", nullable: true })
   cancelledChequeCopy: string;
 
-  @Column({ type: "varchar", default: ClientType.CORPORATE_CLIENT })
+  @Column({
+    type: "enum",
+    enum: ClientType,
+    default: ClientType.CORPORATE_CLIENT,
+  })
   type: ClientType;
 
   // ── FFMC-specific fields ──────────────────────────────────────────────────
