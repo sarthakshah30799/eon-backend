@@ -48,7 +48,10 @@ export class PartyProfileService {
       { value: ClientType.RMC, label: 'RMC' },
       { value: ClientType.FRANCHISE, label: 'Franchise' },
       { value: ClientType.AGENT, label: 'Agent' },
-      { value: ClientType.FOREIGN_CORRESPONDENT, label: 'Foreign Correspondent' }
+      { value: ClientType.FOREIGN_CORRESPONDENT, label: 'Foreign Correspondent' },
+      { value: ClientType.MARKETING_EXECUTIVE, label: 'Marketing Executive' },
+      { value: ClientType.CARD_ISSUER_PROFILE, label: 'Card Issuer Profile' },
+      { value: ClientType.MISC_PROFILE, label: 'MISC Profile' }
     ];
   }
 
