@@ -11,6 +11,7 @@ export class RoleResponseDto {
   @ApiProperty() isSrFinance: boolean;
   @ApiProperty() isFinance: boolean;
   @ApiProperty() isBrnMgr: boolean;
+  @ApiProperty() isHoStaff: boolean;
   @ApiProperty() isExecutive: boolean;
   @ApiProperty() isCardStk: boolean;
   @ApiProperty() isDeliveryBoy: boolean;
@@ -34,6 +35,7 @@ export class RoleResponseDto {
     dto.isSrFinance = entity.isSrFinance;
     dto.isFinance = entity.isFinance;
     dto.isBrnMgr = entity.isBrnMgr;
+    dto.isHoStaff = entity.isHoStaff;
     dto.isExecutive = entity.isExecutive;
     dto.isCardStk = entity.isCardStk;
     dto.isDeliveryBoy = entity.isDeliveryBoy;

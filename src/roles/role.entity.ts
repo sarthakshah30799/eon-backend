@@ -37,6 +37,9 @@ export class Role extends BaseEntity {
   isBrnMgr: boolean;
 
   @Column({ type: "boolean", default: false })
+  isHoStaff: boolean;
+
+  @Column({ type: "boolean", default: false })
   isExecutive: boolean;
 
   @Column({ type: "boolean", default: false })
