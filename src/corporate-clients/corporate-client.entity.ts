@@ -10,7 +10,10 @@ export enum ClientType {
   RMC = 'rmc',
   FRANCHISE = 'franchise',
   AGENT = 'agent',
-  FOREIGN_CORRESPONDENT = 'foreign_respondent'
+  FOREIGN_CORRESPONDENT = 'foreign_respondent',
+  MARKETING_EXECUTIVE = 'marketing_executive',
+  CARD_ISSUER_PROFILE = 'card_issuer_profile',
+  MISC_PROFILE = 'misc_profile'
 }
 
 @Entity("corporate_clients")
