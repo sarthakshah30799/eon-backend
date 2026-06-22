@@ -113,6 +113,8 @@ export class UserService {
         role: roleId ? ({ id: roleId } as any) : null,
         branch: branchId ? ({ id: branchId } as any) : null,
         counter: counterId ? ({ id: counterId } as any) : null,
+        createdBy: userId || '00000000-0000-0000-0000-000000000000',
+        updatedBy: userId || '00000000-0000-0000-0000-000000000000',
       });
       await this.userRoleRepository.save(userRole);
     }
@@ -149,14 +151,7 @@ export class UserService {
       }
     }
 
-    if (uppercased.code && uppercased.code !== user.code) {
-      const existing = await this.userRepository.findOne({ where: { code: uppercased.code } });
-      if (existing) {
-        throw new ConflictException('User with this user code already exists');
-      }
-    }
-
-    const { roleId, branchId, counterId, ...userFields } = uppercased;
+    const { code: _code, roleId, branchId, counterId, ...userFields } = uppercased;
 
     Object.assign(user, userFields);
     user.updatedBy = userId;
@@ -165,13 +160,21 @@ export class UserService {
     if (roleId !== undefined || branchId !== undefined || counterId !== undefined) {
       let userRole = await this.userRoleRepository.findOne({ where: { user: { id: saved.id } } });
       if (!userRole) {
-        userRole = this.userRoleRepository.create({ user: { id: saved.id } as any });
+        userRole = this.userRoleRepository.create({
+          user: { id: saved.id } as any,
+          createdBy: userId,
+          updatedBy: userId,
+        });
       }
       if (roleId !== undefined) {
         userRole.role = roleId ? ({ id: roleId } as any) : null;
       }
       if (branchId !== undefined) userRole.branch = branchId ? ({ id: branchId } as any) : null;
       if (counterId !== undefined) userRole.counter = counterId ? ({ id: counterId } as any) : null;
+      userRole.updatedBy = userId;
+      if (!userRole.createdBy) {
+        userRole.createdBy = userId;
+      }
       await this.userRoleRepository.save(userRole);
     }
 

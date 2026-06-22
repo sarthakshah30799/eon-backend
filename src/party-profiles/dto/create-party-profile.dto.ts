@@ -208,7 +208,7 @@ export class CreatePartyProfileDto {
   @IsOptional()
   tdsGroup?: string;
 
-  @ApiPropertyOptional({ description: "Active status flag", default: true })
+  @ApiPropertyOptional({ description: "Active status flag", default: false })
   @IsBoolean()
   @IsOptional()
   active?: boolean;

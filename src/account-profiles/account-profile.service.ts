@@ -120,16 +120,6 @@ export class AccountProfileService {
 
     const normalized = normalizeDto(dto);
 
-    // Validate Code uniqueness if changing
-    if (normalized.accountCode && normalized.accountCode !== account.accountCode) {
-      const existingCode = await this.accountProfileRepository.findOne({
-        where: { accountCode: normalized.accountCode },
-      });
-      if (existingCode) {
-        throw new ConflictException(`Account Code "${normalized.accountCode}" already exists`);
-      }
-    }
-
     // Validate Name uniqueness if changing
     if (normalized.accountName && normalized.accountName !== account.accountName) {
       const existingName = await this.accountProfileRepository.findOne({
@@ -185,7 +175,8 @@ export class AccountProfileService {
       }
     }
 
-    const updates = pickDefinedFields(normalized);
+    const { accountCode: _accountCode, ...updatableFields } = normalized;
+    const updates = pickDefinedFields(updatableFields);
     Object.assign(account, updates);
     account.updatedBy = userId;
 

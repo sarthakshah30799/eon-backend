@@ -132,7 +132,7 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   tdsGroup: string;
 
-  @Column({ type: "boolean", default: true })
+  @Column({ type: "boolean", default: false })
   active: boolean;
 
   @Column({ type: "boolean", default: false })
@@ -146,14 +146,17 @@ export class PartyProfile extends BaseEntity {
   status: WorkflowStatus;
 
   @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
-  @JoinColumn({ name: "status_updated_by_id" })
+  @JoinColumn({
+    name: "status_updated_by_id",
+    foreignKeyConstraintName: "FK_party_profiles_status_updated_by_id",
+  })
   statusUpdatedBy: User;
 
   @Column({ type: "uuid", nullable: true, name: "status_updated_by_id" })
-  statusUpdatedById: string;
+  statusUpdatedById: string | null;
 
   @Column({ type: "timestamptz", nullable: true, name: "status_updated_at" })
-  statusUpdatedAt: Date;
+  statusUpdatedAt: Date | null;
 
   @Column({ type: "boolean", default: false })
   printAddress: boolean;
@@ -183,14 +186,20 @@ export class PartyProfile extends BaseEntity {
   igstNo: string;
 
   @ManyToOne(() => State, { nullable: true, onDelete: "SET NULL" })
-  @JoinColumn({ name: "gst_state_id" })
+  @JoinColumn({
+    name: "gst_state_id",
+    foreignKeyConstraintName: "FK_party_profiles_gst_state_id",
+  })
   gstState: State;
 
   @Column({ type: "uuid", nullable: true })
   gstStateId: string;
 
   @ManyToOne(() => Branch, { nullable: true, onDelete: "SET NULL" })
-  @JoinColumn({ name: "origin_branch_id" })
+  @JoinColumn({
+    name: "origin_branch_id",
+    foreignKeyConstraintName: "FK_party_profiles_origin_branch_id",
+  })
   originBranch: Branch;
 
   @Column({ type: "uuid", nullable: true })

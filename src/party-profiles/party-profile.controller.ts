@@ -21,6 +21,7 @@ import {
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
+import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
@@ -53,6 +54,13 @@ export class PartyProfileController {
     return this.partyProfileService.findAll(query);
   }
 
+  @Get("review-queue")
+  @ApiOperation({ summary: "Get party profiles pending review for current HO user" })
+  @ApiResponse({ status: 200, description: "Pending review list" })
+  async getReviewQueue(@Session() session: any): Promise<PartyProfileResponseDto[]> {
+    return this.partyProfileService.getReviewQueue(session.userId);
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Get party profile by UUID" })
   @ApiParam({ name: "id", description: "Party profile UUID" })
@@ -82,6 +90,18 @@ export class PartyProfileController {
     @Session() session: any,
   ): Promise<PartyProfileResponseDto> {
     return this.partyProfileService.update(id, dto, session.userId);
+  }
+
+  @Post(":id/review")
+  @ApiOperation({ summary: "Approve or reject a party profile" })
+  @ApiParam({ name: "id", description: "Party profile UUID" })
+  @ApiResponse({ status: 200, type: PartyProfileResponseDto })
+  async review(
+    @Param("id") id: string,
+    @Body() dto: ReviewPartyProfileDto,
+    @Session() session: any,
+  ): Promise<PartyProfileResponseDto> {
+    return this.partyProfileService.review(id, dto, session.userId);
   }
 
   @Delete(":id")

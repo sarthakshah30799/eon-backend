@@ -82,19 +82,6 @@ export class CountryGroupService {
       group.name = name;
     }
 
-    if (dto.code !== undefined) {
-      const code = dto.code.trim().toUpperCase();
-      if (code !== group.code) {
-        const existingCode = await this.countryGroupRepository.findOne({
-          where: { code },
-        });
-        if (existingCode) {
-          throw new ConflictException(`Country Group with code "${code}" already exists`);
-        }
-      }
-      group.code = code;
-    }
-
     group.updatedBy = userId;
     const saved = await this.countryGroupRepository.save(group);
     return CountryGroupResponseDto.fromEntity(saved);

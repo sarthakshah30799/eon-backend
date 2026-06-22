@@ -103,10 +103,11 @@ export class StateService {
       country = nextCountry;
     }
 
-    const candidateCode = normalized.code ?? state.code;
+    const { code: _code, ...updatableFields } = normalized;
+    const candidateCode = state.code;
     const candidateName = normalized.name ?? state.name;
 
-    if (candidateCode !== state.code || country.id !== state.country?.id) {
+    if (country.id !== state.country?.id) {
       const existingState = await this.stateRepository.findOne({
         where: {
           country: { id: country.id },
@@ -135,7 +136,7 @@ export class StateService {
     }
 
     const updates = pickDefinedFields({
-      ...normalized,
+      ...updatableFields,
       country,
     });
 

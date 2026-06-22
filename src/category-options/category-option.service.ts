@@ -154,25 +154,12 @@ export class SelectOptionService {
       throw new NotFoundException(`Select option with id ${id} not found`);
     }
 
-    const nextCode = this.normalizeCode(dto.code?.trim() ?? option.code);
+    const nextCode = option.code;
     const nextValue = dto.value?.trim() ?? option.value;
     const nextLabel = dto.label?.trim() ?? option.label;
     const nextSortOrder = dto.sortOrder ?? option.sortOrder;
     const nextIsActive = dto.isActive ?? option.isActive;
 
-    const existing = await this.selectOptionRepository.findOne({
-      where: {
-        code: nextCode,
-        value: nextValue,
-      },
-    });
-
-    if (existing && existing.id !== option.id) {
-      throw new ConflictException("Select option already exists for this code and value");
-    }
-
-    const previousCode = option.code;
-    option.code = nextCode;
     option.value = nextValue;
     option.label = nextLabel;
     option.sortOrder = nextSortOrder;
@@ -180,8 +167,7 @@ export class SelectOptionService {
     option.updatedBy = userId || this.systemUserId;
 
     const saved = await this.selectOptionRepository.save(option);
-    this.invalidateCache(previousCode);
-    this.invalidateCache(saved.code);
+    this.invalidateCache(nextCode);
     return SelectOptionResponseDto.fromEntity(saved);
   }
 

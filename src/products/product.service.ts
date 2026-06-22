@@ -63,21 +63,7 @@ export class ProductService {
       throw new NotFoundException(`Product with id ${id} not found`);
     }
 
-    if (dto.productCode) {
-      const uppercaseCode = dto.productCode.toUpperCase();
-      if (uppercaseCode !== product.productCode) {
-        const existing = await this.productRepository.findOne({
-          where: { productCode: uppercaseCode },
-        });
-        if (existing) {
-          throw new ConflictException(`Product with code "${uppercaseCode}" already exists`);
-        }
-        product.productCode = uppercaseCode;
-      }
-    }
-
-    // Object.assign to merge update DTO
-    const { productCode, ...otherFields } = dto;
+    const { productCode: _productCode, ...otherFields } = dto;
     Object.assign(product, otherFields);
     
     // Enforce business rules: if not available, series applicability must be false

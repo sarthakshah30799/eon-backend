@@ -69,6 +69,9 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Is Admin User', required: false })
   isAdmin?: boolean;
 
+  @ApiProperty({ description: 'Is HO Staff User', required: false })
+  isHoStaff?: boolean;
+
   @ApiProperty({ description: 'Must change password on next login', required: false })
   mustChangePassword?: boolean;
 
@@ -87,6 +90,7 @@ export class UserResponseDto {
     dto.isLocked = user.isLocked;
     dto.isDormant = user.isDormant;
     dto.isAdmin = user.isAdmin || false;
+    dto.isHoStaff = user.userRoles?.some(userRole => userRole.role?.isHoStaff) || false;
     dto.mustChangePassword = user.mustChangePassword;
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;

@@ -90,9 +90,9 @@ export class FinancialSubProfileService {
       financialCode = nextCode;
     }
 
-    const candidateSubCode = normalized.financialSubCode ?? subProfile.financialSubCode;
+    const candidateSubCode = subProfile.financialSubCode;
 
-    if (candidateSubCode !== subProfile.financialSubCode || financialCode.id !== subProfile.financialCode?.id) {
+    if (financialCode.id !== subProfile.financialCode?.id) {
       const existing = await this.financialSubProfileRepository.findOne({
         where: {
           financialCode: { id: financialCode.id },
@@ -107,8 +107,9 @@ export class FinancialSubProfileService {
       }
     }
 
+    const { financialSubCode: _financialSubCode, ...updatableFields } = normalized;
     const updates = pickDefinedFields({
-      ...normalized,
+      ...updatableFields,
       financialCode,
     });
 

@@ -11,12 +11,11 @@ import { User } from "../users/user.entity";
 import { Role } from "../roles/role.entity";
 import { Branch } from "../branches/branch.entity";
 import { Counter } from "../counters/counter.entity";
+import { BaseEntity } from "../base/base.entity";
 
 @Entity("user_roles")
 @Unique(["user", "role", "branch", "counter"])
-export class UserRole {
-  @PrimaryGeneratedColumn("uuid") id: string;
-
+export class UserRole extends BaseEntity {
   @Index()
   @ManyToOne(() => User, (user) => user.userRoles, { onDelete: "CASCADE" })
   @JoinColumn({ name: "user_id" })

@@ -65,18 +65,9 @@ export class CountryService {
 
     const { countryGroupId, ...normalized } = normalizeCountryDto(dto);
 
-    if (normalized.code && normalized.code !== country.code) {
-      const existingCountry = await this.countryRepository.findOne({
-        where: { code: normalized.code },
-      });
-
-      if (existingCountry) {
-        throw new ConflictException("Country with this code already exists");
-      }
-    }
-
+    const { code: _code, ...updatableFields } = normalized;
     const updates = pickDefinedFields({
-      ...normalized,
+      ...updatableFields,
       riskCategory: normalized.riskCategory ?? country.riskCategory,
     });
     Object.assign(country, updates);

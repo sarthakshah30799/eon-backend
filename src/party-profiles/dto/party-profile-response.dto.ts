@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { PartyProfile, ClientType } from "../party-profile.entity";
+import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 
 export class PartyProfileResponseDto {
   @ApiProperty({ description: "UUID of the party profile" })
@@ -196,6 +197,18 @@ export class PartyProfileResponseDto {
   @ApiProperty({ description: "Party profile type", enum: ClientType })
   type: ClientType;
 
+  @ApiProperty({ description: "Current workflow status", enum: WorkflowStatus })
+  status: WorkflowStatus;
+
+  @ApiPropertyOptional({ description: "Status updated by user ID" })
+  statusUpdatedById?: string | null;
+
+  @ApiPropertyOptional({ description: "Status updated by user name" })
+  statusUpdatedByName?: string;
+
+  @ApiPropertyOptional({ description: "Status updated timestamp" })
+  statusUpdatedAt?: Date | null;
+
   @ApiProperty({ description: "Created at timestamp" })
   createdAt: Date;
 
@@ -269,6 +282,10 @@ export class PartyProfileResponseDto {
     dto.ffmcRegNo = entity.ffmcRegNo;
     dto.ffmcRegDate = entity.ffmcRegDate;
     dto.type = entity.type;
+    dto.status = entity.status;
+    dto.statusUpdatedById = entity.statusUpdatedById;
+    dto.statusUpdatedByName = entity.statusUpdatedBy?.name;
+    dto.statusUpdatedAt = entity.statusUpdatedAt;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

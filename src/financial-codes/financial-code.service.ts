@@ -79,17 +79,7 @@ export class FinancialCodeService {
 
     const normalized = normalizeFinancialCodeDto(dto);
 
-    if (normalized.financialCode && normalized.financialCode !== code.financialCode) {
-      const existing = await this.financialCodeRepository.findOne({
-        where: { financialCode: normalized.financialCode },
-      });
-
-      if (existing && existing.id !== code.id) {
-        throw new ConflictException(`Financial Code "${normalized.financialCode}" already exists`);
-      }
-    }
-
-    const { subProfiles: subProfilesDto, ...parentData } = normalized;
+    const { financialCode: _financialCode, subProfiles: subProfilesDto, ...parentData } = normalized;
     const updates = pickDefinedFields(parentData);
     Object.assign(code, updates);
     code.updatedBy = userId;

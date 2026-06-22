@@ -214,13 +214,8 @@ export class RoleService implements OnModuleInit {
     if (dto.isAdmin && !requesterIsAdmin) {
       throw new ForbiddenException('Admin role can only be managed by admin users');
     }
-    if (dto.code && dto.code !== role.code) {
-      const existing = await this.roleRepository.findOne({ where: { code: dto.code } });
-      if (existing) {
-        throw new ConflictException(`Role with code "${dto.code}" already exists`);
-      }
-    }
-    Object.assign(role, dto);
+    const { code: _code, ...updatableFields } = dto;
+    Object.assign(role, updatableFields);
     role.updatedBy = userId;
     const saved = await this.roleRepository.save(role);
     return RoleResponseDto.fromEntity(saved);
