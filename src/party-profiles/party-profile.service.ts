@@ -1,16 +1,16 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
-import { CorporateClient, ClientType } from "./corporate-client.entity";
+import { PartyProfile, ClientType } from "./party-profile.entity";
 import { Branch } from "../branches/branch.entity";
 import { State } from "../state/state.entity";
-import { CreateCorporateClientDto } from "./dto/create-corporate-client.dto";
-import { UpdateCorporateClientDto } from "./dto/update-corporate-client.dto";
-import { CorporateClientResponseDto } from "./dto/corporate-client-response.dto";
-import { CorporateClientListQueryDto } from "./dto/corporate-client-list-query.dto";
-import { CorporateClientListResponseDto } from "./dto/corporate-client-list-response.dto";
+import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
+import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
+import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
+import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
+import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.dto";
 
-function normalizeDto(dto: CreateCorporateClientDto | UpdateCorporateClientDto) {
+function normalizeDto(dto: CreatePartyProfileDto | UpdatePartyProfileDto) {
   return {
     ...dto,
     code: dto.code?.trim().toUpperCase(),
@@ -30,10 +30,10 @@ function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> 
 }
 
 @Injectable()
-export class CorporateClientService {
+export class PartyProfileService {
   constructor(
-    @InjectRepository(CorporateClient)
-    private readonly corporateClientRepository: Repository<CorporateClient>,
+    @InjectRepository(PartyProfile)
+    private readonly partyProfileRepository: Repository<PartyProfile>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(State)
@@ -42,7 +42,7 @@ export class CorporateClientService {
 
   getTypes() {
     return [
-      { value: ClientType.CORPORATE_CLIENT, label: 'Corporate Client' },
+      { value: ClientType.CORPORATE_CLIENT, label: 'Party Profile' },
       { value: ClientType.FFMC, label: 'FFMC' },
       { value: ClientType.AUTHORISED_DEALER, label: 'Authorised Dealer' },
       { value: ClientType.RMC, label: 'RMC' },
@@ -52,23 +52,23 @@ export class CorporateClientService {
     ];
   }
 
-  async create(dto: CreateCorporateClientDto, userId: string): Promise<CorporateClientResponseDto> {
+  async create(dto: CreatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
     const normalized = normalizeDto(dto);
 
     // Validate Code uniqueness
-    const existingCode = await this.corporateClientRepository.findOne({
+    const existingCode = await this.partyProfileRepository.findOne({
       where: { code: normalized.code },
     });
     if (existingCode) {
-      throw new ConflictException(`Corporate Client Code "${normalized.code}" already exists`);
+      throw new ConflictException(`Party Profile Code "${normalized.code}" already exists`);
     }
 
     // Validate Name uniqueness
-    const existingName = await this.corporateClientRepository.findOne({
+    const existingName = await this.partyProfileRepository.findOne({
       where: { name: normalized.name },
     });
     if (existingName) {
-      throw new ConflictException(`Corporate Client Name "${normalized.name}" already exists`);
+      throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
     }
 
     // Validate Origin Branch exists if provided
@@ -87,7 +87,7 @@ export class CorporateClientService {
       }
     }
 
-    const client = this.corporateClientRepository.create({
+    const client = this.partyProfileRepository.create({
       ...normalized,
       dateOfIntro: normalized.dateOfIntro ? new Date(normalized.dateOfIntro) : new Date(),
       blockDateFrom: normalized.blockDateFrom ? new Date(normalized.blockDateFrom) : null,
@@ -98,35 +98,35 @@ export class CorporateClientService {
       updatedBy: userId,
     });
 
-    const saved = await this.corporateClientRepository.save(client);
+    const saved = await this.partyProfileRepository.save(client);
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateCorporateClientDto, userId: string): Promise<CorporateClientResponseDto> {
-    const client = await this.corporateClientRepository.findOne({ where: { id } });
+  async update(id: string, dto: UpdatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
+    const client = await this.partyProfileRepository.findOne({ where: { id } });
     if (!client) {
-      throw new NotFoundException(`Corporate Client with id ${id} not found`);
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
     const normalized = normalizeDto(dto);
 
     // Validate Code uniqueness if changing
     if (normalized.code && normalized.code !== client.code) {
-      const existingCode = await this.corporateClientRepository.findOne({
+      const existingCode = await this.partyProfileRepository.findOne({
         where: { code: normalized.code },
       });
       if (existingCode) {
-        throw new ConflictException(`Corporate Client Code "${normalized.code}" already exists`);
+        throw new ConflictException(`Party Profile Code "${normalized.code}" already exists`);
       }
     }
 
     // Validate Name uniqueness if changing
     if (normalized.name && normalized.name !== client.name) {
-      const existingName = await this.corporateClientRepository.findOne({
+      const existingName = await this.partyProfileRepository.findOne({
         where: { name: normalized.name },
       });
       if (existingName) {
-        throw new ConflictException(`Corporate Client Name "${normalized.name}" already exists`);
+        throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
       }
     }
 
@@ -157,74 +157,74 @@ export class CorporateClientService {
     });
     client.updatedBy = userId;
 
-    await this.corporateClientRepository.save(client);
+    await this.partyProfileRepository.save(client);
     return this.findById(id);
   }
 
-  async findById(id: string): Promise<CorporateClientResponseDto> {
-    const client = await this.corporateClientRepository.findOne({
+  async findById(id: string): Promise<PartyProfileResponseDto> {
+    const client = await this.partyProfileRepository.findOne({
       where: { id },
       relations: ["gstState", "originBranch"],
     });
 
     if (!client) {
-      throw new NotFoundException(`Corporate Client with id ${id} not found`);
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
-    return CorporateClientResponseDto.fromEntity(client);
+    return PartyProfileResponseDto.fromEntity(client);
   }
 
   async delete(id: string): Promise<{ message: string }> {
-    const client = await this.corporateClientRepository.findOne({ where: { id } });
+    const client = await this.partyProfileRepository.findOne({ where: { id } });
     if (!client) {
-      throw new NotFoundException(`Corporate Client with id ${id} not found`);
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
-    await this.corporateClientRepository.remove(client);
-    return { message: `Corporate Client with id ${id} deleted successfully` };
+    await this.partyProfileRepository.remove(client);
+    return { message: `Party Profile with id ${id} deleted successfully` };
   }
 
-  async findAll(query: CorporateClientListQueryDto): Promise<CorporateClientListResponseDto> {
+  async findAll(query: PartyProfileListQueryDto): Promise<PartyProfileListResponseDto> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const qb = this.corporateClientRepository.createQueryBuilder("cc")
-      .leftJoinAndSelect("cc.gstState", "gstState")
-      .leftJoinAndSelect("cc.originBranch", "originBranch");
+    const qb = this.partyProfileRepository.createQueryBuilder("pp")
+      .leftJoinAndSelect("pp.gstState", "gstState")
+      .leftJoinAndSelect("pp.originBranch", "originBranch");
 
     const type = query.type ?? ClientType.CORPORATE_CLIENT;
-    qb.where("cc.type = :type", { type });
+    qb.where("pp.type = :type", { type });
 
     if (query.search) {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("cc.code ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("cc.name ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("cc.city ILIKE :search", { search: `%${query.search}%` });
+            .where("pp.code ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("pp.name ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("pp.city ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }
 
     if (query.code) {
-      qb.andWhere("cc.code ILIKE :code", { code: `%${query.code}%` });
+      qb.andWhere("pp.code ILIKE :code", { code: `%${query.code}%` });
     }
 
     if (query.name) {
-      qb.andWhere("cc.name ILIKE :name", { name: `%${query.name}%` });
+      qb.andWhere("pp.name ILIKE :name", { name: `%${query.name}%` });
     }
 
     if (query.active !== undefined) {
-      qb.andWhere("cc.active = :active", { active: query.active });
+      qb.andWhere("pp.active = :active", { active: query.active });
     }
 
-    qb.orderBy("cc.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy("pp.createdAt", "DESC").skip(skip).take(limit);
 
     const [data, totalItems] = await qb.getManyAndCount();
 
     return {
-      data: data.map(CorporateClientResponseDto.fromEntity),
+      data: data.map(PartyProfileResponseDto.fromEntity),
       page,
       limit,
       totalItems,

@@ -19,7 +19,7 @@ import { FinancialCodeModule } from './financial-codes/financial-code.module';
 import { FinancialSubProfileModule } from './financial-sub-profiles/financial-sub-profile.module';
 import { AccountProfileModule } from './account-profiles/account-profile.module';
 import { CountryGroupModule } from './country-groups/country-group.module';
-import { CorporateClientModule } from './corporate-clients/corporate-client.module';
+import { PartyProfileModule } from './party-profiles/party-profile.module';
 
 import { AuditLogModule } from './audit-logs/audit-log.module';
 import { SessionPolicyModule } from './session-policy/session-policy.module';
@@ -46,7 +46,7 @@ import { SessionPolicyModule } from './session-policy/session-policy.module';
     FinancialSubProfileModule,
     AccountProfileModule,
     CountryGroupModule,
-    CorporateClientModule,
+    PartyProfileModule,
 
     AuditLogModule,
   ],

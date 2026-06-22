@@ -1,17 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { CorporateClient, ClientType } from "../corporate-client.entity";
+import { PartyProfile, ClientType } from "../party-profile.entity";
 
-export class CorporateClientResponseDto {
-  @ApiProperty({ description: "UUID of the corporate client" })
+export class PartyProfileResponseDto {
+  @ApiProperty({ description: "UUID of the party profile" })
   id: string;
 
   @ApiProperty({ description: "Date of introduction" })
   dateOfIntro: Date;
 
-  @ApiProperty({ description: "Client Code" })
+  @ApiProperty({ description: "Party profile code" })
   code: string;
 
-  @ApiProperty({ description: "Client Name" })
+  @ApiProperty({ description: "Party profile name" })
   name: string;
 
   @ApiProperty({ description: "Individual category status" })
@@ -193,7 +193,7 @@ export class CorporateClientResponseDto {
   @ApiPropertyOptional({ description: "FFMC Registration Date" })
   ffmcRegDate?: Date;
 
-  @ApiProperty({ description: "Client Profile Type", enum: ClientType })
+  @ApiProperty({ description: "Party profile type", enum: ClientType })
   type: ClientType;
 
   @ApiProperty({ description: "Created at timestamp" })
@@ -202,8 +202,8 @@ export class CorporateClientResponseDto {
   @ApiProperty({ description: "Updated at timestamp" })
   updatedAt: Date;
 
-  static fromEntity(entity: CorporateClient): CorporateClientResponseDto {
-    const dto = new CorporateClientResponseDto();
+  static fromEntity(entity: PartyProfile): PartyProfileResponseDto {
+    const dto = new PartyProfileResponseDto();
     dto.id = entity.id;
     dto.dateOfIntro = entity.dateOfIntro;
     dto.code = entity.code;

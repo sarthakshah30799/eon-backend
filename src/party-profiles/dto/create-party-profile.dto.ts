@@ -12,9 +12,9 @@ import {
   Length,
   Min,
 } from "class-validator";
-import { ClientType } from "../corporate-client.entity";
+import { ClientType } from "../party-profile.entity";
 
-export class CreateCorporateClientDto {
+export class CreatePartyProfileDto {
   @ApiProperty({ description: "Date of Introduction", example: "2026-06-09T00:00:00Z" })
   @IsString()
   @IsOptional()

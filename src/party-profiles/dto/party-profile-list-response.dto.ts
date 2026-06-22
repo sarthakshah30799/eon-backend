@@ -1,9 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { CorporateClientResponseDto } from "./corporate-client-response.dto";
+import { PartyProfileResponseDto } from "./party-profile-response.dto";
 
-export class CorporateClientListResponseDto {
-  @ApiProperty({ type: [CorporateClientResponseDto] })
-  data: CorporateClientResponseDto[];
+export class PartyProfileListResponseDto {
+  @ApiProperty({ type: [PartyProfileResponseDto] })
+  data: PartyProfileResponseDto[];
 
   @ApiProperty({ example: 1 })
   page: number;

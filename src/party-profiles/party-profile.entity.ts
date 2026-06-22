@@ -2,19 +2,21 @@ import { Entity, Column, Index, ManyToOne, JoinColumn } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { State } from "../state/state.entity";
 import { Branch } from "../branches/branch.entity";
+import { User } from "../users/user.entity";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 
 export enum ClientType {
-  CORPORATE_CLIENT = 'corporate_client',
-  FFMC = 'ffmc',
-  AUTHORISED_DEALER = 'authorised_dealer',
-  RMC = 'rmc',
-  FRANCHISE = 'franchise',
-  AGENT = 'agent',
-  FOREIGN_CORRESPONDENT = 'foreign_respondent'
+  CORPORATE_CLIENT = "corporate_client",
+  FFMC = "ffmc",
+  AUTHORISED_DEALER = "authorised_dealer",
+  RMC = "rmc",
+  FRANCHISE = "franchise",
+  AGENT = "agent",
+  FOREIGN_CORRESPONDENT = "foreign_respondent",
 }
 
-@Entity("corporate_clients")
-export class CorporateClient extends BaseEntity {
+@Entity("party_profiles")
+export class PartyProfile extends BaseEntity {
   @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
   dateOfIntro: Date;
 
@@ -132,6 +134,23 @@ export class CorporateClient extends BaseEntity {
 
   @Column({ type: "boolean", default: false })
   isActive: boolean;
+
+  @Column({
+    type: "enum",
+    enum: WorkflowStatus,
+    default: WorkflowStatus.PENDING,
+  })
+  status: WorkflowStatus;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "status_updated_by_id" })
+  statusUpdatedBy: User;
+
+  @Column({ type: "uuid", nullable: true, name: "status_updated_by_id" })
+  statusUpdatedById: string;
+
+  @Column({ type: "timestamptz", nullable: true, name: "status_updated_at" })
+  statusUpdatedAt: Date;
 
   @Column({ type: "boolean", default: false })
   printAddress: boolean;
