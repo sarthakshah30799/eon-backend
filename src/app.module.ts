@@ -23,6 +23,7 @@ import { PartyProfileModule } from './party-profiles/party-profile.module';
 
 import { AuditLogModule } from './audit-logs/audit-log.module';
 import { SessionPolicyModule } from './session-policy/session-policy.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { SessionPolicyModule } from './session-policy/session-policy.module';
     AccountProfileModule,
     CountryGroupModule,
     PartyProfileModule,
+    MailModule,
 
     AuditLogModule,
   ],
