@@ -7,6 +7,7 @@ import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PasswordPolicyService } from '../password-policy/password-policy.service';
 import { SessionPolicyService } from '../session-policy/session-policy.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -15,6 +16,7 @@ export class AuthService {
     private readonly sessionService: SessionService,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly sessionPolicyService: SessionPolicyService,
+    private readonly mailService: MailService,
   ) {}
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
@@ -92,15 +94,40 @@ export class AuthService {
 
     await this.userService.save(user);
 
-    // Print link prominently to the console so that the user can copy it
-    console.log('\n============================================================');
-    console.log('                   PASSWORD RESET REQUEST                   ');
-    console.log('============================================================');
-    console.log(`Email:      ${email}`);
-    console.log(`Reset Link: http://localhost:5173/reset-password?token=${token}&email=${encodeURIComponent(email)}`);
-    console.log('============================================================\n');
+    const resetLink = `http://localhost:5173/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
 
-    return { message: 'Reset link generated and logged to the console' };
+    try {
+      await this.mailService.sendEmail({
+        to: email,
+        subject: 'Password Reset Request',
+        text: `You requested a password reset. Please use the following link to reset your password: ${resetLink}`,
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2>Password Reset Request</h2>
+            <p>You requested a password reset for your account.</p>
+            <p>Please click the button below to reset your password:</p>
+            <div style="margin: 24px 0;">
+              <a href="${resetLink}" style="background-color: #0b8db4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+            </div>
+            <p>Or copy and paste the following link into your browser:</p>
+            <p><a href="${resetLink}">${resetLink}</a></p>
+            <p>This link will expire in 1 hour.</p>
+          </div>
+        `,
+      });
+    } catch (error) {
+      // Print to console as fallback
+      console.warn('Failed to send reset email via SMTP, printing to console as fallback:', error.message);
+      console.log('\n============================================================');
+      console.log('                   PASSWORD RESET REQUEST                   ');
+      console.log('============================================================');
+      console.log(`Email:      ${email}`);
+      console.log(`Reset Link: ${resetLink}`);
+      console.log('============================================================\n');
+      throw new BadRequestException(`Failed to send password reset email: ${error.message}`);
+    }
+
+    return { message: 'Password reset email sent successfully.' };
   }
 
   async resetPassword(email: string, token: string, newPassword: string): Promise<{ message: string }> {
