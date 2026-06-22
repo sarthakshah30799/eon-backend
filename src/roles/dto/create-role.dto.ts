@@ -47,6 +47,11 @@ export class CreateRoleDto {
   @ApiProperty({ default: false, required: false })
   @IsBoolean()
   @IsOptional()
+  isHoStaff?: boolean;
+
+  @ApiProperty({ default: false, required: false })
+  @IsBoolean()
+  @IsOptional()
   isExecutive?: boolean;
 
   @ApiProperty({ default: false, required: false })
