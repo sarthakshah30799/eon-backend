@@ -1,7 +1,7 @@
-require('dotenv').config();
+require("dotenv").config();
 
-const { Client } = require('pg');
-const bcrypt = require('bcrypt');
+const { Client } = require("pg");
+const bcrypt = require("bcrypt");
 
 function getRequiredEnv(key) {
   const value = process.env[key];
@@ -25,17 +25,17 @@ function getBooleanEnv(key) {
   if (value === undefined) {
     return undefined;
   }
-  return value.toLowerCase() === 'true';
+  return value.toLowerCase() === "true";
 }
 
 function getSslConfig() {
-  const sslEnabled = getBooleanEnv('DB_SSL') === true;
+  const sslEnabled = getBooleanEnv("DB_SSL") === true;
   if (!sslEnabled) {
     return false;
   }
 
   return {
-    rejectUnauthorized: getBooleanEnv('DB_SSL_REJECT_UNAUTHORIZED') !== false,
+    rejectUnauthorized: getBooleanEnv("DB_SSL_REJECT_UNAUTHORIZED") !== false,
   };
 }
 
@@ -65,7 +65,14 @@ async function upsertMenu(client, menu) {
           "is_admin" = $6
       WHERE "id" = $1
       `,
-      [existingId, menu.icon, menu.sortOrder, menu.isActive, menu.updatedBy, menu.isAdmin ?? false],
+      [
+        existingId,
+        menu.icon,
+        menu.sortOrder,
+        menu.isActive,
+        menu.updatedBy,
+        menu.isAdmin ?? false,
+      ],
     );
     return existingId;
   }
@@ -310,7 +317,13 @@ async function upsertCategoryOption(client, option) {
           "updated_at" = NOW()
       WHERE "id" = $1
       `,
-      [existingId, option.label, option.sortOrder, option.isActive, option.updatedBy],
+      [
+        existingId,
+        option.label,
+        option.sortOrder,
+        option.isActive,
+        option.updatedBy,
+      ],
     );
     return existingId;
   }
@@ -363,7 +376,14 @@ async function upsertFinancialCode(client, fc) {
           "updated_at" = NOW()
       WHERE "id" = $1
       `,
-      [existingId, fc.financialType, fc.financialName, fc.defaultSign, fc.priority, fc.updatedBy],
+      [
+        existingId,
+        fc.financialType,
+        fc.financialName,
+        fc.defaultSign,
+        fc.priority,
+        fc.updatedBy,
+      ],
     );
     return existingId;
   }
@@ -477,12 +497,7 @@ async function upsertCountryGroup(client, group) {
     )
     RETURNING "id"
     `,
-    [
-      group.name,
-      group.code,
-      group.createdBy,
-      group.updatedBy,
-    ],
+    [group.name, group.code, group.createdBy, group.updatedBy],
   );
 
   return inserted.rows[0].id;
@@ -490,30 +505,32 @@ async function upsertCountryGroup(client, group) {
 
 async function main() {
   const client = new Client({
-    host: getRequiredEnv('DB_HOST'),
-    port: getNumberEnv('DB_PORT'),
-    user: getRequiredEnv('DB_USERNAME'),
-    password: getRequiredEnv('DB_PASSWORD'),
-    database: getRequiredEnv('DB_DATABASE'),
+    host: getRequiredEnv("DB_HOST"),
+    port: getNumberEnv("DB_PORT"),
+    user: getRequiredEnv("DB_USERNAME"),
+    password: getRequiredEnv("DB_PASSWORD"),
+    database: getRequiredEnv("DB_DATABASE"),
     ssl: getSslConfig(),
   });
 
-  const systemUserId = '00000000-0000-0000-0000-000000000000';
-  const adminEmail = process.argv[2] || process.env.SEED_ADMIN_EMAIL || 'admin@maraekat.com';
-  const adminPassword = process.argv[3] || process.env.SEED_ADMIN_PASSWORD || 'password123';
+  const systemUserId = "00000000-0000-0000-0000-000000000000";
+  const adminEmail =
+    process.argv[2] || process.env.SEED_ADMIN_EMAIL || "admin@maraekat.com";
+  const adminPassword =
+    process.argv[3] || process.env.SEED_ADMIN_PASSWORD || "password123";
 
   try {
     await client.connect();
-    console.log('Connected to PostgreSQL successfully.');
+    console.log("Connected to PostgreSQL successfully.");
 
     console.log(`Hashing password for ${adminEmail}...`);
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
-    console.log('Onboarding basic menu tree...');
+    console.log("Onboarding basic menu tree...");
     const masterMenuId = await upsertMenu(client, {
-      name: 'Master',
+      name: "Master",
       path: null,
-      icon: 'grid',
+      icon: "grid",
       parentId: null,
       sortOrder: 1,
       isActive: true,
@@ -523,9 +540,9 @@ async function main() {
     });
 
     const systemSetupMenuId = await upsertMenu(client, {
-      name: 'System Setup',
+      name: "System Setup",
       path: null,
-      icon: 'settings',
+      icon: "settings",
       parentId: masterMenuId,
       sortOrder: 1,
       isActive: true,
@@ -535,12 +552,25 @@ async function main() {
     });
 
     const basicMenus = [
-      { name: 'User Role', path: '/admin/user-role', icon: 'shield' },
-      { name: 'User Profile', path: '/admin/user-profile', icon: 'users' },
-      { name: 'Country Profile', path: '/admin/country-profile', icon: 'globe' },
-      { name: 'State Profile', path: '/admin/state-profile', icon: 'map' },
-      { name: 'Product Profile', path: '/admin/product-profile', icon: 'archive' },
-      { name: 'Currency Profile', path: '/admin/currency-profile', icon: 'dollar-sign' },
+      { name: "User Role", path: "/admin/user-role", icon: "shield" },
+      { name: "User Profile", path: "/admin/user-profile", icon: "users" },
+      {
+        name: "Country Profile",
+        path: "/admin/country-profile",
+        icon: "globe",
+      },
+      { name: "State Profile", path: "/admin/state-profile", icon: "map" },
+      {
+        name: "Product Profile",
+        path: "/admin/product-profile",
+        icon: "archive",
+      },
+      {
+        name: "Currency Profile",
+        path: "/admin/currency-profile",
+        icon: "dollar-sign",
+      },
+      { name: "TDS Profile", path: "/admin/tds-profile", icon: "receipt" },
     ];
 
     for (let index = 0; index < basicMenus.length; index += 1) {
@@ -559,9 +589,9 @@ async function main() {
     }
 
     const adminMenuId = await upsertMenu(client, {
-      name: 'Admin',
+      name: "Admin",
       path: null,
-      icon: 'shield',
+      icon: "shield",
       parentId: null,
       sortOrder: 0,
       isActive: true,
@@ -571,15 +601,47 @@ async function main() {
     });
 
     const adminSubMenus = [
-      { name: 'Company Profile', path: '/admin/company-profile', icon: 'building' },
-      { name: 'Branch Profile', path: '/admin/branch-profile', icon: 'sitemap' },
-      { name: 'Counter Profile', path: '/admin/counter-profile', icon: 'counter' },
-      { name: 'Category Options', path: '/admin/category-options', icon: 'tags' },
-      { name: 'Menu Management', path: '/admin/menu-management', icon: 'menu' },
-      { name: 'Financial Profile', path: '/admin/financial-profile', icon: 'dollar-sign' },
-      { name: 'Accounts Profile', path: '/admin/accounts-profile', icon: 'book' },
-      { name: 'Additional Settings', path: '/admin/additional-settings', icon: 'settings' },
-      { name: 'Corporate Client Profile', path: '/admin/corporate-client-profile', icon: 'users' },
+      {
+        name: "Company Profile",
+        path: "/admin/company-profile",
+        icon: "building",
+      },
+      {
+        name: "Branch Profile",
+        path: "/admin/branch-profile",
+        icon: "sitemap",
+      },
+      {
+        name: "Counter Profile",
+        path: "/admin/counter-profile",
+        icon: "counter",
+      },
+      {
+        name: "Category Options",
+        path: "/admin/category-options",
+        icon: "tags",
+      },
+      { name: "Menu Management", path: "/admin/menu-management", icon: "menu" },
+      {
+        name: "Financial Profile",
+        path: "/admin/financial-profile",
+        icon: "dollar-sign",
+      },
+      {
+        name: "Accounts Profile",
+        path: "/admin/accounts-profile",
+        icon: "book",
+      },
+      {
+        name: "Additional Settings",
+        path: "/admin/additional-settings",
+        icon: "settings",
+      },
+      {
+        name: "Corporate Client Profile",
+        path: "/admin/corporate-client-profile",
+        icon: "users",
+      },
     ];
 
     for (let index = 0; index < adminSubMenus.length; index += 1) {
@@ -596,18 +658,18 @@ async function main() {
         isAdmin: true,
       });
     }
-    console.log('Menu tree onboarded successfully.');
+    console.log("Menu tree onboarded successfully.");
 
     console.log(`Onboarding admin user "${adminEmail}"...`);
     const adminUserDbId = await upsertUser(client, {
-      code: 'ADM001',
+      code: "ADM001",
       password: hashedPassword,
-      name: 'Admin',
-      contactNo: '9876543210',
+      name: "Admin",
+      contactNo: "9876543210",
       email: adminEmail.toLowerCase(),
-      employeeNo: 'EMP001',
-      designation: 'Administrator',
-      userLicNo: 'LIC001',
+      employeeNo: "EMP001",
+      designation: "Administrator",
+      userLicNo: "LIC001",
       isActive: true,
       isLocked: false,
       isDormant: false,
@@ -615,50 +677,162 @@ async function main() {
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
-    console.log('Admin user onboarded successfully.');
-    await client.query('DELETE FROM "user_roles" WHERE "user_id" = $1;', [adminUserDbId]);
-    console.log('Cleared legacy role assignments for admin user.');
+    console.log("Admin user onboarded successfully.");
+    await client.query('DELETE FROM "user_roles" WHERE "user_id" = $1;', [
+      adminUserDbId,
+    ]);
+    console.log("Cleared legacy role assignments for admin user.");
 
-    console.log('Onboarding default category options...');
+    console.log("Onboarding default category options...");
     const defaultOptions = [
-      { code: 'financialType', value: 'PROFIT & LOSS', label: 'PROFIT & LOSS', sortOrder: 1 },
-      { code: 'financialType', value: 'TRADING', label: 'TRADING', sortOrder: 2 },
-      { code: 'financialType', value: 'BALANCE SHEET', label: 'BALANCE SHEET', sortOrder: 3 },
-      { code: 'defaultSign', value: 'DEBIT', label: 'DEBIT', sortOrder: 1 },
-      { code: 'defaultSign', value: 'CREDIT', label: 'CREDIT', sortOrder: 2 },
-      { code: 'divisionDept', value: 'HEAD OFFICE', label: 'HEAD OFFICE', sortOrder: 1 },
-      { code: 'divisionDept', value: 'FINANCE DEPT', label: 'FINANCE DEPT', sortOrder: 2 },
-      { code: 'divisionDept', value: 'OPERATIONS DEPT', label: 'OPERATIONS DEPT', sortOrder: 3 },
-      { code: 'accountType', value: 'GENERAL LEDGER', label: 'GENERAL LEDGER', sortOrder: 1 },
-      { code: 'accountType', value: 'CUSTOMER LEDGER', label: 'CUSTOMER LEDGER', sortOrder: 2 },
-      { code: 'accountType', value: 'SUPPLIER LEDGER', label: 'SUPPLIER LEDGER', sortOrder: 3 },
-      { code: 'accountType', value: 'BANK LEDGER', label: 'BANK LEDGER', sortOrder: 4 },
-      { code: 'subLedger', value: 'DIRECT LEDGER', label: 'DIRECT LEDGER', sortOrder: 1 },
-      { code: 'subLedger', value: 'INDIRECT LEDGER', label: 'INDIRECT LEDGER', sortOrder: 2 },
-      { code: 'subLedger', value: 'NONE', label: 'NONE', sortOrder: 3 },
-      { code: 'bankNature', value: 'SAVINGS A/C', label: 'SAVINGS A/C', sortOrder: 1 },
-      { code: 'bankNature', value: 'CURRENT A/C', label: 'CURRENT A/C', sortOrder: 2 },
-      { code: 'bankNature', value: 'OVERDRAFT A/C', label: 'OVERDRAFT A/C', sortOrder: 3 },
-      { code: 'bankNature', value: 'NONE', label: 'NONE', sortOrder: 4 },
+      {
+        code: "financialType",
+        value: "PROFIT & LOSS",
+        label: "PROFIT & LOSS",
+        sortOrder: 1,
+      },
+      {
+        code: "financialType",
+        value: "TRADING",
+        label: "TRADING",
+        sortOrder: 2,
+      },
+      {
+        code: "financialType",
+        value: "BALANCE SHEET",
+        label: "BALANCE SHEET",
+        sortOrder: 3,
+      },
+      { code: "defaultSign", value: "DEBIT", label: "DEBIT", sortOrder: 1 },
+      { code: "defaultSign", value: "CREDIT", label: "CREDIT", sortOrder: 2 },
+      {
+        code: "divisionDept",
+        value: "HEAD OFFICE",
+        label: "HEAD OFFICE",
+        sortOrder: 1,
+      },
+      {
+        code: "divisionDept",
+        value: "FINANCE DEPT",
+        label: "FINANCE DEPT",
+        sortOrder: 2,
+      },
+      {
+        code: "divisionDept",
+        value: "OPERATIONS DEPT",
+        label: "OPERATIONS DEPT",
+        sortOrder: 3,
+      },
+      {
+        code: "accountType",
+        value: "GENERAL LEDGER",
+        label: "GENERAL LEDGER",
+        sortOrder: 1,
+      },
+      {
+        code: "accountType",
+        value: "CUSTOMER LEDGER",
+        label: "CUSTOMER LEDGER",
+        sortOrder: 2,
+      },
+      {
+        code: "accountType",
+        value: "SUPPLIER LEDGER",
+        label: "SUPPLIER LEDGER",
+        sortOrder: 3,
+      },
+      {
+        code: "accountType",
+        value: "BANK LEDGER",
+        label: "BANK LEDGER",
+        sortOrder: 4,
+      },
+      {
+        code: "subLedger",
+        value: "DIRECT LEDGER",
+        label: "DIRECT LEDGER",
+        sortOrder: 1,
+      },
+      {
+        code: "subLedger",
+        value: "INDIRECT LEDGER",
+        label: "INDIRECT LEDGER",
+        sortOrder: 2,
+      },
+      { code: "subLedger", value: "NONE", label: "NONE", sortOrder: 3 },
+      {
+        code: "bankNature",
+        value: "SAVINGS A/C",
+        label: "SAVINGS A/C",
+        sortOrder: 1,
+      },
+      {
+        code: "bankNature",
+        value: "CURRENT A/C",
+        label: "CURRENT A/C",
+        sortOrder: 2,
+      },
+      {
+        code: "bankNature",
+        value: "OVERDRAFT A/C",
+        label: "OVERDRAFT A/C",
+        sortOrder: 3,
+      },
+      { code: "bankNature", value: "NONE", label: "NONE", sortOrder: 4 },
       // KYC Risk Category
-      { code: 'kycRiskCategory', value: 'LOW RISK CATEGORY', label: 'LOW RISK CATEGORY', sortOrder: 1 },
-      { code: 'kycRiskCategory', value: 'MEDIUM RISK CATEGORY', label: 'MEDIUM RISK CATEGORY', sortOrder: 2 },
-      { code: 'kycRiskCategory', value: 'HIGH RISK CATEGORY', label: 'HIGH RISK CATEGORY', sortOrder: 3 },
+      {
+        code: "kycRiskCategory",
+        value: "LOW RISK CATEGORY",
+        label: "LOW RISK CATEGORY",
+        sortOrder: 1,
+      },
+      {
+        code: "kycRiskCategory",
+        value: "MEDIUM RISK CATEGORY",
+        label: "MEDIUM RISK CATEGORY",
+        sortOrder: 2,
+      },
+      {
+        code: "kycRiskCategory",
+        value: "HIGH RISK CATEGORY",
+        label: "HIGH RISK CATEGORY",
+        sortOrder: 3,
+      },
       // Entity Type
-      { code: 'entityType', value: 'COMPANY', label: 'COMPANY', sortOrder: 1 },
-      { code: 'entityType', value: 'INDIVIDUAL', label: 'INDIVIDUAL', sortOrder: 2 },
-      { code: 'entityType', value: 'PARTNERSHIP', label: 'PARTNERSHIP', sortOrder: 3 },
-      { code: 'entityType', value: 'PROPRIETORSHIP', label: 'PROPRIETORSHIP', sortOrder: 4 },
+      { code: "entityType", value: "COMPANY", label: "COMPANY", sortOrder: 1 },
+      {
+        code: "entityType",
+        value: "INDIVIDUAL",
+        label: "INDIVIDUAL",
+        sortOrder: 2,
+      },
+      {
+        code: "entityType",
+        value: "PARTNERSHIP",
+        label: "PARTNERSHIP",
+        sortOrder: 3,
+      },
+      {
+        code: "entityType",
+        value: "PROPRIETORSHIP",
+        label: "PROPRIETORSHIP",
+        sortOrder: 4,
+      },
       // Default Agent, Group, Marketing Executive, Business Nature, Location
-      { code: 'defaultAgent', value: 'NONE', label: 'NONE', sortOrder: 1 },
-      { code: 'group', value: 'NONE', label: 'NONE', sortOrder: 1 },
-      { code: 'marketingExecutive', value: 'NONE', label: 'NONE', sortOrder: 1 },
-      { code: 'businessNature', value: 'NONE', label: 'NONE', sortOrder: 1 },
-      { code: 'locationType', value: 'NONE', label: 'NONE', sortOrder: 1 },
+      { code: "defaultAgent", value: "NONE", label: "NONE", sortOrder: 1 },
+      { code: "group", value: "NONE", label: "NONE", sortOrder: 1 },
+      {
+        code: "marketingExecutive",
+        value: "NONE",
+        label: "NONE",
+        sortOrder: 1,
+      },
+      { code: "businessNature", value: "NONE", label: "NONE", sortOrder: 1 },
+      { code: "locationType", value: "NONE", label: "NONE", sortOrder: 1 },
       // TDS Group
-      { code: 'tdsGroup', value: 'NONE', label: 'NONE', sortOrder: 1 },
-      { code: 'tdsGroup', value: 'A', label: 'A', sortOrder: 2 },
-      { code: 'tdsGroup', value: 'B', label: 'B', sortOrder: 3 },
+      { code: "tdsGroup", value: "NONE", label: "NONE", sortOrder: 1 },
+      { code: "tdsGroup", value: "A", label: "A", sortOrder: 2 },
+      { code: "tdsGroup", value: "B", label: "B", sortOrder: 3 },
     ];
     for (const opt of defaultOptions) {
       await upsertCategoryOption(client, {
@@ -669,51 +843,51 @@ async function main() {
       });
     }
 
-    console.log('Onboarding default financial codes...');
+    console.log("Onboarding default financial codes...");
     const bankBlId = await upsertFinancialCode(client, {
-      financialType: 'PROFIT & LOSS',
-      financialCode: 'BANKBL',
-      financialName: 'BANK BALANCES',
-      defaultSign: 'DEBIT',
+      financialType: "PROFIT & LOSS",
+      financialCode: "BANKBL",
+      financialName: "BANK BALANCES",
+      defaultSign: "DEBIT",
       priority: 1,
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
 
     const opStokId = await upsertFinancialCode(client, {
-      financialType: 'TRADING',
-      financialCode: 'OPSTOK',
-      financialName: 'OPENING STOCK',
-      defaultSign: 'DEBIT',
+      financialType: "TRADING",
+      financialCode: "OPSTOK",
+      financialName: "OPENING STOCK",
+      defaultSign: "DEBIT",
       priority: 2,
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
 
-    console.log('Onboarding default financial sub profiles...');
+    console.log("Onboarding default financial sub profiles...");
     await upsertFinancialSubProfile(client, {
       financialCodeId: bankBlId,
-      financialSubCode: 'HDFCA',
-      financialSubName: 'HDFC CURRENT A/C',
+      financialSubCode: "HDFCA",
+      financialSubName: "HDFC CURRENT A/C",
       priority: 1,
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
     await upsertFinancialSubProfile(client, {
       financialCodeId: opStokId,
-      financialSubCode: 'OPSTK_GEN',
-      financialSubName: 'GENERAL OPENING STOCK',
+      financialSubCode: "OPSTK_GEN",
+      financialSubName: "GENERAL OPENING STOCK",
       priority: 1,
       createdBy: systemUserId,
       updatedBy: systemUserId,
     });
 
-    console.log('Onboarding default country groups...');
+    console.log("Onboarding default country groups...");
     const defaultCountryGroups = [
-      { name: 'EUROPE', code: 'EUROPE' },
-      { name: 'NORTH AMERICA', code: 'NORTH_AMERICA' },
-      { name: 'GULF COUNTRIES', code: 'GULF_COUNTRIES' },
-      { name: 'MIDDLE EAST', code: 'MIDDLE_EAST' },
+      { name: "EUROPE", code: "EUROPE" },
+      { name: "NORTH AMERICA", code: "NORTH_AMERICA" },
+      { name: "GULF COUNTRIES", code: "GULF_COUNTRIES" },
+      { name: "MIDDLE EAST", code: "MIDDLE_EAST" },
     ];
     for (const group of defaultCountryGroups) {
       await upsertCountryGroup(client, {
@@ -723,12 +897,12 @@ async function main() {
       });
     }
 
-    console.log('\n--- Login Credentials ---');
+    console.log("\n--- Login Credentials ---");
     console.log(`Email:    ${adminEmail}`);
     console.log(`Password: ${adminPassword}`);
-    console.log('-------------------------\n');
+    console.log("-------------------------\n");
   } catch (err) {
-    console.error('Error during onboarding seed:', err);
+    console.error("Error during onboarding seed:", err);
     process.exitCode = 1;
   } finally {
     await client.end();

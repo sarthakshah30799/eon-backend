@@ -12,7 +12,8 @@
 --         ├─ Company Profile
 --         ├─ Branch Profile
 --         ├─ Roles Profile
---         └─ User Profile
+--         ├─ User Profile
+--         └─ TDS Profile
 --
 -- Note: The BaseEntity requires createdBy/updatedBy UUIDs.
 -- Using a placeholder system UUID. Replace with an actual admin user UUID if needed.
@@ -89,6 +90,10 @@ BEGIN
   -- Insert "Currency Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'Currency Profile', '/admin/currency-profile', 'dollar-sign', v_system_setup_id, 6, true, v_system_user, v_system_user);
+
+  -- Insert "TDS Profile" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'TDS Profile', '/admin/tds-profile', 'receipt', v_system_setup_id, 7, true, v_system_user, v_system_user);
 
   RAISE NOTICE 'Menu seed completed. Master ID: %, System Setup ID: %', v_master_id, v_system_setup_id;
 END $$;

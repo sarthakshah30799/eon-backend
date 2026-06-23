@@ -83,6 +83,8 @@ export class PermissionsGuard implements CanActivate {
         );
       }
       menuPath = '/admin/document-profile';
+    } else if (path.includes('/tds-profiles')) {
+      menuPath = '/admin/tds-profile';
     }
 
     if (!menuPath) {
