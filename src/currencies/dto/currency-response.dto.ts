@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Currency } from '../currency.entity';
+import { Country } from '../../country/country.entity';
 
 export class CurrencyResponseDto {
   @ApiProperty()
@@ -7,6 +8,9 @@ export class CurrencyResponseDto {
 
   @ApiProperty()
   countryId: string | null;
+
+  @ApiProperty({ required: false, type: () => Country })
+  country?: Country | null;
 
   @ApiProperty()
   currencyCode: string;
@@ -66,6 +70,7 @@ export class CurrencyResponseDto {
     const dto = new CurrencyResponseDto();
     dto.id = entity.id;
     dto.countryId = entity.country?.id || null;
+    dto.country = entity.country || null;
     dto.currencyCode = entity.currencyCode;
     dto.currencyName = entity.currencyName;
     dto.priority = entity.priority;
