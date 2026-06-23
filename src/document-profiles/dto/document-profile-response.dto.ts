@@ -10,13 +10,13 @@ export class DocumentProfileResponseDto {
   specificationType: string;
 
   @ApiProperty()
-  transactionType: string;
+  type: string;
 
   @ApiPropertyOptional({ nullable: true })
-  profileCode?: string;
+  groupSelection: string | null;
 
   @ApiPropertyOptional({ nullable: true })
-  profileName?: string;
+  entitySelection: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   profileDescription: string | null;
@@ -39,10 +39,10 @@ export class DocumentProfileResponseDto {
   static fromEntity(entity: DocumentProfile): DocumentProfileResponseDto {
     const dto = new DocumentProfileResponseDto();
     dto.id = entity.id;
-    dto.specificationType = entity.profileCode;
-    dto.transactionType = entity.profileName;
-    dto.profileCode = entity.profileCode;
-    dto.profileName = entity.profileName;
+    dto.specificationType = entity.specificationType;
+    dto.type = entity.type;
+    dto.groupSelection = entity.groupSelection;
+    dto.entitySelection = entity.entitySelection;
     dto.profileDescription = entity.profileDescription;
     dto.active = entity.active;
     dto.sortOrder = entity.sortOrder;
@@ -55,4 +55,3 @@ export class DocumentProfileResponseDto {
     return dto;
   }
 }
-

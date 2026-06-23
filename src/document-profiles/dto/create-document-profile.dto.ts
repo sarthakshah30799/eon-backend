@@ -31,13 +31,27 @@ export class CreateDocumentProfileDto {
   specificationType: string;
 
   @ApiProperty({
-    description: 'Transaction type',
+    description: 'Type',
     enum: DOCUMENT_PROFILE_TYPE_OPTIONS,
   })
   @IsString()
   @IsNotEmpty()
   @IsIn(DOCUMENT_PROFILE_TYPE_OPTIONS)
-  transactionType: string;
+  type: string;
+
+  @ApiProperty({
+    description: 'Group selection',
+  })
+  @IsString()
+  @IsNotEmpty()
+  groupSelection: string;
+
+  @ApiProperty({
+    description: 'Entity type selection',
+  })
+  @IsString()
+  @IsNotEmpty()
+  entitySelection: string;
 
   @ApiPropertyOptional({ description: 'Profile active flag', default: true })
   @IsBoolean()
@@ -61,4 +75,3 @@ export class CreateDocumentProfileDto {
   @Type(() => CreateDocumentProfileRuleDto)
   rules: CreateDocumentProfileRuleDto[];
 }
-

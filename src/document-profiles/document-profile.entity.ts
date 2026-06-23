@@ -1,15 +1,20 @@
-import { Column, Entity, Index, OneToMany } from 'typeorm';
+import { Column, Entity, OneToMany } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
 import { DocumentProfileRule } from './document-profile-rule.entity';
 
 @Entity('document_profiles')
 export class DocumentProfile extends BaseEntity {
-  @Index({ unique: true })
   @Column({ type: 'citext' })
-  profileCode: string;
+  specificationType: string;
 
   @Column({ type: 'citext' })
-  profileName: string;
+  type: string;
+
+  @Column({ type: 'citext', nullable: true })
+  groupSelection: string | null;
+
+  @Column({ type: 'citext', nullable: true })
+  entitySelection: string | null;
 
   @Column({ type: 'text', nullable: true })
   profileDescription: string | null;
@@ -25,4 +30,3 @@ export class DocumentProfile extends BaseEntity {
   })
   rules: DocumentProfileRule[];
 }
-

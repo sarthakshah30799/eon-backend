@@ -20,18 +20,6 @@ export class DocumentProfileRuleResponseDto {
   @ApiProperty()
   maxSizeMb: number;
 
-  @ApiProperty({ required: false, nullable: true })
-  profileSelection: string | null;
-
-  @ApiProperty({ required: false, nullable: true })
-  entitySelection: string | null;
-
-  @ApiProperty({ required: false, nullable: true })
-  fieldSelection: string | null;
-
-  @ApiProperty({ required: false, nullable: true })
-  fieldValue: string | null;
-
   @ApiProperty()
   active: boolean;
 
@@ -46,13 +34,8 @@ export class DocumentProfileRuleResponseDto {
     dto.documentType = entity.documentType;
     dto.isRequired = entity.isRequired;
     dto.maxSizeMb = Number(entity.maxSizeMb);
-    dto.profileSelection = entity.profileSelection;
-    dto.entitySelection = entity.entitySelection;
-    dto.fieldSelection = entity.fieldSelection;
-    dto.fieldValue = entity.fieldValue;
     dto.active = entity.active;
     dto.sortOrder = entity.sortOrder;
     return dto;
   }
 }
-
