@@ -571,6 +571,16 @@ async function main() {
         icon: "dollar-sign",
       },
       { name: "TDS Profile", path: "/admin/tds-profile", icon: "receipt" },
+      {
+        name: "Expense Booking Master",
+        path: "/admin/expense-booking",
+        icon: "receipt",
+      },
+      {
+        name: "Income Booking Master",
+        path: "/admin/income-booking",
+        icon: "credit-card",
+      },
     ];
 
     for (let index = 0; index < basicMenus.length; index += 1) {

@@ -95,5 +95,13 @@ BEGIN
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'TDS Profile', '/admin/tds-profile', 'receipt', v_system_setup_id, 7, true, v_system_user, v_system_user);
 
+  -- Insert "Expense Booking Master" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Expense Booking Master', '/admin/expense-booking', 'receipt', v_system_setup_id, 8, true, v_system_user, v_system_user);
+
+  -- Insert "Income Booking Master" under System Setup
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Income Booking Master', '/admin/income-booking', 'credit-card', v_system_setup_id, 9, true, v_system_user, v_system_user);
+
   RAISE NOTICE 'Menu seed completed. Master ID: %, System Setup ID: %', v_master_id, v_system_setup_id;
 END $$;
