@@ -7,10 +7,16 @@ export class DocumentProfileResponseDto {
   id: string;
 
   @ApiProperty()
-  profileCode: string;
+  specificationType: string;
 
   @ApiProperty()
-  profileName: string;
+  transactionType: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  profileCode?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  profileName?: string;
 
   @ApiPropertyOptional({ nullable: true })
   profileDescription: string | null;
@@ -33,6 +39,8 @@ export class DocumentProfileResponseDto {
   static fromEntity(entity: DocumentProfile): DocumentProfileResponseDto {
     const dto = new DocumentProfileResponseDto();
     dto.id = entity.id;
+    dto.specificationType = entity.profileCode;
+    dto.transactionType = entity.profileName;
     dto.profileCode = entity.profileCode;
     dto.profileName = entity.profileName;
     dto.profileDescription = entity.profileDescription;

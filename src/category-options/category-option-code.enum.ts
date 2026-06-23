@@ -14,4 +14,6 @@ export enum CategoryOptionCodeEnum {
   MarketingExecutive = "marketingExecutive",
   BusinessNature = "businessNature",
   TdsGroup = "tdsGroup",
+  MasterDocument = "masterDocument",
+  TransactionDocument = "transactionDocument",
 }

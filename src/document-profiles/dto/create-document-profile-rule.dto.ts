@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsNotEmpty,
   IsNumber,
@@ -23,11 +25,13 @@ export class CreateDocumentProfileRuleDto {
   @MaxLength(250)
   documentDescription: string;
 
-  @ApiProperty({ description: 'Document type', example: 'PDF' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  documentType: string;
+  @ApiProperty({ description: 'Document type', example: ['PDF'], type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  @MaxLength(50, { each: true })
+  documentType: string[];
 
   @ApiPropertyOptional({ description: 'Is the document required?', default: false })
   @IsBoolean()
