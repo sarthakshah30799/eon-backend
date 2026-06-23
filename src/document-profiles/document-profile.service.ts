@@ -16,6 +16,7 @@ import {
   normalizeDocumentProfilePayload,
   normalizeDocumentProfileRulePayload,
   resolveDocumentProfileRules,
+  normalizeSelectionValue,
 } from './document-profile.utils';
 import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
 
@@ -61,15 +62,18 @@ export class DocumentProfileService {
     userId: string,
   ): Promise<DocumentProfileResponseDto> {
     const normalizedSpecificationType = dto.specificationType.trim();
-    const normalizedTransactionType = dto.transactionType.trim();
-    await this.ensureProfileCodeIsUnique(normalizedSpecificationType);
+    const normalizedType = dto.type.trim();
+    const normalizedGroupSelection = dto.groupSelection.trim();
+    const normalizedEntitySelection = dto.entitySelection.trim();
     await this.ensureRuleCodesAreUnique(dto.rules);
     this.ensureValidDocumentTypes(dto.rules.flatMap(rule => rule.documentType));
 
     const profile = this.documentProfileRepository.create({
       ...normalizeDocumentProfilePayload({
-        profileCode: normalizedSpecificationType,
-        profileName: normalizedTransactionType,
+        specificationType: normalizedSpecificationType,
+        type: normalizedType,
+        groupSelection: normalizedGroupSelection,
+        entitySelection: normalizedEntitySelection,
         profileDescription: null,
         active: dto.active ?? true,
         sortOrder: dto.sortOrder ?? 0,
@@ -105,12 +109,19 @@ export class DocumentProfileService {
 
     if (dto.specificationType) {
       const normalizedSpecificationType = dto.specificationType.trim();
-      await this.ensureProfileCodeIsUnique(normalizedSpecificationType, id);
-      profile.profileCode = normalizedSpecificationType;
+      profile.specificationType = normalizedSpecificationType;
     }
 
-    if (dto.transactionType !== undefined) {
-      profile.profileName = dto.transactionType.trim();
+    if (dto.type !== undefined) {
+      profile.type = dto.type.trim();
+    }
+
+    if (dto.groupSelection !== undefined) {
+      profile.groupSelection = dto.groupSelection.trim();
+    }
+
+    if (dto.entitySelection !== undefined) {
+      profile.entitySelection = dto.entitySelection.trim();
     }
 
     if (dto.active !== undefined) {
@@ -159,6 +170,10 @@ export class DocumentProfileService {
   async resolveRules(
     query: ResolveDocumentProfileRulesDto,
   ): Promise<DocumentProfileResponseDto[]> {
+    const groupSelection = normalizeSelectionValue(query.groupSelection);
+    const entitySelection = normalizeSelectionValue(query.entitySelection);
+    const hasGroupSelection = Boolean(groupSelection);
+    const hasEntitySelection = Boolean(entitySelection);
     const profiles = await this.documentProfileRepository
       .createQueryBuilder('documentProfile')
       .leftJoinAndSelect('documentProfile.rules', 'rule')
@@ -169,24 +184,28 @@ export class DocumentProfileService {
       .getMany();
 
     return profiles
+      .filter(profile => {
+        if (!hasGroupSelection) {
+          return true;
+        }
+
+        const profileGroupSelection = normalizeSelectionValue(profile.groupSelection);
+        return profileGroupSelection === groupSelection;
+      })
+      .filter(profile => {
+        if (!hasEntitySelection) {
+          return true;
+        }
+
+        const profileEntitySelection = normalizeSelectionValue(profile.entitySelection);
+        return profileEntitySelection === entitySelection;
+      })
       .map(profile => ({
         ...profile,
-        rules: resolveDocumentProfileRules(profile.rules ?? [], query),
+        rules: resolveDocumentProfileRules(profile.rules ?? []),
       }))
       .filter(profile => profile.rules.length > 0)
       .map(DocumentProfileResponseDto.fromEntity);
-  }
-
-  private async ensureProfileCodeIsUnique(code: string, excludeId?: string) {
-    const existing = await this.documentProfileRepository.findOne({
-      where: { profileCode: code },
-    });
-
-    if (existing && existing.id !== excludeId) {
-      throw new ConflictException(
-        `Document profile with code "${code}" already exists`,
-      );
-    }
   }
 
   private async ensureRuleCodesAreUnique(
@@ -230,4 +249,3 @@ export class DocumentProfileService {
     }
   }
 }
-

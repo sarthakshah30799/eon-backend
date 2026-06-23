@@ -20,18 +20,6 @@ export class DocumentProfileRule extends BaseEntity {
   @Column({ type: 'numeric', precision: 10, scale: 2, default: 0 })
   maxSizeMb: number;
 
-  @Column({ type: 'citext', nullable: true })
-  profileSelection: string | null;
-
-  @Column({ type: 'citext', nullable: true })
-  entitySelection: string | null;
-
-  @Column({ type: 'citext', nullable: true })
-  fieldSelection: string | null;
-
-  @Column({ type: 'citext', nullable: true })
-  fieldValue: string | null;
-
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
@@ -51,4 +39,3 @@ export class DocumentProfileRule extends BaseEntity {
   @Column({ type: 'uuid', name: 'document_profile_id' })
   documentProfileId: string;
 }
-
