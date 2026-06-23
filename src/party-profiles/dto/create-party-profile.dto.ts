@@ -303,10 +303,10 @@ export class CreatePartyProfileDto {
   @IsOptional()
   ifscCode?: string;
 
-  @ApiPropertyOptional({ description: "Bank Address" })
+  @ApiPropertyOptional({ description: "Bank Branch Name" })
   @IsString()
   @IsOptional()
-  bankAddress?: string;
+  bankBranchName?: string;
 
   @ApiPropertyOptional({ description: "Cancelled Cheque Copy file path" })
   @IsString()

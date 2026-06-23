@@ -182,8 +182,8 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "IFSC Code" })
   ifscCode?: string;
 
-  @ApiPropertyOptional({ description: "Bank Address" })
-  bankAddress?: string;
+  @ApiPropertyOptional({ description: "Bank Branch Name" })
+  bankBranchName?: string;
 
   @ApiPropertyOptional({ description: "Cancelled Cheque Copy" })
   cancelledChequeCopy?: string;
@@ -277,7 +277,7 @@ export class PartyProfileResponseDto {
     dto.bankName = entity.bankName;
     dto.accountNumber = entity.accountNumber;
     dto.ifscCode = entity.ifscCode;
-    dto.bankAddress = entity.bankAddress;
+    dto.bankBranchName = entity.bankBranchName;
     dto.cancelledChequeCopy = entity.cancelledChequeCopy;
     dto.ffmcRegNo = entity.ffmcRegNo;
     dto.ffmcRegDate = entity.ffmcRegDate;

@@ -223,8 +223,8 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   ifscCode: string;
 
-  @Column({ type: "text", nullable: true })
-  bankAddress: string;
+  @Column({ type: "citext", nullable: true })
+  bankBranchName: string;
 
   @Column({ type: "text", nullable: true })
   cancelledChequeCopy: string;
