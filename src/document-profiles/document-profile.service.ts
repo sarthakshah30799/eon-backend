@@ -60,16 +60,17 @@ export class DocumentProfileService {
     dto: CreateDocumentProfileDto,
     userId: string,
   ): Promise<DocumentProfileResponseDto> {
-    const normalizedProfileCode = dto.profileCode.trim().toUpperCase();
-    await this.ensureProfileCodeIsUnique(normalizedProfileCode);
+    const normalizedSpecificationType = dto.specificationType.trim();
+    const normalizedTransactionType = dto.transactionType.trim();
+    await this.ensureProfileCodeIsUnique(normalizedSpecificationType);
     await this.ensureRuleCodesAreUnique(dto.rules);
-    this.ensureValidDocumentTypes(dto.rules.map(rule => rule.documentType));
+    this.ensureValidDocumentTypes(dto.rules.flatMap(rule => rule.documentType));
 
     const profile = this.documentProfileRepository.create({
       ...normalizeDocumentProfilePayload({
-        profileCode: normalizedProfileCode,
-        profileName: dto.profileName,
-        profileDescription: dto.profileDescription ?? null,
+        profileCode: normalizedSpecificationType,
+        profileName: normalizedTransactionType,
+        profileDescription: null,
         active: dto.active ?? true,
         sortOrder: dto.sortOrder ?? 0,
       }),
@@ -102,18 +103,14 @@ export class DocumentProfileService {
       throw new NotFoundException(`Document profile with id ${id} not found`);
     }
 
-    if (dto.profileCode) {
-      const normalizedProfileCode = dto.profileCode.trim().toUpperCase();
-      await this.ensureProfileCodeIsUnique(normalizedProfileCode, id);
-      profile.profileCode = normalizedProfileCode;
+    if (dto.specificationType) {
+      const normalizedSpecificationType = dto.specificationType.trim();
+      await this.ensureProfileCodeIsUnique(normalizedSpecificationType, id);
+      profile.profileCode = normalizedSpecificationType;
     }
 
-    if (dto.profileName !== undefined) {
-      profile.profileName = dto.profileName.trim();
-    }
-
-    if (dto.profileDescription !== undefined) {
-      profile.profileDescription = dto.profileDescription?.trim() || null;
+    if (dto.transactionType !== undefined) {
+      profile.profileName = dto.transactionType.trim();
     }
 
     if (dto.active !== undefined) {
@@ -127,7 +124,7 @@ export class DocumentProfileService {
     profile.updatedBy = userId;
 
     if (dto.rules) {
-      this.ensureValidDocumentTypes(dto.rules.map(rule => rule.documentType));
+      this.ensureValidDocumentTypes(dto.rules.flatMap(rule => rule.documentType));
       await this.ensureRuleCodesAreUnique(dto.rules, id);
       await this.documentProfileRuleRepository.delete({
         documentProfileId: id,

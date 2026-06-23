@@ -11,8 +11,8 @@ export class DocumentProfileRuleResponseDto {
   @ApiProperty()
   documentDescription: string;
 
-  @ApiProperty()
-  documentType: string;
+  @ApiProperty({ type: [String] })
+  documentType: string[];
 
   @ApiProperty()
   isRequired: boolean;

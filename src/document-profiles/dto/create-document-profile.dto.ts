@@ -3,35 +3,41 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
-  MaxLength,
   ValidateNested,
   ArrayNotEmpty,
   IsNumber,
   Min,
 } from 'class-validator';
 import { CreateDocumentProfileRuleDto } from './create-document-profile-rule.dto';
+import { CategoryOptionCodeEnum } from '../../category-options/category-option-code.enum';
+
+const DOCUMENT_PROFILE_TYPE_OPTIONS = [
+  CategoryOptionCodeEnum.MasterDocument,
+  CategoryOptionCodeEnum.TransactionDocument,
+] as const;
 
 export class CreateDocumentProfileDto {
-  @ApiProperty({ description: 'Document profile code', example: 'KYC_MASTER' })
+  @ApiProperty({
+    description: 'Specification type',
+    enum: DOCUMENT_PROFILE_TYPE_OPTIONS,
+  })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(50)
-  profileCode: string;
+  @IsIn(DOCUMENT_PROFILE_TYPE_OPTIONS)
+  specificationType: string;
 
-  @ApiProperty({ description: 'Document profile name', example: 'KYC Documents' })
+  @ApiProperty({
+    description: 'Transaction type',
+    enum: DOCUMENT_PROFILE_TYPE_OPTIONS,
+  })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(150)
-  profileName: string;
-
-  @ApiPropertyOptional({ description: 'Document profile description' })
-  @IsString()
-  @IsOptional()
-  @MaxLength(500)
-  profileDescription?: string | null;
+  @IsIn(DOCUMENT_PROFILE_TYPE_OPTIONS)
+  transactionType: string;
 
   @ApiPropertyOptional({ description: 'Profile active flag', default: true })
   @IsBoolean()

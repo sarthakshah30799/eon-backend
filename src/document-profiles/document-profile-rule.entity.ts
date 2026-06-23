@@ -11,8 +11,8 @@ export class DocumentProfileRule extends BaseEntity {
   @Column({ type: 'citext' })
   documentDescription: string;
 
-  @Column({ type: 'citext' })
-  documentType: string;
+  @Column({ type: 'text', array: true, default: '{}' })
+  documentType: string[];
 
   @Column({ type: 'boolean', default: false })
   isRequired: boolean;

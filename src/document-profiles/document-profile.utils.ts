@@ -18,7 +18,7 @@ export const normalizeDocumentProfileRulePayload = (
   rule: {
     documentCode: string;
     documentDescription: string;
-    documentType: string;
+    documentType: string[];
     isRequired?: boolean;
     maxSizeMb: number;
     profileSelection?: string | null;
@@ -32,7 +32,11 @@ export const normalizeDocumentProfileRulePayload = (
   ...rule,
   documentCode: normalizeToken(rule.documentCode) ?? rule.documentCode,
   documentDescription: rule.documentDescription.trim(),
-  documentType: normalizeToken(rule.documentType) ?? rule.documentType,
+  documentType: Array.from(
+    new Set(
+      rule.documentType.map(type => normalizeToken(type) ?? type.trim().toUpperCase()),
+    ),
+  ),
   profileSelection: normalizeToken(rule.profileSelection),
   entitySelection: normalizeToken(rule.entitySelection),
   fieldSelection: normalizeToken(rule.fieldSelection),
