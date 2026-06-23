@@ -7,6 +7,7 @@ import { PartyProfileDocument } from './party-profile-document.entity';
 import { PartyProfileDocumentFile } from './party-profile-document-file.entity';
 import { PartyProfileDocumentsController } from './party-profile-documents.controller';
 import { PartyProfileDocumentsService } from './party-profile-documents.service';
+import { UserModule } from '../users/user.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PartyProfileDocumentsService } from './party-profile-documents.service'
       PartyProfileDocument,
       PartyProfileDocumentFile,
     ]),
+    UserModule,
   ],
   controllers: [PartyProfileDocumentsController],
   providers: [PartyProfileDocumentsService],
