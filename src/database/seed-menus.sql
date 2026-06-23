@@ -46,7 +46,7 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'Menu Management', '/admin/menu-management', 'menu', v_admin_id, 5, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Financial Profile', '/admin/financial-profile', 'dollar-sign', v_admin_id, 6, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Financial Profile', '/financial-profile', 'dollar-sign', v_admin_id, 6, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'Accounts Profile', '/admin/accounts-profile', 'book', v_admin_id, 7, true, v_system_user, v_system_user);
@@ -73,7 +73,7 @@ BEGIN
 
   -- Insert "User Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'User Profile', '/admin/user-profile', 'users', v_system_setup_id, 2, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'User Profile', '/user-profile', 'users', v_system_setup_id, 2, true, v_system_user, v_system_user);
 
   -- Insert "Country Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)

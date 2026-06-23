@@ -62,7 +62,7 @@ export class PermissionsGuard implements CanActivate {
       // Allow self-lookup (GET /users/:id matching logged-in user id)
       const isSelf = method === 'GET' && request.params.id === userId;
       if (isSelf) return true;
-      menuPath = '/admin/user-profile';
+      menuPath = '/user-profile';
     } else if (path.includes('/countries')) {
       menuPath = '/admin/country-profile';
     } else if (path.includes('/states')) {
