@@ -553,7 +553,7 @@ async function main() {
 
     const basicMenus = [
       { name: "User Role", path: "/admin/user-role", icon: "shield" },
-      { name: "User Profile", path: "/admin/user-profile", icon: "users" },
+      { name: "User Profile", path: "/user-profile", icon: "users" },
       {
         name: "Country Profile",
         path: "/admin/country-profile",
@@ -624,7 +624,7 @@ async function main() {
       { name: "Menu Management", path: "/admin/menu-management", icon: "menu" },
       {
         name: "Financial Profile",
-        path: "/admin/financial-profile",
+        path: "/financial-profile",
         icon: "dollar-sign",
       },
       {
