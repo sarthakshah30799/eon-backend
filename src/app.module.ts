@@ -20,6 +20,7 @@ import { FinancialSubProfileModule } from "./financial-sub-profiles/financial-su
 import { AccountProfileModule } from "./account-profiles/account-profile.module";
 import { CountryGroupModule } from "./country-groups/country-group.module";
 import { PartyProfileModule } from "./party-profiles/party-profile.module";
+import { PartyProfileDocumentsModule } from "./party-profile-documents/party-profile-documents.module";
 import { DocumentProfileModule } from "./document-profiles/document-profile.module";
 import { TdsProfileModule } from "./tds-profiles/tds-profile.module";
 
@@ -50,6 +51,7 @@ import { MailModule } from "./mail/mail.module";
     AccountProfileModule,
     CountryGroupModule,
     PartyProfileModule,
+    PartyProfileDocumentsModule,
     DocumentProfileModule,
     TdsProfileModule,
     MailModule,

@@ -16,7 +16,7 @@ import {
   normalizeDocumentProfilePayload,
   normalizeDocumentProfileRulePayload,
   resolveDocumentProfileRules,
-  normalizeSelectionValue,
+  applyDocumentProfileFilters,
 } from './document-profile.utils';
 import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
 
@@ -170,36 +170,23 @@ export class DocumentProfileService {
   async resolveRules(
     query: ResolveDocumentProfileRulesDto,
   ): Promise<DocumentProfileResponseDto[]> {
-    const groupSelection = normalizeSelectionValue(query.groupSelection);
-    const entitySelection = normalizeSelectionValue(query.entitySelection);
-    const hasGroupSelection = Boolean(groupSelection);
-    const hasEntitySelection = Boolean(entitySelection);
-    const profiles = await this.documentProfileRepository
+    const queryBuilder = this.documentProfileRepository
       .createQueryBuilder('documentProfile')
       .leftJoinAndSelect('documentProfile.rules', 'rule')
-      .where('documentProfile.active = true')
-      .andWhere('rule.active = true')
+      .where('1 = 1')
+    applyDocumentProfileFilters(queryBuilder, 'documentProfile', 'rule', {
+      groupSelection: query.groupSelection,
+      entitySelection: query.entitySelection,
+      activeOnly: true,
+      activeRulesOnly: true,
+    });
+
+    const profiles = await queryBuilder
       .orderBy('documentProfile.sortOrder', 'ASC')
       .addOrderBy('rule.sortOrder', 'ASC')
       .getMany();
 
     return profiles
-      .filter(profile => {
-        if (!hasGroupSelection) {
-          return true;
-        }
-
-        const profileGroupSelection = normalizeSelectionValue(profile.groupSelection);
-        return profileGroupSelection === groupSelection;
-      })
-      .filter(profile => {
-        if (!hasEntitySelection) {
-          return true;
-        }
-
-        const profileEntitySelection = normalizeSelectionValue(profile.entitySelection);
-        return profileEntitySelection === entitySelection;
-      })
       .map(profile => ({
         ...profile,
         rules: resolveDocumentProfileRules(profile.rules ?? []),
