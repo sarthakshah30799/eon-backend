@@ -73,6 +73,16 @@ export class PermissionsGuard implements CanActivate {
       menuPath = '/admin/state-profile';
     } else if (path.includes('/products')) {
       menuPath = '/admin/product-profile';
+    } else if (path.includes('/document-profiles')) {
+      if (method === 'GET') {
+        if (userDto.isAdmin) {
+          return true;
+        }
+        throw new ForbiddenException(
+          'Access to document profiles is restricted to administrators.',
+        );
+      }
+      menuPath = '/admin/document-profile';
     }
 
     if (!menuPath) {
