@@ -13,7 +13,6 @@ import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
 import { DocumentProfileResponseDto } from './dto/document-profile-response.dto';
 import { ResolveDocumentProfileRulesDto } from './dto/resolve-document-profile-rules.dto';
 import {
-  normalizeDocumentProfilePayload,
   normalizeDocumentProfileRulePayload,
   resolveDocumentProfileRules,
   applyDocumentProfileFilters,
@@ -70,15 +69,13 @@ export class DocumentProfileService {
     this.ensureValidDocumentTypes(dto.rules.flatMap(rule => rule.documentType));
 
     const profile = this.documentProfileRepository.create({
-      ...normalizeDocumentProfilePayload({
-        specificationType: normalizedSpecificationType,
-        type: normalizedType,
-        groupSelection: normalizedGroupSelection,
-        entitySelection: normalizedEntitySelection,
-        profileDescription: null,
-        active: dto.active ?? true,
-        sortOrder: dto.sortOrder ?? 0,
-      }),
+      specificationType: normalizedSpecificationType,
+      type: normalizedType,
+      groupSelection: normalizedGroupSelection,
+      entitySelection: normalizedEntitySelection,
+      profileDescription: null,
+      active: dto.active ?? true,
+      sortOrder: dto.sortOrder ?? 0,
       createdBy: userId,
       updatedBy: userId,
       rules: dto.rules.map(rule =>
@@ -88,7 +85,7 @@ export class DocumentProfileService {
           updatedBy: userId,
         }),
       ),
-    });
+    } as DocumentProfile);
 
     const saved = await this.documentProfileRepository.save(profile);
     return this.findById(saved.id);
