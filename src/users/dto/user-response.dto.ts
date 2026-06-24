@@ -1,6 +1,7 @@
 import { User } from '../user.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { normalizeMenuPath } from '../../menu/menu-path.util';
+import { UserAssignmentResponseDto } from './user-assignment.dto';
 
 export class UserResponseDto {
   @ApiProperty({ description: 'User ID (UUID)' })
@@ -54,6 +55,9 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Branch ID (UUID)', required: false })
   branchId?: string;
 
+  @ApiProperty({ description: 'Branch name', required: false })
+  branchName?: string;
+
   @ApiProperty({ description: 'Counter ID (UUID)', required: false })
   counterId?: string;
 
@@ -62,6 +66,9 @@ export class UserResponseDto {
 
   @ApiProperty({ description: 'Counter Name', required: false })
   counterName?: string;
+
+  @ApiProperty({ description: 'Assignments', required: false, type: [UserAssignmentResponseDto] })
+  assignments?: UserAssignmentResponseDto[];
 
   @ApiProperty({ description: 'Permissions map', required: false })
   permissions?: Record<string, string[]>;
@@ -96,27 +103,39 @@ export class UserResponseDto {
     dto.updatedAt = user.updatedAt;
 
     const permissions: Record<string, string[]> = {};
-    if (user.userRoles && user.userRoles.length > 0) {
-      const userRole = user.userRoles[0];
-      dto.roleId = userRole.role?.id || null;
-      dto.roleName = userRole.role?.name || null;
-      dto.branchId = userRole.branch?.id || null;
-      dto.counterId = userRole.counter?.id || null;
-      dto.counterNo = userRole.counter?.counterNo || null;
-      dto.counterName = userRole.counter?.name || null;
+    const firstUserRole = user.userRoles?.[0];
 
-      if (userRole.role && userRole.role.menuPermissions) {
-        for (const mp of userRole.role.menuPermissions) {
-          if (mp.menu && mp.permission) {
-            const menuPath = normalizeMenuPath(mp.menu.path) || mp.menu.name;
-            if (!permissions[menuPath]) {
-              permissions[menuPath] = [];
-            }
-            permissions[menuPath].push(mp.permission.code);
+    if (firstUserRole) {
+      dto.roleId = firstUserRole.role?.id || null;
+      dto.roleName = firstUserRole.role?.name || null;
+      dto.branchId = firstUserRole.branch?.id || null;
+      dto.branchName = firstUserRole.branch?.name || null;
+      dto.counterId = firstUserRole.counter?.id || null;
+      dto.counterNo = firstUserRole.counter?.counterNo || null;
+      dto.counterName = firstUserRole.counter?.name || null;
+    }
+
+    dto.assignments = user.userRoles?.map(userRole => ({
+      roleId: userRole.role?.id || '',
+      roleName: userRole.role?.name || '',
+      branchId: userRole.branch?.id || '',
+      branchName: userRole.branch?.name || '',
+      counterId: userRole.counter?.id || '',
+      counterName: userRole.counter?.name || '',
+    })) || [];
+
+    if (firstUserRole?.role?.menuPermissions) {
+      for (const mp of firstUserRole.role.menuPermissions) {
+        if (mp.menu && mp.permission) {
+          const menuPath = normalizeMenuPath(mp.menu.path) || mp.menu.name;
+          if (!permissions[menuPath]) {
+            permissions[menuPath] = [];
           }
+          permissions[menuPath].push(mp.permission.code);
         }
       }
     }
+
     dto.permissions = permissions;
 
     return dto;

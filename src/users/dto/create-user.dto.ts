@@ -1,5 +1,16 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsOptional, IsBoolean } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { UserAssignmentDto } from './user-assignment.dto';
 
 export class CreateUserDto {
   @ApiProperty({ description: 'User Code', example: 'USR-001', maxLength: 20 })
@@ -67,4 +78,15 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   counterId?: string;
+
+  @ApiProperty({
+    description: 'Assigned role, branch and counter combinations',
+    required: false,
+    type: [UserAssignmentDto],
+  })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => UserAssignmentDto)
+  assignments?: UserAssignmentDto[];
 }

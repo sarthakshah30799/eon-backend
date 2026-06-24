@@ -9,6 +9,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { UserAssignmentDto } from './dto/user-assignment.dto';
 import { uppercaseFields } from '../utils/uppercase.util';
 import { PasswordPolicyService } from '../password-policy/password-policy.service';
 
@@ -49,6 +50,93 @@ export class UserService {
     return user?.isAdmin === true;
   }
 
+  private normalizeAssignments(
+    dto: Partial<CreateUserDto> & { assignments?: UserAssignmentDto[] }
+  ): UserAssignmentDto[] {
+    const assignments = dto.assignments ?? [];
+
+    if (assignments.length > 0) {
+      const seen = new Set<string>();
+
+      return assignments.filter(assignment => {
+        if (!assignment.roleId || !assignment.branchId || !assignment.counterId) {
+          return false;
+        }
+
+        const key = `${assignment.roleId}::${assignment.branchId}::${assignment.counterId}`;
+        if (seen.has(key)) {
+          return false;
+        }
+
+        seen.add(key);
+        return true;
+      });
+    }
+
+    if (dto.roleId && dto.branchId && dto.counterId) {
+      return [
+        {
+          roleId: dto.roleId,
+          branchId: dto.branchId,
+          counterId: dto.counterId,
+        },
+      ];
+    }
+
+    return [];
+  }
+
+  private async ensureRolesAreAssignable(
+    assignments: UserAssignmentDto[],
+    requesterIsAdmin: boolean
+  ): Promise<void> {
+    const uniqueRoleIds = [...new Set(assignments.map(assignment => assignment.roleId))];
+
+    for (const roleId of uniqueRoleIds) {
+      const role = await this.roleRepository.findOne({ where: { id: roleId } });
+
+      if (!role) {
+        throw new NotFoundException(`Role with id ${roleId} not found`);
+      }
+
+      if (role.isAdmin && !requesterIsAdmin) {
+        throw new ConflictException('Admin role cannot be assigned to non-admin users');
+      }
+    }
+  }
+
+  private async syncUserRoles(
+    userId: string,
+    assignments: UserAssignmentDto[],
+    actorUserId?: string
+  ): Promise<void> {
+    await this.userRoleRepository
+      .createQueryBuilder()
+      .delete()
+      .from(UserRole)
+      .where('user_id = :userId', { userId })
+      .execute();
+
+    if (assignments.length === 0) {
+      return;
+    }
+
+    const actorId = actorUserId || '00000000-0000-0000-0000-000000000000';
+
+    const userRoles = assignments.map(assignment =>
+      this.userRoleRepository.create({
+        user: { id: userId } as any,
+        role: { id: assignment.roleId } as any,
+        branch: { id: assignment.branchId } as any,
+        counter: { id: assignment.counterId } as any,
+        createdBy: actorId,
+        updatedBy: actorId,
+      })
+    );
+
+    await this.userRoleRepository.save(userRoles);
+  }
+
   async findAll(currentUserId?: string): Promise<UserResponseDto[]> {
     const users = await this.userRepository.find({
       relations: USER_RELATIONS,
@@ -82,18 +170,18 @@ export class UserService {
       throw new ConflictException('User with this user code already exists');
     }
 
-    const { roleId, branchId, counterId, ...userFields } = uppercased;
-    const hashedPassword = await bcrypt.hash(TEMP_INITIAL_PASSWORD, 10);
+    const assignments = this.normalizeAssignments(uppercased);
     const requesterIsAdmin = await this.isRequesterAdmin(userId);
-    const selectedRole = roleId
-      ? await this.roleRepository.findOne({
-          where: { id: roleId },
-        })
-      : null;
+    await this.ensureRolesAreAssignable(assignments, requesterIsAdmin);
 
-    if (selectedRole?.isAdmin && !requesterIsAdmin) {
-      throw new ConflictException('Admin role cannot be assigned to non-admin users');
-    }
+    const {
+      roleId: _roleId,
+      branchId: _branchId,
+      counterId: _counterId,
+      assignments: _assignments,
+      ...userFields
+    } = uppercased;
+    const hashedPassword = await bcrypt.hash(TEMP_INITIAL_PASSWORD, 10);
 
     const user = this.userRepository.create({
       ...userFields,
@@ -107,17 +195,7 @@ export class UserService {
 
     const savedUser = await this.userRepository.save(user);
 
-    if (roleId || branchId || counterId) {
-      const userRole = this.userRoleRepository.create({
-        user: { id: savedUser.id } as any,
-        role: roleId ? ({ id: roleId } as any) : null,
-        branch: branchId ? ({ id: branchId } as any) : null,
-        counter: counterId ? ({ id: counterId } as any) : null,
-        createdBy: userId || '00000000-0000-0000-0000-000000000000',
-        updatedBy: userId || '00000000-0000-0000-0000-000000000000',
-      });
-      await this.userRoleRepository.save(userRole);
-    }
+    await this.syncUserRoles(savedUser.id, assignments, userId);
 
     return this.findById(savedUser.id);
   }
@@ -134,14 +212,17 @@ export class UserService {
     }
 
     const uppercased = uppercaseFields(dto);
-    const selectedRole = uppercased.roleId
-      ? await this.roleRepository.findOne({
-          where: { id: uppercased.roleId },
-        })
-      : null;
+    const assignmentsProvided =
+      uppercased.assignments !== undefined ||
+      (uppercased.roleId !== undefined &&
+        uppercased.branchId !== undefined &&
+        uppercased.counterId !== undefined);
+    const assignments = assignmentsProvided
+      ? this.normalizeAssignments(uppercased)
+      : [];
 
-    if (selectedRole?.isAdmin && !requesterIsAdmin) {
-      throw new ConflictException('Admin role cannot be assigned to non-admin users');
+    if (assignmentsProvided) {
+      await this.ensureRolesAreAssignable(assignments, requesterIsAdmin);
     }
 
     if (uppercased.email && uppercased.email !== user.email) {
@@ -151,31 +232,21 @@ export class UserService {
       }
     }
 
-    const { code: _code, roleId, branchId, counterId, ...userFields } = uppercased;
+    const {
+      code: _code,
+      roleId: _roleId,
+      branchId: _branchId,
+      counterId: _counterId,
+      assignments: _assignments,
+      ...userFields
+    } = uppercased;
 
     Object.assign(user, userFields);
     user.updatedBy = userId;
     const saved = await this.userRepository.save(user);
 
-    if (roleId !== undefined || branchId !== undefined || counterId !== undefined) {
-      let userRole = await this.userRoleRepository.findOne({ where: { user: { id: saved.id } } });
-      if (!userRole) {
-        userRole = this.userRoleRepository.create({
-          user: { id: saved.id } as any,
-          createdBy: userId,
-          updatedBy: userId,
-        });
-      }
-      if (roleId !== undefined) {
-        userRole.role = roleId ? ({ id: roleId } as any) : null;
-      }
-      if (branchId !== undefined) userRole.branch = branchId ? ({ id: branchId } as any) : null;
-      if (counterId !== undefined) userRole.counter = counterId ? ({ id: counterId } as any) : null;
-      userRole.updatedBy = userId;
-      if (!userRole.createdBy) {
-        userRole.createdBy = userId;
-      }
-      await this.userRoleRepository.save(userRole);
+    if (assignmentsProvided) {
+      await this.syncUserRoles(saved.id, assignments, userId);
     }
 
     return this.findById(saved.id);
@@ -250,7 +321,7 @@ export class UserService {
       where: { id },
       relations: USER_RELATIONS,
     });
-    
+
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
