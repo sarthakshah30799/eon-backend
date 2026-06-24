@@ -1,6 +1,5 @@
-import { Column, Entity, OneToMany } from 'typeorm';
+import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
-import { DocumentProfileRule } from './document-profile-rule.entity';
 
 export enum DocumentSpecificationType {
   MASTER = 'MASTER',
@@ -9,6 +8,22 @@ export enum DocumentSpecificationType {
 
 @Entity('document_profiles')
 export class DocumentProfile extends BaseEntity {
+  @Index({ unique: true })
+  @Column({ type: 'citext' })
+  documentCode: string;
+
+  @Column({ type: 'citext' })
+  documentDescription: string;
+
+  @Column({ type: 'text', array: true, default: '{}' })
+  documentType: string[];
+
+  @Column({ type: 'boolean', default: false })
+  isRequired: boolean;
+
+  @Column({ type: 'numeric', precision: 10, scale: 2, default: 0 })
+  maxSizeMb: number;
+
   @Column({ type: 'enum', enum: DocumentSpecificationType })
   specificationType: DocumentSpecificationType;
 
@@ -21,17 +36,9 @@ export class DocumentProfile extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   entitySelection: string | null;
 
-  @Column({ type: 'text', nullable: true })
-  profileDescription: string | null;
-
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
   @Column({ type: 'int', default: 0 })
   sortOrder: number;
-
-  @OneToMany(() => DocumentProfileRule, rule => rule.documentProfile, {
-    cascade: ['insert', 'update'],
-  })
-  rules: DocumentProfileRule[];
 }

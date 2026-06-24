@@ -1,22 +1,66 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
+  ArrayNotEmpty,
   IsArray,
   IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
-  ValidateNested,
-  ArrayNotEmpty,
   IsNumber,
   Min,
   IsUUID,
   IsEnum,
+  MaxLength,
 } from 'class-validator';
-import { CreateDocumentProfileRuleDto } from './create-document-profile-rule.dto';
 import { DocumentSpecificationType } from '../document-profile.entity';
+import { Type } from 'class-transformer';
 
 export class CreateDocumentProfileDto {
+  @ApiProperty({
+    description: 'Unique document code',
+    example: 'PAN_CARD_FRONT',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  documentCode: string;
+
+  @ApiProperty({
+    description: 'Document description',
+    example: 'PAN card copy front side',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(250)
+  documentDescription: string;
+
+  @ApiProperty({
+    description: 'Allowed document types',
+    type: [String],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  documentType: string[];
+
+  @ApiPropertyOptional({
+    description: 'Is the document required?',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isRequired?: boolean;
+
+  @ApiProperty({
+    description: 'Maximum file size in MB',
+    example: 5,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  maxSizeMb: number;
+
   @ApiProperty({
     description: 'Specification type',
     enum: DocumentSpecificationType,
@@ -47,11 +91,6 @@ export class CreateDocumentProfileDto {
   @IsNotEmpty()
   entitySelection: string;
 
-  @ApiPropertyOptional({ description: 'Profile active flag', default: true })
-  @IsBoolean()
-  @IsOptional()
-  active?: boolean;
-
   @ApiPropertyOptional({ description: 'Profile sort order', default: 0 })
   @Type(() => Number)
   @IsNumber()
@@ -59,13 +98,8 @@ export class CreateDocumentProfileDto {
   @Min(0)
   sortOrder?: number;
 
-  @ApiProperty({
-    description: 'Document rules attached to this profile',
-    type: [CreateDocumentProfileRuleDto],
-  })
-  @IsArray()
-  @ArrayNotEmpty()
-  @ValidateNested({ each: true })
-  @Type(() => CreateDocumentProfileRuleDto)
-  rules: CreateDocumentProfileRuleDto[];
+  @ApiPropertyOptional({ description: 'Profile active flag', default: true })
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
 }

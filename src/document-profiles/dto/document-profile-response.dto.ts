@@ -1,10 +1,24 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentProfile, DocumentSpecificationType } from '../document-profile.entity';
-import { DocumentProfileRuleResponseDto } from './document-profile-rule-response.dto';
 
 export class DocumentProfileResponseDto {
   @ApiProperty()
   id: string;
+
+  @ApiProperty()
+  documentCode: string;
+
+  @ApiProperty()
+  documentDescription: string;
+
+  @ApiProperty({ type: [String] })
+  documentType: string[];
+
+  @ApiProperty()
+  isRequired: boolean;
+
+  @ApiProperty()
+  maxSizeMb: number;
 
   @ApiProperty({ enum: DocumentSpecificationType })
   specificationType: DocumentSpecificationType;
@@ -18,17 +32,11 @@ export class DocumentProfileResponseDto {
   @ApiPropertyOptional({ nullable: true })
   entitySelection: string | null;
 
-  @ApiPropertyOptional({ nullable: true })
-  profileDescription: string | null;
-
   @ApiProperty()
   active: boolean;
 
   @ApiProperty()
   sortOrder: number;
-
-  @ApiProperty({ type: [DocumentProfileRuleResponseDto] })
-  rules: DocumentProfileRuleResponseDto[];
 
   @ApiProperty()
   createdAt: Date;
@@ -39,17 +47,17 @@ export class DocumentProfileResponseDto {
   static fromEntity(entity: DocumentProfile): DocumentProfileResponseDto {
     const dto = new DocumentProfileResponseDto();
     dto.id = entity.id;
+    dto.documentCode = entity.documentCode;
+    dto.documentDescription = entity.documentDescription;
+    dto.documentType = entity.documentType;
+    dto.isRequired = entity.isRequired;
+    dto.maxSizeMb = Number(entity.maxSizeMb);
     dto.specificationType = entity.specificationType;
     dto.type = entity.type;
     dto.groupSelection = entity.groupSelection;
     dto.entitySelection = entity.entitySelection;
-    dto.profileDescription = entity.profileDescription;
     dto.active = entity.active;
     dto.sortOrder = entity.sortOrder;
-    dto.rules = (entity.rules ?? [])
-      .slice()
-      .sort((left, right) => left.sortOrder - right.sortOrder)
-      .map(rule => DocumentProfileRuleResponseDto.fromEntity(rule));
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

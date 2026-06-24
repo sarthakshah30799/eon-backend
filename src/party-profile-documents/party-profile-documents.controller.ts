@@ -36,35 +36,35 @@ export class PartyProfileDocumentsController {
     return this.partyProfileDocumentsService.getDocuments(partyProfileId);
   }
 
-  @Post(':documentProfileRuleId')
-  @ApiOperation({ summary: 'Upload or replace a document for a specific rule' })
+  @Post(':documentProfileId')
+  @ApiOperation({ summary: 'Upload or replace a document for a specific document profile' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 200, type: PartyProfileDocumentsResponseDto })
   @UseInterceptors(FileInterceptor('file'))
   async uploadDocument(
     @Param('partyProfileId', ParseUUIDPipe) partyProfileId: string,
-    @Param('documentProfileRuleId', ParseUUIDPipe) documentProfileRuleId: string,
+    @Param('documentProfileId', ParseUUIDPipe) documentProfileId: string,
     @UploadedFile() file: PartyProfileDocumentUploadFile,
     @Session() session: any,
   ): Promise<PartyProfileDocumentsResponseDto> {
     return this.partyProfileDocumentsService.uploadDocument(
       partyProfileId,
-      documentProfileRuleId,
+      documentProfileId,
       file,
       session.userId,
     );
   }
 
-  @Get(':documentProfileRuleId/download')
-  @ApiOperation({ summary: 'Download the stored file for a party profile rule' })
+  @Get(':documentProfileId/download')
+  @ApiOperation({ summary: 'Download the stored file for a party profile document profile' })
   async downloadDocument(
     @Param('partyProfileId', ParseUUIDPipe) partyProfileId: string,
-    @Param('documentProfileRuleId', ParseUUIDPipe) documentProfileRuleId: string,
+    @Param('documentProfileId', ParseUUIDPipe) documentProfileId: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const payload = await this.partyProfileDocumentsService.downloadDocument(
       partyProfileId,
-      documentProfileRuleId,
+      documentProfileId,
     );
 
     res.status(HttpStatus.OK);

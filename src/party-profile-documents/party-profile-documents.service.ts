@@ -4,14 +4,11 @@ import { In, Repository } from 'typeorm';
 import { StreamableFile } from '@nestjs/common';
 import type { PartyProfileDocumentUploadFile } from './party-profile-document-upload-file';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
-import { DocumentProfile } from '../document-profiles/document-profile.entity';
-import { DocumentProfileRule } from '../document-profiles/document-profile-rule.entity';
-import { resolveDocumentProfileRules } from '../document-profiles/document-profile.utils';
+import { DocumentProfile, DocumentSpecificationType } from '../document-profiles/document-profile.entity';
 import { PartyProfileDocument } from './party-profile-document.entity';
 import { PartyProfileDocumentFile } from './party-profile-document-file.entity';
 import { PartyProfileDocumentsResponseDto } from './dto/party-profile-documents-response.dto';
 import { PartyProfileDocumentProfileResponseDto } from './dto/party-profile-document-profile-response.dto';
-import { CategoryOptionCodeEnum } from '../category-options/category-option-code.enum';
 
 const isAllowedDocumentMimeType = (
   mimeType: string,
@@ -65,8 +62,6 @@ export class PartyProfileDocumentsService {
     private readonly partyProfileRepository: Repository<PartyProfile>,
     @InjectRepository(DocumentProfile)
     private readonly documentProfileRepository: Repository<DocumentProfile>,
-    @InjectRepository(DocumentProfileRule)
-    private readonly documentProfileRuleRepository: Repository<DocumentProfileRule>,
     @InjectRepository(PartyProfileDocument)
     private readonly partyProfileDocumentRepository: Repository<PartyProfileDocument>,
     @InjectRepository(PartyProfileDocumentFile)
@@ -87,12 +82,12 @@ export class PartyProfileDocumentsService {
       partyProfile.group,
       partyProfile.entityType,
     );
-    const ruleIds = profiles.flatMap(profile => profile.rules.map(rule => rule.id));
-    const existingDocuments = ruleIds.length
+    const profileIds = profiles.map(profile => profile.id);
+    const existingDocuments = profileIds.length
       ? await this.partyProfileDocumentRepository.find({
           where: {
             partyProfileId,
-            documentProfileRuleId: In(ruleIds),
+            documentProfileId: In(profileIds),
           },
           relations: {
             documentFile: true,
@@ -100,21 +95,21 @@ export class PartyProfileDocumentsService {
         })
       : [];
 
-    const documentsByRuleId = new Map(
-      existingDocuments.map(document => [document.documentProfileRuleId, document]),
+    const documentsByProfileId = new Map(
+      existingDocuments.map(document => [document.documentProfileId, document]),
     );
 
     return {
       partyProfileId,
       documentProfiles: profiles.map(profile =>
-        PartyProfileDocumentProfileResponseDto.fromEntity(profile, documentsByRuleId),
+        PartyProfileDocumentProfileResponseDto.fromEntity(profile, documentsByProfileId),
       ),
     };
   }
 
   async uploadDocument(
     partyProfileId: string,
-    documentProfileRuleId: string,
+    documentProfileId: string,
     file: PartyProfileDocumentUploadFile,
     userId: string,
   ): Promise<PartyProfileDocumentsResponseDto> {
@@ -130,16 +125,13 @@ export class PartyProfileDocumentsService {
       throw new NotFoundException(`Party profile with id ${partyProfileId} not found`);
     }
 
-    const documentProfileRule = await this.documentProfileRuleRepository.findOne({
-      where: { id: documentProfileRuleId },
-      relations: {
-        documentProfile: true,
-      },
+    const documentProfile = await this.documentProfileRepository.findOne({
+      where: { id: documentProfileId },
     });
 
-    if (!documentProfileRule || !documentProfileRule.documentProfile) {
+    if (!documentProfile) {
       throw new NotFoundException(
-        `Document profile rule with id ${documentProfileRuleId} not found`,
+        `Document profile with id ${documentProfileId} not found`,
       );
     }
 
@@ -148,32 +140,30 @@ export class PartyProfileDocumentsService {
       partyProfile.group,
       partyProfile.entityType,
     );
-    const allowedRule = allowedProfiles
-      .flatMap(profile => profile.rules)
-      .find(rule => rule.id === documentProfileRuleId);
+    const allowedProfile = allowedProfiles.find(profile => profile.id === documentProfileId);
 
-    if (!allowedRule) {
+    if (!allowedProfile) {
       throw new BadRequestException(
-        'Document rule does not match the selected party profile',
+        'Document profile does not match the selected party profile',
       );
     }
 
-    if (file.size > Number(allowedRule.maxSizeMb) * 1024 * 1024) {
+    if (file.size > Number(allowedProfile.maxSizeMb) * 1024 * 1024) {
       throw new BadRequestException(
-        `File exceeds max size of ${allowedRule.maxSizeMb} MB`,
+        `File exceeds max size of ${allowedProfile.maxSizeMb} MB`,
       );
     }
 
-    if (!isAllowedDocumentMimeType(file.mimetype, allowedRule.documentType)) {
+    if (!isAllowedDocumentMimeType(file.mimetype, allowedProfile.documentType)) {
       throw new BadRequestException(
-        `Unsupported file type for ${allowedRule.documentType.join(', ')}`,
+        `Unsupported file type for ${allowedProfile.documentType.join(', ')}`,
       );
     }
 
     const existingDocument = await this.partyProfileDocumentRepository.findOne({
       where: {
         partyProfileId,
-        documentProfileRuleId,
+        documentProfileId,
       },
       relations: {
         documentFile: true,
@@ -183,8 +173,7 @@ export class PartyProfileDocumentsService {
     const document = this.partyProfileDocumentRepository.create({
       ...(existingDocument ?? {}),
       partyProfileId,
-      documentProfileId: allowedRule.documentProfileId,
-      documentProfileRuleId,
+      documentProfileId,
       createdBy: existingDocument?.createdBy ?? userId,
       updatedBy: userId,
     });
@@ -208,12 +197,12 @@ export class PartyProfileDocumentsService {
 
   async downloadDocument(
     partyProfileId: string,
-    documentProfileRuleId: string,
+    documentProfileId: string,
   ): Promise<{ file: StreamableFile; fileName: string; mimeType: string }> {
     const document = await this.partyProfileDocumentRepository.findOne({
       where: {
         partyProfileId,
-        documentProfileRuleId,
+        documentProfileId,
       },
       relations: {
         documentFile: true,
@@ -244,47 +233,29 @@ export class PartyProfileDocumentsService {
 
     const queryBuilder = this.documentProfileRepository
       .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.rules', 'rule')
-      .leftJoin('category_options', 'specificationTypeOption', 'specificationTypeOption.id = documentProfile.specificationType')
       .leftJoin('category_options', 'typeOption', 'typeOption.id = documentProfile.type')
-      .where('1 = 1');
-
-    queryBuilder
+      .where('1 = 1')
       .andWhere('documentProfile.active = true')
-      .andWhere('rule.active = true')
-      .andWhere('specificationTypeOption.code = :specificationTypeCode', {
-        specificationTypeCode: CategoryOptionCodeEnum.MasterDocument,
+      .andWhere('documentProfile.specificationType = :specificationType', {
+        specificationType: DocumentSpecificationType.MASTER,
       });
 
-    if (type) {
-      queryBuilder.andWhere(
-        '(LOWER(typeOption.value) = LOWER(:partyProfileType) OR LOWER(typeOption.label) = LOWER(:partyProfileType))',
-        { partyProfileType: type },
-      );
-    }
+    queryBuilder.andWhere(
+      '(LOWER(typeOption.value) = LOWER(:partyProfileType) OR LOWER(typeOption.label) = LOWER(:partyProfileType))',
+      { partyProfileType: type },
+    );
 
-    if (groupSelection) {
-      queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
-        groupSelection,
-      });
-    }
+    queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
+      groupSelection,
+    });
 
-    if (entitySelection) {
-      queryBuilder.andWhere('documentProfile.entitySelection = :entitySelection', {
-        entitySelection,
-      });
-    }
+    queryBuilder.andWhere('documentProfile.entitySelection = :entitySelection', {
+      entitySelection,
+    });
 
-    const profiles = await queryBuilder
+    return queryBuilder
       .orderBy('documentProfile.sortOrder', 'ASC')
-      .addOrderBy('rule.sortOrder', 'ASC')
+      .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
-
-    return profiles
-      .map(profile => ({
-        ...profile,
-        rules: resolveDocumentProfileRules(profile.rules ?? []),
-      }))
-      .filter(profile => profile.rules.length > 0);
   }
 }

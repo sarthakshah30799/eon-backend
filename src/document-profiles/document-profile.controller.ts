@@ -15,7 +15,7 @@ import { DocumentProfileService } from './document-profile.service';
 import { CreateDocumentProfileDto } from './dto/create-document-profile.dto';
 import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
 import { DocumentProfileResponseDto } from './dto/document-profile-response.dto';
-import { ResolveDocumentProfileRulesDto } from './dto/resolve-document-profile-rules.dto';
+import { ResolveDocumentProfilesDto } from './dto/resolve-document-profile-rules.dto';
 import { DocumentProfileListQueryDto } from './dto/document-profile-list-query.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -37,9 +37,9 @@ export class DocumentProfileController {
   }
 
   @Get('resolve')
-  @ApiOperation({ summary: 'Resolve document profile rules' })
+  @ApiOperation({ summary: 'Resolve document profiles' })
   async resolve(
-    @Query() query: ResolveDocumentProfileRulesDto,
+    @Query() query: ResolveDocumentProfilesDto,
   ): Promise<DocumentProfileResponseDto[]> {
     return this.documentProfileService.resolveRules(query);
   }

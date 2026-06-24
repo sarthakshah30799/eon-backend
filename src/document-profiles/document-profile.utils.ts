@@ -1,6 +1,5 @@
 import { SelectQueryBuilder } from 'typeorm';
-import { DocumentProfile } from './document-profile.entity';
-import { DocumentProfileRule } from './document-profile-rule.entity';
+import { DocumentProfile, DocumentSpecificationType } from './document-profile.entity';
 
 export const normalizeSelectionValue = (value?: string | null) =>
   value?.trim() || null;
@@ -11,52 +10,58 @@ export const normalizeSpecificationTypeValue = (value?: string | null) =>
 export const normalizeDocumentProfilePayload = (
   profile: Pick<
     DocumentProfile,
+    | 'documentCode'
+    | 'documentDescription'
+    | 'documentType'
+    | 'isRequired'
+    | 'maxSizeMb'
     | 'specificationType'
     | 'type'
     | 'groupSelection'
     | 'entitySelection'
-    | 'profileDescription'
     | 'active'
     | 'sortOrder'
   >,
 ) => ({
   ...profile,
-  specificationType: normalizeSpecificationTypeValue(profile.specificationType) ?? profile.specificationType,
-  type: profile.type.trim(),
-  groupSelection: normalizeSelectionValue(profile.groupSelection),
-  entitySelection: normalizeSelectionValue(profile.entitySelection),
-  profileDescription: profile.profileDescription?.trim() || null,
-});
-
-export const normalizeDocumentProfileRulePayload = (
-  rule: {
-    documentCode: string;
-    documentDescription: string;
-    documentType: string[];
-    isRequired?: boolean;
-    maxSizeMb: number;
-    active?: boolean;
-    sortOrder?: number;
-  },
-) => ({
-  ...rule,
-  documentCode: normalizeSelectionValue(rule.documentCode) ?? rule.documentCode,
-  documentDescription: rule.documentDescription.trim(),
+  documentCode: profile.documentCode.trim().toUpperCase(),
+  documentDescription: profile.documentDescription.trim(),
   documentType: Array.from(
     new Set(
-      rule.documentType.map(
+      profile.documentType.map(
         type => normalizeSelectionValue(type) ?? type.trim().toUpperCase(),
       ),
     ),
   ),
+  specificationType:
+    (normalizeSpecificationTypeValue(profile.specificationType) ??
+      profile.specificationType) as DocumentSpecificationType,
+  type: profile.type.trim(),
+  groupSelection: normalizeSelectionValue(profile.groupSelection),
+  entitySelection: normalizeSelectionValue(profile.entitySelection),
 });
 
-export const resolveDocumentProfileRules = (
-  rules: DocumentProfileRule[],
-): DocumentProfileRule[] => {
-  return rules
-    .filter(rule => rule.active)
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.documentCode.localeCompare(right.documentCode));
+export const resolveDocumentProfile = (
+  profile: DocumentProfile,
+): DocumentProfile => {
+  return {
+    ...profile,
+    documentCode: profile.documentCode.trim().toUpperCase(),
+    documentDescription: profile.documentDescription.trim(),
+    documentType: Array.from(
+      new Set(
+        (profile.documentType ?? []).map(
+          type => normalizeSelectionValue(type) ?? type.trim().toUpperCase(),
+        ),
+      ),
+    ),
+    specificationType:
+      (normalizeSpecificationTypeValue(profile.specificationType) ??
+        profile.specificationType) as DocumentSpecificationType,
+    type: profile.type.trim(),
+    groupSelection: normalizeSelectionValue(profile.groupSelection),
+    entitySelection: normalizeSelectionValue(profile.entitySelection),
+  };
 };
 
 export interface DocumentProfileFilterValues {
@@ -65,13 +70,11 @@ export interface DocumentProfileFilterValues {
   groupSelection?: string | null;
   entitySelection?: string | null;
   activeOnly?: boolean;
-  activeRulesOnly?: boolean;
 }
 
 export const applyDocumentProfileFilters = <T extends Record<string, any>>(
   queryBuilder: SelectQueryBuilder<T>,
   documentProfileAlias: string,
-  ruleAlias: string | null,
   filters: DocumentProfileFilterValues,
 ) => {
   const specificationType = normalizeSpecificationTypeValue(filters.specificationType);
@@ -81,10 +84,6 @@ export const applyDocumentProfileFilters = <T extends Record<string, any>>(
 
   if (filters.activeOnly) {
     queryBuilder.andWhere(`${documentProfileAlias}.active = true`);
-  }
-
-  if (filters.activeRulesOnly && ruleAlias) {
-    queryBuilder.andWhere(`${ruleAlias}.active = true`);
   }
 
   if (specificationType) {

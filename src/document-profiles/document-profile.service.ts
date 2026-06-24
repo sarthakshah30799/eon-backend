@@ -1,21 +1,20 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DocumentProfile } from './document-profile.entity';
-import { DocumentProfileRule } from './document-profile-rule.entity';
 import { CreateDocumentProfileDto } from './dto/create-document-profile.dto';
 import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
 import { DocumentProfileResponseDto } from './dto/document-profile-response.dto';
-import { ResolveDocumentProfileRulesDto } from './dto/resolve-document-profile-rules.dto';
+import { ResolveDocumentProfilesDto } from './dto/resolve-document-profile-rules.dto';
 import {
-  normalizeDocumentProfileRulePayload,
-  resolveDocumentProfileRules,
   applyDocumentProfileFilters,
+  normalizeDocumentProfilePayload,
+  resolveDocumentProfile,
 } from './document-profile.utils';
 import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
 import { DocumentSpecificationType } from './document-profile.entity';
@@ -25,67 +24,57 @@ export class DocumentProfileService {
   constructor(
     @InjectRepository(DocumentProfile)
     private readonly documentProfileRepository: Repository<DocumentProfile>,
-    @InjectRepository(DocumentProfileRule)
-    private readonly documentProfileRuleRepository: Repository<DocumentProfileRule>,
   ) {}
 
   async findAll(): Promise<DocumentProfileResponseDto[]> {
     const profiles = await this.documentProfileRepository
       .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.rules', 'rule')
       .orderBy('documentProfile.sortOrder', 'ASC')
-      .addOrderBy('rule.sortOrder', 'ASC')
-      .addOrderBy('rule.documentCode', 'ASC')
+      .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
 
-    return profiles.map(DocumentProfileResponseDto.fromEntity);
+    return profiles.map(profile =>
+      DocumentProfileResponseDto.fromEntity(resolveDocumentProfile(profile)),
+    );
   }
 
   async findById(id: string): Promise<DocumentProfileResponseDto> {
-    const profile = await this.documentProfileRepository
-      .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.rules', 'rule')
-      .where('documentProfile.id = :id', { id })
-      .orderBy('rule.sortOrder', 'ASC')
-      .addOrderBy('rule.documentCode', 'ASC')
-      .getOne();
+    const profile = await this.documentProfileRepository.findOne({
+      where: { id },
+    });
 
     if (!profile) {
       throw new NotFoundException(`Document profile with id ${id} not found`);
     }
 
-    return DocumentProfileResponseDto.fromEntity(profile);
+    return DocumentProfileResponseDto.fromEntity(resolveDocumentProfile(profile));
   }
 
   async create(
     dto: CreateDocumentProfileDto,
     userId: string,
   ): Promise<DocumentProfileResponseDto> {
-    const normalizedSpecificationType = dto.specificationType.trim().toUpperCase() as DocumentSpecificationType;
-    const normalizedType = dto.type.trim();
-    const normalizedGroupSelection = dto.groupSelection.trim();
-    const normalizedEntitySelection = dto.entitySelection.trim();
-    await this.ensureRuleCodesAreUnique(dto.rules);
-    this.ensureValidDocumentTypes(dto.rules.flatMap(rule => rule.documentType));
+    const normalizedCode = dto.documentCode.trim().toUpperCase();
+    await this.ensureDocumentCodeIsUnique(normalizedCode);
+    this.ensureValidDocumentTypes(dto.documentType);
 
-    const profile = this.documentProfileRepository.create({
-      specificationType: normalizedSpecificationType,
-      type: normalizedType,
-      groupSelection: normalizedGroupSelection,
-      entitySelection: normalizedEntitySelection,
-      profileDescription: null,
-      active: dto.active ?? true,
-      sortOrder: dto.sortOrder ?? 0,
-      createdBy: userId,
-      updatedBy: userId,
-      rules: dto.rules.map(rule =>
-        this.documentProfileRuleRepository.create({
-          ...normalizeDocumentProfileRulePayload(rule),
-          createdBy: userId,
-          updatedBy: userId,
-        }),
-      ),
-    } as DocumentProfile);
+    const profile = this.documentProfileRepository.create(
+      normalizeDocumentProfilePayload({
+        documentCode: normalizedCode,
+        documentDescription: dto.documentDescription,
+        documentType: dto.documentType,
+        isRequired: dto.isRequired ?? false,
+        maxSizeMb: dto.maxSizeMb,
+        specificationType: dto.specificationType,
+        type: dto.type,
+        groupSelection: dto.groupSelection,
+        entitySelection: dto.entitySelection,
+        active: dto.active ?? true,
+        sortOrder: dto.sortOrder ?? 0,
+      }) as DocumentProfile,
+    );
+    profile.createdBy = userId;
+    profile.updatedBy = userId;
 
     const saved = await this.documentProfileRepository.save(profile);
     return this.findById(saved.id);
@@ -98,55 +87,39 @@ export class DocumentProfileService {
   ): Promise<DocumentProfileResponseDto> {
     const profile = await this.documentProfileRepository.findOne({
       where: { id },
-      relations: { rules: true },
     });
 
     if (!profile) {
       throw new NotFoundException(`Document profile with id ${id} not found`);
     }
 
-    if (dto.specificationType) {
-      const normalizedSpecificationType = dto.specificationType.trim().toUpperCase() as DocumentSpecificationType;
-      profile.specificationType = normalizedSpecificationType;
+    const nextCode = (dto.documentCode ?? profile.documentCode).trim().toUpperCase();
+    if (nextCode !== profile.documentCode) {
+      await this.ensureDocumentCodeIsUnique(nextCode, id);
     }
 
-    if (dto.type !== undefined) {
-      profile.type = dto.type.trim();
+    const nextDocumentType = dto.documentType ?? profile.documentType;
+    if (dto.documentType) {
+      this.ensureValidDocumentTypes(dto.documentType);
     }
 
-    if (dto.groupSelection !== undefined) {
-      profile.groupSelection = dto.groupSelection.trim();
-    }
-
-    if (dto.entitySelection !== undefined) {
-      profile.entitySelection = dto.entitySelection.trim();
-    }
-
-    if (dto.active !== undefined) {
-      profile.active = dto.active;
-    }
-
-    if (dto.sortOrder !== undefined) {
-      profile.sortOrder = dto.sortOrder;
-    }
-
+    Object.assign(
+      profile,
+      normalizeDocumentProfilePayload({
+        documentCode: nextCode,
+        documentDescription: dto.documentDescription ?? profile.documentDescription,
+        documentType: nextDocumentType,
+        isRequired: dto.isRequired ?? profile.isRequired,
+        maxSizeMb: dto.maxSizeMb ?? profile.maxSizeMb,
+        specificationType: dto.specificationType ?? profile.specificationType,
+        type: dto.type ?? profile.type,
+        groupSelection: dto.groupSelection ?? profile.groupSelection,
+        entitySelection: dto.entitySelection ?? profile.entitySelection,
+        active: dto.active ?? profile.active,
+        sortOrder: dto.sortOrder ?? profile.sortOrder,
+      }) as DocumentProfile,
+    );
     profile.updatedBy = userId;
-
-    if (dto.rules) {
-      this.ensureValidDocumentTypes(dto.rules.flatMap(rule => rule.documentType));
-      await this.ensureRuleCodesAreUnique(dto.rules, id);
-      await this.documentProfileRuleRepository.delete({
-        documentProfileId: id,
-      });
-      profile.rules = dto.rules.map(rule =>
-        this.documentProfileRuleRepository.create({
-          ...normalizeDocumentProfileRulePayload(rule),
-          documentProfileId: id,
-          createdBy: userId,
-          updatedBy: userId,
-        }),
-      );
-    }
 
     await this.documentProfileRepository.save(profile);
     return this.findById(id);
@@ -166,61 +139,40 @@ export class DocumentProfileService {
   }
 
   async resolveRules(
-    query: ResolveDocumentProfileRulesDto,
+    query: ResolveDocumentProfilesDto,
   ): Promise<DocumentProfileResponseDto[]> {
     const queryBuilder = this.documentProfileRepository
       .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.rules', 'rule')
-      .where('1 = 1')
-    applyDocumentProfileFilters(queryBuilder, 'documentProfile', 'rule', {
+      .where('1 = 1');
+
+    applyDocumentProfileFilters(queryBuilder, 'documentProfile', {
       groupSelection: query.groupSelection,
       entitySelection: query.entitySelection,
       activeOnly: true,
-      activeRulesOnly: true,
     });
 
     const profiles = await queryBuilder
       .orderBy('documentProfile.sortOrder', 'ASC')
-      .addOrderBy('rule.sortOrder', 'ASC')
+      .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
 
-    return profiles
-      .map(profile => ({
-        ...profile,
-        rules: resolveDocumentProfileRules(profile.rules ?? []),
-      }))
-      .filter(profile => profile.rules.length > 0)
-      .map(DocumentProfileResponseDto.fromEntity);
+    return profiles.map(profile =>
+      DocumentProfileResponseDto.fromEntity(resolveDocumentProfile(profile)),
+    );
   }
 
-  private async ensureRuleCodesAreUnique(
-    rules: Array<Pick<CreateDocumentProfileDto['rules'][number], 'documentCode'>>,
+  private async ensureDocumentCodeIsUnique(
+    documentCode: string,
     excludeProfileId?: string,
   ) {
-    const normalizedCodes = rules.map(rule => rule.documentCode.trim().toUpperCase());
-    const duplicateInPayload = normalizedCodes.find(
-      (code, index) => normalizedCodes.indexOf(code) !== index,
-    );
+    const existingProfile = await this.documentProfileRepository.findOne({
+      where: { documentCode },
+    });
 
-    if (duplicateInPayload) {
-      throw new BadRequestException(
-        `Duplicate document code "${duplicateInPayload}" found in payload`,
+    if (existingProfile && existingProfile.id !== excludeProfileId) {
+      throw new ConflictException(
+        `Document profile with code "${documentCode}" already exists`,
       );
-    }
-
-    const existingRule = await this.documentProfileRuleRepository
-      .createQueryBuilder('rule')
-      .where('UPPER(rule.documentCode) IN (:...codes)', {
-        codes: normalizedCodes,
-      })
-      .getOne();
-
-    if (existingRule) {
-      if (!excludeProfileId || existingRule.documentProfileId !== excludeProfileId) {
-        throw new ConflictException(
-          `Document rule with code "${existingRule.documentCode}" already exists`,
-        );
-      }
     }
   }
 
