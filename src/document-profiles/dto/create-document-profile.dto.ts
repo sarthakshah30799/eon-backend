@@ -78,7 +78,7 @@ export class CreateDocumentProfileDto {
   type: string;
 
   @ApiProperty({
-    description: 'Group selection',
+    description: 'Document group selection',
   })
   @IsUUID()
   @IsNotEmpty()

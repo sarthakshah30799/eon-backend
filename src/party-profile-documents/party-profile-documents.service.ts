@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { StreamableFile } from '@nestjs/common';
 import type { PartyProfileDocumentUploadFile } from './party-profile-document-upload-file';
+import { SelectOption } from '../category-options/category-option.entity';
+import { CategoryOptionCodeEnum } from '../category-options/category-option-code.enum';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { DocumentProfile, DocumentSpecificationType } from '../document-profiles/document-profile.entity';
 import { PartyProfileDocument } from './party-profile-document.entity';
@@ -62,6 +64,8 @@ export class PartyProfileDocumentsService {
     private readonly partyProfileRepository: Repository<PartyProfile>,
     @InjectRepository(DocumentProfile)
     private readonly documentProfileRepository: Repository<DocumentProfile>,
+    @InjectRepository(SelectOption)
+    private readonly selectOptionRepository: Repository<SelectOption>,
     @InjectRepository(PartyProfileDocument)
     private readonly partyProfileDocumentRepository: Repository<PartyProfileDocument>,
     @InjectRepository(PartyProfileDocumentFile)
@@ -79,7 +83,7 @@ export class PartyProfileDocumentsService {
 
     const profiles = await this.loadMatchingDocumentProfiles(
       partyProfile.type,
-      partyProfile.group,
+      await this.resolveDocumentGroupSelection(partyProfile.group),
       partyProfile.entityType,
     );
     const profileIds = profiles.map(profile => profile.id);
@@ -137,7 +141,7 @@ export class PartyProfileDocumentsService {
 
     const allowedProfiles = await this.loadMatchingDocumentProfiles(
       partyProfile.type,
-      partyProfile.group,
+      await this.resolveDocumentGroupSelection(partyProfile.group),
       partyProfile.entityType,
     );
     const allowedProfile = allowedProfiles.find(profile => profile.id === documentProfileId);
@@ -224,10 +228,10 @@ export class PartyProfileDocumentsService {
 
   private async loadMatchingDocumentProfiles(
     type?: string | null,
-    groupSelection?: string | null,
+    documentGroupSelection?: string | null,
     entitySelection?: string | null,
   ) {
-    if (!type || !groupSelection || !entitySelection) {
+    if (!type || !documentGroupSelection || !entitySelection) {
       return [];
     }
 
@@ -246,7 +250,7 @@ export class PartyProfileDocumentsService {
     );
 
     queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
-      groupSelection,
+      groupSelection: documentGroupSelection,
     });
 
     queryBuilder.andWhere('documentProfile.entitySelection = :entitySelection', {
@@ -257,5 +261,28 @@ export class PartyProfileDocumentsService {
       .orderBy('documentProfile.sortOrder', 'ASC')
       .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
+  }
+
+  private async resolveDocumentGroupSelection(partyGroupId?: string | null) {
+    if (!partyGroupId) {
+      return null;
+    }
+
+    const partyGroup = await this.selectOptionRepository.findOne({
+      where: { id: partyGroupId },
+    });
+
+    if (!partyGroup) {
+      return null;
+    }
+
+    const documentGroup = await this.selectOptionRepository.findOne({
+      where: {
+        code: CategoryOptionCodeEnum.DocumentGroup,
+        value: partyGroup.value,
+      },
+    });
+
+    return documentGroup?.id ?? null;
   }
 }

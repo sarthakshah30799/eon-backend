@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUUID } from 'class-validator';
 
 export class ResolveDocumentProfilesDto {
-  @ApiPropertyOptional({ description: 'Group selection value' })
+  @ApiPropertyOptional({ description: 'Document group selection value' })
   @IsUUID()
   @IsOptional()
   groupSelection?: string;
