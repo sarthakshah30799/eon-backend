@@ -7,7 +7,7 @@ import { Branch } from "../branches/branch.entity";
 
 @Entity("account_profiles")
 export class AccountProfile extends BaseEntity {
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   divisionDept: string;
 
   @Index({ unique: true })
@@ -18,13 +18,13 @@ export class AccountProfile extends BaseEntity {
   @Column({ type: "citext" })
   accountName: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   accountType: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   subLedger: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   bankNature: string;
 
   @ManyToOne(() => Currency, { nullable: false, onDelete: "RESTRICT" })

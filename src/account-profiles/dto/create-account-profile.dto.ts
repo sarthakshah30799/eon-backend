@@ -3,7 +3,7 @@ import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, Length } from "cla
 
 export class CreateAccountProfileDto {
   @ApiPropertyOptional({ description: "Division / Department" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   divisionDept?: string;
 
@@ -20,17 +20,17 @@ export class CreateAccountProfileDto {
   accountName: string;
 
   @ApiPropertyOptional({ description: "Account Type" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   accountType?: string;
 
   @ApiPropertyOptional({ description: "Sub Ledger" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   subLedger?: string;
 
   @ApiPropertyOptional({ description: "Bank Nature" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   bankNature?: string;
 

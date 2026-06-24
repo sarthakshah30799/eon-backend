@@ -69,7 +69,7 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   kycApprovalNumber: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   kycRiskCategory: string;
 
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
@@ -78,7 +78,7 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
   defaultHandlingCharges: number;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   defaultAgent: string;
 
   @Column({ type: "citext", nullable: true })
@@ -102,10 +102,10 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   designation: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   group: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   entityType: string;
 
   @Column({ type: "citext", nullable: true })
@@ -117,10 +117,10 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   panNo: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   marketingExecutive: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   businessNature: string;
 
   @Column({ type: "boolean", default: false })
@@ -129,7 +129,7 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   tds: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   tdsGroup: string;
 
   @Column({ type: "boolean", default: false })
@@ -205,7 +205,7 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "uuid", nullable: true })
   originBranchId: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   location: string;
 
   @Column({ type: "citext", nullable: true })

@@ -111,10 +111,9 @@ export class CreateBranchDto {
   @MaxLength(20)
   aeonBranchLic?: string;
 
-  @ApiProperty({ description: 'Location Type', required: false, maxLength: 250 })
-  @IsString()
+  @ApiProperty({ description: 'Location Type UUID', required: false })
+  @IsUUID()
   @IsOptional()
-  @MaxLength(250)
   locationType?: string;
 
   @ApiProperty({ description: 'Cash Holding', required: false })

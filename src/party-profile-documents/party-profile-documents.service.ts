@@ -6,16 +6,12 @@ import type { PartyProfileDocumentUploadFile } from './party-profile-document-up
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
 import { DocumentProfileRule } from '../document-profiles/document-profile-rule.entity';
-import {
-  applyDocumentProfileFilters,
-  resolveDocumentProfileRules,
-} from '../document-profiles/document-profile.utils';
+import { resolveDocumentProfileRules } from '../document-profiles/document-profile.utils';
 import { PartyProfileDocument } from './party-profile-document.entity';
 import { PartyProfileDocumentFile } from './party-profile-document-file.entity';
 import { PartyProfileDocumentsResponseDto } from './dto/party-profile-documents-response.dto';
 import { PartyProfileDocumentProfileResponseDto } from './dto/party-profile-document-profile-response.dto';
-
-const MASTER_SPECIFICATION_TYPE = 'MASTER';
+import { CategoryOptionCodeEnum } from '../category-options/category-option-code.enum';
 
 const isAllowedDocumentMimeType = (
   mimeType: string,
@@ -249,16 +245,35 @@ export class PartyProfileDocumentsService {
     const queryBuilder = this.documentProfileRepository
       .createQueryBuilder('documentProfile')
       .leftJoinAndSelect('documentProfile.rules', 'rule')
+      .leftJoin('category_options', 'specificationTypeOption', 'specificationTypeOption.id = documentProfile.specificationType')
+      .leftJoin('category_options', 'typeOption', 'typeOption.id = documentProfile.type')
       .where('1 = 1');
 
-    applyDocumentProfileFilters(queryBuilder, 'documentProfile', 'rule', {
-      specificationType: MASTER_SPECIFICATION_TYPE,
-      type,
-      groupSelection,
-      entitySelection,
-      activeOnly: true,
-      activeRulesOnly: true,
-    });
+    queryBuilder
+      .andWhere('documentProfile.active = true')
+      .andWhere('rule.active = true')
+      .andWhere('specificationTypeOption.code = :specificationTypeCode', {
+        specificationTypeCode: CategoryOptionCodeEnum.MasterDocument,
+      });
+
+    if (type) {
+      queryBuilder.andWhere(
+        '(LOWER(typeOption.value) = LOWER(:partyProfileType) OR LOWER(typeOption.label) = LOWER(:partyProfileType))',
+        { partyProfileType: type },
+      );
+    }
+
+    if (groupSelection) {
+      queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
+        groupSelection,
+      });
+    }
+
+    if (entitySelection) {
+      queryBuilder.andWhere('documentProfile.entitySelection = :entitySelection', {
+        entitySelection,
+      });
+    }
 
     const profiles = await queryBuilder
       .orderBy('documentProfile.sortOrder', 'ASC')
