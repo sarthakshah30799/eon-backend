@@ -3,7 +3,6 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
-  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -11,45 +10,38 @@ import {
   ArrayNotEmpty,
   IsNumber,
   Min,
+  IsUUID,
 } from 'class-validator';
 import { CreateDocumentProfileRuleDto } from './create-document-profile-rule.dto';
-import { CategoryOptionCodeEnum } from '../../category-options/category-option-code.enum';
-
-const DOCUMENT_PROFILE_TYPE_OPTIONS = [
-  CategoryOptionCodeEnum.MasterDocument,
-  CategoryOptionCodeEnum.TransactionDocument,
-] as const;
 
 export class CreateDocumentProfileDto {
   @ApiProperty({
     description: 'Specification type',
-    enum: DOCUMENT_PROFILE_TYPE_OPTIONS,
+    format: 'uuid',
   })
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
-  @IsIn(DOCUMENT_PROFILE_TYPE_OPTIONS)
   specificationType: string;
 
   @ApiProperty({
     description: 'Type',
-    enum: DOCUMENT_PROFILE_TYPE_OPTIONS,
+    format: 'uuid',
   })
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
-  @IsIn(DOCUMENT_PROFILE_TYPE_OPTIONS)
   type: string;
 
   @ApiProperty({
     description: 'Group selection',
   })
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   groupSelection: string;
 
   @ApiProperty({
     description: 'Entity type selection',
   })
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   entitySelection: string;
 

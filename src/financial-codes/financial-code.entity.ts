@@ -4,7 +4,7 @@ import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-pro
 
 @Entity("financial_codes")
 export class FinancialCode extends BaseEntity {
-  @Column({ type: "citext" })
+  @Column({ type: "uuid" })
   financialType: string;
 
   @Index({ unique: true })
@@ -14,7 +14,7 @@ export class FinancialCode extends BaseEntity {
   @Column({ type: "citext" })
   financialName: string;
 
-  @Column({ type: "citext" })
+  @Column({ type: "uuid" })
   defaultSign: string;
 
   @Column({ type: "int", default: 0 })

@@ -233,7 +233,7 @@ export class AccountProfileService {
           searchQb
             .where("ap.accountCode ILIKE :search", { search: `%${query.search}%` })
             .orWhere("ap.accountName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("ap.divisionDept ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("ap.divisionDept::text ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }

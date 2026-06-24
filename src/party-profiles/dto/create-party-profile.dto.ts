@@ -103,7 +103,7 @@ export class CreatePartyProfileDto {
   kycApprovalNumber?: string;
 
   @ApiPropertyOptional({ description: "KYC Risk Category" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   kycRiskCategory?: string;
 
@@ -119,7 +119,7 @@ export class CreatePartyProfileDto {
   defaultHandlingCharges?: number;
 
   @ApiPropertyOptional({ description: "Default Agent" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   defaultAgent?: string;
 
@@ -159,12 +159,12 @@ export class CreatePartyProfileDto {
   designation?: string;
 
   @ApiPropertyOptional({ description: "Group" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   group?: string;
 
   @ApiPropertyOptional({ description: "Entity Type" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   entityType?: string;
 
@@ -184,12 +184,12 @@ export class CreatePartyProfileDto {
   panNo?: string;
 
   @ApiPropertyOptional({ description: "Marketing Executive" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   marketingExecutive?: string;
 
   @ApiPropertyOptional({ description: "Business Nature" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   businessNature?: string;
 
@@ -204,7 +204,7 @@ export class CreatePartyProfileDto {
   tds?: string;
 
   @ApiPropertyOptional({ description: "TDS Group" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   tdsGroup?: string;
 
@@ -274,7 +274,7 @@ export class CreatePartyProfileDto {
   originBranchId?: string;
 
   @ApiPropertyOptional({ description: "Location" })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   location?: string;
 

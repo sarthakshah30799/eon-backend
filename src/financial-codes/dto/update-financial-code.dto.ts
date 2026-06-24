@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsArray, IsInt, IsOptional, IsString, MaxLength, Min, ValidateNested } from "class-validator";
+import { IsArray, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 
 export class UpdateFinancialSubProfileNestedDto {
@@ -69,7 +69,7 @@ export class UpdateFinancialSubProfileNestedDto {
 
 export class UpdateFinancialCodeDto {
   @ApiProperty({ description: "Financial type (from category options)", example: "PROFIT & LOSS", required: false })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   financialType?: string;
 
@@ -86,7 +86,7 @@ export class UpdateFinancialCodeDto {
   financialName?: string;
 
   @ApiProperty({ description: "Default sign", example: "DEBIT", required: false })
-  @IsString()
+  @IsUUID()
   @IsOptional()
   defaultSign?: string;
 

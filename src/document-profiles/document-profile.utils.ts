@@ -1,8 +1,9 @@
+import { SelectQueryBuilder } from 'typeorm';
 import { DocumentProfile } from './document-profile.entity';
 import { DocumentProfileRule } from './document-profile-rule.entity';
 
 export const normalizeSelectionValue = (value?: string | null) =>
-  value?.trim().toUpperCase() || null;
+  value?.trim() || null;
 
 export const normalizeDocumentProfilePayload = (
   profile: Pick<
@@ -17,8 +18,7 @@ export const normalizeDocumentProfilePayload = (
   >,
 ) => ({
   ...profile,
-  specificationType:
-    normalizeSelectionValue(profile.specificationType) ?? profile.specificationType,
+  specificationType: normalizeSelectionValue(profile.specificationType) ?? profile.specificationType,
   type: profile.type.trim(),
   groupSelection: normalizeSelectionValue(profile.groupSelection),
   entitySelection: normalizeSelectionValue(profile.entitySelection),
@@ -54,4 +54,59 @@ export const resolveDocumentProfileRules = (
   return rules
     .filter(rule => rule.active)
     .sort((left, right) => left.sortOrder - right.sortOrder || left.documentCode.localeCompare(right.documentCode));
+};
+
+export interface DocumentProfileFilterValues {
+  specificationType?: string | null;
+  type?: string | null;
+  groupSelection?: string | null;
+  entitySelection?: string | null;
+  activeOnly?: boolean;
+  activeRulesOnly?: boolean;
+}
+
+export const applyDocumentProfileFilters = <T extends Record<string, any>>(
+  queryBuilder: SelectQueryBuilder<T>,
+  documentProfileAlias: string,
+  ruleAlias: string | null,
+  filters: DocumentProfileFilterValues,
+) => {
+  const specificationType = normalizeSelectionValue(filters.specificationType);
+  const type = normalizeSelectionValue(filters.type);
+  const groupSelection = normalizeSelectionValue(filters.groupSelection);
+  const entitySelection = normalizeSelectionValue(filters.entitySelection);
+
+  if (filters.activeOnly) {
+    queryBuilder.andWhere(`${documentProfileAlias}.active = true`);
+  }
+
+  if (filters.activeRulesOnly && ruleAlias) {
+    queryBuilder.andWhere(`${ruleAlias}.active = true`);
+  }
+
+  if (specificationType) {
+    queryBuilder.andWhere(`${documentProfileAlias}.specificationType = :documentProfileSpecificationType`, {
+      documentProfileSpecificationType: specificationType,
+    });
+  }
+
+  if (type) {
+    queryBuilder.andWhere(`${documentProfileAlias}.type = :documentProfileType`, {
+      documentProfileType: type,
+    });
+  }
+
+  if (groupSelection) {
+    queryBuilder.andWhere(`${documentProfileAlias}.groupSelection = :documentProfileGroupSelection`, {
+      documentProfileGroupSelection: groupSelection,
+    });
+  }
+
+  if (entitySelection) {
+    queryBuilder.andWhere(`${documentProfileAlias}.entitySelection = :documentProfileEntitySelection`, {
+      documentProfileEntitySelection: entitySelection,
+    });
+  }
+
+  return queryBuilder;
 };

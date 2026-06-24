@@ -90,7 +90,7 @@ export class Branch extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   aeonBranchLic: string;
 
-  @Column({ type: "citext", nullable: true })
+  @Column({ type: "uuid", nullable: true })
   locationType: string;
 
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })

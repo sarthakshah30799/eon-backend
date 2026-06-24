@@ -12,10 +12,10 @@ import { FinancialCodeListResponseDto } from "./dto/financial-code-list-response
 function normalizeFinancialCodeDto(dto: CreateFinancialCodeDto | UpdateFinancialCodeDto) {
   return {
     ...dto,
-    financialType: dto.financialType?.trim()?.toUpperCase(),
+    financialType: dto.financialType?.trim(),
     financialCode: dto.financialCode?.trim()?.toUpperCase(),
     financialName: dto.financialName?.trim()?.toUpperCase(),
-    defaultSign: dto.defaultSign?.trim()?.toUpperCase(),
+    defaultSign: dto.defaultSign?.trim(),
   };
 }
 
@@ -185,16 +185,16 @@ export class FinancialCodeService {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("fc.financialType ILIKE :search", { search: `%${query.search}%` })
+            .where("fc.financialType::text ILIKE :search", { search: `%${query.search}%` })
             .orWhere("fc.financialCode ILIKE :search", { search: `%${query.search}%` })
             .orWhere("fc.financialName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.defaultSign ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("fc.defaultSign::text ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }
 
     if (query.financialType) {
-      qb.andWhere("fc.financialType ILIKE :financialType", {
+      qb.andWhere("fc.financialType::text ILIKE :financialType", {
         financialType: `%${query.financialType}%`,
       });
     }

@@ -160,7 +160,7 @@ export class FinancialSubProfileService {
             .orWhere("fsp.financialSubName ILIKE :search", { search: `%${query.search}%` })
             .orWhere("fc.financialCode ILIKE :search", { search: `%${query.search}%` })
             .orWhere("fc.financialName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.financialType ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("fc.financialType::text ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }

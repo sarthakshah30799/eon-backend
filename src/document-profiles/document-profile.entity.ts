@@ -4,16 +4,16 @@ import { DocumentProfileRule } from './document-profile-rule.entity';
 
 @Entity('document_profiles')
 export class DocumentProfile extends BaseEntity {
-  @Column({ type: 'citext' })
+  @Column({ type: 'uuid' })
   specificationType: string;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'uuid' })
   type: string;
 
-  @Column({ type: 'citext', nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   groupSelection: string | null;
 
-  @Column({ type: 'citext', nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   entitySelection: string | null;
 
   @Column({ type: 'text', nullable: true })
