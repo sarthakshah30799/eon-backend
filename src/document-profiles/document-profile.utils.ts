@@ -5,6 +5,9 @@ import { DocumentProfileRule } from './document-profile-rule.entity';
 export const normalizeSelectionValue = (value?: string | null) =>
   value?.trim() || null;
 
+export const normalizeSpecificationTypeValue = (value?: string | null) =>
+  value?.trim().toUpperCase() || null;
+
 export const normalizeDocumentProfilePayload = (
   profile: Pick<
     DocumentProfile,
@@ -18,7 +21,7 @@ export const normalizeDocumentProfilePayload = (
   >,
 ) => ({
   ...profile,
-  specificationType: normalizeSelectionValue(profile.specificationType) ?? profile.specificationType,
+  specificationType: normalizeSpecificationTypeValue(profile.specificationType) ?? profile.specificationType,
   type: profile.type.trim(),
   groupSelection: normalizeSelectionValue(profile.groupSelection),
   entitySelection: normalizeSelectionValue(profile.entitySelection),
@@ -71,7 +74,7 @@ export const applyDocumentProfileFilters = <T extends Record<string, any>>(
   ruleAlias: string | null,
   filters: DocumentProfileFilterValues,
 ) => {
-  const specificationType = normalizeSelectionValue(filters.specificationType);
+  const specificationType = normalizeSpecificationTypeValue(filters.specificationType);
   const type = normalizeSelectionValue(filters.type);
   const groupSelection = normalizeSelectionValue(filters.groupSelection);
   const entitySelection = normalizeSelectionValue(filters.entitySelection);

@@ -19,6 +19,7 @@ import {
   applyDocumentProfileFilters,
 } from './document-profile.utils';
 import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
+import { DocumentSpecificationType } from './document-profile.entity';
 
 @Injectable()
 export class DocumentProfileService {
@@ -61,7 +62,7 @@ export class DocumentProfileService {
     dto: CreateDocumentProfileDto,
     userId: string,
   ): Promise<DocumentProfileResponseDto> {
-    const normalizedSpecificationType = dto.specificationType.trim();
+    const normalizedSpecificationType = dto.specificationType.trim().toUpperCase() as DocumentSpecificationType;
     const normalizedType = dto.type.trim();
     const normalizedGroupSelection = dto.groupSelection.trim();
     const normalizedEntitySelection = dto.entitySelection.trim();
@@ -108,7 +109,7 @@ export class DocumentProfileService {
     }
 
     if (dto.specificationType) {
-      const normalizedSpecificationType = dto.specificationType.trim();
+      const normalizedSpecificationType = dto.specificationType.trim().toUpperCase() as DocumentSpecificationType;
       profile.specificationType = normalizedSpecificationType;
     }
 

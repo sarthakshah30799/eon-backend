@@ -1,13 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DocumentProfile } from '../document-profile.entity';
+import { DocumentProfile, DocumentSpecificationType } from '../document-profile.entity';
 import { DocumentProfileRuleResponseDto } from './document-profile-rule-response.dto';
 
 export class DocumentProfileResponseDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty()
-  specificationType: string;
+  @ApiProperty({ enum: DocumentSpecificationType })
+  specificationType: DocumentSpecificationType;
 
   @ApiProperty()
   type: string;

@@ -11,17 +11,19 @@ import {
   IsNumber,
   Min,
   IsUUID,
+  IsEnum,
 } from 'class-validator';
 import { CreateDocumentProfileRuleDto } from './create-document-profile-rule.dto';
+import { DocumentSpecificationType } from '../document-profile.entity';
 
 export class CreateDocumentProfileDto {
   @ApiProperty({
     description: 'Specification type',
-    format: 'uuid',
+    enum: DocumentSpecificationType,
   })
-  @IsUUID()
+  @IsEnum(DocumentSpecificationType)
   @IsNotEmpty()
-  specificationType: string;
+  specificationType: DocumentSpecificationType;
 
   @ApiProperty({
     description: 'Type',
