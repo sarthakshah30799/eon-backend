@@ -529,80 +529,10 @@ async function main() {
     console.log(`Hashing password for ${adminEmail}...`);
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
-    console.log("Onboarding basic menu tree...");
-    const masterMenuId = await upsertMenu(client, {
-      name: "Master",
-      path: null,
-      icon: "grid",
-      parentId: null,
-      sortOrder: 1,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-      isAdmin: false,
-    });
-
-    const systemSetupMenuId = await upsertMenu(client, {
-      name: "System Setup",
-      path: null,
-      icon: "settings",
-      parentId: masterMenuId,
-      sortOrder: 1,
-      isActive: true,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-      isAdmin: false,
-    });
-
-    const basicMenus = [
-      { name: "User Role", path: "/admin/user-role", icon: "shield" },
-      { name: "User Profile", path: "/user-profile", icon: "users" },
-      {
-        name: "Country Profile",
-        path: "/admin/country-profile",
-        icon: "globe",
-      },
-      { name: "State Profile", path: "/admin/state-profile", icon: "map" },
-      {
-        name: "Product Profile",
-        path: "/admin/product-profile",
-        icon: "archive",
-      },
-      {
-        name: "Currency Profile",
-        path: "/admin/currency-profile",
-        icon: "dollar-sign",
-      },
-      { name: "TDS Profile", path: "/admin/tds-profile", icon: "receipt" },
-      {
-        name: "Expense Booking Master",
-        path: "/admin/expense-booking",
-        icon: "receipt",
-      },
-      {
-        name: "Income Booking Master",
-        path: "/admin/income-booking",
-        icon: "credit-card",
-      },
-    ];
-
-    for (let index = 0; index < basicMenus.length; index += 1) {
-      const menu = basicMenus[index];
-      await upsertMenu(client, {
-        name: menu.name,
-        path: menu.path,
-        icon: menu.icon,
-        parentId: systemSetupMenuId,
-        sortOrder: index + 1,
-        isActive: true,
-        createdBy: systemUserId,
-        updatedBy: systemUserId,
-        isAdmin: false,
-      });
-    }
+    console.log("Onboarding menu tree...");
 
     const adminMenuId = await upsertMenu(client, {
-      name: "Admin",
+      name: "ADMIN",
       path: null,
       icon: "shield",
       parentId: null,
@@ -613,52 +543,24 @@ async function main() {
       isAdmin: true,
     });
 
-    const adminSubMenus = [
-      {
-        name: "Company Profile",
-        path: "/admin/company-profile",
-        icon: "building",
-      },
-      {
-        name: "Branch Profile",
-        path: "/admin/branch-profile",
-        icon: "sitemap",
-      },
-      {
-        name: "Counter Profile",
-        path: "/admin/counter-profile",
-        icon: "counter",
-      },
-      {
-        name: "Category Options",
-        path: "/admin/category-options",
-        icon: "tags",
-      },
-      { name: "Menu Management", path: "/admin/menu-management", icon: "menu" },
-      {
-        name: "Financial Profile",
-        path: "/financial-profile",
-        icon: "dollar-sign",
-      },
-      {
-        name: "Accounts Profile",
-        path: "/admin/accounts-profile",
-        icon: "book",
-      },
-      {
-        name: "Additional Settings",
-        path: "/admin/additional-settings",
-        icon: "settings",
-      },
-      {
-        name: "Corporate Client Profile",
-        path: "/party-profiles/corporate-client",
-        icon: "users",
-      },
+    const adminMenus = [
+      { name: "COMPANY PROFILE", path: "/admin/company-profile", icon: "building" },
+      { name: "BRANCH PROFILE", path: "/admin/branch-profile", icon: "sitemap" },
+      { name: "COUNTER PROFILE", path: "/admin/counter-profile", icon: "counter" },
+      { name: "DOCUMENT PROFILE", path: "/admin/document-profile", icon: "file-text" },
+      { name: "MISCELLANEOUS PROFILE", path: "/admin/miscellaneous-profile", icon: "layout-grid" },
+      { name: "PRODUCT PROFILE", path: "/admin/product-profile", icon: "archive" },
+      { name: "COUNTRY PROFILE", path: "/admin/country-profile", icon: "globe" },
+      { name: "STATE PROFILE", path: "/admin/state-profile", icon: "map" },
+      { name: "ACCOUNTS PROFILE", path: "/admin/accounts-profile", icon: "book" },
+      { name: "USER ROLE", path: "/admin/user-role", icon: "shield" },
+      { name: "TDS PROFILE", path: "/admin/tds-profile", icon: "receipt" },
+      { name: "MENU MANAGEMENT", path: "/admin/menu-management", icon: "menu" },
+      { name: "ADDITIONAL SETTINGS", path: "/admin/additional-settings", icon: "settings" },
     ];
 
-    for (let index = 0; index < adminSubMenus.length; index += 1) {
-      const menu = adminSubMenus[index];
+    for (let index = 0; index < adminMenus.length; index += 1) {
+      const menu = adminMenus[index];
       await upsertMenu(client, {
         name: menu.name,
         path: menu.path,
@@ -669,6 +571,70 @@ async function main() {
         createdBy: systemUserId,
         updatedBy: systemUserId,
         isAdmin: true,
+      });
+    }
+
+    const partyProfilesMenuId = await upsertMenu(client, {
+      name: "PARTY PROFILES",
+      path: null,
+      icon: "users",
+      parentId: null,
+      sortOrder: 1,
+      isActive: true,
+      createdBy: systemUserId,
+      updatedBy: systemUserId,
+      isAdmin: false,
+    });
+
+    const partyProfileMenus = [
+      { name: "CORPORATE CLIENT PROFILE", path: "/party-profiles/corporate-client", icon: "users" },
+      { name: "FFMC PROFILE", path: "/party-profiles/ffmc", icon: "badge-check" },
+      { name: "RF PROFILE", path: "/party-profiles/rf", icon: "badge-check" },
+      { name: "AUTHORISED DEALER PROFILE", path: "/party-profiles/authorised-dealer", icon: "badge-check" },
+      { name: "RMC PROFILE", path: "/party-profiles/rmc", icon: "badge-check" },
+      { name: "FRANCHISE PROFILE", path: "/party-profiles/franchise", icon: "badge-check" },
+      { name: "AGENT PROFILE", path: "/party-profiles/agent", icon: "badge-check" },
+      { name: "FOREIGN CORRESPONDENT PROFILE", path: "/party-profiles/foreign-correspondent", icon: "badge-check" },
+      { name: "MARKETING EXECUTIVE PROFILE", path: "/party-profiles/marketing-executive", icon: "badge-check" },
+      { name: "CARD ISSUER PROFILE", path: "/party-profiles/card-issuer-profile", icon: "badge-check" },
+      { name: "MISC PROFILE", path: "/party-profiles/misc-profile", icon: "badge-check" },
+    ];
+
+    for (let index = 0; index < partyProfileMenus.length; index += 1) {
+      const menu = partyProfileMenus[index];
+      await upsertMenu(client, {
+        name: menu.name,
+        path: menu.path,
+        icon: menu.icon,
+        parentId: partyProfilesMenuId,
+        sortOrder: index + 1,
+        isActive: true,
+        createdBy: systemUserId,
+        updatedBy: systemUserId,
+        isAdmin: false,
+      });
+    }
+
+    const standaloneMenus = [
+      { name: "USER PROFILE", path: "/user-profile", icon: "users" },
+      { name: "FINANCIAL PROFILE", path: "/financial-profile", icon: "dollar-sign" },
+      { name: "CURRENCY PROFILE", path: "/currency-profile", icon: "dollar-sign" },
+      { name: "EXPENSE BOOKING MASTER", path: "/expense-booking", icon: "receipt" },
+      { name: "INCOME BOOKING MASTER", path: "/income-booking", icon: "credit-card" },
+    ];
+
+    for (let index = 0; index < standaloneMenus.length; index += 1) {
+      const menu = standaloneMenus[index];
+      await upsertMenu(client, {
+        name: menu.name,
+        path: menu.path,
+        icon: menu.icon,
+        parentId: null,
+        sortOrder: index + 2,
+        isActive: true,
+        createdBy: systemUserId,
+        updatedBy: systemUserId,
+        isAdmin: false,
       });
     }
     console.log("Menu tree onboarded successfully.");
