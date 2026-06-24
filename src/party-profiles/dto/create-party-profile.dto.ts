@@ -13,6 +13,7 @@ import {
   Min,
 } from "class-validator";
 import { ClientType } from "../party-profile.entity";
+import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
 
 export class CreatePartyProfileDto {
   @ApiProperty({ description: "Date of Introduction", example: "2026-06-09T00:00:00Z" })
@@ -103,6 +104,7 @@ export class CreatePartyProfileDto {
   kycApprovalNumber?: string;
 
   @ApiPropertyOptional({ description: "KYC Risk Category" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   kycRiskCategory?: string;
@@ -119,6 +121,7 @@ export class CreatePartyProfileDto {
   defaultHandlingCharges?: number;
 
   @ApiPropertyOptional({ description: "Default Agent" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   defaultAgent?: string;
@@ -159,11 +162,13 @@ export class CreatePartyProfileDto {
   designation?: string;
 
   @ApiPropertyOptional({ description: "Group" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   group?: string;
 
   @ApiPropertyOptional({ description: "Entity Type" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   entityType?: string;
@@ -184,11 +189,13 @@ export class CreatePartyProfileDto {
   panNo?: string;
 
   @ApiPropertyOptional({ description: "Marketing Executive" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   marketingExecutive?: string;
 
   @ApiPropertyOptional({ description: "Business Nature" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   businessNature?: string;
@@ -204,6 +211,7 @@ export class CreatePartyProfileDto {
   tds?: string;
 
   @ApiPropertyOptional({ description: "TDS Group" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   tdsGroup?: string;
@@ -264,21 +272,25 @@ export class CreatePartyProfileDto {
   igstNo?: string;
 
   @ApiPropertyOptional({ description: "GST State ID (UUID)" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   gstStateId?: string;
 
   @ApiPropertyOptional({ description: "State ID (UUID)" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   stateId?: string;
 
   @ApiPropertyOptional({ description: "Origin Branch ID (UUID)" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   originBranchId?: string;
 
   @ApiPropertyOptional({ description: "Location" })
+  @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   location?: string;
