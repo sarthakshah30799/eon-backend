@@ -56,10 +56,10 @@ export class UpdateExpenseIncomeBookingMasterDto {
   @IsOptional()
   applicableAgent?: boolean;
 
-  @ApiPropertyOptional({ description: 'Applicable to TC issuer' })
+  @ApiPropertyOptional({ description: "Applicable to Card issuer" })
   @IsBoolean()
   @IsOptional()
-  applicableTcIssuer?: boolean;
+  applicableCardIssuer?: boolean;
 
   @ApiPropertyOptional({ description: 'Is active flag' })
   @IsBoolean()

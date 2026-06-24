@@ -57,13 +57,13 @@ export class ExpenseIncomeBookingMasterService {
       interstateTransaction: dto.interstateTransaction ?? false,
       code,
       description: dto.description?.trim() || null,
-      applicableCustomer: dto.applicableCustomer ?? false,
-      applicableVendor: dto.applicableVendor ?? false,
-      applicableEmployee: dto.applicableEmployee ?? false,
-      applicableAgent: dto.applicableAgent ?? false,
-      applicableTcIssuer: dto.applicableTcIssuer ?? false,
+      applicableCustomer: dto.type === BookingMasterType.INCOME ? (dto.applicableCustomer ?? false) : false,
+      applicableVendor: dto.type === BookingMasterType.EXPENSE ? (dto.applicableVendor ?? false) : false,
+      applicableEmployee: dto.type === BookingMasterType.EXPENSE ? (dto.applicableEmployee ?? false) : false,
+      applicableAgent: dto.type === BookingMasterType.EXPENSE ? (dto.applicableAgent ?? false) : false,
+      applicableCardIssuer: dto.applicableCardIssuer ?? false,
       active: dto.active ?? true,
-      allowRecPay: dto.allowRecPay ?? false,
+      allowRecPay: dto.type === BookingMasterType.INCOME ? (dto.allowRecPay ?? false) : false,
       totalGst: dto.totalGst ?? 0.00,
       tdsApplicable: dto.tdsApplicable ?? false,
       tdsValue: dto.tdsValue ?? 0.00,
@@ -121,8 +121,8 @@ export class ExpenseIncomeBookingMasterService {
       master.applicableAgent = updatableFields.applicableAgent;
     }
 
-    if (updatableFields.applicableTcIssuer !== undefined) {
-      master.applicableTcIssuer = updatableFields.applicableTcIssuer;
+    if (updatableFields.applicableCardIssuer !== undefined) {
+      master.applicableCardIssuer = updatableFields.applicableCardIssuer;
     }
 
     if (updatableFields.active !== undefined) {
@@ -139,6 +139,16 @@ export class ExpenseIncomeBookingMasterService {
 
     if (updatableFields.tdsApplicable !== undefined) {
       master.tdsApplicable = updatableFields.tdsApplicable;
+    }
+
+    // Enforce business rules based on resolved type
+    if (type === BookingMasterType.EXPENSE) {
+      master.allowRecPay = false;
+      master.applicableCustomer = false;
+    } else if (type === BookingMasterType.INCOME) {
+      master.applicableAgent = false;
+      master.applicableVendor = false;
+      master.applicableEmployee = false;
     }
 
     if (updatableFields.tdsValue !== undefined) {

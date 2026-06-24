@@ -10,6 +10,11 @@ export class ConfigService {
     return value;
   }
 
+  getOptional(key: string): string | undefined {
+    return process.env[key];
+  }
+
+
   getNumber(key: string): number {
     const value = this.get(key);
     const parsed = parseInt(value, 10);

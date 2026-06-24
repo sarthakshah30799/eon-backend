@@ -33,7 +33,7 @@ export class ExpenseIncomeBookingMaster extends BaseEntity {
   applicableAgent: boolean;
 
   @Column({ type: 'boolean', default: false })
-  applicableTcIssuer: boolean;
+  applicableCardIssuer: boolean;
 
   @Column({ type: 'boolean', default: true })
   active: boolean;

@@ -28,6 +28,7 @@ import { ExpenseIncomeBookingMasterModule } from "./expense-income-booking-maste
 import { AuditLogModule } from "./audit-logs/audit-log.module";
 import { SessionPolicyModule } from "./session-policy/session-policy.module";
 import { MailModule } from "./mail/mail.module";
+import { StorageModule } from "./storage/storage.module";
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { MailModule } from "./mail/mail.module";
     ExpenseIncomeBookingMasterModule,
     MailModule,
     AuditLogModule,
+    StorageModule,
   ],
   providers: [SessionMiddleware],
 })

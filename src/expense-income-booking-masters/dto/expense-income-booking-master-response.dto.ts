@@ -53,7 +53,7 @@ export class ExpenseIncomeBookingMasterResponseDto {
   applicableAgent: boolean;
 
   @ApiProperty()
-  applicableTcIssuer: boolean;
+  applicableCardIssuer: boolean;
 
   @ApiProperty()
   active: boolean;
@@ -97,7 +97,7 @@ export class ExpenseIncomeBookingMasterResponseDto {
     dto.applicableVendor = entity.applicableVendor;
     dto.applicableEmployee = entity.applicableEmployee;
     dto.applicableAgent = entity.applicableAgent;
-    dto.applicableTcIssuer = entity.applicableTcIssuer;
+    dto.applicableCardIssuer = entity.applicableCardIssuer;
     dto.active = entity.active;
     dto.allowRecPay = entity.allowRecPay;
     dto.totalGst = Number(entity.totalGst);
