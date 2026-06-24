@@ -8,6 +8,7 @@ import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 export enum ClientType {
   CORPORATE_CLIENT = 'CORPORATE_CLIENT',
   FFMC = 'FFMC',
+  RF = 'RF',
   AUTHORISED_DEALER = 'AUTHORISED_DEALER',
   RMC = 'RMC',
   FRANCHISE = 'FRANCHISE',

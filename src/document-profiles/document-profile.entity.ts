@@ -2,10 +2,15 @@ import { Column, Entity, OneToMany } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
 import { DocumentProfileRule } from './document-profile-rule.entity';
 
+export enum DocumentSpecificationType {
+  MASTER = 'MASTER',
+  TRANSACTION = 'TRANSACTION',
+}
+
 @Entity('document_profiles')
 export class DocumentProfile extends BaseEntity {
-  @Column({ type: 'uuid' })
-  specificationType: string;
+  @Column({ type: 'enum', enum: DocumentSpecificationType })
+  specificationType: DocumentSpecificationType;
 
   @Column({ type: 'uuid' })
   type: string;

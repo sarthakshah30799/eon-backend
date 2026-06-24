@@ -91,6 +91,7 @@ export class PartyProfileService {
     return [
       { value: ClientType.CORPORATE_CLIENT, label: 'CORPORATE CLIENT' },
       { value: ClientType.FFMC, label: 'FFMC' },
+      { value: ClientType.RF, label: 'RF' },
       { value: ClientType.AUTHORISED_DEALER, label: 'AUTHORISED DEALER' },
       { value: ClientType.RMC, label: 'RMC' },
       { value: ClientType.FRANCHISE, label: 'FRANCHISE' },
@@ -339,7 +340,7 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.originBranch", "originBranch");
 
     const type = query.type ?? ClientType.CORPORATE_CLIENT;
-    qb.where("pp.type = :type", { type });
+    qb.where("pp.type::text = :type", { type });
 
     if (query.search) {
       qb.andWhere(
