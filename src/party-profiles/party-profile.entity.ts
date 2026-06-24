@@ -195,6 +195,16 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "uuid", nullable: true })
   gstStateId: string;
 
+  @ManyToOne(() => State, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    name: "state_id",
+    foreignKeyConstraintName: "FK_party_profiles_state_id",
+  })
+  state: State;
+
+  @Column({ type: "uuid", nullable: true })
+  stateId: string;
+
   @ManyToOne(() => Branch, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({
     name: "origin_branch_id",

@@ -133,6 +133,13 @@ export class PartyProfileService {
       }
     }
 
+    if (dto.stateId) {
+      const state = await this.stateRepository.findOne({ where: { id: dto.stateId } });
+      if (!state) {
+        throw new NotFoundException(`State with id ${dto.stateId} not found`);
+      }
+    }
+
     const client = this.partyProfileRepository.create({
       ...normalized,
       dateOfIntro: normalized.dateOfIntro ? new Date(normalized.dateOfIntro) : new Date(),
@@ -179,6 +186,13 @@ export class PartyProfileService {
       const state = await this.stateRepository.findOne({ where: { id: dto.gstStateId } });
       if (!state) {
         throw new NotFoundException(`GST State with id ${dto.gstStateId} not found`);
+      }
+    }
+
+    if (dto.stateId && dto.stateId !== client.stateId) {
+      const state = await this.stateRepository.findOne({ where: { id: dto.stateId } });
+      if (!state) {
+        throw new NotFoundException(`State with id ${dto.stateId} not found`);
       }
     }
 
@@ -271,6 +285,7 @@ export class PartyProfileService {
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
+      .leftJoinAndSelect("pp.state", "state")
       .leftJoinAndSelect("pp.originBranch", "originBranch")
       .leftJoinAndSelect("pp.statusUpdatedBy", "statusUpdatedBy")
       .where("pp.status = :status", { status: WorkflowStatus.PENDING });
@@ -292,7 +307,7 @@ export class PartyProfileService {
   async findById(id: string): Promise<PartyProfileResponseDto> {
     const client = await this.partyProfileRepository.findOne({
       where: { id },
-      relations: ["gstState", "originBranch", "statusUpdatedBy"],
+      relations: ["gstState", "state", "originBranch", "statusUpdatedBy"],
     });
 
     if (!client) {
@@ -320,6 +335,7 @@ export class PartyProfileService {
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
+      .leftJoinAndSelect("pp.state", "state")
       .leftJoinAndSelect("pp.originBranch", "originBranch");
 
     const type = query.type ?? ClientType.CORPORATE_CLIENT;

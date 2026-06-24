@@ -268,6 +268,11 @@ export class CreatePartyProfileDto {
   @IsOptional()
   gstStateId?: string;
 
+  @ApiPropertyOptional({ description: "State ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  stateId?: string;
+
   @ApiPropertyOptional({ description: "Origin Branch ID (UUID)" })
   @IsUUID()
   @IsOptional()

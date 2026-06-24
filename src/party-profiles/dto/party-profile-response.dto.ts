@@ -156,6 +156,12 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "GST State Name" })
   gstStateName?: string;
 
+  @ApiPropertyOptional({ description: "State ID" })
+  stateId?: string;
+
+  @ApiPropertyOptional({ description: "State Name" })
+  stateName?: string;
+
 
 
   @ApiPropertyOptional({ description: "Origin Branch ID" })
@@ -268,6 +274,8 @@ export class PartyProfileResponseDto {
     dto.igstNo = entity.igstNo;
     dto.gstStateId = entity.gstStateId;
     dto.gstStateName = entity.gstState?.name;
+    dto.stateId = entity.stateId;
+    dto.stateName = entity.state?.name;
 
     dto.originBranchId = entity.originBranchId;
     dto.originBranchName = entity.originBranch?.name;
