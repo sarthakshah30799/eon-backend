@@ -79,33 +79,33 @@ export class TdsProfileService {
       throw new NotFoundException(`TDS profile with id ${id} not found`);
     }
 
-    if (dto.code !== undefined) {
-      const code = dto.code.trim().toUpperCase();
-      await this.ensureCodeIsUnique(code, id);
-      profile.code = code;
+    const { code: _code, ...updatableFields } = dto;
+
+    if (updatableFields.name !== undefined) {
+      profile.name = updatableFields.name.trim();
     }
 
-    if (dto.name !== undefined) {
-      profile.name = dto.name.trim();
+    if (updatableFields.description !== undefined) {
+      profile.description = updatableFields.description?.trim() || null;
     }
 
-    if (dto.description !== undefined) {
-      profile.description = dto.description?.trim() || null;
+    if (updatableFields.active !== undefined) {
+      profile.active = updatableFields.active;
     }
 
-    if (dto.active !== undefined) {
-      profile.active = dto.active;
+    if (updatableFields.sortOrder !== undefined) {
+      profile.sortOrder = updatableFields.sortOrder;
     }
 
-    if (dto.sortOrder !== undefined) {
-      profile.sortOrder = dto.sortOrder;
-    }
-
-    if (dto.from !== undefined || dto.to !== undefined) {
+    if (updatableFields.from !== undefined || updatableFields.to !== undefined) {
       const nextFrom =
-        dto.from !== undefined ? (dto.from ? new Date(dto.from) : null) : profile.from;
+        updatableFields.from !== undefined
+          ? (updatableFields.from ? new Date(updatableFields.from) : null)
+          : profile.from;
       const nextTo =
-        dto.to !== undefined ? (dto.to ? new Date(dto.to) : null) : profile.to;
+        updatableFields.to !== undefined
+          ? (updatableFields.to ? new Date(updatableFields.to) : null)
+          : profile.to;
       this.ensureValidDateRange(
         nextFrom ? nextFrom.toISOString() : null,
         nextTo ? nextTo.toISOString() : null,
@@ -114,8 +114,8 @@ export class TdsProfileService {
       profile.to = nextTo;
     }
 
-    if (dto.value !== undefined) {
-      profile.value = dto.value;
+    if (updatableFields.value !== undefined) {
+      profile.value = updatableFields.value;
     }
 
     profile.updatedBy = userId;

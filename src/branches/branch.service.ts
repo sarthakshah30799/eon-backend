@@ -85,7 +85,7 @@ export class BranchService {
   }
 
   async create(dto: CreateBranchDto, userId: string): Promise<BranchResponseDto> {
-    const { code: _code, companyId, countryId, stateId, counterIds, ...rest } = uppercaseFields(dto);
+    const { companyId, countryId, stateId, counterIds, ...rest } = uppercaseFields(dto);
 
     const country = await this.countryRepository.findOne({
       where: { id: countryId },
@@ -139,7 +139,7 @@ export class BranchService {
       throw new NotFoundException(`Branch with id ${id} not found`);
     }
 
-    const { companyId, countryId, stateId, counterIds, ...rest } = uppercaseFields(dto);
+    const { code: _code, companyId, countryId, stateId, counterIds, ...rest } = uppercaseFields(dto);
 
     let country = branch.country;
     let state = branch.state;

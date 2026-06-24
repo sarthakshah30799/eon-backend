@@ -523,6 +523,9 @@ async function main() {
     await client.connect();
     console.log("Connected to PostgreSQL successfully.");
 
+    console.log('Ensuring uuid-ossp extension exists...');
+    await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
+
     console.log(`Hashing password for ${adminEmail}...`);
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
@@ -649,7 +652,7 @@ async function main() {
       },
       {
         name: "Corporate Client Profile",
-        path: "/admin/corporate-client-profile",
+        path: "/party-profiles/corporate-client",
         icon: "users",
       },
     ];

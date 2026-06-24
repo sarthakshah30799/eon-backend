@@ -91,68 +91,62 @@ export class ExpenseIncomeBookingMasterService {
       throw new NotFoundException(`Expense/Income Booking Master with id ${id} not found`);
     }
 
-    const type = dto.type ?? (master.type as BookingMasterType);
+    const { code: _code, ...updatableFields } = dto;
 
-    if (dto.code !== undefined) {
-      const code = dto.code.trim().toUpperCase();
-      await this.ensureCodeIsUnique(code, type, id);
-      master.code = code;
+    if (updatableFields.type !== undefined) {
+      master.type = updatableFields.type;
     }
 
-    if (dto.type !== undefined) {
-      master.type = dto.type;
+    if (updatableFields.interstateTransaction !== undefined) {
+      master.interstateTransaction = updatableFields.interstateTransaction;
     }
 
-    if (dto.interstateTransaction !== undefined) {
-      master.interstateTransaction = dto.interstateTransaction;
+    if (updatableFields.description !== undefined) {
+      master.description = updatableFields.description?.trim() || null;
     }
 
-    if (dto.description !== undefined) {
-      master.description = dto.description?.trim() || null;
+    if (updatableFields.applicableCustomer !== undefined) {
+      master.applicableCustomer = updatableFields.applicableCustomer;
     }
 
-    if (dto.applicableCustomer !== undefined) {
-      master.applicableCustomer = dto.applicableCustomer;
+    if (updatableFields.applicableVendor !== undefined) {
+      master.applicableVendor = updatableFields.applicableVendor;
     }
 
-    if (dto.applicableVendor !== undefined) {
-      master.applicableVendor = dto.applicableVendor;
+    if (updatableFields.applicableEmployee !== undefined) {
+      master.applicableEmployee = updatableFields.applicableEmployee;
     }
 
-    if (dto.applicableEmployee !== undefined) {
-      master.applicableEmployee = dto.applicableEmployee;
+    if (updatableFields.applicableAgent !== undefined) {
+      master.applicableAgent = updatableFields.applicableAgent;
     }
 
-    if (dto.applicableAgent !== undefined) {
-      master.applicableAgent = dto.applicableAgent;
+    if (updatableFields.applicableTcIssuer !== undefined) {
+      master.applicableTcIssuer = updatableFields.applicableTcIssuer;
     }
 
-    if (dto.applicableTcIssuer !== undefined) {
-      master.applicableTcIssuer = dto.applicableTcIssuer;
+    if (updatableFields.active !== undefined) {
+      master.active = updatableFields.active;
     }
 
-    if (dto.active !== undefined) {
-      master.active = dto.active;
+    if (updatableFields.allowRecPay !== undefined) {
+      master.allowRecPay = updatableFields.allowRecPay;
     }
 
-    if (dto.allowRecPay !== undefined) {
-      master.allowRecPay = dto.allowRecPay;
+    if (updatableFields.totalGst !== undefined) {
+      master.totalGst = updatableFields.totalGst;
     }
 
-    if (dto.totalGst !== undefined) {
-      master.totalGst = dto.totalGst;
+    if (updatableFields.tdsApplicable !== undefined) {
+      master.tdsApplicable = updatableFields.tdsApplicable;
     }
 
-    if (dto.tdsApplicable !== undefined) {
-      master.tdsApplicable = dto.tdsApplicable;
+    if (updatableFields.tdsValue !== undefined) {
+      master.tdsValue = updatableFields.tdsValue;
     }
 
-    if (dto.tdsValue !== undefined) {
-      master.tdsValue = dto.tdsValue;
-    }
-
-    if (dto.tdsAccountId !== undefined) {
-      master.tdsAccountId = dto.tdsAccountId;
+    if (updatableFields.tdsAccountId !== undefined) {
+      master.tdsAccountId = updatableFields.tdsAccountId;
     }
 
     // Clear tds fields if tds is no longer applicable
@@ -161,11 +155,15 @@ export class ExpenseIncomeBookingMasterService {
       master.tdsAccountId = null;
     }
 
-    if (dto.from !== undefined || dto.to !== undefined) {
+    if (updatableFields.from !== undefined || updatableFields.to !== undefined) {
       const nextFrom =
-        dto.from !== undefined ? (dto.from ? new Date(dto.from) : null) : master.from;
+        updatableFields.from !== undefined
+          ? (updatableFields.from ? new Date(updatableFields.from) : null)
+          : master.from;
       const nextTo =
-        dto.to !== undefined ? (dto.to ? new Date(dto.to) : null) : master.to;
+        updatableFields.to !== undefined
+          ? (updatableFields.to ? new Date(updatableFields.to) : null)
+          : master.to;
       this.ensureValidDateRange(
         nextFrom ? nextFrom.toISOString() : null,
         nextTo ? nextTo.toISOString() : null,

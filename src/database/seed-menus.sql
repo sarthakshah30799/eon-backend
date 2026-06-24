@@ -55,7 +55,7 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'Additional Settings', '/admin/additional-settings', 'settings', v_admin_id, 8, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Corporate Client Profile', '/admin/corporate-client-profile', 'users', v_admin_id, 9, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Corporate Client Profile', '/party-profiles/corporate-client', 'users', v_admin_id, 9, true, v_system_user, v_system_user);
 
   -- Insert "Master" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
