@@ -4,16 +4,36 @@
 --     ├─ Company Profile
 --     ├─ Branch Profile
 --     ├─ Counter Profile
---     ├─ Category Options
---     └─ Menu Management
+--     ├─ Document Profile
+--     ├─ Miscellaneous Profile
+--     ├─ Product Profile
+--     ├─ Country Profile
+--     ├─ State Profile
+--     ├─ Accounts Profile
+--     ├─ User Role
+--     ├─ TDS Profile
+--     ├─ Menu Management
+--     └─ Additional Settings
 --
---   Master (root)
---     └─ System Setup
---         ├─ Company Profile
---         ├─ Branch Profile
---         ├─ Roles Profile
---         ├─ User Profile
---         └─ TDS Profile
+--   Party Profiles (root)
+--     ├─ Corporate Client Profile
+--     ├─ FFMC Profile
+--     ├─ RF Profile
+--     ├─ Authorised Dealer Profile
+--     ├─ RMC Profile
+--     ├─ Franchise Profile
+--     ├─ Agent Profile
+--     ├─ Foreign Correspondent Profile
+--     ├─ Marketing Executive Profile
+--     ├─ Card Issuer Profile
+--     └─ Misc Profile
+--
+--   Standalone root menus
+--     ├─ User Profile
+--     ├─ Financial Profile
+--     ├─ Currency Profile
+--     ├─ Expense Booking Master
+--     └─ Income Booking Master
 --
 -- Note: The BaseEntity requires createdBy/updatedBy UUIDs.
 -- Using a placeholder system UUID. Replace with an actual admin user UUID if needed.
@@ -22,86 +42,105 @@ DO $$
 DECLARE
   v_system_user UUID := '00000000-0000-0000-0000-000000000000';
   v_admin_id UUID;
-  v_master_id UUID;
-  v_system_setup_id UUID;
+  v_party_profiles_id UUID;
 BEGIN
   -- Insert "Admin" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), true, 'Admin', NULL, 'shield', NULL, 0, true, v_system_user, v_system_user)
+  VALUES (uuid_generate_v4(), true, 'ADMIN', NULL, 'shield', NULL, 0, true, v_system_user, v_system_user)
   RETURNING id INTO v_admin_id;
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Company Profile', '/admin/company-profile', 'building', v_admin_id, 1, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'COMPANY PROFILE', '/admin/company-profile', 'building', v_admin_id, 1, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Branch Profile', '/admin/branch-profile', 'sitemap', v_admin_id, 2, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'BRANCH PROFILE', '/admin/branch-profile', 'sitemap', v_admin_id, 2, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Counter Profile', '/admin/counter-profile', 'counter', v_admin_id, 3, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'COUNTER PROFILE', '/admin/counter-profile', 'counter', v_admin_id, 3, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Category Options', '/admin/category-options', 'tags', v_admin_id, 4, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'DOCUMENT PROFILE', '/admin/document-profile', 'file-text', v_admin_id, 4, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Menu Management', '/admin/menu-management', 'menu', v_admin_id, 5, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'MISCELLANEOUS PROFILE', '/admin/miscellaneous-profile', 'layout-grid', v_admin_id, 5, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Financial Profile', '/financial-profile', 'dollar-sign', v_admin_id, 6, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'PRODUCT PROFILE', '/admin/product-profile', 'archive', v_admin_id, 6, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Accounts Profile', '/admin/accounts-profile', 'book', v_admin_id, 7, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'COUNTRY PROFILE', '/admin/country-profile', 'globe', v_admin_id, 7, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Additional Settings', '/admin/additional-settings', 'settings', v_admin_id, 8, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'STATE PROFILE', '/admin/state-profile', 'map', v_admin_id, 8, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Corporate Client Profile', '/party-profiles/corporate-client', 'users', v_admin_id, 9, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'ACCOUNTS PROFILE', '/admin/accounts-profile', 'book', v_admin_id, 9, true, v_system_user, v_system_user);
 
-  -- Insert "Master" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Master', NULL, 'grid', NULL, 1, true, v_system_user, v_system_user)
-  RETURNING id INTO v_master_id;
+  VALUES (uuid_generate_v4(), false, 'USER ROLE', '/admin/user-role', 'shield', v_admin_id, 10, true, v_system_user, v_system_user);
 
-  -- Insert "System Setup" under Master
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'System Setup', NULL, 'settings', v_master_id, 1, true, v_system_user, v_system_user)
-  RETURNING id INTO v_system_setup_id;
+  VALUES (uuid_generate_v4(), false, 'TDS PROFILE', '/admin/tds-profile', 'receipt', v_admin_id, 11, true, v_system_user, v_system_user);
 
-  -- Insert "Roles Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'User Role', '/admin/user-role', 'shield', v_system_setup_id, 1, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'MENU MANAGEMENT', '/admin/menu-management', 'menu', v_admin_id, 12, true, v_system_user, v_system_user);
 
-  -- Insert "User Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'User Profile', '/user-profile', 'users', v_system_setup_id, 2, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'ADDITIONAL SETTINGS', '/admin/additional-settings', 'settings', v_admin_id, 13, true, v_system_user, v_system_user);
 
-  -- Insert "Country Profile" under System Setup
+  -- Insert "Party Profiles" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Country Profile', '/admin/country-profile', 'globe', v_system_setup_id, 3, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'PARTY PROFILES', NULL, 'users', NULL, 1, true, v_system_user, v_system_user)
+  RETURNING id INTO v_party_profiles_id;
 
-  -- Insert "State Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'State Profile', '/admin/state-profile', 'map', v_system_setup_id, 4, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'CORPORATE CLIENT PROFILE', '/party-profiles/corporate-client', 'users', v_party_profiles_id, 1, true, v_system_user, v_system_user);
 
-  -- Insert "Product Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Product Profile', '/admin/product-profile', 'archive', v_system_setup_id, 5, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'FFMC PROFILE', '/party-profiles/ffmc', 'badge-check', v_party_profiles_id, 2, true, v_system_user, v_system_user);
 
-  -- Insert "Currency Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Currency Profile', '/admin/currency-profile', 'dollar-sign', v_system_setup_id, 6, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'RF PROFILE', '/party-profiles/rf', 'badge-check', v_party_profiles_id, 3, true, v_system_user, v_system_user);
 
-  -- Insert "TDS Profile" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'TDS Profile', '/admin/tds-profile', 'receipt', v_system_setup_id, 7, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'AUTHORISED DEALER PROFILE', '/party-profiles/authorised-dealer', 'badge-check', v_party_profiles_id, 4, true, v_system_user, v_system_user);
 
-  -- Insert "Expense Booking Master" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Expense Booking Master', '/admin/expense-booking', 'receipt', v_system_setup_id, 8, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'RMC PROFILE', '/party-profiles/rmc', 'badge-check', v_party_profiles_id, 5, true, v_system_user, v_system_user);
 
-  -- Insert "Income Booking Master" under System Setup
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Income Booking Master', '/admin/income-booking', 'credit-card', v_system_setup_id, 9, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'FRANCHISE PROFILE', '/party-profiles/franchise', 'badge-check', v_party_profiles_id, 6, true, v_system_user, v_system_user);
 
-  RAISE NOTICE 'Menu seed completed. Master ID: %, System Setup ID: %', v_master_id, v_system_setup_id;
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'AGENT PROFILE', '/party-profiles/agent', 'badge-check', v_party_profiles_id, 7, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'FOREIGN CORRESPONDENT PROFILE', '/party-profiles/foreign-correspondent', 'badge-check', v_party_profiles_id, 8, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'MARKETING EXECUTIVE PROFILE', '/party-profiles/marketing-executive', 'badge-check', v_party_profiles_id, 9, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'CARD ISSUER PROFILE', '/party-profiles/card-issuer-profile', 'badge-check', v_party_profiles_id, 10, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'MISC PROFILE', '/party-profiles/misc-profile', 'badge-check', v_party_profiles_id, 11, true, v_system_user, v_system_user);
+
+  -- Standalone menus
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'USER PROFILE', '/user-profile', 'users', NULL, 2, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'FINANCIAL PROFILE', '/financial-profile', 'dollar-sign', NULL, 3, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'CURRENCY PROFILE', '/currency-profile', 'dollar-sign', NULL, 4, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'EXPENSE BOOKING MASTER', '/expense-booking', 'receipt', NULL, 5, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'INCOME BOOKING MASTER', '/income-booking', 'credit-card', NULL, 6, true, v_system_user, v_system_user);
+
+  RAISE NOTICE 'Menu seed completed. Admin ID: %, Party Profiles ID: %', v_admin_id, v_party_profiles_id;
 END $$;
