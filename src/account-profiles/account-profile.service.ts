@@ -6,6 +6,7 @@ import { Currency } from "../currencies/currency.entity";
 import { FinancialCode } from "../financial-codes/financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
 import { Branch } from "../branches/branch.entity";
+import { SelectOption } from "../category-options/category-option.entity";
 import { CreateAccountProfileDto } from "./dto/create-account-profile.dto";
 import { UpdateAccountProfileDto } from "./dto/update-account-profile.dto";
 import { AccountProfileResponseDto } from "./dto/account-profile-response.dto";
@@ -13,15 +14,20 @@ import { AccountProfileListQueryDto } from "./dto/account-profile-list-query.dto
 import { AccountProfileListResponseDto } from "./dto/account-profile-list-response.dto";
 
 function normalizeDto(dto: CreateAccountProfileDto | UpdateAccountProfileDto) {
+  const normalizeOptional = (value?: string | null) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  };
+
   return {
     ...dto,
     accountCode: dto.accountCode?.trim().toUpperCase(),
     accountName: dto.accountName?.trim(),
-    divisionDept: dto.divisionDept?.trim(),
-    accountType: dto.accountType?.trim(),
-    subLedger: dto.subLedger?.trim(),
-    bankNature: dto.bankNature?.trim(),
-    pettyCashExpenseId: dto.pettyCashExpenseId?.trim(),
+    divisionDept: normalizeOptional(dto.divisionDept),
+    accountType: normalizeOptional(dto.accountType),
+    subLedger: normalizeOptional(dto.subLedger),
+    bankNature: normalizeOptional(dto.bankNature),
+    pettyCashExpenseId: normalizeOptional(dto.pettyCashExpenseId),
   };
 }
 
@@ -102,8 +108,13 @@ export class AccountProfileService {
       }
     }
 
+    const { divisionDept, accountType, subLedger, bankNature, ...rest } = normalized;
     const account = this.accountProfileRepository.create({
-      ...normalized,
+      ...rest,
+      divisionDept: divisionDept ? ({ id: divisionDept } as SelectOption) : null,
+      accountType: accountType ? ({ id: accountType } as SelectOption) : null,
+      subLedger: subLedger ? ({ id: subLedger } as SelectOption) : null,
+      bankNature: bankNature ? ({ id: bankNature } as SelectOption) : null,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -175,9 +186,28 @@ export class AccountProfileService {
       }
     }
 
-    const { accountCode: _accountCode, ...updatableFields } = normalized;
+    const {
+      accountCode: _accountCode,
+      divisionDept,
+      accountType,
+      subLedger,
+      bankNature,
+      ...updatableFields
+    } = normalized;
     const updates = pickDefinedFields(updatableFields);
     Object.assign(account, updates);
+    if (divisionDept !== undefined) {
+      account.divisionDept = divisionDept ? ({ id: divisionDept } as SelectOption) : null;
+    }
+    if (accountType !== undefined) {
+      account.accountType = accountType ? ({ id: accountType } as SelectOption) : null;
+    }
+    if (subLedger !== undefined) {
+      account.subLedger = subLedger ? ({ id: subLedger } as SelectOption) : null;
+    }
+    if (bankNature !== undefined) {
+      account.bankNature = bankNature ? ({ id: bankNature } as SelectOption) : null;
+    }
     account.updatedBy = userId;
 
     await this.accountProfileRepository.save(account);
@@ -187,7 +217,17 @@ export class AccountProfileService {
   async findById(id: string): Promise<AccountProfileResponseDto> {
     const account = await this.accountProfileRepository.findOne({
       where: { id },
-      relations: ["currency", "financialCode", "financialSubProfile", "branchToTransfer", "mapToAccount"],
+      relations: [
+        "currency",
+        "financialCode",
+        "financialSubProfile",
+        "branchToTransfer",
+        "mapToAccount",
+        "divisionDept",
+        "accountType",
+        "subLedger",
+        "bankNature",
+      ],
     });
 
     if (!account) {
@@ -225,7 +265,11 @@ export class AccountProfileService {
       .leftJoinAndSelect("ap.financialCode", "financialCode")
       .leftJoinAndSelect("ap.financialSubProfile", "financialSubProfile")
       .leftJoinAndSelect("ap.branchToTransfer", "branchToTransfer")
-      .leftJoinAndSelect("ap.mapToAccount", "mapToAccount");
+      .leftJoinAndSelect("ap.mapToAccount", "mapToAccount")
+      .leftJoinAndSelect("ap.divisionDept", "divisionDept")
+      .leftJoinAndSelect("ap.accountType", "accountType")
+      .leftJoinAndSelect("ap.subLedger", "subLedger")
+      .leftJoinAndSelect("ap.bankNature", "bankNature");
 
     if (query.search) {
       qb.andWhere(
@@ -233,7 +277,10 @@ export class AccountProfileService {
           searchQb
             .where("ap.accountCode ILIKE :search", { search: `%${query.search}%` })
             .orWhere("ap.accountName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("ap.divisionDept::text ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("divisionDept.label ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("accountType.label ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("subLedger.label ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("bankNature.label ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }
@@ -263,7 +310,7 @@ export class AccountProfileService {
     const [data, totalItems] = await qb.getManyAndCount();
 
     return {
-      data: data.map(AccountProfileResponseDto.fromEntity),
+      data: data.map(account => AccountProfileResponseDto.fromEntity(account)),
       page,
       limit,
       totalItems,

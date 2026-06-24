@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import { FinancialCode } from "./financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
+import { SelectOption } from "../category-options/category-option.entity";
 import { CreateFinancialCodeDto } from "./dto/create-financial-code.dto";
 import { UpdateFinancialCodeDto } from "./dto/update-financial-code.dto";
 import { FinancialCodeResponseDto } from "./dto/financial-code-response.dto";
@@ -10,12 +11,17 @@ import { FinancialCodeListQueryDto } from "./dto/financial-code-list-query.dto";
 import { FinancialCodeListResponseDto } from "./dto/financial-code-list-response.dto";
 
 function normalizeFinancialCodeDto(dto: CreateFinancialCodeDto | UpdateFinancialCodeDto) {
+  const normalizeOptional = (value?: string | null) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  };
+
   return {
     ...dto,
-    financialType: dto.financialType?.trim(),
+    financialType: normalizeOptional(dto.financialType),
     financialCode: dto.financialCode?.trim()?.toUpperCase(),
     financialName: dto.financialName?.trim()?.toUpperCase(),
-    defaultSign: dto.defaultSign?.trim(),
+    defaultSign: normalizeOptional(dto.defaultSign),
   };
 }
 
@@ -44,7 +50,7 @@ export class FinancialCodeService {
       throw new ConflictException(`Financial Code "${normalized.financialCode}" already exists`);
     }
 
-    const { subProfiles: subProfilesDto, ...parentData } = normalized;
+    const { subProfiles: subProfilesDto, financialType, defaultSign, ...parentData } = normalized;
 
     const subProfiles = (subProfilesDto ?? []).map(sp => {
       return this.financialSubProfileRepository.create({
@@ -58,6 +64,8 @@ export class FinancialCodeService {
 
     const code = this.financialCodeRepository.create({
       ...parentData,
+      financialType: financialType ? ({ id: financialType } as SelectOption) : null,
+      defaultSign: defaultSign ? ({ id: defaultSign } as SelectOption) : null,
       subProfiles,
       createdBy: userId,
       updatedBy: userId,
@@ -79,9 +87,21 @@ export class FinancialCodeService {
 
     const normalized = normalizeFinancialCodeDto(dto);
 
-    const { financialCode: _financialCode, subProfiles: subProfilesDto, ...parentData } = normalized;
+    const {
+      financialCode: _financialCode,
+      subProfiles: subProfilesDto,
+      financialType,
+      defaultSign,
+      ...parentData
+    } = normalized;
     const updates = pickDefinedFields(parentData);
     Object.assign(code, updates);
+    if (financialType !== undefined) {
+      code.financialType = financialType ? ({ id: financialType } as SelectOption) : null;
+    }
+    if (defaultSign !== undefined) {
+      code.defaultSign = defaultSign ? ({ id: defaultSign } as SelectOption) : null;
+    }
     code.updatedBy = userId;
 
     if (subProfilesDto !== undefined) {
@@ -123,7 +143,7 @@ export class FinancialCodeService {
   async findById(id: string): Promise<FinancialCodeResponseDto> {
     const code = await this.financialCodeRepository.findOne({
       where: { id },
-      relations: ["subProfiles"],
+      relations: ["subProfiles", "financialType", "defaultSign"],
     });
 
     if (!code) {
@@ -136,7 +156,7 @@ export class FinancialCodeService {
   async findByCode(financialCode: string): Promise<FinancialCodeResponseDto> {
     const code = await this.financialCodeRepository.findOne({
       where: { financialCode: financialCode.toUpperCase() },
-      relations: ["subProfiles"],
+      relations: ["subProfiles", "financialType", "defaultSign"],
     });
 
     if (!code) {
@@ -149,7 +169,7 @@ export class FinancialCodeService {
   async delete(id: string): Promise<{ message: string }> {
     const code = await this.financialCodeRepository.findOne({
       where: { id },
-      relations: ["subProfiles"],
+      relations: ["subProfiles", "financialType", "defaultSign"],
     });
 
     if (!code) {
@@ -179,22 +199,26 @@ export class FinancialCodeService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
-    const qb = this.financialCodeRepository.createQueryBuilder("fc").leftJoinAndSelect("fc.subProfiles", "subProfiles");
+    const qb = this.financialCodeRepository
+      .createQueryBuilder("fc")
+      .leftJoinAndSelect("fc.subProfiles", "subProfiles")
+      .leftJoinAndSelect("fc.financialType", "financialType")
+      .leftJoinAndSelect("fc.defaultSign", "defaultSign");
 
     if (query.search) {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("fc.financialType::text ILIKE :search", { search: `%${query.search}%` })
+            .where("financialType.label ILIKE :search", { search: `%${query.search}%` })
             .orWhere("fc.financialCode ILIKE :search", { search: `%${query.search}%` })
             .orWhere("fc.financialName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.defaultSign::text ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("defaultSign.label ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }
 
     if (query.financialType) {
-      qb.andWhere("fc.financialType::text ILIKE :financialType", {
+      qb.andWhere("financialType.label ILIKE :financialType", {
         financialType: `%${query.financialType}%`,
       });
     }
@@ -216,7 +240,7 @@ export class FinancialCodeService {
     const [data, totalItems] = await qb.getManyAndCount();
 
     return {
-      data: data.map(FinancialCodeResponseDto.fromEntity),
+      data: data.map(code => FinancialCodeResponseDto.fromEntity(code)),
       page,
       limit,
       totalItems,

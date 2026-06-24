@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { PartyProfile, ClientType } from "../party-profile.entity";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 
 export class PartyProfileResponseDto {
   @ApiProperty({ description: "UUID of the party profile" })
@@ -54,8 +55,8 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "KYC Approval Number" })
   kycApprovalNumber?: string;
 
-  @ApiPropertyOptional({ description: "KYC Risk Category" })
-  kycRiskCategory?: string;
+  @ApiPropertyOptional({ description: "KYC Risk Category", type: SelectOptionResponseDto })
+  kycRiskCategory?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "Cheque Transaction Limit" })
   chqTrxnLimit?: number;
@@ -63,8 +64,8 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Default Handling Charges" })
   defaultHandlingCharges?: number;
 
-  @ApiPropertyOptional({ description: "Default Agent" })
-  defaultAgent?: string;
+  @ApiPropertyOptional({ description: "Default Agent", type: SelectOptionResponseDto })
+  defaultAgent?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "Phone No" })
   phoneNo?: string;
@@ -87,11 +88,11 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Designation" })
   designation?: string;
 
-  @ApiPropertyOptional({ description: "Group" })
-  group?: string;
+  @ApiPropertyOptional({ description: "Group", type: SelectOptionResponseDto })
+  group?: SelectOptionResponseDto | null;
 
-  @ApiPropertyOptional({ description: "Entity Type" })
-  entityType?: string;
+  @ApiPropertyOptional({ description: "Entity Type", type: SelectOptionResponseDto })
+  entityType?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "PAN Name" })
   panName?: string;
@@ -102,11 +103,11 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "PAN No" })
   panNo?: string;
 
-  @ApiPropertyOptional({ description: "Marketing Executive" })
-  marketingExecutive?: string;
+  @ApiPropertyOptional({ description: "Marketing Executive", type: SelectOptionResponseDto })
+  marketingExecutive?: SelectOptionResponseDto | null;
 
-  @ApiPropertyOptional({ description: "Business Nature" })
-  businessNature?: string;
+  @ApiPropertyOptional({ description: "Business Nature", type: SelectOptionResponseDto })
+  businessNature?: SelectOptionResponseDto | null;
 
   @ApiProperty({ description: "Is TDS Deducted flag" })
   isTdsDeducted: boolean;
@@ -114,8 +115,8 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "TDS value/type" })
   tds?: string;
 
-  @ApiPropertyOptional({ description: "TDS Group" })
-  tdsGroup?: string;
+  @ApiPropertyOptional({ description: "TDS Group", type: SelectOptionResponseDto })
+  tdsGroup?: SelectOptionResponseDto | null;
 
   @ApiProperty({ description: "Active status flag" })
   active: boolean;
@@ -170,8 +171,8 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Origin Branch Name" })
   originBranchName?: string;
 
-  @ApiPropertyOptional({ description: "Location" })
-  location?: string;
+  @ApiPropertyOptional({ description: "Location", type: SelectOptionResponseDto })
+  location?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "Website" })
   webSite?: string;
@@ -240,10 +241,10 @@ export class PartyProfileResponseDto {
     dto.city = entity.city;
     dto.pinCode = entity.pinCode;
     dto.kycApprovalNumber = entity.kycApprovalNumber;
-    dto.kycRiskCategory = entity.kycRiskCategory;
+    dto.kycRiskCategory = entity.kycRiskCategory ? SelectOptionResponseDto.fromEntity(entity.kycRiskCategory) : null;
     dto.chqTrxnLimit = entity.chqTrxnLimit ? Number(entity.chqTrxnLimit) : undefined;
     dto.defaultHandlingCharges = entity.defaultHandlingCharges ? Number(entity.defaultHandlingCharges) : undefined;
-    dto.defaultAgent = entity.defaultAgent;
+    dto.defaultAgent = entity.defaultAgent ? SelectOptionResponseDto.fromEntity(entity.defaultAgent) : null;
     dto.phoneNo = entity.phoneNo;
     dto.blockDateFrom = entity.blockDateFrom;
     dto.establishmentDate = entity.establishmentDate;
@@ -251,16 +252,16 @@ export class PartyProfileResponseDto {
     dto.email = entity.email;
     dto.contactName = entity.contactName;
     dto.designation = entity.designation;
-    dto.group = entity.group;
-    dto.entityType = entity.entityType;
+    dto.group = entity.group ? SelectOptionResponseDto.fromEntity(entity.group) : null;
+    dto.entityType = entity.entityType ? SelectOptionResponseDto.fromEntity(entity.entityType) : null;
     dto.panName = entity.panName;
     dto.panDob = entity.panDob;
     dto.panNo = entity.panNo;
-    dto.marketingExecutive = entity.marketingExecutive;
-    dto.businessNature = entity.businessNature;
+    dto.marketingExecutive = entity.marketingExecutive ? SelectOptionResponseDto.fromEntity(entity.marketingExecutive) : null;
+    dto.businessNature = entity.businessNature ? SelectOptionResponseDto.fromEntity(entity.businessNature) : null;
     dto.isTdsDeducted = entity.isTdsDeducted;
     dto.tds = entity.tds;
-    dto.tdsGroup = entity.tdsGroup;
+    dto.tdsGroup = entity.tdsGroup ? SelectOptionResponseDto.fromEntity(entity.tdsGroup) : null;
     dto.active = entity.active;
     dto.isActive = entity.isActive;
     dto.printAddress = entity.printAddress;
@@ -279,7 +280,7 @@ export class PartyProfileResponseDto {
 
     dto.originBranchId = entity.originBranchId;
     dto.originBranchName = entity.originBranch?.name;
-    dto.location = entity.location;
+    dto.location = entity.location ? SelectOptionResponseDto.fromEntity(entity.location) : null;
     dto.webSite = entity.webSite;
     dto.accountHolderName = entity.accountHolderName;
     dto.bankName = entity.bankName;

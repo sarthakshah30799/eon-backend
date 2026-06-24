@@ -1,5 +1,6 @@
 import { Entity, Column, Index, ManyToOne, JoinColumn } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
+import { SelectOption } from "../category-options/category-option.entity";
 import { Currency } from "../currencies/currency.entity";
 import { FinancialCode } from "../financial-codes/financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
@@ -7,8 +8,11 @@ import { Branch } from "../branches/branch.entity";
 
 @Entity("account_profiles")
 export class AccountProfile extends BaseEntity {
-  @Column({ type: "uuid", nullable: true })
-  divisionDept: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_account_profiles_division_dept",
+  })
+  divisionDept: SelectOption | null;
 
   @Index({ unique: true })
   @Column({ type: "citext" })
@@ -18,14 +22,23 @@ export class AccountProfile extends BaseEntity {
   @Column({ type: "citext" })
   accountName: string;
 
-  @Column({ type: "uuid", nullable: true })
-  accountType: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_account_profiles_account_type",
+  })
+  accountType: SelectOption | null;
 
-  @Column({ type: "uuid", nullable: true })
-  subLedger: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_account_profiles_sub_ledger",
+  })
+  subLedger: SelectOption | null;
 
-  @Column({ type: "uuid", nullable: true })
-  bankNature: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_account_profiles_bank_nature",
+  })
+  bankNature: SelectOption | null;
 
   @ManyToOne(() => Currency, { nullable: false, onDelete: "RESTRICT" })
   @JoinColumn({ name: "currency_id" })
@@ -41,7 +54,10 @@ export class AccountProfile extends BaseEntity {
   @Column({ type: "uuid" })
   financialCodeId: string;
 
-  @ManyToOne(() => FinancialSubProfile, { nullable: true, onDelete: "RESTRICT" })
+  @ManyToOne(() => FinancialSubProfile, {
+    nullable: true,
+    onDelete: "RESTRICT",
+  })
   @JoinColumn({ name: "financial_sub_profile_id" })
   financialSubProfile: FinancialSubProfile;
 

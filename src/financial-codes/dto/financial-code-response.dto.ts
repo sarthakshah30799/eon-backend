@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 import { FinancialCode } from "../financial-code.entity";
 
 export class FinancialSubProfileNestedResponseDto {
@@ -19,8 +20,8 @@ export class FinancialCodeResponseDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty()
-  financialType: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  financialType: SelectOptionResponseDto | null;
 
   @ApiProperty()
   financialCode: string;
@@ -28,8 +29,8 @@ export class FinancialCodeResponseDto {
   @ApiProperty()
   financialName: string;
 
-  @ApiProperty()
-  defaultSign: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  defaultSign: SelectOptionResponseDto | null;
 
   @ApiProperty()
   priority: number;
@@ -46,10 +47,10 @@ export class FinancialCodeResponseDto {
   static fromEntity(entity: FinancialCode): FinancialCodeResponseDto {
     const dto = new FinancialCodeResponseDto();
     dto.id = entity.id;
-    dto.financialType = entity.financialType;
+    dto.financialType = entity.financialType ? SelectOptionResponseDto.fromEntity(entity.financialType) : null;
     dto.financialCode = entity.financialCode;
     dto.financialName = entity.financialName;
-    dto.defaultSign = entity.defaultSign;
+    dto.defaultSign = entity.defaultSign ? SelectOptionResponseDto.fromEntity(entity.defaultSign) : null;
     dto.priority = entity.priority;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;

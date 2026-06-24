@@ -21,6 +21,11 @@ import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.d
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 
 function normalizeDto(dto: CreatePartyProfileDto | UpdatePartyProfileDto) {
+  const normalizeOptional = (value?: string | null) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  };
+
   return {
     ...dto,
     code: dto.code?.trim().toUpperCase(),
@@ -31,6 +36,14 @@ function normalizeDto(dto: CreatePartyProfileDto | UpdatePartyProfileDto) {
     city: dto.city?.trim(),
     pinCode: dto.pinCode?.trim(),
     email: dto.email?.trim() || null,
+    location: normalizeOptional(dto.location),
+    kycRiskCategory: normalizeOptional(dto.kycRiskCategory),
+    defaultAgent: normalizeOptional(dto.defaultAgent),
+    group: normalizeOptional(dto.group),
+    entityType: normalizeOptional(dto.entityType),
+    marketingExecutive: normalizeOptional(dto.marketingExecutive),
+    businessNature: normalizeOptional(dto.businessNature),
+    tdsGroup: normalizeOptional(dto.tdsGroup),
   };
 }
 
@@ -141,8 +154,28 @@ export class PartyProfileService {
       }
     }
 
+    const {
+      location,
+      kycRiskCategory,
+      defaultAgent,
+      group,
+      entityType,
+      marketingExecutive,
+      businessNature,
+      tdsGroup,
+      ...rest
+    } = normalized;
+
     const client = this.partyProfileRepository.create({
-      ...normalized,
+      ...rest,
+      location: location ? ({ id: location } as any) : null,
+      kycRiskCategory: kycRiskCategory ? ({ id: kycRiskCategory } as any) : null,
+      defaultAgent: defaultAgent ? ({ id: defaultAgent } as any) : null,
+      group: group ? ({ id: group } as any) : null,
+      entityType: entityType ? ({ id: entityType } as any) : null,
+      marketingExecutive: marketingExecutive ? ({ id: marketingExecutive } as any) : null,
+      businessNature: businessNature ? ({ id: businessNature } as any) : null,
+      tdsGroup: tdsGroup ? ({ id: tdsGroup } as any) : null,
       dateOfIntro: normalized.dateOfIntro ? new Date(normalized.dateOfIntro) : new Date(),
       blockDateFrom: normalized.blockDateFrom ? new Date(normalized.blockDateFrom) : null,
       establishmentDate: normalized.establishmentDate ? new Date(normalized.establishmentDate) : null,
@@ -197,7 +230,18 @@ export class PartyProfileService {
       }
     }
 
-    const { code: _code, ...updatableFields } = normalized;
+    const {
+      code: _code,
+      location,
+      kycRiskCategory,
+      defaultAgent,
+      group,
+      entityType,
+      marketingExecutive,
+      businessNature,
+      tdsGroup,
+      ...updatableFields
+    } = normalized;
     const updates = pickDefinedFields(updatableFields);
     Object.assign(client, {
       ...updates,
@@ -227,6 +271,30 @@ export class PartyProfileService {
             : null
           : client.ffmcRegDate,
     });
+    if (location !== undefined) {
+      client.location = location ? ({ id: location } as any) : null;
+    }
+    if (kycRiskCategory !== undefined) {
+      client.kycRiskCategory = kycRiskCategory ? ({ id: kycRiskCategory } as any) : null;
+    }
+    if (defaultAgent !== undefined) {
+      client.defaultAgent = defaultAgent ? ({ id: defaultAgent } as any) : null;
+    }
+    if (group !== undefined) {
+      client.group = group ? ({ id: group } as any) : null;
+    }
+    if (entityType !== undefined) {
+      client.entityType = entityType ? ({ id: entityType } as any) : null;
+    }
+    if (marketingExecutive !== undefined) {
+      client.marketingExecutive = marketingExecutive ? ({ id: marketingExecutive } as any) : null;
+    }
+    if (businessNature !== undefined) {
+      client.businessNature = businessNature ? ({ id: businessNature } as any) : null;
+    }
+    if (tdsGroup !== undefined) {
+      client.tdsGroup = tdsGroup ? ({ id: tdsGroup } as any) : null;
+    }
     client.updatedBy = userId;
 
     await this.partyProfileRepository.save(client);
@@ -289,6 +357,14 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.state", "state")
       .leftJoinAndSelect("pp.originBranch", "originBranch")
       .leftJoinAndSelect("pp.statusUpdatedBy", "statusUpdatedBy")
+      .leftJoinAndSelect("pp.location", "locationOption")
+      .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
+      .leftJoinAndSelect("pp.defaultAgent", "defaultAgentOption")
+      .leftJoinAndSelect("pp.group", "groupOption")
+      .leftJoinAndSelect("pp.entityType", "entityTypeOption")
+      .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
+      .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
+      .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption")
       .where("pp.status = :status", { status: WorkflowStatus.PENDING });
 
     if (!user?.isAdmin) {
@@ -302,13 +378,26 @@ export class PartyProfileService {
     qb.orderBy("pp.createdAt", "ASC");
 
     const pending = await qb.getMany();
-    return pending.map(PartyProfileResponseDto.fromEntity);
+    return pending.map(client => PartyProfileResponseDto.fromEntity(client));
   }
 
   async findById(id: string): Promise<PartyProfileResponseDto> {
     const client = await this.partyProfileRepository.findOne({
       where: { id },
-      relations: ["gstState", "state", "originBranch", "statusUpdatedBy"],
+      relations: [
+        "gstState",
+        "state",
+        "originBranch",
+        "statusUpdatedBy",
+        "location",
+        "kycRiskCategory",
+        "defaultAgent",
+        "group",
+        "entityType",
+        "marketingExecutive",
+        "businessNature",
+        "tdsGroup",
+      ],
     });
 
     if (!client) {
@@ -337,7 +426,15 @@ export class PartyProfileService {
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
       .leftJoinAndSelect("pp.state", "state")
-      .leftJoinAndSelect("pp.originBranch", "originBranch");
+      .leftJoinAndSelect("pp.originBranch", "originBranch")
+      .leftJoinAndSelect("pp.location", "locationOption")
+      .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
+      .leftJoinAndSelect("pp.defaultAgent", "defaultAgentOption")
+      .leftJoinAndSelect("pp.group", "groupOption")
+      .leftJoinAndSelect("pp.entityType", "entityTypeOption")
+      .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
+      .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
+      .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
     const type = query.type ?? ClientType.CORPORATE_CLIENT;
     qb.where("pp.type::text = :type", { type });
@@ -370,7 +467,7 @@ export class PartyProfileService {
     const [data, totalItems] = await qb.getManyAndCount();
 
     return {
-      data: data.map(PartyProfileResponseDto.fromEntity),
+      data: data.map(client => PartyProfileResponseDto.fromEntity(client)),
       page,
       limit,
       totalItems,

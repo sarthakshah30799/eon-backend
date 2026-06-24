@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { SelectOption } from '../category-options/category-option.entity';
 import { DocumentProfile } from './document-profile.entity';
 import { CreateDocumentProfileDto } from './dto/create-document-profile.dto';
 import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
@@ -14,7 +15,6 @@ import { ResolveDocumentProfilesDto } from './dto/resolve-document-profile-rules
 import {
   applyDocumentProfileFilters,
   normalizeDocumentProfilePayload,
-  resolveDocumentProfile,
 } from './document-profile.utils';
 import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
 import { DocumentSpecificationType } from './document-profile.entity';
@@ -29,25 +29,32 @@ export class DocumentProfileService {
   async findAll(): Promise<DocumentProfileResponseDto[]> {
     const profiles = await this.documentProfileRepository
       .createQueryBuilder('documentProfile')
+      .leftJoinAndSelect('documentProfile.type', 'type')
+      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
       .orderBy('documentProfile.sortOrder', 'ASC')
       .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
 
     return profiles.map(profile =>
-      DocumentProfileResponseDto.fromEntity(resolveDocumentProfile(profile)),
+      DocumentProfileResponseDto.fromEntity(profile),
     );
   }
 
   async findById(id: string): Promise<DocumentProfileResponseDto> {
-    const profile = await this.documentProfileRepository.findOne({
-      where: { id },
-    });
+    const profile = await this.documentProfileRepository
+      .createQueryBuilder('documentProfile')
+      .leftJoinAndSelect('documentProfile.type', 'type')
+      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
+      .where('documentProfile.id = :id', { id })
+      .getOne();
 
     if (!profile) {
       throw new NotFoundException(`Document profile with id ${id} not found`);
     }
 
-    return DocumentProfileResponseDto.fromEntity(resolveDocumentProfile(profile));
+    return DocumentProfileResponseDto.fromEntity(profile);
   }
 
   async create(
@@ -66,9 +73,9 @@ export class DocumentProfileService {
         isRequired: dto.isRequired ?? false,
         maxSizeMb: dto.maxSizeMb,
         specificationType: dto.specificationType,
-        type: dto.type,
-        groupSelection: dto.groupSelection,
-        entitySelection: dto.entitySelection,
+        type: { id: dto.type } as SelectOption,
+        groupSelection: { id: dto.groupSelection } as SelectOption,
+        entitySelection: { id: dto.entitySelection } as SelectOption,
         active: dto.active ?? true,
         sortOrder: dto.sortOrder ?? 0,
       }) as DocumentProfile,
@@ -112,9 +119,13 @@ export class DocumentProfileService {
         isRequired: dto.isRequired ?? profile.isRequired,
         maxSizeMb: dto.maxSizeMb ?? profile.maxSizeMb,
         specificationType: dto.specificationType ?? profile.specificationType,
-        type: dto.type ?? profile.type,
-        groupSelection: dto.groupSelection ?? profile.groupSelection,
-        entitySelection: dto.entitySelection ?? profile.entitySelection,
+        type: dto.type ? ({ id: dto.type } as SelectOption) : profile.type,
+        groupSelection: dto.groupSelection
+          ? ({ id: dto.groupSelection } as SelectOption)
+          : profile.groupSelection,
+        entitySelection: dto.entitySelection
+          ? ({ id: dto.entitySelection } as SelectOption)
+          : profile.entitySelection,
         active: dto.active ?? profile.active,
         sortOrder: dto.sortOrder ?? profile.sortOrder,
       }) as DocumentProfile,
@@ -143,6 +154,9 @@ export class DocumentProfileService {
   ): Promise<DocumentProfileResponseDto[]> {
     const queryBuilder = this.documentProfileRepository
       .createQueryBuilder('documentProfile')
+      .leftJoinAndSelect('documentProfile.type', 'type')
+      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
       .where('1 = 1');
 
     applyDocumentProfileFilters(queryBuilder, 'documentProfile', {
@@ -157,7 +171,7 @@ export class DocumentProfileService {
       .getMany();
 
     return profiles.map(profile =>
-      DocumentProfileResponseDto.fromEntity(resolveDocumentProfile(profile)),
+      DocumentProfileResponseDto.fromEntity(profile),
     );
   }
 

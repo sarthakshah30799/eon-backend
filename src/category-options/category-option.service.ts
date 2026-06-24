@@ -25,11 +25,11 @@ export class SelectOptionService {
   ) {}
 
   private getCacheKey(code: string): string {
-    return code.trim().toLowerCase();
+    return code.trim().replace(/[_\s-]/g, '').toLowerCase();
   }
 
   private normalizeCode(code: string): string {
-    return code.trim();
+    return code.trim().replace(/[_\s-]/g, '').toUpperCase();
   }
 
   private invalidateCache(code?: string): void {
@@ -60,7 +60,9 @@ export class SelectOptionService {
 
     const loader = this.selectOptionRepository
       .createQueryBuilder("selectOption")
-      .where("selectOption.code = :code", { code: normalizedCode })
+      .where("REPLACE(UPPER(selectOption.code), '_', '') = :code", {
+        code: normalizedCode,
+      })
       .andWhere("selectOption.isActive = true")
       .orderBy("selectOption.sortOrder", "ASC")
       .addOrderBy("selectOption.label", "ASC")
@@ -114,15 +116,18 @@ export class SelectOptionService {
     userId?: string,
   ): Promise<SelectOptionResponseDto> {
     const normalizedCode = this.normalizeCode(dto.code);
-    const normalizedValue = dto.value.trim();
-    const normalizedLabel = dto.label.trim();
+    const normalizedValue = dto.value.trim().toUpperCase();
+    const normalizedLabel = dto.label.trim().toUpperCase();
 
-    const existing = await this.selectOptionRepository.findOne({
-      where: {
+    const existing = await this.selectOptionRepository
+      .createQueryBuilder("selectOption")
+      .where("REPLACE(UPPER(selectOption.code), '_', '') = :code", {
         code: normalizedCode,
+      })
+      .andWhere("selectOption.value = :value", {
         value: normalizedValue,
-      },
-    });
+      })
+      .getOne();
 
     if (existing) {
       throw new ConflictException("Select option already exists for this code and value");
@@ -155,8 +160,8 @@ export class SelectOptionService {
     }
 
     const nextCode = option.code;
-    const nextValue = dto.value?.trim() ?? option.value;
-    const nextLabel = dto.label?.trim() ?? option.label;
+    const nextValue = dto.value?.trim().toUpperCase() ?? option.value;
+    const nextLabel = dto.label?.trim().toUpperCase() ?? option.label;
     const nextSortOrder = dto.sortOrder ?? option.sortOrder;
     const nextIsActive = dto.isActive ?? option.isActive;
 
@@ -178,15 +183,20 @@ export class SelectOptionService {
     const result: SelectOptionResponseDto[] = [];
 
     for (const item of options) {
-      const existing = await this.selectOptionRepository.findOne({
-        where: {
-          code: this.normalizeCode(item.code),
-          value: item.value.trim(),
-        },
-      });
+      const normalizedCode = this.normalizeCode(item.code);
+      const normalizedValue = item.value.trim().toUpperCase();
+      const existing = await this.selectOptionRepository
+        .createQueryBuilder("selectOption")
+        .where("REPLACE(UPPER(selectOption.code), '_', '') = :code", {
+          code: normalizedCode,
+        })
+        .andWhere("selectOption.value = :value", {
+          value: normalizedValue,
+        })
+        .getOne();
 
       if (existing) {
-        existing.label = item.label.trim();
+        existing.label = item.label.trim().toUpperCase();
         existing.sortOrder = item.sortOrder ?? existing.sortOrder;
         existing.isActive = item.isActive ?? existing.isActive;
         existing.updatedBy = userId || this.systemUserId;
@@ -198,9 +208,9 @@ export class SelectOptionService {
 
       const created = await this.selectOptionRepository.save(
         this.selectOptionRepository.create({
-          code: this.normalizeCode(item.code),
-          value: item.value.trim(),
-          label: item.label.trim(),
+          code: normalizedCode,
+          value: normalizedValue,
+          label: item.label.trim().toUpperCase(),
           sortOrder: item.sortOrder ?? 0,
           isActive: item.isActive ?? true,
           createdBy: userId || this.systemUserId,
@@ -221,6 +231,6 @@ export class SelectOptionService {
       .orderBy("selectOption.code", "ASC")
       .getRawMany<{ code: string }>();
 
-    return rows.map(row => row.code as CategoryOptionCodeEnum);
+    return [...new Set(rows.map(row => this.normalizeCode(row.code)))] as CategoryOptionCodeEnum[];
   }
 }

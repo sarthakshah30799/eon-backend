@@ -5,6 +5,7 @@ import { PartyProfileStatusChangeLog } from "./party-profile-status-change-log.e
 import { Branch } from "../branches/branch.entity";
 import { State } from "../state/state.entity";
 import { User } from "../users/user.entity";
+import { SelectOption } from "../category-options/category-option.entity";
 import { PartyProfileController } from "./party-profile.controller";
 import { PartyProfileService } from "./party-profile.service";
 import { UserModule } from "../users/user.module";
@@ -17,6 +18,7 @@ import { UserModule } from "../users/user.module";
       Branch,
       State,
       User,
+      SelectOption,
     ]),
     UserModule,
   ],

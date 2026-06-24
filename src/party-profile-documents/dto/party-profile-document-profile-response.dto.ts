@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentProfile } from '../../document-profiles/document-profile.entity';
 import { DocumentProfileResponseDto } from '../../document-profiles/dto/document-profile-response.dto';
+import { SelectOptionResponseDto } from '../../category-options/dto/category-option-response.dto';
 import { PartyProfileDocument } from '../party-profile-document.entity';
 import { PartyProfileDocumentFileResponseDto } from './party-profile-document-file-response.dto';
 
@@ -27,13 +28,13 @@ export class PartyProfileDocumentProfileResponseDto {
   specificationType: string;
 
   @ApiProperty()
-  type: string;
+  type: SelectOptionResponseDto | null;
 
-  @ApiProperty()
-  groupSelection: string | null;
+  @ApiPropertyOptional({ nullable: true })
+  groupSelection: SelectOptionResponseDto | null;
 
-  @ApiProperty()
-  entitySelection: string | null;
+  @ApiPropertyOptional({ nullable: true })
+  entitySelection: SelectOptionResponseDto | null;
 
   @ApiProperty()
   active: boolean;

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentProfile, DocumentSpecificationType } from '../document-profile.entity';
+import { SelectOptionResponseDto } from '../../category-options/dto/category-option-response.dto';
 
 export class DocumentProfileResponseDto {
   @ApiProperty()
@@ -23,14 +24,14 @@ export class DocumentProfileResponseDto {
   @ApiProperty({ enum: DocumentSpecificationType })
   specificationType: DocumentSpecificationType;
 
-  @ApiProperty()
-  type: string;
+  @ApiPropertyOptional({ type: SelectOptionResponseDto, nullable: true })
+  type: SelectOptionResponseDto | null;
 
-  @ApiPropertyOptional({ nullable: true })
-  groupSelection: string | null;
+  @ApiPropertyOptional({ type: SelectOptionResponseDto, nullable: true })
+  groupSelection: SelectOptionResponseDto | null;
 
-  @ApiPropertyOptional({ nullable: true })
-  entitySelection: string | null;
+  @ApiPropertyOptional({ type: SelectOptionResponseDto, nullable: true })
+  entitySelection: SelectOptionResponseDto | null;
 
   @ApiProperty()
   active: boolean;
@@ -53,9 +54,13 @@ export class DocumentProfileResponseDto {
     dto.isRequired = entity.isRequired;
     dto.maxSizeMb = Number(entity.maxSizeMb);
     dto.specificationType = entity.specificationType;
-    dto.type = entity.type;
-    dto.groupSelection = entity.groupSelection;
-    dto.entitySelection = entity.entitySelection;
+    dto.type = entity.type ? SelectOptionResponseDto.fromEntity(entity.type) : null;
+    dto.groupSelection = entity.groupSelection
+      ? SelectOptionResponseDto.fromEntity(entity.groupSelection)
+      : null;
+    dto.entitySelection = entity.entitySelection
+      ? SelectOptionResponseDto.fromEntity(entity.entitySelection)
+      : null;
     dto.active = entity.active;
     dto.sortOrder = entity.sortOrder;
     dto.createdAt = entity.createdAt;

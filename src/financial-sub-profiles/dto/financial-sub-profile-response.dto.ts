@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 import { FinancialSubProfile } from "../financial-sub-profile.entity";
 
 export class FinancialSubProfileResponseDto {
@@ -11,8 +12,8 @@ export class FinancialSubProfileResponseDto {
   @ApiProperty()
   financialCode: string;
 
-  @ApiProperty()
-  financialType: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  financialType: SelectOptionResponseDto | null;
 
   @ApiProperty()
   financialName: string;
@@ -37,7 +38,9 @@ export class FinancialSubProfileResponseDto {
     dto.id = entity.id;
     dto.financialCodeId = entity.financialCode?.id || null;
     dto.financialCode = entity.financialCode?.financialCode || null;
-    dto.financialType = entity.financialCode?.financialType || null;
+    dto.financialType = entity.financialCode?.financialType
+      ? SelectOptionResponseDto.fromEntity(entity.financialCode.financialType)
+      : null;
     dto.financialName = entity.financialCode?.financialName || null;
     dto.financialSubCode = entity.financialSubCode;
     dto.financialSubName = entity.financialSubName;

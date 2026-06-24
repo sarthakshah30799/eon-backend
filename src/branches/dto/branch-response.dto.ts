@@ -40,10 +40,7 @@ export class BranchResponseDto {
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
 
-  static fromEntity(
-    entity: Branch,
-    locationType?: SelectOptionResponseDto | null,
-  ): BranchResponseDto {
+  static fromEntity(entity: Branch): BranchResponseDto {
     const dto = new BranchResponseDto();
     dto.id = entity.id;
     dto.code = entity.code;
@@ -64,7 +61,7 @@ export class BranchResponseDto {
     dto.contactNo = entity.contactNo;
     dto.branchEmail = entity.branchEmail;
     dto.aeonBranchLic = entity.aeonBranchLic;
-    dto.locationType = locationType ?? null;
+    dto.locationType = entity.locationType ? SelectOptionResponseDto.fromEntity(entity.locationType) : null;
     dto.cashHolding = entity.cashHolding !== null ? Number(entity.cashHolding) : null;
     dto.cashHoldingTemp = entity.cashHoldingTemp !== null ? Number(entity.cashHoldingTemp) : null;
     dto.currHolding = entity.currHolding !== null ? Number(entity.currHolding) : null;

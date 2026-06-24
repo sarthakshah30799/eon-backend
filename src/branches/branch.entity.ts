@@ -11,6 +11,7 @@ import { BaseEntity } from "../base/base.entity";
 import { Company } from "../company/company.entity";
 import { Counter } from "../counters/counter.entity";
 import { Country } from "../country/country.entity";
+import { SelectOption } from "../category-options/category-option.entity";
 import { State } from "../state/state.entity";
 
 @Entity("branches")
@@ -90,8 +91,11 @@ export class Branch extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   aeonBranchLic: string;
 
-  @Column({ type: "uuid", nullable: true })
-  locationType: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_branches_location_type",
+  })
+  locationType: SelectOption | null;
 
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
   cashHolding: number;

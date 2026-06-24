@@ -1,22 +1,23 @@
 import { Entity, Column, Index, ManyToOne, JoinColumn } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
+import { SelectOption } from "../category-options/category-option.entity";
 import { State } from "../state/state.entity";
 import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 
 export enum ClientType {
-  CORPORATE_CLIENT = 'CORPORATE_CLIENT',
-  FFMC = 'FFMC',
-  RF = 'RF',
-  AUTHORISED_DEALER = 'AUTHORISED_DEALER',
-  RMC = 'RMC',
-  FRANCHISE = 'FRANCHISE',
-  AGENT = 'AGENT',
-  FOREIGN_CORRESPONDENT = 'FOREIGN_CORRESPONDENT',
-  MARKETING_EXECUTIVE = 'MARKETING_EXECUTIVE',
-  CARD_ISSUER_PROFILE = 'CARD_ISSUER_PROFILE',
-  MISC_PROFILE = 'MISC_PROFILE'
+  CORPORATE_CLIENT = "CORPORATE_CLIENT",
+  FFMC = "FFMC",
+  RF = "RF",
+  AUTHORISED_DEALER = "AUTHORISED_DEALER",
+  RMC = "RMC",
+  FRANCHISE = "FRANCHISE",
+  AGENT = "AGENT",
+  FOREIGN_CORRESPONDENT = "FOREIGN_CORRESPONDENT",
+  MARKETING_EXECUTIVE = "MARKETING_EXECUTIVE",
+  CARD_ISSUER_PROFILE = "CARD_ISSUER_PROFILE",
+  MISC_PROFILE = "MISC_PROFILE",
 }
 
 @Entity("party_profiles")
@@ -70,8 +71,11 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   kycApprovalNumber: string;
 
-  @Column({ type: "uuid", nullable: true })
-  kycRiskCategory: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_kyc_risk_category",
+  })
+  kycRiskCategory: SelectOption | null;
 
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
   chqTrxnLimit: number;
@@ -79,8 +83,11 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
   defaultHandlingCharges: number;
 
-  @Column({ type: "uuid", nullable: true })
-  defaultAgent: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_defaultAgent",
+  })
+  defaultAgent: SelectOption | null;
 
   @Column({ type: "citext", nullable: true })
   phoneNo: string;
@@ -103,11 +110,17 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   designation: string;
 
-  @Column({ type: "uuid", nullable: true })
-  group: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_group",
+  })
+  group: SelectOption | null;
 
-  @Column({ type: "uuid", nullable: true })
-  entityType: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_entityType",
+  })
+  entityType: SelectOption | null;
 
   @Column({ type: "citext", nullable: true })
   panName: string;
@@ -118,11 +131,17 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   panNo: string;
 
-  @Column({ type: "uuid", nullable: true })
-  marketingExecutive: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_marketingExecutive",
+  })
+  marketingExecutive: SelectOption | null;
 
-  @Column({ type: "uuid", nullable: true })
-  businessNature: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_businessNature",
+  })
+  businessNature: SelectOption | null;
 
   @Column({ type: "boolean", default: false })
   isTdsDeducted: boolean;
@@ -130,8 +149,11 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   tds: string;
 
-  @Column({ type: "uuid", nullable: true })
-  tdsGroup: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_tdsGroup",
+  })
+  tdsGroup: SelectOption | null;
 
   @Column({ type: "boolean", default: false })
   active: boolean;
@@ -216,8 +238,11 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "uuid", nullable: true })
   originBranchId: string;
 
-  @Column({ type: "uuid", nullable: true })
-  location: string;
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_party_profiles_location",
+  })
+  location: SelectOption | null;
 
   @Column({ type: "citext", nullable: true })
   webSite: string;

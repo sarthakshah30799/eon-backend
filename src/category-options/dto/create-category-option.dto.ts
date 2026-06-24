@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import {
   IsBoolean,
   IsEnum,
@@ -17,19 +18,30 @@ export class CreateSelectOptionDto {
     example: CategoryOptionCodeEnum.LocationType,
     maxLength: 100,
   })
+  @Transform(({ value }) =>
+    typeof value === "string"
+      ? value.trim().replace(/[_\s-]/g, "").toUpperCase()
+      : value
+  )
   @IsEnum(CategoryOptionCodeEnum)
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   code: string;
 
-  @ApiProperty({ description: "Stored option value", example: "branch" })
+  @ApiProperty({ description: "Stored option value", example: "BRANCH" })
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toUpperCase() : value
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
   value: string;
 
-  @ApiProperty({ description: "Human readable option label", example: "Branch" })
+  @ApiProperty({ description: "Human readable option label", example: "BRANCH" })
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toUpperCase() : value
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)

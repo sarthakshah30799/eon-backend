@@ -36,9 +36,9 @@ export const normalizeDocumentProfilePayload = (
   specificationType:
     (normalizeSpecificationTypeValue(profile.specificationType) ??
       profile.specificationType) as DocumentSpecificationType,
-  type: profile.type.trim(),
-  groupSelection: normalizeSelectionValue(profile.groupSelection),
-  entitySelection: normalizeSelectionValue(profile.entitySelection),
+  type: profile.type,
+  groupSelection: profile.groupSelection,
+  entitySelection: profile.entitySelection,
 });
 
 export const resolveDocumentProfile = (
@@ -58,9 +58,9 @@ export const resolveDocumentProfile = (
     specificationType:
       (normalizeSpecificationTypeValue(profile.specificationType) ??
         profile.specificationType) as DocumentSpecificationType,
-    type: profile.type.trim(),
-    groupSelection: normalizeSelectionValue(profile.groupSelection),
-    entitySelection: normalizeSelectionValue(profile.entitySelection),
+    type: profile.type,
+    groupSelection: profile.groupSelection,
+    entitySelection: profile.entitySelection,
   };
 };
 

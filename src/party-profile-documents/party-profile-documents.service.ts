@@ -75,6 +75,7 @@ export class PartyProfileDocumentsService {
   async getDocuments(partyProfileId: string): Promise<PartyProfileDocumentsResponseDto> {
     const partyProfile = await this.partyProfileRepository.findOne({
       where: { id: partyProfileId },
+      relations: ['group', 'entityType'],
     });
 
     if (!partyProfile) {
@@ -84,7 +85,7 @@ export class PartyProfileDocumentsService {
     const profiles = await this.loadMatchingDocumentProfiles(
       partyProfile.type,
       await this.resolveDocumentGroupSelection(partyProfile.group),
-      partyProfile.entityType,
+      partyProfile.entityType?.id ?? null,
     );
     const profileIds = profiles.map(profile => profile.id);
     const existingDocuments = profileIds.length
@@ -123,6 +124,7 @@ export class PartyProfileDocumentsService {
 
     const partyProfile = await this.partyProfileRepository.findOne({
       where: { id: partyProfileId },
+      relations: ['group', 'entityType'],
     });
 
     if (!partyProfile) {
@@ -142,7 +144,7 @@ export class PartyProfileDocumentsService {
     const allowedProfiles = await this.loadMatchingDocumentProfiles(
       partyProfile.type,
       await this.resolveDocumentGroupSelection(partyProfile.group),
-      partyProfile.entityType,
+      partyProfile.entityType?.id ?? null,
     );
     const allowedProfile = allowedProfiles.find(profile => profile.id === documentProfileId);
 
@@ -231,13 +233,15 @@ export class PartyProfileDocumentsService {
     documentGroupSelection?: string | null,
     entitySelection?: string | null,
   ) {
-    if (!type || !documentGroupSelection || !entitySelection) {
+    if (!type || !entitySelection) {
       return [];
     }
 
     const queryBuilder = this.documentProfileRepository
       .createQueryBuilder('documentProfile')
-      .leftJoin('category_options', 'typeOption', 'typeOption.id = documentProfile.type')
+      .leftJoinAndSelect('documentProfile.type', 'type')
+      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
       .where('1 = 1')
       .andWhere('documentProfile.active = true')
       .andWhere('documentProfile.specificationType = :specificationType', {
@@ -245,13 +249,15 @@ export class PartyProfileDocumentsService {
       });
 
     queryBuilder.andWhere(
-      '(LOWER(typeOption.value) = LOWER(:partyProfileType) OR LOWER(typeOption.label) = LOWER(:partyProfileType))',
+      '(LOWER(type.value) = LOWER(:partyProfileType) OR LOWER(type.label) = LOWER(:partyProfileType))',
       { partyProfileType: type },
     );
 
-    queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
-      groupSelection: documentGroupSelection,
-    });
+    if (documentGroupSelection) {
+      queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
+        groupSelection: documentGroupSelection,
+      });
+    }
 
     queryBuilder.andWhere('documentProfile.entitySelection = :entitySelection', {
       entitySelection,
@@ -263,16 +269,8 @@ export class PartyProfileDocumentsService {
       .getMany();
   }
 
-  private async resolveDocumentGroupSelection(partyGroupId?: string | null) {
-    if (!partyGroupId) {
-      return null;
-    }
-
-    const partyGroup = await this.selectOptionRepository.findOne({
-      where: { id: partyGroupId },
-    });
-
-    if (!partyGroup) {
+  private async resolveDocumentGroupSelection(partyGroup?: SelectOption | null) {
+    if (!partyGroup?.value) {
       return null;
     }
 

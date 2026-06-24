@@ -1,5 +1,6 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
+import { SelectOption } from '../category-options/category-option.entity';
 
 export enum DocumentSpecificationType {
   MASTER = 'MASTER',
@@ -27,14 +28,17 @@ export class DocumentProfile extends BaseEntity {
   @Column({ type: 'enum', enum: DocumentSpecificationType })
   specificationType: DocumentSpecificationType;
 
-  @Column({ type: 'uuid' })
-  type: string;
+  @ManyToOne(() => SelectOption, { nullable: false })
+  @JoinColumn({ name: 'type', referencedColumnName: 'id' })
+  type: SelectOption;
 
-  @Column({ type: 'uuid', nullable: true })
-  groupSelection: string | null;
+  @ManyToOne(() => SelectOption, { nullable: true })
+  @JoinColumn({ name: 'group_selection', referencedColumnName: 'id' })
+  groupSelection: SelectOption | null;
 
-  @Column({ type: 'uuid', nullable: true })
-  entitySelection: string | null;
+  @ManyToOne(() => SelectOption, { nullable: true })
+  @JoinColumn({ name: 'entity_selection', referencedColumnName: 'id' })
+  entitySelection: SelectOption | null;
 
   @Column({ type: 'boolean', default: true })
   active: boolean;

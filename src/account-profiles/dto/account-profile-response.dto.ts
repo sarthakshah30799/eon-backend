@@ -1,12 +1,13 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 import { AccountProfile } from "../account-profile.entity";
 
 export class AccountProfileResponseDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty({ nullable: true })
-  divisionDept: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  divisionDept: SelectOptionResponseDto | null;
 
   @ApiProperty()
   accountCode: string;
@@ -14,14 +15,14 @@ export class AccountProfileResponseDto {
   @ApiProperty()
   accountName: string;
 
-  @ApiProperty({ nullable: true })
-  accountType: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  accountType: SelectOptionResponseDto | null;
 
-  @ApiProperty({ nullable: true })
-  subLedger: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  subLedger: SelectOptionResponseDto | null;
 
-  @ApiProperty({ nullable: true })
-  bankNature: string;
+  @ApiProperty({ nullable: true, type: SelectOptionResponseDto })
+  bankNature: SelectOptionResponseDto | null;
 
   @ApiProperty()
   currencyId: string;
@@ -83,12 +84,12 @@ export class AccountProfileResponseDto {
   static fromEntity(entity: AccountProfile): AccountProfileResponseDto {
     const dto = new AccountProfileResponseDto();
     dto.id = entity.id;
-    dto.divisionDept = entity.divisionDept;
+    dto.divisionDept = entity.divisionDept ? SelectOptionResponseDto.fromEntity(entity.divisionDept) : null;
     dto.accountCode = entity.accountCode;
     dto.accountName = entity.accountName;
-    dto.accountType = entity.accountType;
-    dto.subLedger = entity.subLedger;
-    dto.bankNature = entity.bankNature;
+    dto.accountType = entity.accountType ? SelectOptionResponseDto.fromEntity(entity.accountType) : null;
+    dto.subLedger = entity.subLedger ? SelectOptionResponseDto.fromEntity(entity.subLedger) : null;
+    dto.bankNature = entity.bankNature ? SelectOptionResponseDto.fromEntity(entity.bankNature) : null;
     dto.currencyId = entity.currencyId;
     dto.currencyCode = entity.currency?.currencyCode;
     dto.financialCodeId = entity.financialCodeId;
