@@ -41,6 +41,7 @@ export class MenuController {
     return this.menuService.findTree(
       shouldIncludeAdmin,
       user.isAdmin === true,
+      user.permissions,
     );
   }
 

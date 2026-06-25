@@ -3,6 +3,7 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserService } from '../../users/user.service';
@@ -85,6 +86,17 @@ export class PermissionsGuard implements CanActivate {
       menuPath = '/admin/document-profile';
     } else if (path.includes('/tds-profiles')) {
       menuPath = '/admin/tds-profile';
+    } else if (path.includes('/party-profiles')) {
+      if (path.endsWith('/types') || path.endsWith('/review-queue')) {
+        return true;
+      }
+
+      const requestedType = request.query?.type || request.body?.type;
+      if (!requestedType) {
+        return true;
+      }
+
+      menuPath = `/party-profiles/${String(requestedType).trim().toLowerCase().replace(/_/g, '-')}`;
     }
 
     if (!menuPath) {
@@ -103,8 +115,8 @@ export class PermissionsGuard implements CanActivate {
 
     const userPermissions = userDto.permissions?.[menuPath] || [];
     if (!userPermissions.includes(requiredPermission)) {
-      throw new ForbiddenException(
-        `You do not have permission to ${requiredPermission} on ${menuPath}`,
+      throw new NotFoundException(
+        `Resource at ${menuPath} not found`,
       );
     }
 

@@ -39,8 +39,8 @@ export class PartyProfileController {
   @Get("types")
   @ApiOperation({ summary: "Get all party profile types as key-value pairs" })
   @ApiResponse({ status: 200, description: "List of profile types" })
-  async getTypes(): Promise<{ value: string; label: string }[]> {
-    return this.partyProfileService.getTypes();
+  async getTypes(@Session() session: any): Promise<{ value: string; label: string }[]> {
+    return this.partyProfileService.getTypes(session.userId);
   }
 
   @Get()
@@ -50,8 +50,11 @@ export class PartyProfileController {
     description: "Paginated list of party profiles",
     type: PartyProfileListResponseDto,
   })
-  async findAll(@Query() query: PartyProfileListQueryDto): Promise<PartyProfileListResponseDto> {
-    return this.partyProfileService.findAll(query);
+  async findAll(
+    @Query() query: PartyProfileListQueryDto,
+    @Session() session: any,
+  ): Promise<PartyProfileListResponseDto> {
+    return this.partyProfileService.findAll(query, session.userId);
   }
 
   @Get("review-queue")
@@ -66,8 +69,11 @@ export class PartyProfileController {
   @ApiParam({ name: "id", description: "Party profile UUID" })
   @ApiResponse({ status: 200, type: PartyProfileResponseDto })
   @ApiResponse({ status: 404, description: "Not found" })
-  async findById(@Param("id") id: string): Promise<PartyProfileResponseDto> {
-    return this.partyProfileService.findById(id);
+  async findById(
+    @Param("id") id: string,
+    @Session() session: any,
+  ): Promise<PartyProfileResponseDto> {
+    return this.partyProfileService.findByIdForUser(id, session.userId);
   }
 
   @Post()
@@ -108,7 +114,10 @@ export class PartyProfileController {
   @ApiOperation({ summary: "Delete a party profile" })
   @ApiParam({ name: "id", description: "Party profile UUID" })
   @ApiResponse({ status: 200, description: "Successfully deleted" })
-  async delete(@Param("id") id: string): Promise<{ message: string }> {
-    return this.partyProfileService.delete(id);
+  async delete(
+    @Param("id") id: string,
+    @Session() session: any,
+  ): Promise<{ message: string }> {
+    return this.partyProfileService.delete(id, session.userId);
   }
 }

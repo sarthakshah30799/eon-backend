@@ -170,7 +170,10 @@ export class RoleService implements OnModuleInit {
   }
 
   async findById(id: string, currentUserId?: string): Promise<RoleResponseDto> {
-    const role = await this.roleRepository.findOne({ where: { id } });
+    const role = await this.roleRepository.findOne({
+      where: { id },
+      relations: ['menuPermissions', 'menuPermissions.menu', 'menuPermissions.permission'],
+    });
     if (!role) {
       throw new NotFoundException(`Role with id ${id} not found`);
     }

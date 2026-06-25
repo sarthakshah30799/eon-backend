@@ -21,6 +21,8 @@ export class RoleResponseDto {
   @ApiProperty() isAeonAccess: boolean;
   @ApiProperty() isDelPortalAccess: boolean;
   @ApiProperty() isDelAppAccess: boolean;
+  @ApiProperty({ required: false, type: Object })
+  permissions?: Record<string, Record<string, boolean>>;
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
 
@@ -45,6 +47,32 @@ export class RoleResponseDto {
     dto.isAeonAccess = entity.isAeonAccess;
     dto.isDelPortalAccess = entity.isDelPortalAccess;
     dto.isDelAppAccess = entity.isDelAppAccess;
+
+    const permissions: Record<string, Record<string, boolean>> = {};
+    for (const menuPermission of entity.menuPermissions ?? []) {
+      if (!menuPermission.menu || !menuPermission.permission) {
+        continue;
+      }
+
+      const menuId = menuPermission.menu.id;
+      const permCode = menuPermission.permission.code;
+
+      if (!permissions[menuId]) {
+        permissions[menuId] = {
+          add: false,
+          modify: false,
+          delete: false,
+          view: false,
+          export: false,
+          authorized: false,
+          rejected: false,
+        };
+      }
+
+      permissions[menuId][permCode] = true;
+    }
+
+    dto.permissions = permissions;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

@@ -20,6 +20,8 @@ import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.dto";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 
+type PartyProfileAction = "view" | "add" | "modify" | "delete";
+
 function normalizeDto(dto: CreatePartyProfileDto | UpdatePartyProfileDto) {
   const normalizeOptional = (value?: string | null) => {
     const trimmed = value?.trim();
@@ -70,8 +72,74 @@ export class PartyProfileService {
   private async getCurrentUser(userId: string) {
     return this.userRepository.findOne({
       where: { id: userId },
-      relations: ["userRoles", "userRoles.role", "userRoles.branch"],
+      relations: [
+        "userRoles",
+        "userRoles.role",
+        "userRoles.role.menuPermissions",
+        "userRoles.role.menuPermissions.menu",
+        "userRoles.role.menuPermissions.permission",
+        "userRoles.branch",
+      ],
     });
+  }
+
+  private normalizePartyProfilePath(type?: string) {
+    if (!type) {
+      return "";
+    }
+
+    return `/party-profiles/${type.trim().toLowerCase().replace(/_/g, "-")}`;
+  }
+
+  private canAccessPartyProfileType(
+    user: User | null | undefined,
+    type: string,
+    action: PartyProfileAction = "view",
+  ) {
+    if (!user) {
+      return false;
+    }
+
+    if (user.isAdmin) {
+      return true;
+    }
+
+    if (this.isReviewer(user)) {
+      return true;
+    }
+
+    const requiredPath = this.normalizePartyProfilePath(type);
+    if (!requiredPath) {
+      return false;
+    }
+
+    return (
+      user.userRoles?.some(userRole =>
+        userRole.role?.menuPermissions?.some(menuPermission => {
+          const permissionCode = menuPermission.permission?.code;
+          const menuPath = menuPermission.menu?.path?.trim().toLowerCase();
+
+          if (!menuPath || permissionCode !== action) {
+            return false;
+          }
+
+          return (
+            menuPath === requiredPath ||
+            requiredPath.startsWith(`${menuPath}/`)
+          );
+        }),
+      ) ?? false
+    );
+  }
+
+  private assertPartyProfileAccess(
+    user: User | null | undefined,
+    type: string,
+    action: PartyProfileAction = "view",
+  ) {
+    if (!this.canAccessPartyProfileType(user, type, action)) {
+      throw new NotFoundException(`Party profile type ${type} not found`);
+    }
   }
 
   private isReviewer(user: User | null | undefined) {
@@ -100,8 +168,8 @@ export class PartyProfileService {
     ];
   }
 
-  getTypes() {
-    return [
+  getTypes(userId?: string) {
+    const allTypes = [
       { value: ClientType.CORPORATE_CLIENT, label: 'CORPORATE CLIENT' },
       { value: ClientType.FFMC, label: 'FFMC' },
       { value: ClientType.RF, label: 'RF' },
@@ -114,10 +182,30 @@ export class PartyProfileService {
       { value: ClientType.CARD_ISSUER_PROFILE, label: 'CARD ISSUER PROFILE' },
       { value: ClientType.MISC_PROFILE, label: 'MISC PROFILE' }
     ];
+
+    if (!userId) {
+      return [];
+    }
+
+    return this.getCurrentUser(userId).then(user => {
+      if (!user) {
+        return [];
+      }
+
+      if (user.isAdmin || this.isReviewer(user)) {
+        return allTypes;
+      }
+
+      return allTypes.filter(type =>
+        this.canAccessPartyProfileType(user, type.value, "view"),
+      );
+    });
   }
 
   async create(dto: CreatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
+    const user = await this.getCurrentUser(userId);
     const normalized = normalizeDto(dto);
+    this.assertPartyProfileAccess(user, normalized.type ?? dto.type ?? ClientType.CORPORATE_CLIENT, "add");
 
     const existingCode = await this.partyProfileRepository.findOne({
       where: { code: normalized.code },
@@ -193,12 +281,14 @@ export class PartyProfileService {
   }
 
   async update(id: string, dto: UpdatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
+    const user = await this.getCurrentUser(userId);
     const client = await this.partyProfileRepository.findOne({ where: { id } });
     if (!client) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
     const normalized = normalizeDto(dto);
+    this.assertPartyProfileAccess(user, normalized.type ?? client.type, "modify");
 
     if (normalized.name && normalized.name !== client.name) {
       const existingName = await this.partyProfileRepository.findOne({
@@ -382,6 +472,11 @@ export class PartyProfileService {
   }
 
   async findById(id: string): Promise<PartyProfileResponseDto> {
+    return this.findByIdForUser(id, undefined);
+  }
+
+  async findByIdForUser(id: string, userId?: string): Promise<PartyProfileResponseDto> {
+    const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({
       where: { id },
       relations: [
@@ -404,20 +499,33 @@ export class PartyProfileService {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
+    if (user) {
+      this.assertPartyProfileAccess(user, client.type, "view");
+    }
+
     return PartyProfileResponseDto.fromEntity(client);
   }
 
-  async delete(id: string): Promise<{ message: string }> {
+  async delete(id: string, userId?: string): Promise<{ message: string }> {
+    const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({ where: { id } });
     if (!client) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
+    }
+
+    if (user) {
+      this.assertPartyProfileAccess(user, client.type, "delete");
     }
 
     await this.partyProfileRepository.remove(client);
     return { message: `Party Profile with id ${id} deleted successfully` };
   }
 
-  async findAll(query: PartyProfileListQueryDto): Promise<PartyProfileListResponseDto> {
+  async findAll(
+    query: PartyProfileListQueryDto,
+    userId?: string,
+  ): Promise<PartyProfileListResponseDto> {
+    const user = userId ? await this.getCurrentUser(userId) : null;
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -437,6 +545,9 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
     const type = query.type ?? ClientType.CORPORATE_CLIENT;
+    if (user) {
+      this.assertPartyProfileAccess(user, type, "view");
+    }
     qb.where("pp.type::text = :type", { type });
 
     if (query.search) {

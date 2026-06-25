@@ -77,6 +77,54 @@ export class MenuService {
     return build(null);
   }
 
+  private canAccessMenuPath(
+    permissions: Record<string, string[]> | undefined,
+    path?: string | null,
+  ): boolean {
+    if (!path) {
+      return false;
+    }
+
+    const normalizedPath = normalizeMenuPath(path);
+    if (!normalizedPath) {
+      return false;
+    }
+
+    const grantedPermissions = permissions?.[normalizedPath];
+    return Boolean(grantedPermissions?.length);
+  }
+
+  private pruneTreeByPermissions(
+    menus: MenuResponseDto[],
+    permissions: Record<string, string[]> | undefined,
+    includeAdminMenus: boolean,
+  ): MenuResponseDto[] {
+    return menus
+      .map(menu => {
+        if (menu.isAdmin && !includeAdminMenus) {
+          return null;
+        }
+
+        const visibleChildren = this.pruneTreeByPermissions(
+          menu.children ?? [],
+          permissions,
+          includeAdminMenus,
+        );
+
+        const canViewSelf = this.canAccessMenuPath(permissions, menu.path);
+
+        if (!canViewSelf && visibleChildren.length === 0) {
+          return null;
+        }
+
+        return {
+          ...menu,
+          children: visibleChildren,
+        };
+      })
+      .filter(Boolean) as MenuResponseDto[];
+  }
+
   private findMenuNodeById(
     menus: MenuResponseDto[],
     id: string
@@ -100,16 +148,20 @@ export class MenuService {
   async findTree(
     includeAdminMenus = false,
     isAdminUser = false,
+    permissions?: Record<string, string[]>,
   ): Promise<MenuResponseDto[]> {
     const menus = await this.getAllMenuDtos();
     const visibleMenus = this.buildVisibleMenuDtos(
       menus,
       includeAdminMenus && isAdminUser,
-    ).filter(
-      menu => menu.isActive
-    );
+    ).filter(menu => menu.isActive);
 
-    return this.buildTree(visibleMenus);
+    const tree = this.buildTree(visibleMenus);
+    if (includeAdminMenus && isAdminUser) {
+      return tree;
+    }
+
+    return this.pruneTreeByPermissions(tree, permissions, includeAdminMenus && isAdminUser);
   }
 
   async findAll(
