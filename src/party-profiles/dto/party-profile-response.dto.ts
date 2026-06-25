@@ -145,12 +145,6 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "GST Number" })
   gstNo?: string;
 
-  @ApiPropertyOptional({ description: "SGST Number" })
-  sgstNo?: string;
-
-  @ApiPropertyOptional({ description: "IGST Number" })
-  igstNo?: string;
-
   @ApiPropertyOptional({ description: "GST State ID" })
   gstStateId?: string;
 
@@ -191,9 +185,6 @@ export class PartyProfileResponseDto {
 
   @ApiPropertyOptional({ description: "Bank Branch Name" })
   bankBranchName?: string;
-
-  @ApiPropertyOptional({ description: "Cancelled Cheque Copy" })
-  cancelledChequeCopy?: string;
 
   @ApiPropertyOptional({ description: "FFMC Registration Number" })
   ffmcRegNo?: string;
@@ -271,8 +262,6 @@ export class PartyProfileResponseDto {
     dto.applyTax = entity.applyTax;
     dto.igstOnly = entity.igstOnly;
     dto.gstNo = entity.gstNo;
-    dto.sgstNo = entity.sgstNo;
-    dto.igstNo = entity.igstNo;
     dto.gstStateId = entity.gstStateId;
     dto.gstStateName = entity.gstState?.name;
     dto.stateId = entity.stateId;
@@ -287,7 +276,6 @@ export class PartyProfileResponseDto {
     dto.accountNumber = entity.accountNumber;
     dto.ifscCode = entity.ifscCode;
     dto.bankBranchName = entity.bankBranchName;
-    dto.cancelledChequeCopy = entity.cancelledChequeCopy;
     dto.ffmcRegNo = entity.ffmcRegNo;
     dto.ffmcRegDate = entity.ffmcRegDate;
     dto.type = entity.type;
