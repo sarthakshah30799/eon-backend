@@ -92,6 +92,7 @@ export class ExpenseIncomeBookingMasterService {
     }
 
     const { code: _code, ...updatableFields } = dto;
+    const resolvedType = updatableFields.type ?? master.type;
 
     if (updatableFields.type !== undefined) {
       master.type = updatableFields.type;
@@ -142,10 +143,10 @@ export class ExpenseIncomeBookingMasterService {
     }
 
     // Enforce business rules based on resolved type
-    if (type === BookingMasterType.EXPENSE) {
+    if (resolvedType === BookingMasterType.EXPENSE) {
       master.allowRecPay = false;
       master.applicableCustomer = false;
-    } else if (type === BookingMasterType.INCOME) {
+    } else if (resolvedType === BookingMasterType.INCOME) {
       master.applicableAgent = false;
       master.applicableVendor = false;
       master.applicableEmployee = false;
