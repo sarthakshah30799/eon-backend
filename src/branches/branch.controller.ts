@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Session } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { BranchService } from './branch.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -17,8 +17,8 @@ export class BranchController {
   @Get()
   @ApiOperation({ summary: 'Get all branches' })
   @ApiResponse({ status: 200, description: 'List of branches', type: [BranchResponseDto] })
-  async findAll(): Promise<BranchResponseDto[]> {
-    return this.branchService.findAll();
+  async findAll(@Query('activeOnly') activeOnly = 'true'): Promise<BranchResponseDto[]> {
+    return this.branchService.findAll(activeOnly !== 'false');
   }
 
   @Get(':id')

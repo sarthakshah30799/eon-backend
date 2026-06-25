@@ -137,17 +137,21 @@ export class UserService {
     await this.userRoleRepository.save(userRoles);
   }
 
-  async findAll(currentUserId?: string): Promise<UserResponseDto[]> {
+  async findAll(currentUserId?: string, activeOnly = true): Promise<UserResponseDto[]> {
     const users = await this.userRepository.find({
       relations: USER_RELATIONS,
       order: { createdAt: 'DESC' },
     });
 
+    const visibleUsers = activeOnly
+      ? users.filter(user => user.isActive === true)
+      : users;
+
     if (await this.isRequesterAdmin(currentUserId)) {
-      return users.map(UserResponseDto.fromEntity);
+      return visibleUsers.map(UserResponseDto.fromEntity);
     }
 
-    return users
+    return visibleUsers
       .filter(user => user.isAdmin !== true)
       .map(UserResponseDto.fromEntity);
   }

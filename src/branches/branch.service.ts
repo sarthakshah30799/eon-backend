@@ -25,8 +25,9 @@ export class BranchService {
     private readonly stateRepository: Repository<State>,
   ) {}
 
-  async findAll(): Promise<BranchResponseDto[]> {
+  async findAll(activeOnly = true): Promise<BranchResponseDto[]> {
     const branches = await this.branchRepository.find({
+      where: activeOnly ? { isActive: true } : undefined,
       relations: ['company', 'counters', 'country', 'state', 'locationType'],
       order: { createdAt: 'DESC' },
     });

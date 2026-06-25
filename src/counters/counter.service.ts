@@ -15,8 +15,9 @@ export class CounterService {
     private readonly counterRepository: Repository<Counter>,
   ) {}
 
-  async findAll(): Promise<CounterResponseDto[]> {
+  async findAll(activeOnly = true): Promise<CounterResponseDto[]> {
     const counters = await this.counterRepository.find({
+      where: activeOnly ? { isActive: true } : undefined,
       relations: ['branch'],
       order: { createdAt: 'DESC' },
     });

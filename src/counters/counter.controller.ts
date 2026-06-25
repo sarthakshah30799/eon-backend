@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Session } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { CounterService } from './counter.service';
 import { CreateCounterDto } from './dto/create-counter.dto';
@@ -17,8 +17,8 @@ export class CounterController {
   @Get()
   @ApiOperation({ summary: 'Get all counters' })
   @ApiResponse({ status: 200, description: 'List of counters', type: [CounterResponseDto] })
-  async findAll(): Promise<CounterResponseDto[]> {
-    return this.counterService.findAll();
+  async findAll(@Query('activeOnly') activeOnly = 'true'): Promise<CounterResponseDto[]> {
+    return this.counterService.findAll(activeOnly !== 'false');
   }
 
   @Get(':id')

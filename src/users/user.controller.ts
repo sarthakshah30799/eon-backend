@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UseGuards, Session } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiBody, ApiParam } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -18,8 +18,11 @@ export class UserController {
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'List of users', type: [UserResponseDto] })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findAll(@Session() session: any): Promise<UserResponseDto[]> {
-    return this.userService.findAll(session.userId);
+  async findAll(
+    @Session() session: any,
+    @Query('activeOnly') activeOnly = 'true',
+  ): Promise<UserResponseDto[]> {
+    return this.userService.findAll(session.userId, activeOnly !== 'false');
   }
 
   @Get(':id')
