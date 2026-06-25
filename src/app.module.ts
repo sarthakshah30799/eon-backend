@@ -25,10 +25,16 @@ import { DocumentProfileModule } from "./document-profiles/document-profile.modu
 import { TdsProfileModule } from "./tds-profiles/tds-profile.module";
 import { ExpenseIncomeBookingMasterModule } from "./expense-income-booking-masters/expense-income-booking-master.module";
 
+<<<<<<< HEAD
 import { AuditLogModule } from "./audit-logs/audit-log.module";
 import { SessionPolicyModule } from "./session-policy/session-policy.module";
 import { MailModule } from "./mail/mail.module";
 import { StorageModule } from "./storage/storage.module";
+=======
+import { AuditLogModule } from './audit-logs/audit-log.module';
+import { SessionPolicyModule } from './session-policy/session-policy.module';
+import { MailModule } from './mail/mail.module';
+>>>>>>> 141d94af8359ca8b2963fd587241e067f70eccf7
 
 @Module({
   imports: [
@@ -53,11 +59,16 @@ import { StorageModule } from "./storage/storage.module";
     AccountProfileModule,
     CountryGroupModule,
     PartyProfileModule,
+<<<<<<< HEAD
     PartyProfileDocumentsModule,
     DocumentProfileModule,
     TdsProfileModule,
     ExpenseIncomeBookingMasterModule,
     MailModule,
+=======
+    MailModule,
+
+>>>>>>> 141d94af8359ca8b2963fd587241e067f70eccf7
     AuditLogModule,
     StorageModule,
   ],
