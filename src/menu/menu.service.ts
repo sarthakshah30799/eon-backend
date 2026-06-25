@@ -15,10 +15,13 @@ export class MenuService {
   ) {}
 
   private async getAllMenuDtos(): Promise<MenuResponseDto[]> {
-    const menus = await this.menuRepository.find({
-      relations: ['parent'],
-      order: { sortOrder: 'ASC' },
-    });
+    const menus = await this.menuRepository
+      .createQueryBuilder('menu')
+      .leftJoinAndSelect('menu.parent', 'parent')
+      .orderBy('menu.sortOrder IS NULL', 'ASC')
+      .addOrderBy('menu.sortOrder', 'ASC')
+      .addOrderBy('menu.name', 'ASC')
+      .getMany();
     return menus.map(menu => MenuResponseDto.fromEntity(menu, false));
   }
 
@@ -63,11 +66,8 @@ export class MenuService {
       childrenByParent.set(parentId, items);
     }
 
-    const sortMenus = (items: MenuResponseDto[]) =>
-      items.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-
     const build = (parentId: string | null): MenuResponseDto[] => {
-      const items = sortMenus(childrenByParent.get(parentId) ?? []);
+      const items = childrenByParent.get(parentId) ?? [];
       return items.map(menu => ({
         ...menu,
         children: build(menu.id),

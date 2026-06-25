@@ -202,12 +202,6 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   gstNo: string;
 
-  @Column({ type: "citext", nullable: true })
-  sgstNo: string;
-
-  @Column({ type: "citext", nullable: true })
-  igstNo: string;
-
   @ManyToOne(() => State, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({
     name: "gst_state_id",
@@ -261,9 +255,6 @@ export class PartyProfile extends BaseEntity {
 
   @Column({ type: "citext", nullable: true })
   bankBranchName: string;
-
-  @Column({ type: "text", nullable: true })
-  cancelledChequeCopy: string;
 
   @Column({
     type: "enum",
