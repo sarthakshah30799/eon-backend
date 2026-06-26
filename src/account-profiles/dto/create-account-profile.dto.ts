@@ -69,25 +69,45 @@ export class CreateAccountProfileDto {
   @IsOptional()
   mapToAccountId?: string;
 
-  @ApiPropertyOptional({ description: "Do Sale flag", default: false })
+  @ApiPropertyOptional({ description: "Retail Sale flag", default: false })
   @IsBoolean()
   @IsOptional()
-  doSale?: boolean;
+  retailSale?: boolean;
 
-  @ApiPropertyOptional({ description: "Do Purchase flag", default: false })
+  @ApiPropertyOptional({ description: "Retail Purchase flag", default: false })
   @IsBoolean()
   @IsOptional()
-  doPurchase?: boolean;
+  retailPurchase?: boolean;
 
-  @ApiPropertyOptional({ description: "Do Receipt flag", default: false })
+  @ApiPropertyOptional({ description: "Bulk Sale flag", default: false })
   @IsBoolean()
   @IsOptional()
-  doReceipt?: boolean;
+  bulkSale?: boolean;
 
-  @ApiPropertyOptional({ description: "Do Payment flag", default: false })
+  @ApiPropertyOptional({ description: "Bulk Purchase flag", default: false })
   @IsBoolean()
   @IsOptional()
-  doPayment?: boolean;
+  bulkPurchase?: boolean;
+
+  @ApiPropertyOptional({ description: "Expense flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  expense?: boolean;
+
+  @ApiPropertyOptional({ description: "Receipt flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  receipt?: boolean;
+
+  @ApiPropertyOptional({ description: "Payment flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  payment?: boolean;
+
+  @ApiPropertyOptional({ description: "Journal Voucher (JV) flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  journalVoucher?: boolean;
 
   @ApiPropertyOptional({ description: "Active status flag", default: true })
   @IsBoolean()

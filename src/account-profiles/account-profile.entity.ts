@@ -85,16 +85,28 @@ export class AccountProfile extends BaseEntity {
   mapToAccountId: string;
 
   @Column({ type: "boolean", default: false })
-  doSale: boolean;
+  retailSale: boolean;
 
   @Column({ type: "boolean", default: false })
-  doPurchase: boolean;
+  retailPurchase: boolean;
 
   @Column({ type: "boolean", default: false })
-  doReceipt: boolean;
+  bulkSale: boolean;
 
   @Column({ type: "boolean", default: false })
-  doPayment: boolean;
+  bulkPurchase: boolean;
+
+  @Column({ type: "boolean", default: false })
+  expense: boolean;
+
+  @Column({ type: "boolean", default: false })
+  receipt: boolean;
+
+  @Column({ type: "boolean", default: false })
+  payment: boolean;
+
+  @Column({ type: "boolean", default: false })
+  journalVoucher: boolean;
 
   @Column({ type: "boolean", default: true })
   active: boolean;

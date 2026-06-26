@@ -55,16 +55,28 @@ export class AccountProfileResponseDto {
   mapToAccountId: string;
 
   @ApiProperty()
-  doSale: boolean;
+  retailSale: boolean;
 
   @ApiProperty()
-  doPurchase: boolean;
+  retailPurchase: boolean;
 
   @ApiProperty()
-  doReceipt: boolean;
+  bulkSale: boolean;
 
   @ApiProperty()
-  doPayment: boolean;
+  bulkPurchase: boolean;
+
+  @ApiProperty()
+  expense: boolean;
+
+  @ApiProperty()
+  receipt: boolean;
+
+  @ApiProperty()
+  payment: boolean;
+
+  @ApiProperty()
+  journalVoucher: boolean;
 
   @ApiProperty()
   active: boolean;
@@ -100,10 +112,14 @@ export class AccountProfileResponseDto {
     dto.zeroBalanceAtEod = entity.zeroBalanceAtEod;
     dto.branchIdToTransfer = entity.branchIdToTransfer;
     dto.mapToAccountId = entity.mapToAccountId;
-    dto.doSale = entity.doSale;
-    dto.doPurchase = entity.doPurchase;
-    dto.doReceipt = entity.doReceipt;
-    dto.doPayment = entity.doPayment;
+    dto.retailSale = entity.retailSale;
+    dto.retailPurchase = entity.retailPurchase;
+    dto.bulkSale = entity.bulkSale;
+    dto.bulkPurchase = entity.bulkPurchase;
+    dto.expense = entity.expense;
+    dto.receipt = entity.receipt;
+    dto.payment = entity.payment;
+    dto.journalVoucher = entity.journalVoucher;
     dto.active = entity.active;
     dto.cmsBank = entity.cmsBank;
     dto.directRemittance = entity.directRemittance;
