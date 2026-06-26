@@ -159,14 +159,7 @@ export class RoleService implements OnModuleInit {
     const roles = await this.roleRepository.find({
       order: { createdAt: 'DESC' },
     });
-
-    if (await this.isRequesterAdmin(currentUserId)) {
-      return roles.map(RoleResponseDto.fromEntity);
-    }
-
-    return roles
-      .filter(role => role.isAdmin !== true)
-      .map(RoleResponseDto.fromEntity);
+    return roles.map(RoleResponseDto.fromEntity);
   }
 
   async findById(id: string, currentUserId?: string): Promise<RoleResponseDto> {

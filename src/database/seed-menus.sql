@@ -118,13 +118,16 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'FOREIGN CORRESPONDENT PROFILE', '/party-profiles/foreign-correspondent', 'badge-check', v_party_profiles_id, 8, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'MARKETING EXECUTIVE PROFILE', '/party-profiles/marketing-executive', 'badge-check', v_party_profiles_id, 9, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'FOREX CORRESPONDENT PROFILE', '/party-profiles/forex-correspondent', 'badge-check', v_party_profiles_id, 9, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'CARD ISSUER PROFILE', '/party-profiles/card-issuer-profile', 'badge-check', v_party_profiles_id, 10, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'MARKETING EXECUTIVE PROFILE', '/party-profiles/marketing-executive', 'badge-check', v_party_profiles_id, 10, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'MISC PROFILE', '/party-profiles/misc-profile', 'badge-check', v_party_profiles_id, 11, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'CARD ISSUER PROFILE', '/party-profiles/card-issuer-profile', 'badge-check', v_party_profiles_id, 11, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'MISC PROFILE', '/party-profiles/misc-profile', 'badge-check', v_party_profiles_id, 12, true, v_system_user, v_system_user);
 
   -- Standalone menus
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)

@@ -35,12 +35,16 @@ export class MenuController {
     @Session() session: any,
     @Query('includeAdmin') includeAdmin?: string,
   ): Promise<MenuResponseDto[]> {
-    const user = await this.userService.findById(session.userId, session.userId);
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     const shouldIncludeAdmin =
-      includeAdmin === undefined ? user.isAdmin === true : includeAdmin === 'true';
+      includeAdmin === undefined ? isFullAccessUser : includeAdmin === 'true';
     return this.menuService.findTree(
       shouldIncludeAdmin,
-      user.isAdmin === true,
+      isFullAccessUser,
       user.permissions,
     );
   }
@@ -52,12 +56,16 @@ export class MenuController {
     @Session() session: any,
     @Query('includeAdmin') includeAdmin?: string,
   ): Promise<MenuResponseDto[]> {
-    const user = await this.userService.findById(session.userId, session.userId);
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     const shouldIncludeAdmin =
-      includeAdmin === undefined ? user.isAdmin === true : includeAdmin === 'true';
+      includeAdmin === undefined ? isFullAccessUser : includeAdmin === 'true';
     return this.menuService.findAll(
       shouldIncludeAdmin,
-      user.isAdmin === true,
+      isFullAccessUser,
     );
   }
 
@@ -67,20 +75,28 @@ export class MenuController {
   @ApiResponse({ status: 200, description: 'Menu details', type: MenuResponseDto })
   @ApiResponse({ status: 404, description: 'Menu not found' })
   async findById(@Param('id') id: string, @Session() session: any): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId, session.userId);
-    return this.menuService.findById(id, user.isAdmin === true, user.isAdmin === true);
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
+    return this.menuService.findById(id, isFullAccessUser, isFullAccessUser);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a new menu item' })
   @ApiResponse({ status: 201, description: 'Menu created', type: MenuResponseDto })
   async create(@Body() dto: CreateMenuDto, @Session() session: any): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId, session.userId);
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     return this.menuService.create(
       dto,
       session.userId,
-      user.isAdmin === true,
-      user.isAdmin === true,
+      isFullAccessUser,
+      isFullAccessUser,
     );
   }
 
@@ -94,13 +110,17 @@ export class MenuController {
     @Body() dto: UpdateMenuDto,
     @Session() session: any,
   ): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId, session.userId);
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     return this.menuService.update(
       id,
       dto,
       session.userId,
-      user.isAdmin === true,
-      user.isAdmin === true,
+      isFullAccessUser,
+      isFullAccessUser,
     );
   }
 
@@ -113,7 +133,11 @@ export class MenuController {
     @Param('id') id: string,
     @Session() session: any,
   ): Promise<{ message: string }> {
-    const user = await this.userService.findById(session.userId, session.userId);
-    return this.menuService.delete(id, user.isAdmin === true, user.isAdmin === true);
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
+    return this.menuService.delete(id, isFullAccessUser, isFullAccessUser);
   }
 }

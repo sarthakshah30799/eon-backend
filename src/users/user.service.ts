@@ -26,6 +26,11 @@ const USER_RELATIONS = [
 
 const TEMP_INITIAL_PASSWORD = 'Temp@1234';
 
+type WorkplaceSelection = {
+  activeBranchId?: string | null;
+  activeCounterId?: string | null;
+};
+
 @Injectable()
 export class UserService {
   constructor(
@@ -138,22 +143,30 @@ export class UserService {
   }
 
   async findAll(currentUserId?: string, activeOnly = true): Promise<UserResponseDto[]> {
-    const users = await this.userRepository.find({
-      relations: USER_RELATIONS,
-      order: { createdAt: 'DESC' },
-    });
+    const requesterIsAdmin = await this.isRequesterAdmin(currentUserId);
 
-    const visibleUsers = activeOnly
-      ? users.filter(user => user.isActive === true)
-      : users;
+    const query = this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.userRoles', 'userRole')
+      .leftJoinAndSelect('userRole.role', 'role')
+      .leftJoinAndSelect('role.menuPermissions', 'menuPermission')
+      .leftJoinAndSelect('menuPermission.menu', 'menu')
+      .leftJoinAndSelect('menuPermission.permission', 'permission')
+      .leftJoinAndSelect('userRole.branch', 'branch')
+      .leftJoinAndSelect('branch.company', 'company')
+      .leftJoinAndSelect('userRole.counter', 'counter')
+      .orderBy('user.createdAt', 'DESC');
 
-    if (await this.isRequesterAdmin(currentUserId)) {
-      return visibleUsers.map(UserResponseDto.fromEntity);
+    if (activeOnly) {
+      query.andWhere('user.isActive = :isActive', { isActive: true });
     }
 
-    return visibleUsers
-      .filter(user => user.isAdmin !== true)
-      .map(UserResponseDto.fromEntity);
+    if (!requesterIsAdmin) {
+      query.andWhere('user.isAdmin = :isAdmin', { isAdmin: false });
+    }
+
+    const users = await query.getMany();
+    return users.map(user => UserResponseDto.fromEntity(user));
   }
 
   async create(createUserDto: CreateUserDto, userId?: string): Promise<UserResponseDto> {
@@ -320,7 +333,11 @@ export class UserService {
     });
   }
 
-  async findById(id: string, currentUserId?: string): Promise<UserResponseDto> {
+  async findById(
+    id: string,
+    currentUserId?: string,
+    workplace?: WorkplaceSelection,
+  ): Promise<UserResponseDto> {
     const user = await this.userRepository.findOne({
       where: { id },
       relations: USER_RELATIONS,
@@ -334,7 +351,7 @@ export class UserService {
       throw new NotFoundException(`User with id ${id} not found`);
     }
 
-    return UserResponseDto.fromEntity(user);
+    return UserResponseDto.fromEntity(user, workplace);
   }
 
   async findByEmail(email: string): Promise<User | null> {

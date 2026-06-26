@@ -178,6 +178,7 @@ export class PartyProfileService {
       { value: ClientType.FRANCHISE, label: 'FRANCHISE' },
       { value: ClientType.AGENT, label: 'AGENT' },
       { value: ClientType.FOREIGN_CORRESPONDENT, label: 'FOREIGN CORRESPONDENT' },
+      { value: ClientType.FOREX_CORRESPONDENT, label: 'FOREX CORRESPONDENT' },
       { value: ClientType.MARKETING_EXECUTIVE, label: 'MARKETING EXECUTIVE' },
       { value: ClientType.CARD_ISSUER_PROFILE, label: 'CARD ISSUER PROFILE' },
       { value: ClientType.MISC_PROFILE, label: 'MISC PROFILE' }

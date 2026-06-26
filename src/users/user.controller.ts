@@ -22,6 +22,20 @@ export class UserController {
     @Session() session: any,
     @Query('activeOnly') activeOnly = 'true',
   ): Promise<UserResponseDto[]> {
+    const user = await this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
+    if (user.isAdmin) {
+      return this.userService.findAll(session.userId, activeOnly !== 'false');
+    }
+
+    const canViewUsers = user.permissions?.['/user-profile']?.includes('view') === true;
+
+    if (!canViewUsers) {
+      return [];
+    }
+
     return this.userService.findAll(session.userId, activeOnly !== 'false');
   }
 
@@ -93,6 +107,9 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'User profile data', type: UserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getProfile(@Session() session: any): Promise<UserResponseDto> {
-    return this.userService.findById(session.userId, session.userId);
+    return this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
   }
 }

@@ -4,6 +4,7 @@ import {
   IsIn,
   IsNotEmpty,
   IsOptional,
+  Matches,
   IsString,
   IsUUID,
   MaxLength,
@@ -42,18 +43,27 @@ export class CreateCurrencyDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^\d+(\.\d+)?$/, {
+    message: 'Rate / Per must be a valid decimal number',
+  })
   ratePer: string;
 
   @ApiProperty({ description: 'Default Min Rate', required: false, maxLength: 20 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^\d+(\.\d+)?$/, {
+    message: 'Default Min Rate must be a valid decimal number',
+  })
   defaultMinRate: string;
 
   @ApiProperty({ description: 'Default Max Rate', required: false, maxLength: 20 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^\d+(\.\d+)?$/, {
+    message: 'Default Max Rate must be a valid decimal number',
+  })
   defaultMaxRate: string;
 
   @ApiProperty({ enum: CurrencyCalculationMethod, default: CurrencyCalculationMethod.MULTIPLICATION })
@@ -66,12 +76,18 @@ export class CreateCurrencyDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^\d+(\.\d+)?$/, {
+    message: 'Open Rate Premium must be a valid decimal number',
+  })
   openRatePremium: string;
 
   @ApiProperty({ description: 'Gulf Disc Factor', required: false, maxLength: 20 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(/^\d+(\.\d+)?$/, {
+    message: 'Gulf Disc Factor must be a valid decimal number',
+  })
   gulfDiscFactor: string;
 
   @ApiProperty({ description: 'Amex Map Code', required: false, maxLength: 50 })

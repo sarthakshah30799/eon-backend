@@ -19,7 +19,10 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException('User not authenticated');
     }
 
-    const userDto = await this.userService.findById(userId, userId);
+    const userDto = await this.userService.findById(userId, userId, {
+      activeBranchId: request.session?.activeBranchId ?? null,
+      activeCounterId: request.session?.activeCounterId ?? null,
+    });
     if (!userDto) {
       throw new UnauthorizedException('User profile not found');
     }
@@ -50,9 +53,19 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // 3. Users marked as admin always have absolute access to everything
-    if (userDto.isAdmin) {
+    if (method === 'GET' && path.includes('/roles') && !path.includes('/permissions')) {
       return true;
+    }
+
+    // 3. Users marked as admin or HO staff always have absolute access to everything
+    if (userDto.isAdmin || userDto.isHoStaff) {
+      return true;
+    }
+
+    const activeBranchId = request.session?.activeBranchId;
+    const activeCounterId = request.session?.activeCounterId;
+    if (!activeBranchId || !activeCounterId) {
+      throw new ForbiddenException('Workplace not selected');
     }
 
     // 4. Role-Based Access Control for other profiles
@@ -115,11 +128,60 @@ export class PermissionsGuard implements CanActivate {
 
     const userPermissions = userDto.permissions?.[menuPath] || [];
     if (!userPermissions.includes(requiredPermission)) {
-      throw new NotFoundException(
-        `Resource at ${menuPath} not found`,
-      );
+      if (method === 'GET' && !request.params?.id) {
+        request.silentEmptyResult = this.resolveSilentEmptyResult(path, menuPath);
+        if (request.silentEmptyResult) {
+          return true;
+        }
+      }
+
+      throw new NotFoundException(`Resource at ${menuPath} not found`);
     }
 
     return true;
+  }
+
+  private resolveSilentEmptyResult(
+    path: string,
+    menuPath: string,
+  ): { kind: 'array' } | { kind: 'paginated' } | null {
+    const arrayPathMatches = [
+      '/roles',
+      '/users',
+      '/user-profile',
+      '/products',
+      '/document-profiles',
+      '/admin/user-role',
+      '/admin/product-profile',
+      '/admin/document-profile',
+      '/admin/tds-profile',
+      '/tds-profiles',
+    ];
+
+    const paginatedPathMatches = [
+      '/countries',
+      '/states',
+      '/country-profile',
+      '/state-profile',
+      '/admin/country-profile',
+      '/admin/state-profile',
+      '/account-profiles',
+      '/financial-codes',
+    ];
+
+    if (
+      arrayPathMatches.some(token => path.includes(token) || menuPath.includes(token))
+    ) {
+      return { kind: 'array' };
+    }
+
+    if (
+      paginatedPathMatches.some(token => path.includes(token) || menuPath.includes(token)) ||
+      menuPath.startsWith('/party-profiles/')
+    ) {
+      return { kind: 'paginated' };
+    }
+
+    return null;
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { UserService } from '../users/user.service';
 import { LoginUserDto } from '../users/dto/login-user.dto';
 import { User } from '../users/user.entity';
@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PasswordPolicyService } from '../password-policy/password-policy.service';
 import { SessionPolicyService } from '../session-policy/session-policy.service';
 import { MailService } from '../mail/mail.service';
+import { SetWorkplaceDto } from './dto/set-workplace.dto';
 
 @Injectable()
 export class AuthService {
@@ -35,6 +36,59 @@ export class AuthService {
       (userId: string, currentSessionId?: string) =>
         this.sessionService.invalidateUserSessions(userId, currentSessionId),
     );
+  }
+
+  async setWorkplace(
+    session: any,
+    dto: SetWorkplaceDto,
+  ): Promise<{ message: string; activeBranchId: string; activeCounterId: string }> {
+    if (!session?.userId) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    const user = await this.userService.findEntityById(session.userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isHoStaff = user.userRoles?.some(userRole => userRole.role?.isHoStaff) === true;
+
+    if (!user.isAdmin && !isHoStaff) {
+      const hasAssignment = user.userRoles?.some(
+        userRole =>
+          userRole.branch?.id === dto.branchId &&
+          userRole.counter?.id === dto.counterId,
+      );
+
+      if (!hasAssignment) {
+        throw new BadRequestException('Selected branch and counter are not assigned to this user');
+      }
+    }
+
+    session.activeBranchId = dto.branchId;
+    session.activeCounterId = dto.counterId;
+
+    return {
+      message: 'Workplace set successfully',
+      activeBranchId: dto.branchId,
+      activeCounterId: dto.counterId,
+    };
+  }
+
+  getWorkplace(session: any): { activeBranchId: string | null; activeCounterId: string | null } {
+    return {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    };
+  }
+
+  clearWorkplace(session: any): { message: string } {
+    if (session) {
+      session.activeBranchId = null;
+      session.activeCounterId = null;
+    }
+
+    return { message: 'Workplace cleared successfully' };
   }
 
   async completeInitialPasswordSetup(session: any, newPassword: string): Promise<{ message: string }> {

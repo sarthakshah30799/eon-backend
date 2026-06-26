@@ -232,6 +232,8 @@ export class SessionPolicyService {
     session.userId = user.id;
     session.email = user.email;
     session.isAdmin = user.isAdmin === true;
+    session.activeBranchId = null;
+    session.activeCounterId = null;
     const resolved = this.validatePolicyConfig(policy);
     if (resolved.idleTimeoutSeconds !== undefined && resolved.idleTimeoutSeconds > 0) {
       this.applyPolicyToSession(session, resolved);

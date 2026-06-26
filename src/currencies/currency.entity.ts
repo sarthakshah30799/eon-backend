@@ -49,22 +49,22 @@ export class Currency extends BaseEntity {
   @Column({ type: 'citext' })
   priority: string;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'numeric' })
   ratePer: string;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'numeric' })
   defaultMinRate: string;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'numeric' })
   defaultMaxRate: string;
 
   @Column({ type: 'citext', default: CurrencyCalculationMethod.MULTIPLICATION })
   calculationMethod: CurrencyCalculationMethod;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'numeric' })
   openRatePremium: string;
 
-  @Column({ type: 'citext' })
+  @Column({ type: 'numeric' })
   gulfDiscFactor: string;
 
   @Column({ type: 'citext' })

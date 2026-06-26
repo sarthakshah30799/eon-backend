@@ -3,6 +3,11 @@ import { ApiProperty } from '@nestjs/swagger';
 import { normalizeMenuPath } from '../../menu/menu-path.util';
 import { UserAssignmentResponseDto } from './user-assignment.dto';
 
+type WorkplaceSelection = {
+  activeBranchId?: string | null;
+  activeCounterId?: string | null;
+};
+
 export class UserResponseDto {
   @ApiProperty({ description: 'User ID (UUID)' })
   id: string;
@@ -82,7 +87,7 @@ export class UserResponseDto {
   @ApiProperty({ description: 'Must change password on next login', required: false })
   mustChangePassword?: boolean;
 
-  static fromEntity(user: User): UserResponseDto {
+  static fromEntity(user: User, workplace?: WorkplaceSelection): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
     dto.code = user.code;
@@ -104,15 +109,24 @@ export class UserResponseDto {
 
     const permissions: Record<string, string[]> = {};
     const firstUserRole = user.userRoles?.[0];
+    const activeUserRole =
+      workplace?.activeBranchId && workplace?.activeCounterId
+        ? user.userRoles?.find(
+            userRole =>
+              userRole.branch?.id === workplace.activeBranchId &&
+              userRole.counter?.id === workplace.activeCounterId,
+          )
+        : undefined;
+    const resolvedUserRole = activeUserRole ?? firstUserRole;
 
-    if (firstUserRole) {
-      dto.roleId = firstUserRole.role?.id || null;
-      dto.roleName = firstUserRole.role?.name || null;
-      dto.branchId = firstUserRole.branch?.id || null;
-      dto.branchName = firstUserRole.branch?.name || null;
-      dto.counterId = firstUserRole.counter?.id || null;
-      dto.counterNo = firstUserRole.counter?.counterNo || null;
-      dto.counterName = firstUserRole.counter?.name || null;
+    if (resolvedUserRole) {
+      dto.roleId = resolvedUserRole.role?.id || null;
+      dto.roleName = resolvedUserRole.role?.name || null;
+      dto.branchId = resolvedUserRole.branch?.id || null;
+      dto.branchName = resolvedUserRole.branch?.name || null;
+      dto.counterId = resolvedUserRole.counter?.id || null;
+      dto.counterNo = resolvedUserRole.counter?.counterNo || null;
+      dto.counterName = resolvedUserRole.counter?.name || null;
     }
 
     dto.assignments = user.userRoles?.map(userRole => ({
@@ -124,8 +138,8 @@ export class UserResponseDto {
       counterName: userRole.counter?.name || '',
     })) || [];
 
-    if (firstUserRole?.role?.menuPermissions) {
-      for (const mp of firstUserRole.role.menuPermissions) {
+    if (resolvedUserRole?.role?.menuPermissions) {
+      for (const mp of resolvedUserRole.role.menuPermissions) {
         if (mp.menu && mp.permission) {
           const menuPath = normalizeMenuPath(mp.menu.path) || mp.menu.name;
           if (!permissions[menuPath]) {

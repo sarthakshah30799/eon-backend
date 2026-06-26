@@ -1,4 +1,5 @@
 import { Module, NestModule, MiddlewareConsumer } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
 import { UserModule } from "./users/user.module";
@@ -15,6 +16,7 @@ import { ProductModule } from "./products/product.module";
 import { CurrencyModule } from "./currencies/currency.module";
 import { AdditionalSettingModule } from "./additional-settings/additional-setting.module";
 import { SessionMiddleware } from "./auth/session.middleware";
+import { SilentEmptyListInterceptor } from "./auth/interceptors/silent-empty-list.interceptor";
 import { FinancialCodeModule } from "./financial-codes/financial-code.module";
 import { FinancialSubProfileModule } from "./financial-sub-profiles/financial-sub-profile.module";
 import { AccountProfileModule } from "./account-profiles/account-profile.module";
@@ -60,7 +62,7 @@ import { StorageModule } from "./storage/storage.module";
     AuditLogModule,
     StorageModule,
   ],
-  providers: [SessionMiddleware],
+  providers: [SessionMiddleware, { provide: APP_INTERCEPTOR, useClass: SilentEmptyListInterceptor }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
