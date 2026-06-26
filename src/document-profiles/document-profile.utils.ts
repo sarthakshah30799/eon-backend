@@ -19,6 +19,7 @@ export const normalizeDocumentProfilePayload = (
     | 'type'
     | 'groupSelection'
     | 'entitySelection'
+    | 'financialYearSelection'
     | 'active'
     | 'sortOrder'
   >,
@@ -36,10 +37,11 @@ export const normalizeDocumentProfilePayload = (
   specificationType:
     (normalizeSpecificationTypeValue(profile.specificationType) ??
       profile.specificationType) as DocumentSpecificationType,
-  type: profile.type,
-  groupSelection: profile.groupSelection,
-  entitySelection: profile.entitySelection,
-});
+    type: profile.type,
+    groupSelection: profile.groupSelection,
+    entitySelection: profile.entitySelection,
+    financialYearSelection: profile.financialYearSelection,
+  });
 
 export const resolveDocumentProfile = (
   profile: DocumentProfile,
@@ -61,6 +63,7 @@ export const resolveDocumentProfile = (
     type: profile.type,
     groupSelection: profile.groupSelection,
     entitySelection: profile.entitySelection,
+    financialYearSelection: profile.financialYearSelection,
   };
 };
 

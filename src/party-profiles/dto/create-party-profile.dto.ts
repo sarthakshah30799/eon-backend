@@ -340,6 +340,11 @@ export class CreatePartyProfileDto {
   @IsOptional()
   ffmcRegDate?: string;
 
+  @ApiPropertyOptional({ description: "Division Factor", example: 1 })
+  @IsNumber()
+  @IsOptional()
+  divisionFactor?: number;
+
   @ApiPropertyOptional({ description: "Client Profile Type", enum: ClientType, default: ClientType.CORPORATE_CLIENT })
   @IsEnum(ClientType)
   @IsOptional()

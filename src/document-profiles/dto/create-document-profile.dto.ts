@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { DocumentSpecificationType } from '../document-profile.entity';
 import { Type } from 'class-transformer';
+import { EmptyStringToUndefined } from '../../common/decorators/empty-string-to-undefined.decorator';
 
 export class CreateDocumentProfileDto {
   @ApiProperty({
@@ -90,6 +91,14 @@ export class CreateDocumentProfileDto {
   @IsUUID()
   @IsNotEmpty()
   entitySelection: string;
+
+  @ApiPropertyOptional({
+    description: 'Financial year selection',
+  })
+  @EmptyStringToUndefined()
+  @IsUUID()
+  @IsOptional()
+  financialYearSelection?: string;
 
   @ApiPropertyOptional({ description: 'Profile sort order', default: 0 })
   @Type(() => Number)

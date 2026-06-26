@@ -256,6 +256,9 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   bankBranchName: string;
 
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  divisionFactor: number;
+
   @Column({
     type: "enum",
     enum: ClientType,

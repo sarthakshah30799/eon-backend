@@ -33,6 +33,9 @@ export class DocumentProfileResponseDto {
   @ApiPropertyOptional({ type: SelectOptionResponseDto, nullable: true })
   entitySelection: SelectOptionResponseDto | null;
 
+  @ApiPropertyOptional({ type: SelectOptionResponseDto, nullable: true })
+  financialYearSelection: SelectOptionResponseDto | null;
+
   @ApiProperty()
   active: boolean;
 
@@ -60,6 +63,9 @@ export class DocumentProfileResponseDto {
       : null;
     dto.entitySelection = entity.entitySelection
       ? SelectOptionResponseDto.fromEntity(entity.entitySelection)
+      : null;
+    dto.financialYearSelection = entity.financialYearSelection
+      ? SelectOptionResponseDto.fromEntity(entity.financialYearSelection)
       : null;
     dto.active = entity.active;
     dto.sortOrder = entity.sortOrder;

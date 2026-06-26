@@ -32,6 +32,7 @@ export class DocumentProfileService {
       .leftJoinAndSelect('documentProfile.type', 'type')
       .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
       .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('documentProfile.financialYearSelection', 'financialYearSelection')
       .orderBy('documentProfile.sortOrder', 'ASC')
       .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
@@ -47,6 +48,7 @@ export class DocumentProfileService {
       .leftJoinAndSelect('documentProfile.type', 'type')
       .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
       .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('documentProfile.financialYearSelection', 'financialYearSelection')
       .where('documentProfile.id = :id', { id })
       .getOne();
 
@@ -76,6 +78,9 @@ export class DocumentProfileService {
         type: { id: dto.type } as SelectOption,
         groupSelection: { id: dto.groupSelection } as SelectOption,
         entitySelection: { id: dto.entitySelection } as SelectOption,
+        financialYearSelection: dto.financialYearSelection
+          ? ({ id: dto.financialYearSelection } as SelectOption)
+          : null,
         active: dto.active ?? true,
         sortOrder: dto.sortOrder ?? 0,
       }) as DocumentProfile,
@@ -126,6 +131,11 @@ export class DocumentProfileService {
         entitySelection: dto.entitySelection
           ? ({ id: dto.entitySelection } as SelectOption)
           : profile.entitySelection,
+        financialYearSelection: dto.financialYearSelection
+          ? ({ id: dto.financialYearSelection } as SelectOption)
+          : dto.financialYearSelection === null
+            ? null
+            : profile.financialYearSelection,
         active: dto.active ?? profile.active,
         sortOrder: dto.sortOrder ?? profile.sortOrder,
       }) as DocumentProfile,
@@ -157,6 +167,7 @@ export class DocumentProfileService {
       .leftJoinAndSelect('documentProfile.type', 'type')
       .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
       .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('documentProfile.financialYearSelection', 'financialYearSelection')
       .where('1 = 1');
 
     applyDocumentProfileFilters(queryBuilder, 'documentProfile', {

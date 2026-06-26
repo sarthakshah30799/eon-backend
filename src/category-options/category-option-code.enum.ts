@@ -2,6 +2,7 @@ export enum CategoryOptionCodeEnum {
   LocationType = "LOCATIONTYPE",
   RiskCategory = "RISKCATEGORY",
   FinancialType = "FINANCIALTYPE",
+  FinancialYear = "FINANCIALYEAR",
   DefaultSign = "DEFAULTSIGN",
   DivisionDept = "DIVISIONDEPT",
   AccountType = "ACCOUNTTYPE",

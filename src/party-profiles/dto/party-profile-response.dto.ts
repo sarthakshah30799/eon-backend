@@ -192,6 +192,9 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "FFMC Registration Date" })
   ffmcRegDate?: Date;
 
+  @ApiPropertyOptional({ description: "Division Factor" })
+  divisionFactor?: number;
+
   @ApiProperty({ description: "Party profile type", enum: ClientType })
   type: ClientType;
 
@@ -278,6 +281,9 @@ export class PartyProfileResponseDto {
     dto.bankBranchName = entity.bankBranchName;
     dto.ffmcRegNo = entity.ffmcRegNo;
     dto.ffmcRegDate = entity.ffmcRegDate;
+    dto.divisionFactor = entity.divisionFactor !== null && entity.divisionFactor !== undefined
+      ? Number(entity.divisionFactor)
+      : undefined;
     dto.type = entity.type;
     dto.status = entity.status;
     dto.statusUpdatedById = entity.statusUpdatedById;

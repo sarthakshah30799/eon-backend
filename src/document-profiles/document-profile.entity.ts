@@ -40,6 +40,10 @@ export class DocumentProfile extends BaseEntity {
   @JoinColumn({ name: 'entity_selection', referencedColumnName: 'id' })
   entitySelection: SelectOption | null;
 
+  @ManyToOne(() => SelectOption, { nullable: true })
+  @JoinColumn({ name: 'financial_year_selection', referencedColumnName: 'id' })
+  financialYearSelection: SelectOption | null;
+
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
