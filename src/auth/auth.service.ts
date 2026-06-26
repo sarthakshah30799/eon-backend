@@ -9,6 +9,7 @@ import { PasswordPolicyService } from '../password-policy/password-policy.servic
 import { SessionPolicyService } from '../session-policy/session-policy.service';
 import { MailService } from '../mail/mail.service';
 import { SetWorkplaceDto } from './dto/set-workplace.dto';
+import { ConfigService } from '../config/config.service';
 
 @Injectable()
 export class AuthService {
@@ -18,7 +19,8 @@ export class AuthService {
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly sessionPolicyService: SessionPolicyService,
     private readonly mailService: MailService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) { }
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
     return this.userService.validateUser(loginUserDto);
@@ -148,7 +150,8 @@ export class AuthService {
 
     await this.userService.save(user);
 
-    const resetLink = `http://localhost:5173/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    const feBaseUrl = this.configService.getOptional('FRONTEND_URL') || 'http://localhost:5173';
+    const resetLink = `${feBaseUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
 
     try {
       await this.mailService.sendEmail({
