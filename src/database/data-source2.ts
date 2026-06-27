@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '../config/config.service';
 import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
@@ -12,7 +13,7 @@ export const AppDataSource2 = new DataSource({
   password: configService.database.password,
   database: configService.database.database2,
   ssl: configService.database.ssl,
-  entities: [__dirname + '/../**/*.entity{.ts,.js}'],
+  entities: [__dirname + '/../manual-bill-books/**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations2/*{.ts,.js}'],
   synchronize: configService.database.synchronize,
   namingStrategy: new SnakeNamingStrategy(),

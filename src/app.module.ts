@@ -30,6 +30,7 @@ import { AuditLogModule } from "./audit-logs/audit-log.module";
 import { SessionPolicyModule } from "./session-policy/session-policy.module";
 import { MailModule } from "./mail/mail.module";
 import { StorageModule } from "./storage/storage.module";
+import { ManualBillBookModule } from "./manual-bill-books/manual-bill-book.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { StorageModule } from "./storage/storage.module";
     TdsProfileModule,
     ExpenseIncomeBookingMasterModule,
     MailModule,
+    ManualBillBookModule,
     AuditLogModule,
     StorageModule,
   ],
