@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateManualBookDto {
   @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25' })
@@ -80,4 +81,59 @@ export class ApproveRejectManualBookDto {
   @IsDateString()
   @IsOptional()
   toDate?: string;
+}
+
+export class BulkReviewItemDto {
+  @ApiProperty({ description: 'Manual Book Entry ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  id: string;
+
+  @ApiProperty({ description: 'Status', example: 'Approved' })
+  @IsString()
+  @IsNotEmpty()
+  status: string;
+
+  @ApiProperty({ description: 'Approval Remarks', required: false })
+  @IsString()
+  @IsOptional()
+  approvalRemarks?: string;
+}
+
+export class BulkReviewManualBooksDto {
+  @ApiProperty({ description: 'List of reviews', type: [BulkReviewItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkReviewItemDto)
+  reviews: BulkReviewItemDto[];
+}
+
+export class SaveAllocationItemDto {
+  @ApiProperty({ description: 'Manual Book entry ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  manualBookId: string;
+
+  @ApiProperty({ description: 'Book No within the range' })
+  @IsNumber()
+  @Min(1)
+  bookNo: number;
+
+  @ApiProperty({ description: 'Cashier user ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  cashierId: string;
+
+  @ApiProperty({ description: 'Remarks', required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+export class SaveAllocationsDto {
+  @ApiProperty({ description: 'List of cashier allocations', type: [SaveAllocationItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SaveAllocationItemDto)
+  allocations: SaveAllocationItemDto[];
 }
