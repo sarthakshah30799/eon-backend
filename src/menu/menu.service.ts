@@ -90,6 +90,15 @@ export class MenuService {
       return false;
     }
 
+    if (
+      normalizedPath === '/manual-bill-books' ||
+      normalizedPath.startsWith('/manual-bill-books/') ||
+      normalizedPath === 'manual-bill-books' ||
+      normalizedPath.startsWith('manual-bill-books/')
+    ) {
+      return true;
+    }
+
     const grantedPermissions = permissions?.[normalizedPath];
     return Boolean(grantedPermissions?.length);
   }

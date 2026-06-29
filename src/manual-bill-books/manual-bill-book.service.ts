@@ -1,15 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In } from 'typeorm';
+import { Repository, Like, In, Between } from 'typeorm';
 import { ManualBook } from './entities/manual-book.entity';
+import { ManualBookAllocation } from './entities/manual-book-allocation.entity';
 import { Branch } from '../branches/branch.entity';
-import { CreateManualBookDto, ApproveRejectManualBookDto } from './dto/manual-bill-book.dto';
+import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto } from './dto/manual-bill-book.dto';
 
 @Injectable()
 export class ManualBillBookService {
   constructor(
     @InjectRepository(ManualBook, 'database2')
     private readonly manualBookRepository: Repository<ManualBook>,
+
+    @InjectRepository(ManualBookAllocation, 'database2')
+    private readonly allocationRepository: Repository<ManualBookAllocation>,
 
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
@@ -109,10 +113,20 @@ export class ManualBillBookService {
     return { nextNumber };
   }
 
-  async findAll(branchId?: string, status?: string): Promise<any[]> {
+  async findAll(
+    branchId?: string,
+    status?: string,
+    transactionType?: string,
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<any[]> {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
+    if (transactionType && transactionType !== 'ALL') where.transactionType = transactionType;
+    if (fromDate && toDate) {
+      where.dispatchDate = Between(fromDate, toDate);
+    }
 
     const books = await this.manualBookRepository.find({
       where,
@@ -155,5 +169,68 @@ export class ManualBillBookService {
     book.updatedBy = userId;
 
     return this.manualBookRepository.save(book);
+  }
+
+  async bulkReview(dto: BulkReviewManualBooksDto, userId: string): Promise<any[]> {
+    const results = [];
+    for (const item of dto.reviews) {
+      const book = await this.manualBookRepository.findOne({ where: { id: item.id } });
+      if (!book) continue;
+      book.status = item.status;
+      book.approvalRemarks = item.approvalRemarks;
+      book.approvedAt = new Date();
+      book.approvedBy = userId;
+      book.updatedBy = userId;
+      const saved = await this.manualBookRepository.save(book);
+      results.push(saved);
+    }
+    return results;
+  }
+
+  async getCashiers(branchId: string): Promise<any[]> {
+    return this.manualBookRepository.manager.query(`
+      SELECT u.id, u.name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.branch_id = $1 AND r.code = 'CASHIER' AND u.is_active = true
+    `, [branchId]);
+  }
+
+  async saveAllocations(dto: SaveAllocationsDto, userId: string): Promise<any[]> {
+    const results = [];
+    for (const item of dto.allocations) {
+      let allocation = await this.allocationRepository.findOne({
+        where: {
+          manualBookId: item.manualBookId,
+          bookNo: item.bookNo,
+        }
+      });
+      if (!allocation) {
+        allocation = this.allocationRepository.create({
+          manualBookId: item.manualBookId,
+          bookNo: item.bookNo,
+          cashierId: item.cashierId,
+          remarks: item.remarks,
+          allocatedBy: userId,
+        });
+      } else {
+        allocation.cashierId = item.cashierId;
+        allocation.remarks = item.remarks;
+        allocation.allocatedBy = userId;
+      }
+      const saved = await this.allocationRepository.save(allocation);
+      results.push(saved);
+    }
+    return results;
+  }
+
+  async getAllocationsByBookIds(manualBookIds: string[]): Promise<ManualBookAllocation[]> {
+    if (manualBookIds.length === 0) return [];
+    return this.allocationRepository.find({
+      where: {
+        manualBookId: In(manualBookIds),
+      }
+    });
   }
 }
