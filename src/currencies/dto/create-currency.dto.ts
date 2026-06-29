@@ -102,6 +102,11 @@ export class CreateCurrencyDto {
   @IsIn(Object.values(CurrencyGroup))
   group: CurrencyGroup;
 
+  @ApiProperty({ required: false, description: 'Currency pricing group UUID' })
+  @IsUUID()
+  @IsOptional()
+  pricingGroupId?: string;
+
   @ApiProperty({ required: false, default: false })
   @IsBoolean()
   @IsOptional()
