@@ -9,12 +9,14 @@ import {
   UseGuards,
   Session,
   ForbiddenException,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyResponseDto } from './dto/company-response.dto';
+import { CompanyListQueryDto } from './dto/company-list-query.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { UserService } from '../users/user.service';
 
@@ -32,8 +34,8 @@ export class CompanyController {
   @ApiOperation({ summary: 'Get all companies' })
   @ApiResponse({ status: 200, description: 'List of companies', type: [CompanyResponseDto] })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findAll(): Promise<CompanyResponseDto[]> {
-    return this.companyService.findAll();
+  async findAll(@Query() query: CompanyListQueryDto): Promise<CompanyResponseDto[]> {
+    return this.companyService.findAll(query);
   }
 
   @Get(':id')

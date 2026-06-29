@@ -86,7 +86,7 @@ export class PartyProfileService {
   private normalizePartyProfilePath(type?: string) {
     if (!type) {
       return "";
-    }
+    }    
 
     return `/party-profiles/${type.trim().toLowerCase().replace(/_/g, "-")}`;
   }
@@ -181,7 +181,7 @@ export class PartyProfileService {
       { value: ClientType.FOREX_CORRESPONDENT, label: 'FOREX CORRESPONDENT' },
       { value: ClientType.MARKETING_EXECUTIVE, label: 'MARKETING EXECUTIVE' },
       { value: ClientType.CARD_ISSUER_PROFILE, label: 'CARD ISSUER PROFILE' },
-      { value: ClientType.MISC_PROFILE, label: 'MISC PROFILE' }
+      { value: ClientType.MISC_PROFILE, label: 'MISC SUPPLIER PROFILE' }
     ];
 
     if (!userId) {

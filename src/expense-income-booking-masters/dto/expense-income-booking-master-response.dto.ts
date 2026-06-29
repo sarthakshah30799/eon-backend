@@ -32,9 +32,6 @@ export class ExpenseIncomeBookingMasterResponseDto {
   type: string;
 
   @ApiProperty()
-  interstateTransaction: boolean;
-
-  @ApiProperty()
   code: string;
 
   @ApiPropertyOptional({ nullable: true })
@@ -90,7 +87,6 @@ export class ExpenseIncomeBookingMasterResponseDto {
     dto.createdBy = entity.createdBy;
     dto.updatedBy = entity.updatedBy;
     dto.type = entity.type;
-    dto.interstateTransaction = entity.interstateTransaction;
     dto.code = entity.code;
     dto.description = entity.description;
     dto.applicableCustomer = entity.applicableCustomer;

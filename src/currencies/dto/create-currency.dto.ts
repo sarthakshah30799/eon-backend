@@ -8,6 +8,7 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  Length,
 } from 'class-validator';
 import {
   CurrencyCalculationMethod,
@@ -21,10 +22,10 @@ export class CreateCurrencyDto {
   @IsNotEmpty()
   countryId: string;
 
-  @ApiProperty({ description: 'Unique currency code', example: 'USD', maxLength: 20 })
+  @ApiProperty({ description: 'Unique currency code', example: 'USD', maxLength: 3 })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(20)
+  @Length(3, 3, { message: 'Currency Code must be exactly 3 characters' })
   currencyCode: string;
 
   @ApiProperty({ description: 'Currency name', example: 'US Dollar', maxLength: 250 })

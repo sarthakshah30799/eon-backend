@@ -1,12 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Branch } from './branch.entity';
 import { Counter } from '../counters/counter.entity';
 import { Country } from '../country/country.entity';
 import { State } from '../state/state.entity';
 import { SelectOption } from '../category-options/category-option.entity';
 import { CreateBranchDto } from './dto/create-branch.dto';
+import { BranchListQueryDto } from './dto/branch-list-query.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchResponseDto } from './dto/branch-response.dto';
 
@@ -25,12 +26,41 @@ export class BranchService {
     private readonly stateRepository: Repository<State>,
   ) {}
 
-  async findAll(activeOnly = true): Promise<BranchResponseDto[]> {
-    const branches = await this.branchRepository.find({
-      where: activeOnly ? { isActive: true } : undefined,
-      relations: ['company', 'counters', 'country', 'state', 'locationType'],
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(query?: BranchListQueryDto): Promise<BranchResponseDto[]> {
+    const includeInactive =
+      query?.activeOnly === false || query?.activeOnly === 'false';
+    const qb = this.branchRepository
+      .createQueryBuilder('branch')
+      .leftJoinAndSelect('branch.company', 'company')
+      .leftJoinAndSelect('branch.counters', 'counters')
+      .leftJoinAndSelect('branch.country', 'country')
+      .leftJoinAndSelect('branch.state', 'state')
+      .leftJoinAndSelect('branch.locationType', 'locationType')
+      .orderBy('branch.createdAt', 'DESC');
+
+    if (!includeInactive) {
+      qb.andWhere('branch.isActive = :isActive', { isActive: true });
+    }
+
+    if (query?.search) {
+      qb.andWhere(
+        new Brackets(searchQb => {
+          searchQb
+            .where('branch.code ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.name ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.city ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.branchNumber::text ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.contactName ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.contactNo ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.branchEmail ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('country.name ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('state.name ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('company.name ILIKE :search', { search: `%${query.search}%` });
+        })
+      );
+    }
+
+    const branches = await qb.getMany();
     return branches.map(branch => BranchResponseDto.fromEntity(branch));
   }
 

@@ -54,7 +54,6 @@ export class ExpenseIncomeBookingMasterService {
 
     const master = this.repository.create({
       type: dto.type,
-      interstateTransaction: dto.interstateTransaction ?? false,
       code,
       description: dto.description?.trim() || null,
       applicableCustomer: dto.type === BookingMasterType.INCOME ? (dto.applicableCustomer ?? false) : false,
@@ -96,10 +95,6 @@ export class ExpenseIncomeBookingMasterService {
 
     if (updatableFields.type !== undefined) {
       master.type = updatableFields.type;
-    }
-
-    if (updatableFields.interstateTransaction !== undefined) {
-      master.interstateTransaction = updatableFields.interstateTransaction;
     }
 
     if (updatableFields.description !== undefined) {

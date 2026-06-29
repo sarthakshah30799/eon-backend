@@ -9,9 +9,6 @@ export class ExpenseIncomeBookingMaster extends BaseEntity {
   @Column({ type: 'citext' })
   type: string; // 'EXPENSE' or 'INCOME'
 
-  @Column({ type: 'boolean', default: false })
-  interstateTransaction: boolean;
-
   @Index()
   @Column({ type: 'citext' })
   code: string;

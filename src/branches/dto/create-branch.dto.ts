@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsUUID, IsNumber, IsDateString, MaxLength, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsUUID, IsNumber, IsDateString, Matches, Length, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBranchDto {
@@ -17,10 +17,10 @@ export class CreateBranchDto {
   @IsNotEmpty()
   stateId: string;
 
-  @ApiProperty({ description: 'Branch Code', example: 'BR-001', maxLength: 20 })
+  @ApiProperty({ description: 'Branch Code', example: 'BR001', maxLength: 5 })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(20)
+  @Length(5, 5, { message: 'Branch Code must be exactly 5 characters' })
   code: string;
 
   @ApiProperty({ description: 'Branch Name', example: 'Mumbai Main Branch', maxLength: 250 })

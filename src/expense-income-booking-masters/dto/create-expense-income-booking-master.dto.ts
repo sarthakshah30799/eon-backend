@@ -23,11 +23,6 @@ export class CreateExpenseIncomeBookingMasterDto {
   @IsEnum(BookingMasterType)
   type: BookingMasterType;
 
-  @ApiPropertyOptional({ description: 'Interstate transaction flag', default: false })
-  @IsBoolean()
-  @IsOptional()
-  interstateTransaction?: boolean;
-
   @ApiProperty({ description: 'Unique code for master', example: 'EXP-001' })
   @IsString()
   @IsNotEmpty()

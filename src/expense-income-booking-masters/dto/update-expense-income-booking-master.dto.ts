@@ -19,11 +19,6 @@ export class UpdateExpenseIncomeBookingMasterDto {
   @IsOptional()
   type?: BookingMasterType;
 
-  @ApiPropertyOptional({ description: 'Interstate transaction flag' })
-  @IsBoolean()
-  @IsOptional()
-  interstateTransaction?: boolean;
-
   @ApiPropertyOptional({ description: 'Code for master' })
   @IsString()
   @IsOptional()

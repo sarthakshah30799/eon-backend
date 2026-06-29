@@ -4,11 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Company } from './company.entity';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyResponseDto } from './dto/company-response.dto';
+import { CompanyListQueryDto } from './dto/company-list-query.dto';
 
 import { uppercaseFields } from '../utils/uppercase.util';
 
@@ -19,10 +20,25 @@ export class CompanyService {
     private readonly companyRepository: Repository<Company>,
   ) {}
 
-  async findAll(): Promise<CompanyResponseDto[]> {
-    const companies = await this.companyRepository.find({
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(query?: CompanyListQueryDto): Promise<CompanyResponseDto[]> {
+    const qb = this.companyRepository
+      .createQueryBuilder('company')
+      .orderBy('company.createdAt', 'DESC');
+
+    if (query?.search) {
+      qb.andWhere(
+        new Brackets(searchQb => {
+          searchQb
+            .where('company.name ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('company.shortCode ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('company.panNo ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('company.cinNo ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('company.email ILIKE :search', { search: `%${query.search}%` });
+        })
+      );
+    }
+
+    const companies = await qb.getMany();
     return companies.map(CompanyResponseDto.fromEntity);
   }
 

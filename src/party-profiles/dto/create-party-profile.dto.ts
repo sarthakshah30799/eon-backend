@@ -21,10 +21,10 @@ export class CreatePartyProfileDto {
   @IsOptional()
   dateOfIntro?: string;
 
-  @ApiProperty({ description: "Client Code", example: "SHREENATH", minLength: 4, maxLength: 20 })
+  @ApiProperty({ description: "Client Code", example: "SHREENATH", minLength: 5, maxLength: 20 })
   @IsString()
   @IsNotEmpty()
-  @Length(4, 20, { message: "Code must be between 4 and 20 characters" })
+  @Length(5, 20, { message: "Code must be between 5 and 20 characters" })
   code: string;
 
   @ApiProperty({ description: "Client Name", example: "SHREENATH ENTERPRISES" })

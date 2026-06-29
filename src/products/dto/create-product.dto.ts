@@ -4,14 +4,15 @@ import {
   IsOptional,
   IsBoolean,
   MaxLength,
+  Length,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProductDto {
-  @ApiProperty({ description: 'Unique product code', example: 'PROD001', maxLength: 50 })
+  @ApiProperty({ description: 'Unique product code', example: 'PR', maxLength: 2 })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(50)
+  @Length(2, 2, { message: 'Product Code must be exactly 2 characters' })
   productCode: string;
 
   @ApiProperty({ description: 'Product description', example: 'General Trading Product', maxLength: 250 })
