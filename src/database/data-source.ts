@@ -18,7 +18,7 @@ export const AppDataSource = new DataSource({
   password: configService.database.password,
   database: configService.database.database,
   ssl: configService.database.ssl,
-  entities: [__dirname + '/../**/*.entity{.ts,.js}'],
+  entities: [__dirname + '/../!(manual-bill-books)/**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: configService.database.synchronize,
   namingStrategy: new SnakeNamingStrategy(),
