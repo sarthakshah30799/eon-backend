@@ -7,11 +7,11 @@ const configService = new ConfigService();
 
 export const AppDataSource2 = new DataSource({
   type: "postgres",
-  host: configService.database.transactionHost || configService.database.host,
-  port: configService.database.port,
-  username: configService.database.username,
-  password: configService.database.password,
-  database: configService.database.transactionDatabase,
+  host: configService.database2.host,
+  port: configService.database2.port,
+  username: configService.database2.username,
+  password: configService.database2.password,
+  database: configService.database2.database,
   ssl: configService.database.ssl,
   entities: [__dirname + "/../manual-bill-books/**/*.entity{.ts,.js}"],
   migrations: [__dirname + "/../migrations2/*{.ts,.js}"],
