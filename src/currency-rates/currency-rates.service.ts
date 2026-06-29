@@ -1,8 +1,8 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -12,14 +12,11 @@ import { Currency } from '../currencies/currency.entity';
 import { CurrencyRateGroup } from './currency-rate-group.entity';
 import { CurrencyRate } from './currency-rate.entity';
 import {
-  CurrencyRateMarginDirection,
   CurrencyRateMarginType,
   CurrencyRateProvider,
 } from './currency-rates.enums';
 import {
-  CurrencyRateMarginConfig,
   CurrencyRateQuote,
-  CurrencyRateRuleConfig,
   CurrencyRateSettings,
 } from './currency-rates.types';
 import { CreateCurrencyRateGroupDto } from './dto/create-currency-rate-group.dto';
@@ -29,27 +26,84 @@ import { SaveCurrencyRateSettingsDto } from './dto/save-currency-rate-settings.d
 import { PreviewCurrencyRateDto } from './dto/preview-currency-rate.dto';
 
 const SETTINGS_CATEGORY_CODE = 'CURRENCY_RATES';
-const SETTINGS_CONFIG_CODE = 'CURRENCY_RATES_CONFIG';
+const DEFAULT_ROUNDING_SCALE = 4;
 
-const createDefaultMargin = (): CurrencyRateMarginConfig => ({
-  marginType: CurrencyRateMarginType.PERCENT,
-  marginValue: '0',
-  marginDirection: CurrencyRateMarginDirection.ADD,
-  minRate: '0',
-  maxRate: '999999999',
-});
+const SETTINGS_FIELDS = {
+  defaultProvider: {
+    code: 'DEFAULT_PROVIDER',
+    label: 'Default Provider',
+    valueType: ValueType.Select,
+    defaultValue: CurrencyRateProvider.TICKER,
+  },
+  buyMarginType: {
+    code: 'BUY_MARGIN_TYPE',
+    label: 'Buy Margin Type',
+    valueType: ValueType.Select,
+    defaultValue: CurrencyRateMarginType.PERCENT,
+  },
+  buyMarginValue: {
+    code: 'BUY_MARGIN_VALUE',
+    label: 'Buy Margin Value',
+    valueType: ValueType.Decimal,
+    defaultValue: '0',
+  },
+  buyMinRate: {
+    code: 'BUY_MIN_RATE',
+    label: 'Buy Min Rate',
+    valueType: ValueType.Decimal,
+    defaultValue: '0',
+  },
+  buyMaxRate: {
+    code: 'BUY_MAX_RATE',
+    label: 'Buy Max Rate',
+    valueType: ValueType.Decimal,
+    defaultValue: '999999999',
+  },
+  saleMarginType: {
+    code: 'SALE_MARGIN_TYPE',
+    label: 'Sale Margin Type',
+    valueType: ValueType.Select,
+    defaultValue: CurrencyRateMarginType.PERCENT,
+  },
+  saleMarginValue: {
+    code: 'SALE_MARGIN_VALUE',
+    label: 'Sale Margin Value',
+    valueType: ValueType.Decimal,
+    defaultValue: '0',
+  },
+  saleMinRate: {
+    code: 'SALE_MIN_RATE',
+    label: 'Sale Min Rate',
+    valueType: ValueType.Decimal,
+    defaultValue: '0',
+  },
+  saleMaxRate: {
+    code: 'SALE_MAX_RATE',
+    label: 'Sale Max Rate',
+    valueType: ValueType.Decimal,
+    defaultValue: '999999999',
+  },
+} as const;
 
-const createDefaultRule = (): CurrencyRateRuleConfig => ({
-  buy: createDefaultMargin(),
-  sale: createDefaultMargin(),
-});
+type CurrencyRateSettingKey = keyof CurrencyRateSettings;
+
+type CurrencyRateSideConfig = {
+  marginType: CurrencyRateMarginType;
+  marginValue: string;
+  minRate: string;
+  maxRate: string;
+};
 
 const createDefaultSettings = (): CurrencyRateSettings => ({
   defaultProvider: CurrencyRateProvider.TICKER,
-  roundingScale: 4,
-  global: createDefaultRule(),
-  groups: {},
-  currencyOverrides: {},
+  buyMarginType: CurrencyRateMarginType.PERCENT,
+  buyMarginValue: '0',
+  buyMinRate: '0',
+  buyMaxRate: '999999999',
+  saleMarginType: CurrencyRateMarginType.PERCENT,
+  saleMarginValue: '0',
+  saleMinRate: '0',
+  saleMaxRate: '999999999',
 });
 
 @Injectable()
@@ -74,7 +128,7 @@ export class CurrencyRatesService {
     });
   }
 
-  private async getSettingsSetting(): Promise<AdvancedSetting | null> {
+  private async getSettingsCategory(): Promise<AdvancedSetting | null> {
     const company = await this.getCompany();
     if (!company) {
       return null;
@@ -88,15 +142,103 @@ export class CurrencyRatesService {
     return category ?? null;
   }
 
-  private sanitizeRule(rule: Partial<CurrencyRateRuleConfig> | undefined): CurrencyRateRuleConfig {
-    if (!rule) {
-      return createDefaultRule();
+  private normalizeCurrencyRateSettings(settings?: Partial<CurrencyRateSettings> | null): CurrencyRateSettings {
+    const defaults = createDefaultSettings();
+    if (!settings) {
+      return defaults;
     }
 
     return {
-      buy: { ...createDefaultMargin(), ...(rule.buy ?? {}) },
-      sale: { ...createDefaultMargin(), ...(rule.sale ?? {}) },
+      defaultProvider: Object.values(CurrencyRateProvider).includes(settings.defaultProvider as CurrencyRateProvider)
+        ? (settings.defaultProvider as CurrencyRateProvider)
+        : defaults.defaultProvider,
+      buyMarginType: Object.values(CurrencyRateMarginType).includes(settings.buyMarginType as CurrencyRateMarginType)
+        ? (settings.buyMarginType as CurrencyRateMarginType)
+        : defaults.buyMarginType,
+      buyMarginValue: settings.buyMarginValue ?? defaults.buyMarginValue,
+      buyMinRate: settings.buyMinRate ?? defaults.buyMinRate,
+      buyMaxRate: settings.buyMaxRate ?? defaults.buyMaxRate,
+      saleMarginType: Object.values(CurrencyRateMarginType).includes(settings.saleMarginType as CurrencyRateMarginType)
+        ? (settings.saleMarginType as CurrencyRateMarginType)
+        : defaults.saleMarginType,
+      saleMarginValue: settings.saleMarginValue ?? defaults.saleMarginValue,
+      saleMinRate: settings.saleMinRate ?? defaults.saleMinRate,
+      saleMaxRate: settings.saleMaxRate ?? defaults.saleMaxRate,
     };
+  }
+
+  private getRowValue(setting?: AdvancedSetting | null): string {
+    if (!setting) {
+      return '';
+    }
+
+    switch (setting.valueType) {
+      case ValueType.Boolean:
+        return setting.valueBoolean ? 'YES' : 'NO';
+      case ValueType.Number:
+        return setting.valueNumber !== null && setting.valueNumber !== undefined ? String(setting.valueNumber) : '';
+      case ValueType.Decimal:
+        return setting.valueDecimal !== null && setting.valueDecimal !== undefined ? String(setting.valueDecimal) : '';
+      case ValueType.Date:
+        return setting.valueDate ? setting.valueDate.toISOString() : '';
+      case ValueType.Select:
+      case ValueType.Text:
+        return setting.valueText || '';
+      case ValueType.Json:
+        return setting.valueJson ? JSON.stringify(setting.valueJson) : '';
+      default:
+        return setting.valueText || '';
+    }
+  }
+
+  private getSettingValue(setting?: AdvancedSetting | null): string {
+    return this.getRowValue(setting);
+  }
+
+  private async upsertSettingRow(
+    category: AdvancedSetting,
+    key: CurrencyRateSettingKey,
+    userId: string,
+    value: string,
+  ): Promise<void> {
+    const definition = SETTINGS_FIELDS[key];
+    let row = await this.settingRepository.findOne({
+      where: { parentId: category.id, code: definition.code, nodeType: NodeType.Setting },
+    });
+
+    if (!row) {
+      row = this.settingRepository.create({
+        companyId: category.companyId,
+        parentId: category.id,
+        code: definition.code,
+        label: definition.label,
+        description: definition.label,
+        nodeType: NodeType.Setting,
+        sortOrder: Object.keys(SETTINGS_FIELDS).indexOf(key),
+        createdBy: userId,
+        updatedBy: userId,
+        isActive: true,
+      });
+    } else {
+      row.updatedBy = userId;
+    }
+
+    row.valueType = definition.valueType;
+    row.valueBoolean = null;
+    row.valueText = null;
+    row.valueNumber = null;
+    row.valueDecimal = null;
+    row.valueDate = null;
+    row.valueJson = null;
+
+    const cleanValue = String(value ?? '').trim();
+    if (definition.valueType === ValueType.Select) {
+      row.valueText = cleanValue;
+    } else if (definition.valueType === ValueType.Decimal) {
+      row.valueDecimal = cleanValue ? Number.parseFloat(cleanValue) : null;
+    }
+
+    await this.settingRepository.save(row);
   }
 
   async ensureSettingsSeeded(userId: string): Promise<void> {
@@ -105,7 +247,7 @@ export class CurrencyRatesService {
       throw new NotFoundException('Company not found');
     }
 
-    let category = await this.getSettingsSetting();
+    let category = await this.getSettingsCategory();
     if (!category) {
       category = this.settingRepository.create({
         code: SETTINGS_CATEGORY_CODE,
@@ -117,29 +259,18 @@ export class CurrencyRatesService {
         sortOrder: 0,
         isActive: true,
       });
-      await this.settingRepository.save(category);
+      category = await this.settingRepository.save(category);
     }
 
-    const child = await this.settingRepository.findOne({
-      where: { parentId: category.id, code: SETTINGS_CONFIG_CODE, nodeType: NodeType.Setting },
-    });
-
-    if (!child) {
-      const seed = this.settingRepository.create({
-        code: SETTINGS_CONFIG_CODE,
-        label: 'Currency Rates Config',
-        description: 'Structured currency rates configuration',
-        nodeType: NodeType.Setting,
-        valueType: ValueType.Json,
-        valueJson: createDefaultSettings(),
-        parentId: category.id,
-        companyId: category.companyId,
-        createdBy: userId,
-        updatedBy: userId,
-        sortOrder: 0,
-        isActive: true,
+    for (const key of Object.keys(SETTINGS_FIELDS) as CurrencyRateSettingKey[]) {
+      const definition = SETTINGS_FIELDS[key];
+      const row = await this.settingRepository.findOne({
+        where: { parentId: category.id, code: definition.code, nodeType: NodeType.Setting },
       });
-      await this.settingRepository.save(seed);
+
+      if (!row) {
+        await this.upsertSettingRow(category, key, userId, definition.defaultValue);
+      }
     }
   }
 
@@ -149,28 +280,28 @@ export class CurrencyRatesService {
       return { category: null, config: createDefaultSettings() };
     }
 
-    const category = await this.getSettingsSetting();
-    const child = category?.children?.find(setting => setting.code === SETTINGS_CONFIG_CODE) ?? null;
-    const config = (child?.valueJson as CurrencyRateSettings | undefined) ?? createDefaultSettings();
+    const category = await this.getSettingsCategory();
+    const rowMap = new Map(
+      (category?.children ?? []).map(setting => [setting.code.toUpperCase(), setting]),
+    );
 
-    return {
-      category,
-      config: {
-        defaultProvider: config.defaultProvider ?? CurrencyRateProvider.TICKER,
-        roundingScale: Number.isFinite(config.roundingScale) ? config.roundingScale : 4,
-        global: this.sanitizeRule(config.global),
-        groups: Object.fromEntries(
-          Object.entries(config.groups ?? {}).map(([key, rule]) => [key.toUpperCase(), this.sanitizeRule(rule)])
-        ),
-        currencyOverrides: Object.fromEntries(
-          Object.entries(config.currencyOverrides ?? {}).map(([key, rule]) => [key, this.sanitizeRule(rule)])
-        ),
-      },
-    };
+    const config = this.normalizeCurrencyRateSettings({
+      defaultProvider: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.defaultProvider.code)) as CurrencyRateProvider,
+      buyMarginType: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMarginType.code)) as CurrencyRateMarginType,
+      buyMarginValue: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMarginValue.code)),
+      buyMinRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMinRate.code)),
+      buyMaxRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMaxRate.code)),
+      saleMarginType: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMarginType.code)) as CurrencyRateMarginType,
+      saleMarginValue: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMarginValue.code)),
+      saleMinRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMinRate.code)),
+      saleMaxRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMaxRate.code)),
+    });
+
+    return { category, config };
   }
 
   private async saveSettings(config: CurrencyRateSettings, userId: string): Promise<CurrencyRateSettings> {
-    let category = await this.getSettingsSetting();
+    let category = await this.getSettingsCategory();
     if (!category) {
       const company = await this.getCompany();
       if (!company) {
@@ -190,46 +321,19 @@ export class CurrencyRatesService {
       category = await this.settingRepository.save(category);
     }
 
-    const payload = {
-      defaultProvider: config.defaultProvider,
-      roundingScale: config.roundingScale,
-      global: this.sanitizeRule(config.global),
-      groups: Object.fromEntries(
-        Object.entries(config.groups ?? {}).map(([key, rule]) => [key.toUpperCase(), this.sanitizeRule(rule)])
-      ),
-      currencyOverrides: Object.fromEntries(
-        Object.entries(config.currencyOverrides ?? {}).map(([key, rule]) => [key, this.sanitizeRule(rule)])
-      ),
-    } satisfies CurrencyRateSettings;
+    const normalized = this.normalizeCurrencyRateSettings(config);
 
-    const child = await this.settingRepository.findOne({
-      where: { parentId: category.id, code: SETTINGS_CONFIG_CODE, nodeType: NodeType.Setting },
-    });
+    await this.upsertSettingRow(category, 'defaultProvider', userId, normalized.defaultProvider);
+    await this.upsertSettingRow(category, 'buyMarginType', userId, normalized.buyMarginType);
+    await this.upsertSettingRow(category, 'buyMarginValue', userId, normalized.buyMarginValue);
+    await this.upsertSettingRow(category, 'buyMinRate', userId, normalized.buyMinRate);
+    await this.upsertSettingRow(category, 'buyMaxRate', userId, normalized.buyMaxRate);
+    await this.upsertSettingRow(category, 'saleMarginType', userId, normalized.saleMarginType);
+    await this.upsertSettingRow(category, 'saleMarginValue', userId, normalized.saleMarginValue);
+    await this.upsertSettingRow(category, 'saleMinRate', userId, normalized.saleMinRate);
+    await this.upsertSettingRow(category, 'saleMaxRate', userId, normalized.saleMaxRate);
 
-    if (!child) {
-      const created = this.settingRepository.create({
-        code: SETTINGS_CONFIG_CODE,
-        label: 'Currency Rates Config',
-        description: 'Structured currency rates configuration',
-        nodeType: NodeType.Setting,
-        valueType: ValueType.Json,
-        valueJson: payload,
-        parentId: category.id,
-        companyId: category.companyId,
-        createdBy: userId,
-        updatedBy: userId,
-        sortOrder: 0,
-        isActive: true,
-      });
-      await this.settingRepository.save(created);
-      return payload;
-    }
-
-    child.valueType = ValueType.Json;
-    child.valueJson = payload;
-    child.updatedBy = userId;
-    await this.settingRepository.save(child);
-    return payload;
+    return normalized;
   }
 
   async getSettings(): Promise<CurrencyRateSettings> {
@@ -242,10 +346,14 @@ export class CurrencyRatesService {
     return this.saveSettings(
       {
         defaultProvider: dto.defaultProvider,
-        roundingScale: dto.roundingScale,
-        global: dto.global,
-        groups: dto.groups ?? {},
-        currencyOverrides: dto.currencyOverrides ?? {},
+        buyMarginType: dto.buyMarginType,
+        buyMarginValue: dto.buyMarginValue,
+        buyMinRate: dto.buyMinRate,
+        buyMaxRate: dto.buyMaxRate,
+        saleMarginType: dto.saleMarginType,
+        saleMarginValue: dto.saleMarginValue,
+        saleMinRate: dto.saleMinRate,
+        saleMaxRate: dto.saleMaxRate,
       },
       userId,
     );
@@ -388,21 +496,15 @@ export class CurrencyRatesService {
 
   private applyMargin(
     baseRate: string,
-    margin: CurrencyRateMarginConfig,
+    margin: CurrencyRateSideConfig,
     scale: number,
   ): { marginAmount: string; finalRate: string } {
     const base = this.parseDecimal(baseRate);
     const marginValue = this.parseDecimal(margin.marginValue);
-    let amount = 0;
-
-    if (margin.marginType === CurrencyRateMarginType.PERCENT) {
-      amount = base * (marginValue / 100);
-    } else {
-      amount = marginValue;
-    }
-
-    const signedAmount = margin.marginDirection === CurrencyRateMarginDirection.SUBTRACT ? -amount : amount;
-    const final = base + signedAmount;
+    const amount = margin.marginType === CurrencyRateMarginType.PERCENT
+      ? base * (marginValue / 100)
+      : marginValue;
+    const final = base + amount;
 
     return {
       marginAmount: this.round(amount, scale),
@@ -410,7 +512,7 @@ export class CurrencyRatesService {
     };
   }
 
-  private validateBand(finalRate: string, margin: CurrencyRateMarginConfig): { isValid: boolean; reason?: string } {
+  private validateBand(finalRate: string, margin: CurrencyRateSideConfig): { isValid: boolean; reason?: string } {
     const value = this.parseDecimal(finalRate);
     const min = this.parseDecimal(margin.minRate);
     const max = this.parseDecimal(margin.maxRate);
@@ -434,20 +536,23 @@ export class CurrencyRatesService {
     }
 
     const { config } = await this.loadSettings();
-    const override = config.currencyOverrides[dto.currencyId];
-    const groupCode = currency.pricingGroup?.code?.toUpperCase();
-    const groupRule = groupCode ? config.groups[groupCode] : undefined;
-    const effectiveRule = override ?? groupRule ?? config.global;
-    const effectiveSource: CurrencyRateQuote['effectiveSource'] = override
-      ? 'currency-override'
-      : groupRule
-        ? 'group-default'
-        : 'global-default';
+    const buyMargin = {
+      marginType: config.buyMarginType,
+      marginValue: config.buyMarginValue,
+      minRate: config.buyMinRate,
+      maxRate: config.buyMaxRate,
+    };
+    const saleMargin = {
+      marginType: config.saleMarginType,
+      marginValue: config.saleMarginValue,
+      minRate: config.saleMinRate,
+      maxRate: config.saleMaxRate,
+    };
 
-    const buy = this.applyMargin(dto.baseBuyRate, effectiveRule.buy, config.roundingScale);
-    const sale = this.applyMargin(dto.baseSaleRate, effectiveRule.sale, config.roundingScale);
-    const buyValidation = this.validateBand(buy.finalRate, effectiveRule.buy);
-    const saleValidation = this.validateBand(sale.finalRate, effectiveRule.sale);
+    const buy = this.applyMargin(dto.baseBuyRate, buyMargin, DEFAULT_ROUNDING_SCALE);
+    const sale = this.applyMargin(dto.baseSaleRate, saleMargin, DEFAULT_ROUNDING_SCALE);
+    const buyValidation = this.validateBand(buy.finalRate, buyMargin);
+    const saleValidation = this.validateBand(sale.finalRate, saleMargin);
 
     return {
       currencyId: currency.id,
@@ -458,20 +563,20 @@ export class CurrencyRatesService {
       buy: {
         baseRate: dto.baseBuyRate,
         ...buy,
-        minRate: effectiveRule.buy.minRate,
-        maxRate: effectiveRule.buy.maxRate,
+        minRate: buyMargin.minRate,
+        maxRate: buyMargin.maxRate,
         isValid: buyValidation.isValid,
         reason: buyValidation.reason,
       },
       sale: {
         baseRate: dto.baseSaleRate,
         ...sale,
-        minRate: effectiveRule.sale.minRate,
-        maxRate: effectiveRule.sale.maxRate,
+        minRate: saleMargin.minRate,
+        maxRate: saleMargin.maxRate,
         isValid: saleValidation.isValid,
         reason: saleValidation.reason,
       },
-      effectiveSource,
+      effectiveSource: 'advanced-settings',
     };
   }
 
@@ -489,20 +594,13 @@ export class CurrencyRatesService {
       throw new NotFoundException(`Currency with id ${currencyId} not found`);
     }
 
-    const { config } = await this.loadSettings();
     const groupCode = currency.pricingGroup?.code?.toUpperCase() ?? null;
-    const hasOverride = Boolean(config.currencyOverrides[currencyId]);
-    const effectiveSource = hasOverride
-      ? 'currency-override'
-      : groupCode && config.groups[groupCode]
-        ? 'group-default'
-        : 'global-default';
 
     return {
       currency,
       groupCode,
-      effectiveSource,
-      hasOverride,
+      effectiveSource: 'advanced-settings',
+      hasOverride: false,
     };
   }
 }

@@ -13,11 +13,3 @@ export const CurrencyRateMarginType = {
 
 export type CurrencyRateMarginType =
   (typeof CurrencyRateMarginType)[keyof typeof CurrencyRateMarginType];
-
-export const CurrencyRateMarginDirection = {
-  ADD: 'ADD',
-  SUBTRACT: 'SUBTRACT',
-} as const;
-
-export type CurrencyRateMarginDirection =
-  (typeof CurrencyRateMarginDirection)[keyof typeof CurrencyRateMarginDirection];

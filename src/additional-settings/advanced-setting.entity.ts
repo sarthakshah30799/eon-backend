@@ -13,6 +13,7 @@ export enum ValueType {
   Number = "number",
   Decimal = "decimal",
   Date = "date",
+  Select = "select",
   Json = "json",
 }
 
