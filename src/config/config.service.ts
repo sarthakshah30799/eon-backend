@@ -45,11 +45,13 @@ export class ConfigService {
     const sslEnabled = this.getOptionalBoolean('DB_SSL') === true;
     return {
       host: this.get('DB_HOST'),
+      transactionHost: this.get('DB_HOST2'),
       port: this.getNumber('DB_PORT'),
       username: this.get('DB_USERNAME'),
       password: this.get('DB_PASSWORD'),
       database: this.get('DB_DATABASE'),
-      database2: this.get('DB_DATABASE2'),
+      database2: this.getOptional('DB_DATABASE2') || this.get('DB_DATABASE'),
+      transactionDatabase: this.get('DB_DATABASE2'),
       synchronize: this.getBoolean('DB_SYNCHRONIZE') || false,
       migrationsRun: this.getBoolean('DB_MIGRATIONS_RUN') || true,
       ssl: sslEnabled

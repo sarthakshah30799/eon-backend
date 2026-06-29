@@ -10,6 +10,7 @@ import { Country } from '../country/country.entity';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
 import { CurrencyResponseDto } from './dto/currency-response.dto';
+import { CurrencyRateGroup } from '../currency-rates/currency-rate-group.entity';
 
 @Injectable()
 export class CurrencyService {
@@ -18,6 +19,8 @@ export class CurrencyService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Country)
     private readonly countryRepository: Repository<Country>,
+    @InjectRepository(CurrencyRateGroup)
+    private readonly pricingGroupRepository: Repository<CurrencyRateGroup>,
   ) {}
 
   private applyBusinessRules(currency: Currency): void {
@@ -32,7 +35,7 @@ export class CurrencyService {
 
   async findAll(): Promise<CurrencyResponseDto[]> {
     const currencies = await this.currencyRepository.find({
-      relations: ['country'],
+      relations: ['country', 'pricingGroup'],
       order: { createdAt: 'DESC' },
     });
 
@@ -42,7 +45,7 @@ export class CurrencyService {
   async findById(id: string): Promise<CurrencyResponseDto> {
     const currency = await this.currencyRepository.findOne({
       where: { id },
-      relations: ['country'],
+      relations: ['country', 'pricingGroup'],
     });
 
     if (!currency) {
@@ -75,12 +78,24 @@ export class CurrencyService {
       throw new NotFoundException(`Country with id ${dto.countryId} not found`);
     }
 
-    const { countryId: _countryId, ...otherFields } = dto;
+    let pricingGroup = null;
+    if (dto.pricingGroupId) {
+      pricingGroup = await this.pricingGroupRepository.findOne({
+        where: { id: dto.pricingGroupId },
+      });
+      if (!pricingGroup) {
+        throw new NotFoundException(`Currency pricing group with id ${dto.pricingGroupId} not found`);
+      }
+    }
+
+    const { countryId: _countryId, pricingGroupId: _pricingGroupId, ...otherFields } = dto;
     void _countryId;
+    void _pricingGroupId;
     const currency = this.currencyRepository.create({
       ...otherFields,
       currencyCode,
       country,
+      pricingGroup,
       active: dto.active ?? false,
       onlyStocking: dto.onlyStocking ?? false,
       productAllowed: dto.productAllowed ?? '',
@@ -139,7 +154,25 @@ export class CurrencyService {
       currency.country = country;
     }
 
-    const { currencyCode, countryId, ...otherFields } = dto;
+    if (dto.pricingGroupId !== undefined) {
+      if (dto.pricingGroupId === null || dto.pricingGroupId === '') {
+        currency.pricingGroup = null;
+      } else {
+        const pricingGroup = await this.pricingGroupRepository.findOne({
+          where: { id: dto.pricingGroupId },
+        });
+
+        if (!pricingGroup) {
+          throw new NotFoundException(
+            `Currency pricing group with id ${dto.pricingGroupId} not found`,
+          );
+        }
+
+        currency.pricingGroup = pricingGroup;
+      }
+    }
+
+    const { currencyCode, countryId, pricingGroupId, ...otherFields } = dto;
     Object.assign(currency, otherFields);
     currency.updatedBy = userId;
     this.applyBusinessRules(currency);

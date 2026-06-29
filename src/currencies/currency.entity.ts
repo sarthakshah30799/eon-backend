@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
 import { Country } from '../country/country.entity';
+import { CurrencyRateGroup } from '../currency-rates/currency-rate-group.entity';
 
 export const CurrencyCalculationMethod = {
   MULTIPLICATION: 'MULTIPLICATION',
@@ -72,6 +73,11 @@ export class Currency extends BaseEntity {
 
   @Column({ type: 'citext', default: CurrencyGroup.ASIA })
   group: CurrencyGroup;
+
+  @Index()
+  @ManyToOne(() => CurrencyRateGroup, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'pricing_group_id' })
+  pricingGroup: CurrencyRateGroup | null;
 
   @Column({ type: 'boolean', default: false })
   active: boolean;

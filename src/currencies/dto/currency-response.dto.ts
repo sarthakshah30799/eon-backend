@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Currency } from '../currency.entity';
 import { Country } from '../../country/country.entity';
+import { CurrencyRateGroupResponseDto } from '../../currency-rates/dto/currency-rate-group-response.dto';
 
 export class CurrencyResponseDto {
   @ApiProperty()
@@ -45,6 +46,12 @@ export class CurrencyResponseDto {
   @ApiProperty()
   group: string;
 
+  @ApiProperty({ required: false, nullable: true, type: () => CurrencyRateGroupResponseDto })
+  pricingGroup?: CurrencyRateGroupResponseDto | null;
+
+  @ApiProperty({ required: false })
+  pricingGroupId?: string | null;
+
   @ApiProperty()
   active: boolean;
 
@@ -82,6 +89,18 @@ export class CurrencyResponseDto {
     dto.gulfDiscFactor = entity.gulfDiscFactor;
     dto.amexMapCode = entity.amexMapCode;
     dto.group = entity.group;
+    dto.pricingGroupId = entity.pricingGroup?.id || null;
+    dto.pricingGroup = entity.pricingGroup
+      ? {
+          id: entity.pricingGroup.id,
+          code: entity.pricingGroup.code,
+          name: entity.pricingGroup.name,
+          description: entity.pricingGroup.description,
+          isActive: entity.pricingGroup.isActive,
+          createdAt: entity.pricingGroup.createdAt,
+          updatedAt: entity.pricingGroup.updatedAt,
+        }
+      : null;
     dto.active = entity.active;
     dto.onlyStocking = entity.onlyStocking;
     dto.productAllowed = entity.productAllowed;
