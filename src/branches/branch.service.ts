@@ -27,8 +27,7 @@ export class BranchService {
   ) {}
 
   async findAll(query?: BranchListQueryDto): Promise<BranchResponseDto[]> {
-    const includeInactive =
-      query?.activeOnly === false || query?.activeOnly === 'false';
+    const includeInactive = query?.activeOnly === false;
     const qb = this.branchRepository
       .createQueryBuilder('branch')
       .leftJoinAndSelect('branch.company', 'company')
@@ -49,7 +48,7 @@ export class BranchService {
             .where('branch.code ILIKE :search', { search: `%${query.search}%` })
             .orWhere('branch.name ILIKE :search', { search: `%${query.search}%` })
             .orWhere('branch.city ILIKE :search', { search: `%${query.search}%` })
-            .orWhere('branch.branchNumber::text ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('branch.branch_number::text ILIKE :search', { search: `%${query.search}%` })
             .orWhere('branch.contactName ILIKE :search', { search: `%${query.search}%` })
             .orWhere('branch.contactNo ILIKE :search', { search: `%${query.search}%` })
             .orWhere('branch.branchEmail ILIKE :search', { search: `%${query.search}%` })
