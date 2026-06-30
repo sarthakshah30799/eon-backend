@@ -1,5 +1,6 @@
-import { Entity, Column, Index } from 'typeorm';
+import { Entity, Column, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
+import { AccountProfile } from '../account-profiles/account-profile.entity';
 
 @Entity('products')
 export class Product extends BaseEntity {
@@ -11,62 +12,81 @@ export class Product extends BaseEntity {
   productDescription: string;
 
   // Accounting Configuration
-  @Column({ type: 'citext', nullable: true })
-  acOfIssuer: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'ac_of_issuer_id' })
+  acOfIssuer: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  commissionAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'commission_ac_id' })
+  commissionAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  fakeAccount: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'fake_account_id' })
+  fakeAccount: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  bulkPurAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'bulk_pur_ac_id' })
+  bulkPurAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  openAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'open_ac_id' })
+  openAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  closingAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'closing_ac_id' })
+  closingAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  expenseAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'expense_ac_id' })
+  expenseAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  bulkSaleAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'bulk_sale_ac_id' })
+  bulkSaleAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  purchaseAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'purchase_ac_id' })
+  purchaseAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  saleAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'sale_ac_id' })
+  saleAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  profitAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'profit_ac_id' })
+  profitAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  bulkProficAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'bulk_profic_ac_id' })
+  bulkProficAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  purchaseRetCancAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'purchase_ret_canc_ac_id' })
+  purchaseRetCancAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  purchaseBlkCancAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'purchase_blk_canc_ac_id' })
+  purchaseBlkCancAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  saleRetCancAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'sale_ret_canc_ac_id' })
+  saleRetCancAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  saleBlkCancAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'sale_blk_canc_ac_id' })
+  saleBlkCancAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  branchPurAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'branch_pur_ac_id' })
+  branchPurAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  branchSaleAc: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'branch_sale_ac_id' })
+  branchSaleAc: AccountProfile | null;
 
-  @Column({ type: 'citext', nullable: true })
-  profitAcBrnSale: string;
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'profit_ac_brn_sale_id' })
+  profitAcBrnSale: AccountProfile | null;
 
   // Additional Fields from Frontend
   @Column({ type: 'citext', nullable: true })

@@ -177,25 +177,25 @@ export class ProductResponseDto {
     dto.productDescription = entity.productDescription;
     
     // Accounting
-    dto.acOfIssuer = entity.acOfIssuer;
-    dto.commissionAc = entity.commissionAc;
-    dto.fakeAccount = entity.fakeAccount;
-    dto.bulkPurAc = entity.bulkPurAc;
-    dto.openAc = entity.openAc;
-    dto.closingAc = entity.closingAc;
-    dto.expenseAc = entity.expenseAc;
-    dto.bulkSaleAc = entity.bulkSaleAc;
-    dto.purchaseAc = entity.purchaseAc;
-    dto.saleAc = entity.saleAc;
-    dto.profitAc = entity.profitAc;
-    dto.bulkProficAc = entity.bulkProficAc;
-    dto.purchaseRetCancAc = entity.purchaseRetCancAc;
-    dto.purchaseBlkCancAc = entity.purchaseBlkCancAc;
-    dto.saleRetCancAc = entity.saleRetCancAc;
-    dto.saleBlkCancAc = entity.saleBlkCancAc;
-    dto.branchPurAc = entity.branchPurAc;
-    dto.branchSaleAc = entity.branchSaleAc;
-    dto.profitAcBrnSale = entity.profitAcBrnSale;
+    dto.acOfIssuer = entity.acOfIssuer?.id ?? '';
+    dto.commissionAc = entity.commissionAc?.id ?? '';
+    dto.fakeAccount = entity.fakeAccount?.id ?? '';
+    dto.bulkPurAc = entity.bulkPurAc?.id ?? '';
+    dto.openAc = entity.openAc?.id ?? '';
+    dto.closingAc = entity.closingAc?.id ?? '';
+    dto.expenseAc = entity.expenseAc?.id ?? '';
+    dto.bulkSaleAc = entity.bulkSaleAc?.id ?? '';
+    dto.purchaseAc = entity.purchaseAc?.id ?? '';
+    dto.saleAc = entity.saleAc?.id ?? '';
+    dto.profitAc = entity.profitAc?.id ?? '';
+    dto.bulkProficAc = entity.bulkProficAc?.id ?? '';
+    dto.purchaseRetCancAc = entity.purchaseRetCancAc?.id ?? '';
+    dto.purchaseBlkCancAc = entity.purchaseBlkCancAc?.id ?? '';
+    dto.saleRetCancAc = entity.saleRetCancAc?.id ?? '';
+    dto.saleBlkCancAc = entity.saleBlkCancAc?.id ?? '';
+    dto.branchPurAc = entity.branchPurAc?.id ?? '';
+    dto.branchSaleAc = entity.branchSaleAc?.id ?? '';
+    dto.profitAcBrnSale = entity.profitAcBrnSale?.id ?? '';
 
     // Additional Fields
     dto.retail = entity.retail;
