@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsString, IsUUID, Matches } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  ValidateIf,
+} from 'class-validator';
 import { CurrencyRateMarginType } from '../currency-rates.enums';
 
 export class CreateProductCurrencyRateDto {
@@ -12,44 +20,52 @@ export class CreateProductCurrencyRateDto {
   currencyId: string;
 
   @ApiProperty({ enum: CurrencyRateMarginType })
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @IsIn(Object.values(CurrencyRateMarginType))
-  buyMarginType: CurrencyRateMarginType;
+  buyMarginType?: CurrencyRateMarginType;
 
   @ApiProperty()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'buyMarginValue must be a valid decimal number' })
-  buyMarginValue: string;
+  buyMarginValue?: string;
 
   @ApiProperty()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'buyMinRate must be a valid decimal number' })
-  buyMinRate: string;
+  buyMinRate?: string;
 
   @ApiProperty()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'buyMaxRate must be a valid decimal number' })
-  buyMaxRate: string;
+  buyMaxRate?: string;
 
   @ApiProperty({ enum: CurrencyRateMarginType })
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @IsIn(Object.values(CurrencyRateMarginType))
-  saleMarginType: CurrencyRateMarginType;
+  saleMarginType?: CurrencyRateMarginType;
 
   @ApiProperty()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'saleMarginValue must be a valid decimal number' })
-  saleMarginValue: string;
+  saleMarginValue?: string;
 
   @ApiProperty()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'saleMinRate must be a valid decimal number' })
-  saleMinRate: string;
+  saleMinRate?: string;
 
   @ApiProperty()
+  @ValidateIf((_, value) => value !== null && value !== undefined && value !== '')
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'saleMaxRate must be a valid decimal number' })
-  saleMaxRate: string;
+  saleMaxRate?: string;
 
   @ApiProperty({ default: true, required: false })
   @IsBoolean()

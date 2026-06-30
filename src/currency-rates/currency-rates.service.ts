@@ -31,6 +31,10 @@ import { UpdateProductCurrencyRateDto } from './dto/update-product-currency-rate
 type CurrencyRateSideConfig = CurrencyRateMarginConfig;
 
 const normalizeGroupCode = (code?: string | null) => String(code ?? '').trim().toUpperCase();
+const normalizeOptionalText = (value?: string | null) => {
+  const trimmed = String(value ?? '').trim();
+  return trimmed ? trimmed : null;
+};
 
 @Injectable()
 export class CurrencyRatesService {
@@ -244,14 +248,14 @@ export class CurrencyRatesService {
       productId: product.id,
       currency,
       currencyId: currency.id,
-      buyMarginType: dto.buyMarginType,
-      buyMarginValue: dto.buyMarginValue,
-      buyMinRate: dto.buyMinRate,
-      buyMaxRate: dto.buyMaxRate,
-      saleMarginType: dto.saleMarginType,
-      saleMarginValue: dto.saleMarginValue,
-      saleMinRate: dto.saleMinRate,
-      saleMaxRate: dto.saleMaxRate,
+      buyMarginType: normalizeOptionalText(dto.buyMarginType) as CurrencyRateMarginType | null,
+      buyMarginValue: normalizeOptionalText(dto.buyMarginValue),
+      buyMinRate: normalizeOptionalText(dto.buyMinRate),
+      buyMaxRate: normalizeOptionalText(dto.buyMaxRate),
+      saleMarginType: normalizeOptionalText(dto.saleMarginType) as CurrencyRateMarginType | null,
+      saleMarginValue: normalizeOptionalText(dto.saleMarginValue),
+      saleMinRate: normalizeOptionalText(dto.saleMinRate),
+      saleMaxRate: normalizeOptionalText(dto.saleMaxRate),
       isActive: dto.isActive ?? true,
       createdBy: userId,
       updatedBy: userId,
@@ -312,14 +316,14 @@ export class CurrencyRatesService {
       rule.currencyId = currency.id;
     }
 
-    if (dto.buyMarginType !== undefined) rule.buyMarginType = dto.buyMarginType;
-    if (dto.buyMarginValue !== undefined) rule.buyMarginValue = dto.buyMarginValue;
-    if (dto.buyMinRate !== undefined) rule.buyMinRate = dto.buyMinRate;
-    if (dto.buyMaxRate !== undefined) rule.buyMaxRate = dto.buyMaxRate;
-    if (dto.saleMarginType !== undefined) rule.saleMarginType = dto.saleMarginType;
-    if (dto.saleMarginValue !== undefined) rule.saleMarginValue = dto.saleMarginValue;
-    if (dto.saleMinRate !== undefined) rule.saleMinRate = dto.saleMinRate;
-    if (dto.saleMaxRate !== undefined) rule.saleMaxRate = dto.saleMaxRate;
+    if (dto.buyMarginType !== undefined) rule.buyMarginType = normalizeOptionalText(dto.buyMarginType) as CurrencyRateMarginType | null;
+    if (dto.buyMarginValue !== undefined) rule.buyMarginValue = normalizeOptionalText(dto.buyMarginValue);
+    if (dto.buyMinRate !== undefined) rule.buyMinRate = normalizeOptionalText(dto.buyMinRate);
+    if (dto.buyMaxRate !== undefined) rule.buyMaxRate = normalizeOptionalText(dto.buyMaxRate);
+    if (dto.saleMarginType !== undefined) rule.saleMarginType = normalizeOptionalText(dto.saleMarginType) as CurrencyRateMarginType | null;
+    if (dto.saleMarginValue !== undefined) rule.saleMarginValue = normalizeOptionalText(dto.saleMarginValue);
+    if (dto.saleMinRate !== undefined) rule.saleMinRate = normalizeOptionalText(dto.saleMinRate);
+    if (dto.saleMaxRate !== undefined) rule.saleMaxRate = normalizeOptionalText(dto.saleMaxRate);
     if (dto.isActive !== undefined) rule.isActive = dto.isActive;
 
     rule.updatedBy = userId;

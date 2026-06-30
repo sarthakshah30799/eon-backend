@@ -20,7 +20,7 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
         entities: [__dirname + '/../!(manual-bill-books)/**/*.entity{.ts,.js}'],
         migrations: [__dirname + '/../migrations/*{.ts,.js}'],
         synchronize: false, // Ensure you handle schema changes properly
-        migrationsRun: false,
+        migrationsRun: configService.database.migrationsRun,
         logging: true,
         namingStrategy: new SnakeNamingStrategy(),
       }),
