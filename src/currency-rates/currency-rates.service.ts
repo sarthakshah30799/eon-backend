@@ -6,105 +6,31 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { AdvancedSetting, NodeType, ValueType } from '../additional-settings/advanced-setting.entity';
-import { Company } from '../company/company.entity';
 import { Currency } from '../currencies/currency.entity';
+import { Product } from '../products/product.entity';
 import { CurrencyRateGroup } from './currency-rate-group.entity';
 import { CurrencyRate } from './currency-rate.entity';
+import { ProductCurrencyRate } from './product-currency-rate.entity';
 import {
   CurrencyRateMarginType,
   CurrencyRateProvider,
 } from './currency-rates.enums';
 import {
+  CurrencyRateMarginConfig,
   CurrencyRateQuote,
-  CurrencyRateSettings,
+  CurrencyRateRuleConfig,
+  ProductCurrencyPricingRule,
 } from './currency-rates.types';
 import { CreateCurrencyRateGroupDto } from './dto/create-currency-rate-group.dto';
 import { UpdateCurrencyRateGroupDto } from './dto/update-currency-rate-group.dto';
 import { CreateCurrencyRateDto } from './dto/create-currency-rate.dto';
-import { SaveCurrencyRateSettingsDto } from './dto/save-currency-rate-settings.dto';
 import { PreviewCurrencyRateDto } from './dto/preview-currency-rate.dto';
+import { CreateProductCurrencyRateDto } from './dto/create-product-currency-rate.dto';
+import { UpdateProductCurrencyRateDto } from './dto/update-product-currency-rate.dto';
 
-const SETTINGS_CATEGORY_CODE = 'CURRENCY_RATES';
-const DEFAULT_ROUNDING_SCALE = 4;
+type CurrencyRateSideConfig = CurrencyRateMarginConfig;
 
-const SETTINGS_FIELDS = {
-  defaultProvider: {
-    code: 'DEFAULT_PROVIDER',
-    label: 'Default Provider',
-    valueType: ValueType.Select,
-    defaultValue: CurrencyRateProvider.TICKER,
-  },
-  buyMarginType: {
-    code: 'BUY_MARGIN_TYPE',
-    label: 'Buy Margin Type',
-    valueType: ValueType.Select,
-    defaultValue: CurrencyRateMarginType.PERCENT,
-  },
-  buyMarginValue: {
-    code: 'BUY_MARGIN_VALUE',
-    label: 'Buy Margin Value',
-    valueType: ValueType.Decimal,
-    defaultValue: '0',
-  },
-  buyMinRate: {
-    code: 'BUY_MIN_RATE',
-    label: 'Buy Min Rate',
-    valueType: ValueType.Decimal,
-    defaultValue: '0',
-  },
-  buyMaxRate: {
-    code: 'BUY_MAX_RATE',
-    label: 'Buy Max Rate',
-    valueType: ValueType.Decimal,
-    defaultValue: '999999999',
-  },
-  saleMarginType: {
-    code: 'SALE_MARGIN_TYPE',
-    label: 'Sale Margin Type',
-    valueType: ValueType.Select,
-    defaultValue: CurrencyRateMarginType.PERCENT,
-  },
-  saleMarginValue: {
-    code: 'SALE_MARGIN_VALUE',
-    label: 'Sale Margin Value',
-    valueType: ValueType.Decimal,
-    defaultValue: '0',
-  },
-  saleMinRate: {
-    code: 'SALE_MIN_RATE',
-    label: 'Sale Min Rate',
-    valueType: ValueType.Decimal,
-    defaultValue: '0',
-  },
-  saleMaxRate: {
-    code: 'SALE_MAX_RATE',
-    label: 'Sale Max Rate',
-    valueType: ValueType.Decimal,
-    defaultValue: '999999999',
-  },
-} as const;
-
-type CurrencyRateSettingKey = keyof CurrencyRateSettings;
-
-type CurrencyRateSideConfig = {
-  marginType: CurrencyRateMarginType;
-  marginValue: string;
-  minRate: string;
-  maxRate: string;
-};
-
-const createDefaultSettings = (): CurrencyRateSettings => ({
-  defaultProvider: CurrencyRateProvider.TICKER,
-  buyMarginType: CurrencyRateMarginType.PERCENT,
-  buyMarginValue: '0',
-  buyMinRate: '0',
-  buyMaxRate: '999999999',
-  saleMarginType: CurrencyRateMarginType.PERCENT,
-  saleMarginValue: '0',
-  saleMinRate: '0',
-  saleMaxRate: '999999999',
-});
+const normalizeGroupCode = (code?: string | null) => String(code ?? '').trim().toUpperCase();
 
 @Injectable()
 export class CurrencyRatesService {
@@ -113,250 +39,46 @@ export class CurrencyRatesService {
     private readonly groupRepository: Repository<CurrencyRateGroup>,
     @InjectRepository(CurrencyRate)
     private readonly rateRepository: Repository<CurrencyRate>,
+    @InjectRepository(ProductCurrencyRate)
+    private readonly productCurrencyRateRepository: Repository<ProductCurrencyRate>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
-    @InjectRepository(Company)
-    private readonly companyRepository: Repository<Company>,
-    @InjectRepository(AdvancedSetting)
-    private readonly settingRepository: Repository<AdvancedSetting>,
   ) {}
 
-  async getCompany(): Promise<Company | null> {
-    return this.companyRepository.findOne({
-      where: {},
-      order: { createdAt: 'ASC' },
-    });
-  }
-
-  private async getSettingsCategory(): Promise<AdvancedSetting | null> {
-    const company = await this.getCompany();
-    if (!company) {
-      return null;
-    }
-
-    const category = await this.settingRepository.findOne({
-      where: { companyId: company.id, code: SETTINGS_CATEGORY_CODE, nodeType: NodeType.Category },
-      relations: ['children'],
-    });
-
-    return category ?? null;
-  }
-
-  private normalizeCurrencyRateSettings(settings?: Partial<CurrencyRateSettings> | null): CurrencyRateSettings {
-    const defaults = createDefaultSettings();
-    if (!settings) {
-      return defaults;
-    }
-
+  private ruleFromProductCurrencyRate(rule: ProductCurrencyRate): CurrencyRateRuleConfig {
     return {
-      defaultProvider: Object.values(CurrencyRateProvider).includes(settings.defaultProvider as CurrencyRateProvider)
-        ? (settings.defaultProvider as CurrencyRateProvider)
-        : defaults.defaultProvider,
-      buyMarginType: Object.values(CurrencyRateMarginType).includes(settings.buyMarginType as CurrencyRateMarginType)
-        ? (settings.buyMarginType as CurrencyRateMarginType)
-        : defaults.buyMarginType,
-      buyMarginValue: settings.buyMarginValue ?? defaults.buyMarginValue,
-      buyMinRate: settings.buyMinRate ?? defaults.buyMinRate,
-      buyMaxRate: settings.buyMaxRate ?? defaults.buyMaxRate,
-      saleMarginType: Object.values(CurrencyRateMarginType).includes(settings.saleMarginType as CurrencyRateMarginType)
-        ? (settings.saleMarginType as CurrencyRateMarginType)
-        : defaults.saleMarginType,
-      saleMarginValue: settings.saleMarginValue ?? defaults.saleMarginValue,
-      saleMinRate: settings.saleMinRate ?? defaults.saleMinRate,
-      saleMaxRate: settings.saleMaxRate ?? defaults.saleMaxRate,
+      buy: {
+        marginType: rule.buyMarginType,
+        marginValue: rule.buyMarginValue,
+        minRate: rule.buyMinRate,
+        maxRate: rule.buyMaxRate,
+      },
+      sale: {
+        marginType: rule.saleMarginType,
+        marginValue: rule.saleMarginValue,
+        minRate: rule.saleMinRate,
+        maxRate: rule.saleMaxRate,
+      },
     };
   }
 
-  private getRowValue(setting?: AdvancedSetting | null): string {
-    if (!setting) {
-      return '';
-    }
-
-    switch (setting.valueType) {
-      case ValueType.Boolean:
-        return setting.valueBoolean ? 'YES' : 'NO';
-      case ValueType.Number:
-        return setting.valueNumber !== null && setting.valueNumber !== undefined ? String(setting.valueNumber) : '';
-      case ValueType.Decimal:
-        return setting.valueDecimal !== null && setting.valueDecimal !== undefined ? String(setting.valueDecimal) : '';
-      case ValueType.Date:
-        return setting.valueDate ? setting.valueDate.toISOString() : '';
-      case ValueType.Select:
-      case ValueType.Text:
-        return setting.valueText || '';
-      case ValueType.Json:
-        return setting.valueJson ? JSON.stringify(setting.valueJson) : '';
-      default:
-        return setting.valueText || '';
-    }
-  }
-
-  private getSettingValue(setting?: AdvancedSetting | null): string {
-    return this.getRowValue(setting);
-  }
-
-  private async upsertSettingRow(
-    category: AdvancedSetting,
-    key: CurrencyRateSettingKey,
-    userId: string,
-    value: string,
-  ): Promise<void> {
-    const definition = SETTINGS_FIELDS[key];
-    let row = await this.settingRepository.findOne({
-      where: { parentId: category.id, code: definition.code, nodeType: NodeType.Setting },
-    });
-
-    if (!row) {
-      row = this.settingRepository.create({
-        companyId: category.companyId,
-        parentId: category.id,
-        code: definition.code,
-        label: definition.label,
-        description: definition.label,
-        nodeType: NodeType.Setting,
-        sortOrder: Object.keys(SETTINGS_FIELDS).indexOf(key),
-        createdBy: userId,
-        updatedBy: userId,
-        isActive: true,
-      });
-    } else {
-      row.updatedBy = userId;
-    }
-
-    row.valueType = definition.valueType;
-    row.valueBoolean = null;
-    row.valueText = null;
-    row.valueNumber = null;
-    row.valueDecimal = null;
-    row.valueDate = null;
-    row.valueJson = null;
-
-    const cleanValue = String(value ?? '').trim();
-    if (definition.valueType === ValueType.Select) {
-      row.valueText = cleanValue;
-    } else if (definition.valueType === ValueType.Decimal) {
-      row.valueDecimal = cleanValue ? Number.parseFloat(cleanValue) : null;
-    }
-
-    await this.settingRepository.save(row);
-  }
-
-  async ensureSettingsSeeded(userId: string): Promise<void> {
-    const company = await this.getCompany();
-    if (!company) {
-      throw new NotFoundException('Company not found');
-    }
-
-    let category = await this.getSettingsCategory();
-    if (!category) {
-      category = this.settingRepository.create({
-        code: SETTINGS_CATEGORY_CODE,
-        label: 'Currency Rates',
-        nodeType: NodeType.Category,
-        createdBy: userId,
-        updatedBy: userId,
-        companyId: company.id,
-        sortOrder: 0,
-        isActive: true,
-      });
-      category = await this.settingRepository.save(category);
-    }
-
-    for (const key of Object.keys(SETTINGS_FIELDS) as CurrencyRateSettingKey[]) {
-      const definition = SETTINGS_FIELDS[key];
-      const row = await this.settingRepository.findOne({
-        where: { parentId: category.id, code: definition.code, nodeType: NodeType.Setting },
-      });
-
-      if (!row) {
-        await this.upsertSettingRow(category, key, userId, definition.defaultValue);
-      }
-    }
-  }
-
-  private async loadSettings(): Promise<{ category: AdvancedSetting | null; config: CurrencyRateSettings }> {
-    const company = await this.getCompany();
-    if (!company) {
-      return { category: null, config: createDefaultSettings() };
-    }
-
-    const category = await this.getSettingsCategory();
-    const rowMap = new Map(
-      (category?.children ?? []).map(setting => [setting.code.toUpperCase(), setting]),
-    );
-
-    const config = this.normalizeCurrencyRateSettings({
-      defaultProvider: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.defaultProvider.code)) as CurrencyRateProvider,
-      buyMarginType: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMarginType.code)) as CurrencyRateMarginType,
-      buyMarginValue: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMarginValue.code)),
-      buyMinRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMinRate.code)),
-      buyMaxRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.buyMaxRate.code)),
-      saleMarginType: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMarginType.code)) as CurrencyRateMarginType,
-      saleMarginValue: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMarginValue.code)),
-      saleMinRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMinRate.code)),
-      saleMaxRate: this.getSettingValue(rowMap.get(SETTINGS_FIELDS.saleMaxRate.code)),
-    });
-
-    return { category, config };
-  }
-
-  private async saveSettings(config: CurrencyRateSettings, userId: string): Promise<CurrencyRateSettings> {
-    let category = await this.getSettingsCategory();
-    if (!category) {
-      const company = await this.getCompany();
-      if (!company) {
-        throw new NotFoundException('Company not found');
-      }
-
-      category = this.settingRepository.create({
-        code: SETTINGS_CATEGORY_CODE,
-        label: 'Currency Rates',
-        nodeType: NodeType.Category,
-        createdBy: userId,
-        updatedBy: userId,
-        companyId: company.id,
-        sortOrder: 0,
-        isActive: true,
-      });
-      category = await this.settingRepository.save(category);
-    }
-
-    const normalized = this.normalizeCurrencyRateSettings(config);
-
-    await this.upsertSettingRow(category, 'defaultProvider', userId, normalized.defaultProvider);
-    await this.upsertSettingRow(category, 'buyMarginType', userId, normalized.buyMarginType);
-    await this.upsertSettingRow(category, 'buyMarginValue', userId, normalized.buyMarginValue);
-    await this.upsertSettingRow(category, 'buyMinRate', userId, normalized.buyMinRate);
-    await this.upsertSettingRow(category, 'buyMaxRate', userId, normalized.buyMaxRate);
-    await this.upsertSettingRow(category, 'saleMarginType', userId, normalized.saleMarginType);
-    await this.upsertSettingRow(category, 'saleMarginValue', userId, normalized.saleMarginValue);
-    await this.upsertSettingRow(category, 'saleMinRate', userId, normalized.saleMinRate);
-    await this.upsertSettingRow(category, 'saleMaxRate', userId, normalized.saleMaxRate);
-
-    return normalized;
-  }
-
-  async getSettings(): Promise<CurrencyRateSettings> {
-    const { config } = await this.loadSettings();
-    return config;
-  }
-
-  async updateSettings(dto: SaveCurrencyRateSettingsDto, userId: string): Promise<CurrencyRateSettings> {
-    await this.ensureSettingsSeeded(userId);
-    return this.saveSettings(
-      {
-        defaultProvider: dto.defaultProvider,
-        buyMarginType: dto.buyMarginType,
-        buyMarginValue: dto.buyMarginValue,
-        buyMinRate: dto.buyMinRate,
-        buyMaxRate: dto.buyMaxRate,
-        saleMarginType: dto.saleMarginType,
-        saleMarginValue: dto.saleMarginValue,
-        saleMinRate: dto.saleMinRate,
-        saleMaxRate: dto.saleMaxRate,
+  private ruleFromGroup(group: CurrencyRateGroup): CurrencyRateRuleConfig {
+    return {
+      buy: {
+        marginType: group.buyMarginType ?? '',
+        marginValue: group.buyMarginValue ?? '',
+        minRate: '',
+        maxRate: '',
       },
-      userId,
-    );
+      sale: {
+        marginType: group.saleMarginType ?? '',
+        marginValue: group.saleMarginValue ?? '',
+        minRate: '',
+        maxRate: '',
+      },
+    };
   }
 
   async createGroup(dto: CreateCurrencyRateGroupDto, userId: string): Promise<CurrencyRateGroup> {
@@ -370,6 +92,10 @@ export class CurrencyRatesService {
       code,
       name: dto.name.trim(),
       description: dto.description?.trim() || null,
+      buyMarginType: dto.buyMarginType ?? null,
+      buyMarginValue: dto.buyMarginValue ?? null,
+      saleMarginType: dto.saleMarginType ?? null,
+      saleMarginValue: dto.saleMarginValue ?? null,
       isActive: dto.isActive ?? true,
       createdBy: userId,
       updatedBy: userId,
@@ -401,6 +127,18 @@ export class CurrencyRatesService {
     if (dto.description !== undefined) {
       group.description = dto.description?.trim() || null;
     }
+    if (dto.buyMarginType !== undefined) {
+      group.buyMarginType = dto.buyMarginType;
+    }
+    if (dto.buyMarginValue !== undefined) {
+      group.buyMarginValue = dto.buyMarginValue;
+    }
+    if (dto.saleMarginType !== undefined) {
+      group.saleMarginType = dto.saleMarginType;
+    }
+    if (dto.saleMarginValue !== undefined) {
+      group.saleMarginValue = dto.saleMarginValue;
+    }
     if (dto.isActive !== undefined) {
       group.isActive = dto.isActive;
     }
@@ -410,14 +148,6 @@ export class CurrencyRatesService {
 
   async findGroups(): Promise<CurrencyRateGroup[]> {
     return this.groupRepository.find({ order: { createdAt: 'DESC' } });
-  }
-
-  async findGroupById(id: string): Promise<CurrencyRateGroup> {
-    const group = await this.groupRepository.findOne({ where: { id } });
-    if (!group) {
-      throw new NotFoundException(`Currency rate group with id ${id} not found`);
-    }
-    return group;
   }
 
   async createRateEntry(dto: CreateCurrencyRateDto, userId: string): Promise<CurrencyRate> {
@@ -433,12 +163,15 @@ export class CurrencyRatesService {
     let baseSaleRate = dto.baseSaleRate ?? null;
     let baseRate = dto.baseRate ?? null;
 
-    if (dto.provider === CurrencyRateProvider.FOREX) {
-      if (!baseRate) {
-        throw new BadRequestException('baseRate is required for FOREX provider');
+    if (dto.provider === CurrencyRateProvider.FOREX || dto.provider === CurrencyRateProvider.MANUAL) {
+      if (baseRate) {
+        baseBuyRate = baseRate;
+        baseSaleRate = baseRate;
+      } else if (!baseBuyRate || !baseSaleRate) {
+        throw new BadRequestException('baseRate or baseBuyRate/baseSaleRate is required for FOREX and MANUAL providers');
+      } else if (dto.provider === CurrencyRateProvider.MANUAL) {
+        baseRate = baseBuyRate;
       }
-      baseBuyRate = baseRate;
-      baseSaleRate = baseRate;
     } else {
       if (!baseBuyRate || !baseSaleRate) {
         throw new BadRequestException('baseBuyRate and baseSaleRate are required for TICKER provider');
@@ -482,7 +215,177 @@ export class CurrencyRatesService {
     return qb.getMany();
   }
 
-  private round(value: number, scale: number): string {
+  async createProductCurrencyRate(
+    dto: CreateProductCurrencyRateDto,
+    userId: string,
+  ): Promise<ProductCurrencyPricingRule> {
+    const product = await this.productRepository.findOne({ where: { id: dto.productId } });
+    if (!product) {
+      throw new NotFoundException(`Product with id ${dto.productId} not found`);
+    }
+
+    const currency = await this.currencyRepository.findOne({
+      where: { id: dto.currencyId },
+      relations: ['pricingGroup'],
+    });
+    if (!currency) {
+      throw new NotFoundException(`Currency with id ${dto.currencyId} not found`);
+    }
+
+    const existing = await this.productCurrencyRateRepository.findOne({
+      where: { productId: dto.productId, currencyId: dto.currencyId },
+    });
+    if (existing) {
+      throw new ConflictException('Product currency pricing already exists for this product and currency');
+    }
+
+    const rule = this.productCurrencyRateRepository.create({
+      product,
+      productId: product.id,
+      currency,
+      currencyId: currency.id,
+      buyMarginType: dto.buyMarginType,
+      buyMarginValue: dto.buyMarginValue,
+      buyMinRate: dto.buyMinRate,
+      buyMaxRate: dto.buyMaxRate,
+      saleMarginType: dto.saleMarginType,
+      saleMarginValue: dto.saleMarginValue,
+      saleMinRate: dto.saleMinRate,
+      saleMaxRate: dto.saleMaxRate,
+      isActive: dto.isActive ?? true,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+
+    const saved = await this.productCurrencyRateRepository.save(rule);
+    const savedWithRelations = await this.productCurrencyRateRepository.findOne({
+      where: { id: saved.id },
+      relations: ['product', 'currency'],
+    });
+
+    return this.toProductCurrencyPricingRule(savedWithRelations ?? saved);
+  }
+
+  async updateProductCurrencyRate(
+    id: string,
+    dto: UpdateProductCurrencyRateDto,
+    userId: string,
+  ): Promise<ProductCurrencyPricingRule> {
+    const rule = await this.productCurrencyRateRepository.findOne({
+      where: { id },
+      relations: ['product', 'currency'],
+    });
+    if (!rule) {
+      throw new NotFoundException(`Product currency pricing with id ${id} not found`);
+    }
+
+    if (dto.productId !== undefined && dto.productId !== rule.productId) {
+      const product = await this.productRepository.findOne({ where: { id: dto.productId } });
+      if (!product) {
+        throw new NotFoundException(`Product with id ${dto.productId} not found`);
+      }
+      const duplicate = await this.productCurrencyRateRepository.findOne({
+        where: {
+          productId: dto.productId,
+          currencyId: dto.currencyId ?? rule.currencyId,
+        },
+      });
+      if (duplicate && duplicate.id !== rule.id) {
+        throw new ConflictException('Product currency pricing already exists for this product and currency');
+      }
+      rule.product = product;
+      rule.productId = product.id;
+    }
+
+    if (dto.currencyId !== undefined && dto.currencyId !== rule.currencyId) {
+      const currency = await this.currencyRepository.findOne({ where: { id: dto.currencyId } });
+      if (!currency) {
+        throw new NotFoundException(`Currency with id ${dto.currencyId} not found`);
+      }
+      const duplicate = await this.productCurrencyRateRepository.findOne({
+        where: { productId: dto.productId ?? rule.productId, currencyId: dto.currencyId },
+      });
+      if (duplicate && duplicate.id !== rule.id) {
+        throw new ConflictException('Product currency pricing already exists for this product and currency');
+      }
+      rule.currency = currency;
+      rule.currencyId = currency.id;
+    }
+
+    if (dto.buyMarginType !== undefined) rule.buyMarginType = dto.buyMarginType;
+    if (dto.buyMarginValue !== undefined) rule.buyMarginValue = dto.buyMarginValue;
+    if (dto.buyMinRate !== undefined) rule.buyMinRate = dto.buyMinRate;
+    if (dto.buyMaxRate !== undefined) rule.buyMaxRate = dto.buyMaxRate;
+    if (dto.saleMarginType !== undefined) rule.saleMarginType = dto.saleMarginType;
+    if (dto.saleMarginValue !== undefined) rule.saleMarginValue = dto.saleMarginValue;
+    if (dto.saleMinRate !== undefined) rule.saleMinRate = dto.saleMinRate;
+    if (dto.saleMaxRate !== undefined) rule.saleMaxRate = dto.saleMaxRate;
+    if (dto.isActive !== undefined) rule.isActive = dto.isActive;
+
+    rule.updatedBy = userId;
+    const saved = await this.productCurrencyRateRepository.save(rule);
+    const savedWithRelations = await this.productCurrencyRateRepository.findOne({
+      where: { id: saved.id },
+      relations: ['product', 'currency'],
+    });
+    return this.toProductCurrencyPricingRule(savedWithRelations ?? saved);
+  }
+
+  async findProductCurrencyRates(productId?: string, currencyId?: string): Promise<ProductCurrencyPricingRule[]> {
+    const qb = this.productCurrencyRateRepository.createQueryBuilder('rule')
+      .leftJoinAndSelect('rule.product', 'product')
+      .leftJoinAndSelect('rule.currency', 'currency')
+      .orderBy('rule.createdAt', 'DESC');
+
+    if (productId) {
+      qb.andWhere('rule.productId = :productId', { productId });
+    }
+    if (currencyId) {
+      qb.andWhere('rule.currencyId = :currencyId', { currencyId });
+    }
+
+    const rows = await qb.getMany();
+    return rows.map(row => this.toProductCurrencyPricingRule(row));
+  }
+
+  private toProductCurrencyPricingRule(entity: ProductCurrencyRate): ProductCurrencyPricingRule {
+    return {
+      id: entity.id,
+      productId: entity.productId,
+      currencyId: entity.currencyId,
+      buy: {
+        marginType: entity.buyMarginType,
+        marginValue: entity.buyMarginValue,
+        minRate: entity.buyMinRate,
+        maxRate: entity.buyMaxRate,
+      },
+      sale: {
+        marginType: entity.saleMarginType,
+        marginValue: entity.saleMarginValue,
+        minRate: entity.saleMinRate,
+        maxRate: entity.saleMaxRate,
+      },
+      isActive: entity.isActive,
+      product: entity.product
+        ? {
+            id: entity.product.id,
+            productCode: entity.product.productCode,
+            productDescription: entity.product.productDescription,
+          }
+        : null,
+      currency: entity.currency
+        ? {
+            id: entity.currency.id,
+            currencyCode: entity.currency.currencyCode,
+            currencyName: entity.currency.currencyName,
+          }
+        : null,
+      createdAt: entity.createdAt.toISOString(),
+      updatedAt: entity.updatedAt.toISOString(),
+    };
+  }
+
+  private round(value: number, scale = 4): string {
     return value.toFixed(Math.max(scale, 0));
   }
 
@@ -497,14 +400,15 @@ export class CurrencyRatesService {
   private applyMargin(
     baseRate: string,
     margin: CurrencyRateSideConfig,
-    scale: number,
+    direction: 'add' | 'subtract',
+    scale = 4,
   ): { marginAmount: string; finalRate: string } {
     const base = this.parseDecimal(baseRate);
     const marginValue = this.parseDecimal(margin.marginValue);
     const amount = margin.marginType === CurrencyRateMarginType.PERCENT
       ? base * (marginValue / 100)
       : marginValue;
-    const final = base + amount;
+    const final = direction === 'subtract' ? base - amount : base + amount;
 
     return {
       marginAmount: this.round(amount, scale),
@@ -513,6 +417,10 @@ export class CurrencyRatesService {
   }
 
   private validateBand(finalRate: string, margin: CurrencyRateSideConfig): { isValid: boolean; reason?: string } {
+    if (!margin.minRate || !margin.maxRate) {
+      return { isValid: true };
+    }
+
     const value = this.parseDecimal(finalRate);
     const min = this.parseDecimal(margin.minRate);
     const max = this.parseDecimal(margin.maxRate);
@@ -526,66 +434,19 @@ export class CurrencyRatesService {
     return { isValid: true };
   }
 
-  async previewQuote(dto: PreviewCurrencyRateDto): Promise<CurrencyRateQuote> {
-    const currency = await this.currencyRepository.findOne({
-      where: { id: dto.currencyId },
-      relations: ['pricingGroup'],
-    });
-    if (!currency) {
-      throw new NotFoundException(`Currency with id ${dto.currencyId} not found`);
+  private async resolvePricingRule(productId: string, currencyId: string): Promise<{
+    product: Product;
+    currency: Currency;
+    rule: CurrencyRateRuleConfig;
+    source: CurrencyRateQuote['effectiveSource'];
+    groupCode: string | null;
+    override: ProductCurrencyRate | null;
+  }> {
+    const product = await this.productRepository.findOne({ where: { id: productId } });
+    if (!product) {
+      throw new NotFoundException(`Product with id ${productId} not found`);
     }
 
-    const { config } = await this.loadSettings();
-    const buyMargin = {
-      marginType: config.buyMarginType,
-      marginValue: config.buyMarginValue,
-      minRate: config.buyMinRate,
-      maxRate: config.buyMaxRate,
-    };
-    const saleMargin = {
-      marginType: config.saleMarginType,
-      marginValue: config.saleMarginValue,
-      minRate: config.saleMinRate,
-      maxRate: config.saleMaxRate,
-    };
-
-    const buy = this.applyMargin(dto.baseBuyRate, buyMargin, DEFAULT_ROUNDING_SCALE);
-    const sale = this.applyMargin(dto.baseSaleRate, saleMargin, DEFAULT_ROUNDING_SCALE);
-    const buyValidation = this.validateBand(buy.finalRate, buyMargin);
-    const saleValidation = this.validateBand(sale.finalRate, saleMargin);
-
-    return {
-      currencyId: currency.id,
-      currencyCode: currency.currencyCode,
-      provider: dto.provider,
-      baseBuyRate: dto.baseBuyRate,
-      baseSaleRate: dto.baseSaleRate,
-      buy: {
-        baseRate: dto.baseBuyRate,
-        ...buy,
-        minRate: buyMargin.minRate,
-        maxRate: buyMargin.maxRate,
-        isValid: buyValidation.isValid,
-        reason: buyValidation.reason,
-      },
-      sale: {
-        baseRate: dto.baseSaleRate,
-        ...sale,
-        minRate: saleMargin.minRate,
-        maxRate: saleMargin.maxRate,
-        isValid: saleValidation.isValid,
-        reason: saleValidation.reason,
-      },
-      effectiveSource: 'advanced-settings',
-    };
-  }
-
-  async getCurrencyRateContext(currencyId: string): Promise<{
-    currency: Currency;
-    groupCode: string | null;
-    effectiveSource: string;
-    hasOverride: boolean;
-  }> {
     const currency = await this.currencyRepository.findOne({
       where: { id: currencyId },
       relations: ['pricingGroup'],
@@ -594,13 +455,105 @@ export class CurrencyRatesService {
       throw new NotFoundException(`Currency with id ${currencyId} not found`);
     }
 
-    const groupCode = currency.pricingGroup?.code?.toUpperCase() ?? null;
+    const override = await this.productCurrencyRateRepository.findOne({
+      where: { productId, currencyId, isActive: true },
+      relations: ['product', 'currency'],
+    });
+    if (override) {
+      return {
+        product,
+        currency,
+        rule: this.ruleFromProductCurrencyRate(override),
+        source: 'product-override',
+        groupCode: normalizeGroupCode(currency.pricingGroup?.code),
+        override,
+      };
+    }
+
+    const groupCode = normalizeGroupCode(currency.pricingGroup?.code);
+    const group = currency.pricingGroup;
+    if (!group) {
+      throw new NotFoundException(`Currency with id ${currencyId} is not assigned to a pricing group`);
+    }
+
+    const groupRule = this.ruleFromGroup(group);
+
+    if (!groupRule.buy || !groupRule.sale) {
+      throw new NotFoundException(`No pricing rule found for currency group "${groupCode || 'N/A'}"`);
+    }
 
     return {
+      product,
       currency,
+      rule: groupRule,
+      source: 'group-default',
       groupCode,
-      effectiveSource: 'advanced-settings',
-      hasOverride: false,
+      override: null,
+    };
+  }
+
+  async previewQuote(dto: PreviewCurrencyRateDto): Promise<CurrencyRateQuote> {
+    const { product, currency, rule, source, groupCode } = await this.resolvePricingRule(dto.productId, dto.currencyId);
+
+    const baseBuyRate = dto.provider === CurrencyRateProvider.MANUAL
+      ? (dto.baseRate ?? dto.baseBuyRate ?? dto.baseSaleRate)
+      : (dto.baseBuyRate ?? dto.baseRate ?? '');
+    const baseSaleRate = dto.provider === CurrencyRateProvider.MANUAL
+      ? (dto.baseRate ?? dto.baseSaleRate ?? dto.baseBuyRate)
+      : (dto.baseSaleRate ?? dto.baseRate ?? '');
+
+    if (!baseBuyRate || !baseSaleRate) {
+      throw new BadRequestException('Base buy and sale rates are required for preview');
+    }
+
+    const buy = this.applyMargin(baseBuyRate, rule.buy, 'subtract');
+    const sale = this.applyMargin(baseSaleRate, rule.sale, 'add');
+    const buyValidation = this.validateBand(buy.finalRate, rule.buy);
+    const saleValidation = this.validateBand(sale.finalRate, rule.sale);
+
+    return {
+      productId: product.id,
+      productCode: product.productCode,
+      currencyId: currency.id,
+      currencyCode: currency.currencyCode,
+      provider: dto.provider,
+      baseBuyRate,
+      baseSaleRate,
+      buy: {
+        baseRate: baseBuyRate,
+        ...buy,
+        minRate: rule.buy.minRate,
+        maxRate: rule.buy.maxRate,
+        isValid: buyValidation.isValid,
+        reason: buyValidation.reason,
+      },
+      sale: {
+        baseRate: baseSaleRate,
+        ...sale,
+        minRate: rule.sale.minRate,
+        maxRate: rule.sale.maxRate,
+        isValid: saleValidation.isValid,
+        reason: saleValidation.reason,
+      },
+      effectiveSource: source,
+      effectiveGroupCode: groupCode,
+    };
+  }
+
+  async getCurrencyRateContext(productId: string, currencyId: string): Promise<{
+    product: Product;
+    currency: Currency;
+    effectiveSource: CurrencyRateQuote['effectiveSource'];
+    effectiveGroupCode: string | null;
+    hasOverride: boolean;
+  }> {
+    const resolved = await this.resolvePricingRule(productId, currencyId);
+    return {
+      product: resolved.product,
+      currency: resolved.currency,
+      effectiveSource: resolved.source,
+      effectiveGroupCode: resolved.groupCode,
+      hasOverride: resolved.source === 'product-override',
     };
   }
 }

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CurrencyRateGroup } from '../currency-rate-group.entity';
+import { CurrencyRateMarginType } from '../currency-rates.enums';
 
 export class CurrencyRateGroupResponseDto {
   @ApiProperty()
@@ -13,6 +14,18 @@ export class CurrencyRateGroupResponseDto {
 
   @ApiProperty({ required: false, nullable: true })
   description: string | null;
+
+  @ApiProperty({ enum: CurrencyRateMarginType, required: false, nullable: true })
+  buyMarginType: CurrencyRateMarginType | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  buyMarginValue: string | null;
+
+  @ApiProperty({ enum: CurrencyRateMarginType, required: false, nullable: true })
+  saleMarginType: CurrencyRateMarginType | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  saleMarginValue: string | null;
 
   @ApiProperty()
   isActive: boolean;
@@ -29,6 +42,10 @@ export class CurrencyRateGroupResponseDto {
     dto.code = entity.code;
     dto.name = entity.name;
     dto.description = entity.description;
+    dto.buyMarginType = entity.buyMarginType;
+    dto.buyMarginValue = entity.buyMarginValue;
+    dto.saleMarginType = entity.saleMarginType;
+    dto.saleMarginValue = entity.saleMarginValue;
     dto.isActive = entity.isActive;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;

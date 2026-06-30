@@ -1,15 +1,26 @@
 import { CurrencyRateMarginType, CurrencyRateProvider } from './currency-rates.enums';
 
-export interface CurrencyRateSettings {
-  defaultProvider: CurrencyRateProvider;
-  buyMarginType: CurrencyRateMarginType;
-  buyMarginValue: string;
-  buyMinRate: string;
-  buyMaxRate: string;
-  saleMarginType: CurrencyRateMarginType;
-  saleMarginValue: string;
-  saleMinRate: string;
-  saleMaxRate: string;
+export interface CurrencyRateMarginConfig {
+  marginType: CurrencyRateMarginType | '';
+  marginValue: string | null;
+  minRate: string | null;
+  maxRate: string | null;
+}
+
+export interface CurrencyRateRuleConfig {
+  buy: CurrencyRateMarginConfig;
+  sale: CurrencyRateMarginConfig;
+}
+
+export interface ProductCurrencyPricingRule extends CurrencyRateRuleConfig {
+  id: string;
+  productId: string;
+  currencyId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product?: { id: string; productCode: string; productDescription: string } | null;
+  currency?: { id: string; currencyCode: string; currencyName: string } | null;
 }
 
 export interface CurrencyRateQuoteSide {
@@ -23,6 +34,8 @@ export interface CurrencyRateQuoteSide {
 }
 
 export interface CurrencyRateQuote {
+  productId: string;
+  productCode: string;
   currencyId: string;
   currencyCode: string;
   provider: CurrencyRateProvider;
@@ -30,5 +43,6 @@ export interface CurrencyRateQuote {
   baseSaleRate: string;
   buy: CurrencyRateQuoteSide;
   sale: CurrencyRateQuoteSide;
-  effectiveSource: 'advanced-settings' | 'currency-override' | 'group-default' | 'global-default';
+  effectiveSource: 'product-override' | 'group-default';
+  effectiveGroupCode: string | null;
 }

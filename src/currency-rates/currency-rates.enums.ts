@@ -1,6 +1,7 @@
 export const CurrencyRateProvider = {
   TICKER: 'TICKER',
   FOREX: 'FOREX',
+  MANUAL: 'MANUAL',
 } as const;
 
 export type CurrencyRateProvider =

@@ -27,6 +27,12 @@ class CurrencyRateQuoteSideResponseDto implements CurrencyRateQuoteSide {
 
 export class CurrencyRateQuoteResponseDto implements CurrencyRateQuote {
   @ApiProperty()
+  productId: string;
+
+  @ApiProperty()
+  productCode: string;
+
+  @ApiProperty()
   currencyId: string;
 
   @ApiProperty()
@@ -48,7 +54,10 @@ export class CurrencyRateQuoteResponseDto implements CurrencyRateQuote {
   sale: CurrencyRateQuoteSideResponseDto;
 
   @ApiProperty()
-  effectiveSource: 'advanced-settings' | 'currency-override' | 'group-default' | 'global-default';
+  effectiveSource: 'product-override' | 'group-default';
+
+  @ApiProperty({ required: false, nullable: true })
+  effectiveGroupCode: string | null;
 
   static fromValue(value: CurrencyRateQuote): CurrencyRateQuoteResponseDto {
     return Object.assign(new CurrencyRateQuoteResponseDto(), value);
