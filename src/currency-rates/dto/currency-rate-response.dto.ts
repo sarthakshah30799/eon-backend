@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CurrencyRate } from '../currency-rate.entity';
+import { CurrencyRateProvider } from '../currency-rates.enums';
 import { CurrencyResponseDto } from '../../currencies/dto/currency-response.dto';
 
 class UserSummaryResponseDto {
@@ -21,7 +22,7 @@ export class CurrencyRateResponseDto {
   currencyId: string;
 
   @ApiProperty()
-  provider: string;
+  provider: CurrencyRateProvider;
 
   @ApiProperty({ required: false, type: () => CurrencyResponseDto })
   currency?: CurrencyResponseDto | null;

@@ -1,15 +1,10 @@
-import {
-  CurrencyRateMarginDirection,
-  CurrencyRateMarginType,
-  CurrencyRateProvider,
-} from './currency-rates.enums';
+import { CurrencyRateMarginType, CurrencyRateProvider } from './currency-rates.enums';
 
 export interface CurrencyRateMarginConfig {
-  marginType: CurrencyRateMarginType;
-  marginValue: string;
-  marginDirection: CurrencyRateMarginDirection;
-  minRate: string;
-  maxRate: string;
+  marginType: CurrencyRateMarginType | '';
+  marginValue: string | null;
+  minRate: string | null;
+  maxRate: string | null;
 }
 
 export interface CurrencyRateRuleConfig {
@@ -17,12 +12,15 @@ export interface CurrencyRateRuleConfig {
   sale: CurrencyRateMarginConfig;
 }
 
-export interface CurrencyRateSettings {
-  defaultProvider: CurrencyRateProvider;
-  roundingScale: number;
-  global: CurrencyRateRuleConfig;
-  groups: Record<string, CurrencyRateRuleConfig>;
-  currencyOverrides: Record<string, CurrencyRateRuleConfig>;
+export interface ProductCurrencyPricingRule extends CurrencyRateRuleConfig {
+  id: string;
+  productId: string;
+  currencyId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product?: { id: string; productCode: string; productDescription: string } | null;
+  currency?: { id: string; currencyCode: string; currencyName: string } | null;
 }
 
 export interface CurrencyRateQuoteSide {
@@ -36,6 +34,8 @@ export interface CurrencyRateQuoteSide {
 }
 
 export interface CurrencyRateQuote {
+  productId: string;
+  productCode: string;
   currencyId: string;
   currencyCode: string;
   provider: CurrencyRateProvider;
@@ -43,5 +43,6 @@ export interface CurrencyRateQuote {
   baseSaleRate: string;
   buy: CurrencyRateQuoteSide;
   sale: CurrencyRateQuoteSide;
-  effectiveSource: 'currency-override' | 'group-default' | 'global-default';
+  effectiveSource: 'product-override' | 'group-default';
+  effectiveGroupCode: string | null;
 }

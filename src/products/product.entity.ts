@@ -1,5 +1,6 @@
-import { Entity, Column, Index } from 'typeorm';
+import { Entity, Column, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
+import { ProductCurrencyRate } from '../currency-rates/product-currency-rate.entity';
 
 @Entity('products')
 export class Product extends BaseEntity {
@@ -162,4 +163,7 @@ export class Product extends BaseEntity {
 
   @Column({ type: 'boolean', default: false })
   instrumentIssuingAuthorityRequired: boolean;
+
+  @OneToMany(() => ProductCurrencyRate, rate => rate.product)
+  currencyRates: ProductCurrencyRate[];
 }

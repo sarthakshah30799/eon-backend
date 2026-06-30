@@ -70,6 +70,9 @@ export class AdditionalSettingService {
       case ValueType.Date:
         setting.valueDate = new Date(cleanVal);
         break;
+      case ValueType.Select:
+        setting.valueText = cleanVal;
+        break;
       case ValueType.Json:
         try {
           setting.valueJson = JSON.parse(cleanVal);

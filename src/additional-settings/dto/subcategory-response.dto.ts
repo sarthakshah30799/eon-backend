@@ -53,6 +53,9 @@ export class SubcategoryResponseDto {
       case ValueType.Date:
         dto.value = entity.valueDate ? entity.valueDate.toISOString() : "";
         break;
+      case ValueType.Select:
+        dto.value = entity.valueText || "";
+        break;
       case ValueType.Json:
         dto.value = entity.valueJson ? JSON.stringify(entity.valueJson) : "";
         break;
