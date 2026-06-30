@@ -4,13 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Currency, CurrencyProductAllowed } from './currency.entity';
 import { Country } from '../country/country.entity';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
 import { CurrencyResponseDto } from './dto/currency-response.dto';
 import { CurrencyRateGroup } from '../currency-rates/currency-rate-group.entity';
+import { CurrencyListQueryDto } from './dto/currency-list-query.dto';
 
 @Injectable()
 export class CurrencyService {
@@ -33,12 +34,26 @@ export class CurrencyService {
       currency.productAllowed || CurrencyProductAllowed.CN;
   }
 
-  async findAll(): Promise<CurrencyResponseDto[]> {
-    const currencies = await this.currencyRepository.find({
-      relations: ['country', 'pricingGroup'],
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(query?: CurrencyListQueryDto): Promise<CurrencyResponseDto[]> {
+    const qb = this.currencyRepository
+      .createQueryBuilder('currency')
+      .leftJoinAndSelect('currency.country', 'country')
+      .leftJoinAndSelect('currency.pricingGroup', 'pricingGroup')
+      .orderBy('currency.createdAt', 'DESC');
 
+    const trimmedSearch = query?.search?.trim();
+    if (trimmedSearch) {
+      qb.andWhere(
+        new Brackets(searchQb => {
+          searchQb
+            .where('currency.currencyCode ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('currency.currencyName ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('country.name ILIKE :search', { search: `%${trimmedSearch}%` });
+        }),
+      );
+    }
+
+    const currencies = await qb.getMany();
     return currencies.map(CurrencyResponseDto.fromEntity);
   }
 

@@ -557,7 +557,9 @@ export class PartyProfileService {
           searchQb
             .where("pp.code ILIKE :search", { search: `%${query.search}%` })
             .orWhere("pp.name ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("pp.city ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("pp.city ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("pp.pinCode ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("pp.phoneNo ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }

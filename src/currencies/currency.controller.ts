@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Session,
   UseGuards,
 } from '@nestjs/common';
@@ -20,6 +21,7 @@ import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CurrencyService } from './currency.service';
 import { CreateCurrencyDto } from './dto/create-currency.dto';
+import { CurrencyListQueryDto } from './dto/currency-list-query.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
 import { CurrencyResponseDto } from './dto/currency-response.dto';
 
@@ -37,8 +39,8 @@ export class CurrencyController {
     description: 'List of currencies',
     type: [CurrencyResponseDto],
   })
-  async findAll(): Promise<CurrencyResponseDto[]> {
-    return this.currencyService.findAll();
+  async findAll(@Query() query: CurrencyListQueryDto): Promise<CurrencyResponseDto[]> {
+    return this.currencyService.findAll(query);
   }
 
   @Get(':id')

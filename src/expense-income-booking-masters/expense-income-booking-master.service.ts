@@ -5,9 +5,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { ExpenseIncomeBookingMaster } from './expense-income-booking-master.entity';
 import { CreateExpenseIncomeBookingMasterDto, BookingMasterType } from './dto/create-expense-income-booking-master.dto';
+import { ExpenseIncomeBookingMasterListQueryDto } from './dto/expense-income-booking-master-list-query.dto';
 import { UpdateExpenseIncomeBookingMasterDto } from './dto/update-expense-income-booking-master.dto';
 import { ExpenseIncomeBookingMasterResponseDto } from './dto/expense-income-booking-master-response.dto';
 
@@ -18,15 +19,28 @@ export class ExpenseIncomeBookingMasterService {
     private readonly repository: Repository<ExpenseIncomeBookingMaster>,
   ) {}
 
-  async findAll(type?: BookingMasterType): Promise<ExpenseIncomeBookingMasterResponseDto[]> {
-    const whereClause = type ? { type } : {};
-    const masters = await this.repository.find({
-      where: whereClause,
-      relations: ['tdsAccount'],
-      order: {
-        code: 'ASC',
-      },
-    });
+  async findAll(query?: ExpenseIncomeBookingMasterListQueryDto): Promise<ExpenseIncomeBookingMasterResponseDto[]> {
+    const qb = this.repository
+      .createQueryBuilder('master')
+      .leftJoinAndSelect('master.tdsAccount', 'tdsAccount')
+      .orderBy('master.code', 'ASC');
+
+    if (query?.type) {
+      qb.andWhere('master.type = :type', { type: query.type });
+    }
+
+    const trimmedSearch = query?.search?.trim();
+    if (trimmedSearch) {
+      qb.andWhere(
+        new Brackets(searchQb => {
+          searchQb
+            .where('master.code ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('master.description ILIKE :search', { search: `%${trimmedSearch}%` });
+        }),
+      );
+    }
+
+    const masters = await qb.getMany();
 
     return masters.map(ExpenseIncomeBookingMasterResponseDto.fromEntity);
   }

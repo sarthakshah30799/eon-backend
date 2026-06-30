@@ -21,6 +21,7 @@ import {
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateExpenseIncomeBookingMasterDto, BookingMasterType } from './dto/create-expense-income-booking-master.dto';
+import { ExpenseIncomeBookingMasterListQueryDto } from './dto/expense-income-booking-master-list-query.dto';
 import { UpdateExpenseIncomeBookingMasterDto } from './dto/update-expense-income-booking-master.dto';
 import { ExpenseIncomeBookingMasterResponseDto } from './dto/expense-income-booking-master-response.dto';
 import { ExpenseIncomeBookingMasterService } from './expense-income-booking-master.service';
@@ -35,11 +36,12 @@ export class ExpenseIncomeBookingMasterController {
   @Get()
   @ApiOperation({ summary: 'Get all Expense/Income Booking Masters' })
   @ApiQuery({ name: 'type', enum: BookingMasterType, required: false, description: 'Filter by type' })
+  @ApiQuery({ name: 'search', required: false, description: 'Global search across code and description' })
   @ApiResponse({ status: 200, type: [ExpenseIncomeBookingMasterResponseDto] })
   async findAll(
-    @Query('type') type?: BookingMasterType,
+    @Query() query: ExpenseIncomeBookingMasterListQueryDto,
   ): Promise<ExpenseIncomeBookingMasterResponseDto[]> {
-    return this.service.findAll(type);
+    return this.service.findAll(query);
   }
 
   @Get(':id')
