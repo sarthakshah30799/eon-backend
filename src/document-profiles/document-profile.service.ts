@@ -5,12 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { SelectOption } from '../category-options/category-option.entity';
 import { DocumentProfile } from './document-profile.entity';
 import { CreateDocumentProfileDto } from './dto/create-document-profile.dto';
 import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
 import { DocumentProfileResponseDto } from './dto/document-profile-response.dto';
+import { DocumentProfileListQueryDto } from './dto/document-profile-list-query.dto';
 import { ResolveDocumentProfilesDto } from './dto/resolve-document-profile-rules.dto';
 import {
   applyDocumentProfileFilters,
@@ -26,16 +27,42 @@ export class DocumentProfileService {
     private readonly documentProfileRepository: Repository<DocumentProfile>,
   ) {}
 
-  async findAll(): Promise<DocumentProfileResponseDto[]> {
-    const profiles = await this.documentProfileRepository
-      .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.type', 'type')
-      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
-      .leftJoinAndSelect('documentProfile.financialYearSelection', 'financialYearSelection')
-      .orderBy('documentProfile.sortOrder', 'ASC')
-      .addOrderBy('documentProfile.documentCode', 'ASC')
-      .getMany();
+  async findAll(
+    query?: DocumentProfileListQueryDto,
+  ): Promise<DocumentProfileResponseDto[]> {
+    const queryBuilder = this.documentProfileRepository
+      .createQueryBuilder('document_profile')
+      .leftJoinAndSelect('document_profile.type', 'type')
+      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection');
+
+    if (query?.search?.trim()) {
+      const search = `%${query.search.trim()}%`;
+      queryBuilder.andWhere(
+        new Brackets(brackets => {
+          brackets
+            .where('"document_profile"."document_code" ILIKE :search', { search })
+            .orWhere('"document_profile"."specification_type"::text ILIKE :search', {
+              search,
+            })
+            .orWhere('type.label ILIKE :search', { search })
+            .orWhere('type.value ILIKE :search', { search })
+            .orWhere('entitySelection.label ILIKE :search', { search })
+            .orWhere('entitySelection.value ILIKE :search', { search })
+            .orWhere(
+              `EXISTS (
+                SELECT 1
+                FROM unnest("document_profile"."document_type") AS document_type
+                WHERE document_type ILIKE :search
+              )`,
+              { search },
+            );
+        }),
+      );
+    }
+
+    const profiles = await queryBuilder.getMany();
 
     return profiles.map(profile =>
       DocumentProfileResponseDto.fromEntity(profile),
@@ -44,12 +71,12 @@ export class DocumentProfileService {
 
   async findById(id: string): Promise<DocumentProfileResponseDto> {
     const profile = await this.documentProfileRepository
-      .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.type', 'type')
-      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
-      .leftJoinAndSelect('documentProfile.financialYearSelection', 'financialYearSelection')
-      .where('documentProfile.id = :id', { id })
+      .createQueryBuilder('document_profile')
+      .leftJoinAndSelect('document_profile.type', 'type')
+      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection')
+      .where('document_profile.id = :id', { id })
       .getOne();
 
     if (!profile) {
@@ -163,23 +190,20 @@ export class DocumentProfileService {
     query: ResolveDocumentProfilesDto,
   ): Promise<DocumentProfileResponseDto[]> {
     const queryBuilder = this.documentProfileRepository
-      .createQueryBuilder('documentProfile')
-      .leftJoinAndSelect('documentProfile.type', 'type')
-      .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
-      .leftJoinAndSelect('documentProfile.financialYearSelection', 'financialYearSelection')
+      .createQueryBuilder('document_profile')
+      .leftJoinAndSelect('document_profile.type', 'type')
+      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection')
       .where('1 = 1');
 
-    applyDocumentProfileFilters(queryBuilder, 'documentProfile', {
+    applyDocumentProfileFilters(queryBuilder, 'document_profile', {
       groupSelection: query.groupSelection,
       entitySelection: query.entitySelection,
       activeOnly: true,
     });
 
-    const profiles = await queryBuilder
-      .orderBy('documentProfile.sortOrder', 'ASC')
-      .addOrderBy('documentProfile.documentCode', 'ASC')
-      .getMany();
+    const profiles = await queryBuilder.getMany();
 
     return profiles.map(profile =>
       DocumentProfileResponseDto.fromEntity(profile),

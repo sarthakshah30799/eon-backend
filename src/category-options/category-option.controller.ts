@@ -5,6 +5,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
   Session,
 } from "@nestjs/common";
@@ -46,13 +47,14 @@ export class SelectOptionController {
 
   @Get("all")
   @ApiOperation({ summary: "Get all select options" })
+  @ApiQuery({ name: "search", required: false, description: "Search by value" })
   @ApiResponse({
     status: 200,
     description: "List of select options",
     type: [SelectOptionResponseDto],
   })
-  async getAllOptions(): Promise<SelectOptionResponseDto[]> {
-    return this.selectOptionService.getAllOptions();
+  async getAllOptions(@Query('search') search?: string): Promise<SelectOptionResponseDto[]> {
+    return this.selectOptionService.getAllOptions(search);
   }
 
   @Get("item/:id")

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { ILike, Repository } from "typeorm";
 import { SelectOption } from "./category-option.entity";
 import { CreateSelectOptionDto } from "./dto/create-category-option.dto";
 import { UpdateSelectOptionDto } from "./dto/update-category-option.dto";
@@ -89,8 +89,10 @@ export class SelectOptionService {
     return this.loadOptionsByCode(code);
   }
 
-  async getAllOptions(): Promise<SelectOptionResponseDto[]> {
+  async getAllOptions(search?: string): Promise<SelectOptionResponseDto[]> {
+    const normalizedSearch = search?.trim();
     const options = await this.selectOptionRepository.find({
+      where: normalizedSearch ? { code: ILike(`%${normalizedSearch}%`) } : undefined,
       order: {
         code: 'ASC',
         sortOrder: 'ASC',

@@ -30,10 +30,8 @@ export class DocumentProfileController {
   @Get()
   @ApiOperation({ summary: 'List document profiles' })
   @ApiResponse({ status: 200, type: [DocumentProfileResponseDto] })
-  async findAll(
-    @Query() _query: DocumentProfileListQueryDto,
-  ): Promise<DocumentProfileResponseDto[]> {
-    return this.documentProfileService.findAll();
+  async findAll(@Query() query: DocumentProfileListQueryDto): Promise<DocumentProfileResponseDto[]> {
+    return this.documentProfileService.findAll(query);
   }
 
   @Get('resolve')

@@ -17,8 +17,11 @@ export class CounterController {
   @Get()
   @ApiOperation({ summary: 'Get all counters' })
   @ApiResponse({ status: 200, description: 'List of counters', type: [CounterResponseDto] })
-  async findAll(@Query('activeOnly') activeOnly = 'true'): Promise<CounterResponseDto[]> {
-    return this.counterService.findAll(activeOnly !== 'false');
+  async findAll(
+    @Query('activeOnly') activeOnly = 'false',
+    @Query('search') search?: string,
+  ): Promise<CounterResponseDto[]> {
+    return this.counterService.findAll(activeOnly !== 'false', search);
   }
 
   @Get(':id')

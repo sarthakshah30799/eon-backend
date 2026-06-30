@@ -15,12 +15,21 @@ export class CounterService {
     private readonly counterRepository: Repository<Counter>,
   ) {}
 
-  async findAll(activeOnly = true): Promise<CounterResponseDto[]> {
-    const counters = await this.counterRepository.find({
-      where: activeOnly ? { isActive: true } : undefined,
-      relations: ['branch'],
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(activeOnly = true, search?: string): Promise<CounterResponseDto[]> {
+    const qb = this.counterRepository
+      .createQueryBuilder('counter')
+      .leftJoinAndSelect('counter.branch', 'branch')
+      .orderBy('counter.createdAt', 'DESC');
+
+    if (activeOnly) {
+      qb.andWhere('counter.isActive = :isActive', { isActive: true });
+    }
+
+    if (search) {
+      qb.andWhere('counter.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    const counters = await qb.getMany();
     return counters.map(CounterResponseDto.fromEntity);
   }
 
