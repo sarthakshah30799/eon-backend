@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Session,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateTdsProfileDto } from './dto/create-tds-profile.dto';
 import { UpdateTdsProfileDto } from './dto/update-tds-profile.dto';
 import { TdsProfileResponseDto } from './dto/tds-profile-response.dto';
+import { TdsProfileListQueryDto } from './dto/tds-profile-list-query.dto';
 import { TdsProfileService } from './tds-profile.service';
 
 @ApiTags('tds-profiles')
@@ -33,8 +35,8 @@ export class TdsProfileController {
   @Get()
   @ApiOperation({ summary: 'Get all TDS profiles' })
   @ApiResponse({ status: 200, type: [TdsProfileResponseDto] })
-  async findAll(): Promise<TdsProfileResponseDto[]> {
-    return this.tdsProfileService.findAll();
+  async findAll(@Query() query: TdsProfileListQueryDto): Promise<TdsProfileResponseDto[]> {
+    return this.tdsProfileService.findAll(query);
   }
 
   @Get(':id')

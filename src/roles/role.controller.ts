@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Session } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { RoleService } from './role.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -17,8 +17,11 @@ export class RoleController {
   @Get()
   @ApiOperation({ summary: 'Get all roles' })
   @ApiResponse({ status: 200, description: 'List of roles', type: [RoleResponseDto] })
-  async findAll(@Session() session: any): Promise<RoleResponseDto[]> {
-    return this.roleService.findAll(session.userId);
+  async findAll(
+    @Session() session: any,
+    @Query('search') search?: string,
+  ): Promise<RoleResponseDto[]> {
+    return this.roleService.findAll(session.userId, search);
   }
 
   @Get(':id')

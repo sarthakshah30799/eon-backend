@@ -21,13 +21,14 @@ export class UserController {
   async findAll(
     @Session() session: any,
     @Query('activeOnly') activeOnly = 'true',
+    @Query('search') search?: string,
   ): Promise<UserResponseDto[]> {
     const user = await this.userService.findById(session.userId, session.userId, {
       activeBranchId: session?.activeBranchId ?? null,
       activeCounterId: session?.activeCounterId ?? null,
     });
     if (user.isAdmin) {
-      return this.userService.findAll(session.userId, activeOnly !== 'false');
+      return this.userService.findAll(session.userId, activeOnly !== 'false', search);
     }
 
     const canViewUsers = user.permissions?.['/user-profile']?.includes('view') === true;
@@ -36,7 +37,7 @@ export class UserController {
       return [];
     }
 
-    return this.userService.findAll(session.userId, activeOnly !== 'false');
+    return this.userService.findAll(session.userId, activeOnly !== 'false', search);
   }
 
   @Get(':id')

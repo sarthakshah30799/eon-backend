@@ -17,7 +17,7 @@ export class TdsProfile extends BaseEntity {
   active: boolean;
 
   @Index()
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: 'int', name: 'sort_order', default: 0 })
   sortOrder: number;
 
   @Column({ type: 'timestamp with time zone', nullable: true })

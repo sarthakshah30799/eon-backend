@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
 import { Role } from '../roles/role.entity';
@@ -142,8 +142,13 @@ export class UserService {
     await this.userRoleRepository.save(userRoles);
   }
 
-  async findAll(currentUserId?: string, activeOnly = true): Promise<UserResponseDto[]> {
+  async findAll(
+    currentUserId?: string,
+    activeOnly = true,
+    search?: string,
+  ): Promise<UserResponseDto[]> {
     const requesterIsAdmin = await this.isRequesterAdmin(currentUserId);
+    const trimmedSearch = search?.trim();
 
     const query = this.userRepository
       .createQueryBuilder('user')
@@ -163,6 +168,19 @@ export class UserService {
 
     if (!requesterIsAdmin) {
       query.andWhere('user.isAdmin = :isAdmin', { isAdmin: false });
+    }
+
+    if (trimmedSearch) {
+      query.andWhere(
+        new Brackets(subQuery => {
+          subQuery
+            .where('user.code ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('user.name ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('user.email ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('user.contactNo ILIKE :search', { search: `%${trimmedSearch}%` })
+            .orWhere('user.designation ILIKE :search', { search: `%${trimmedSearch}%` });
+        })
+      );
     }
 
     const users = await query.getMany();

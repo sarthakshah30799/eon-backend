@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, OnModuleInit, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { Role } from './role.entity';
 import { User } from '../users/user.entity';
 import { Permission } from '../permissions/permission.entity';
@@ -155,10 +155,20 @@ export class RoleService implements OnModuleInit {
     return { message: 'Permissions updated successfully' };
   }
 
-  async findAll(currentUserId?: string): Promise<RoleResponseDto[]> {
-    const roles = await this.roleRepository.find({
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(currentUserId?: string, search?: string): Promise<RoleResponseDto[]> {
+    const qb = this.roleRepository.createQueryBuilder('role');
+
+    if (search?.trim()) {
+      qb.andWhere(
+        new Brackets(searchQb => {
+          searchQb
+            .where('role.code ILIKE :search', { search: `%${search.trim()}%` })
+            .orWhere('role.name ILIKE :search', { search: `%${search.trim()}%` });
+        }),
+      );
+    }
+
+    const roles = await qb.orderBy('role.createdAt', 'DESC').getMany();
     return roles.map(RoleResponseDto.fromEntity);
   }
 

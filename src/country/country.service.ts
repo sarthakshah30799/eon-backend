@@ -106,45 +106,51 @@ export class CountryService {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("country.code ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("country.name ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("country.lrsCountryCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("country.ctrCountryCode ILIKE :search", { search: `%${query.search}%` });
+            .where('country.code ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('country.name ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('country.risk_category::text ILIKE :search', {
+              search: `%${query.search}%`,
+            })
+            .orWhere('countryGroup.name ILIKE :search', {
+              search: `%${query.search}%`,
+            })
+            .orWhere('country.lrs_country_code ILIKE :search', { search: `%${query.search}%` })
+            .orWhere('country.ctr_country_code ILIKE :search', { search: `%${query.search}%` });
         }),
       );
     }
 
     if (query.code) {
-      qb.andWhere("country.code ILIKE :code", { code: `%${query.code}%` });
+      qb.andWhere('country.code ILIKE :code', { code: `%${query.code}%` });
     }
 
     if (query.name) {
-      qb.andWhere("country.name ILIKE :name", { name: `%${query.name}%` });
+      qb.andWhere('country.name ILIKE :name', { name: `%${query.name}%` });
     }
 
     if (query.riskCategory) {
-      qb.andWhere("country.riskCategory = :riskCategory", { riskCategory: query.riskCategory });
+      qb.andWhere('country.risk_category = :riskCategory', { riskCategory: query.riskCategory });
     }
 
     if (query.restrictedCountry !== undefined) {
-      qb.andWhere("country.restrictedCountry = :restrictedCountry", {
+      qb.andWhere('country.restricted_country = :restrictedCountry', {
         restrictedCountry: query.restrictedCountry,
       });
     }
 
     if (query.greyListCountry !== undefined) {
-      qb.andWhere("country.greyListCountry = :greyListCountry", {
+      qb.andWhere('country.grey_list_country = :greyListCountry', {
         greyListCountry: query.greyListCountry,
       });
     }
 
     if (query.baseCountry !== undefined) {
-      qb.andWhere("country.baseCountry = :baseCountry", {
+      qb.andWhere('country.base_country = :baseCountry', {
         baseCountry: query.baseCountry,
       });
     }
 
-    qb.orderBy("country.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy('country.createdAt', 'DESC').skip(skip).take(limit);
 
     const [countries, totalItems] = await qb.getManyAndCount();
 

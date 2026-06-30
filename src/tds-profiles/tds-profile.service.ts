@@ -5,11 +5,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { TdsProfile } from './tds-profile.entity';
 import { CreateTdsProfileDto } from './dto/create-tds-profile.dto';
 import { UpdateTdsProfileDto } from './dto/update-tds-profile.dto';
 import { TdsProfileResponseDto } from './dto/tds-profile-response.dto';
+import { TdsProfileListQueryDto } from './dto/tds-profile-list-query.dto';
 
 @Injectable()
 export class TdsProfileService {
@@ -18,13 +19,26 @@ export class TdsProfileService {
     private readonly tdsProfileRepository: Repository<TdsProfile>,
   ) {}
 
-  async findAll(): Promise<TdsProfileResponseDto[]> {
-    const profiles = await this.tdsProfileRepository.find({
-      order: {
-        sortOrder: 'ASC',
-        code: 'ASC',
-      },
-    });
+  async findAll(query?: TdsProfileListQueryDto): Promise<TdsProfileResponseDto[]> {
+    const qb = this.tdsProfileRepository.createQueryBuilder('tds_profile');
+
+    if (query?.search?.trim()) {
+      const search = `%${query.search.trim()}%`;
+      qb.andWhere(
+        new Brackets(searchQb => {
+          searchQb
+            .where('tds_profile.code ILIKE :search', { search })
+            .orWhere('tds_profile.name ILIKE :search', { search })
+            .orWhere('tds_profile.value::text ILIKE :search', { search })
+            .orWhere('tds_profile.sort_order::text ILIKE :search', { search });
+        }),
+      );
+    }
+
+    const profiles = await qb
+      .orderBy('tds_profile.sort_order', 'ASC')
+      .addOrderBy('tds_profile.code', 'ASC')
+      .getMany();
 
     return profiles.map(TdsProfileResponseDto.fromEntity);
   }

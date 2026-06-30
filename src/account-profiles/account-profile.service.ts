@@ -279,8 +279,10 @@ export class AccountProfileService {
             .orWhere("ap.accountName ILIKE :search", { search: `%${query.search}%` })
             .orWhere("divisionDept.label ILIKE :search", { search: `%${query.search}%` })
             .orWhere("accountType.label ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("subLedger.label ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("bankNature.label ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("currency.currencyCode ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("currency.currencyName ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("financialCode.financialCode ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("financialCode.financialName ILIKE :search", { search: `%${query.search}%` });
         }),
       );
     }
