@@ -18,13 +18,13 @@ export class CreateCurrencyRateDto {
   @Matches(/^\d+(\.\d+)?$/, { message: 'baseRate must be a valid decimal number' })
   baseRate?: string;
 
-  @ApiPropertyOptional({ description: 'Base buy rate for ticker' })
+  @ApiPropertyOptional({ description: 'Base buy rate for ticker or manual entry fallback' })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'baseBuyRate must be a valid decimal number' })
   baseBuyRate?: string;
 
-  @ApiPropertyOptional({ description: 'Base sale rate for ticker' })
+  @ApiPropertyOptional({ description: 'Base sale rate for ticker or manual entry fallback' })
   @IsOptional()
   @IsString()
   @Matches(/^\d+(\.\d+)?$/, { message: 'baseSaleRate must be a valid decimal number' })

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, Matches } from 'class-validator';
+import { CurrencyRateMarginType } from '../currency-rates.enums';
 
 export class CreateCurrencyRateGroupDto {
   @ApiProperty({ example: 'MAJOR', maxLength: 50 })
@@ -18,7 +19,31 @@ export class CreateCurrencyRateGroupDto {
   @MaxLength(1000)
   description?: string;
 
-  @ApiPropertyOptional({ default: true })
+  @ApiPropertyOptional({ enum: CurrencyRateMarginType })
+  @IsOptional()
+  @IsString()
+  @IsIn(Object.values(CurrencyRateMarginType))
+  buyMarginType?: CurrencyRateMarginType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d+(\.\d+)?$/, { message: 'buyMarginValue must be a valid decimal number' })
+  buyMarginValue?: string;
+
+  @ApiPropertyOptional({ enum: CurrencyRateMarginType })
+  @IsOptional()
+  @IsString()
+  @IsIn(Object.values(CurrencyRateMarginType))
+  saleMarginType?: CurrencyRateMarginType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d+(\.\d+)?$/, { message: 'saleMarginValue must be a valid decimal number' })
+  saleMarginValue?: string;
+
+  @ApiPropertyOptional()
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
