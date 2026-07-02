@@ -62,7 +62,6 @@ export class ManualBillBookService {
         nextSeq = lastSeq + 1;
       }
     }
-
     const no = `${prefix}${String(nextSeq).padStart(5, '0')}`;
 
     const book = this.manualBookRepository.create({
