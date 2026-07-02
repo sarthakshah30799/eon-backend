@@ -91,6 +91,9 @@ BEGIN
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'MANUAL BILL BOOKS', '/admin/manual-bill-books', 'book-open', v_admin_id, 14, true, v_system_user, v_system_user);
 
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'CHECKBOOKS', '/admin/checkbooks', 'book-open', v_admin_id, 15, true, v_system_user, v_system_user);
+
   -- Insert "Party Profiles" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'PARTY PROFILES', NULL, 'users', NULL, 1, true, v_system_user, v_system_user)
