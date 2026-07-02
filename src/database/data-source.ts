@@ -20,7 +20,7 @@ export const AppDataSource = new DataSource({
   ssl: configService.database.ssl,
 
   entities: [
-    __dirname + "/../!(manual-bill-books|checkbooks)/**/*.entity{.ts,.js}",
+    __dirname + "/../!(manual-bill-books|chequebooks)/**/*.entity{.ts,.js}",
   ],
   migrations: [__dirname + "/../migrations/*{.ts,.js}"],
   synchronize: configService.database.synchronize,

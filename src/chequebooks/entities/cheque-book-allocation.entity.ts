@@ -1,19 +1,19 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
-import { CheckBook } from './check-book.entity';
+import { ChequeBook } from './cheque-book.entity';
 
 @Entity('check_book_allocations')
 @Unique('UQ_check_book_allocations_book', ['checkBookId', 'bookNo'])
 @Index('IDX_check_book_allocations_query', ['checkBookId', 'bookNo'])
-export class CheckBookAllocation {
+export class ChequeBookAllocation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ name: 'check_book_id', type: 'uuid' })
   checkBookId: string;
 
-  @ManyToOne(() => CheckBook, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ChequeBook, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'check_book_id' })
-  checkBook: CheckBook;
+  checkBook: ChequeBook;
 
   @Column({ name: 'book_no', type: 'integer' })
   bookNo: number;

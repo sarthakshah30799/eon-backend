@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, 
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
-export class CreateCheckBookDto {
+export class CreateChequeBookDto {
   @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25' })
   @IsDateString()
   @IsNotEmpty()
@@ -61,7 +61,7 @@ export class CreateCheckBookDto {
   mvNoTo?: any;
 }
 
-export class ApproveRejectCheckBookDto {
+export class ApproveRejectChequeBookDto {
   @ApiProperty({ description: 'Status', example: 'Approved' })
   @IsString()
   @IsNotEmpty()
@@ -83,7 +83,7 @@ export class ApproveRejectCheckBookDto {
   toDate?: string;
 }
 
-export class BulkReviewCheckBookItemDto {
+export class BulkReviewChequeBookItemDto {
   @ApiProperty({ description: 'Check Book Entry ID (UUID)' })
   @IsUUID()
   @IsNotEmpty()
@@ -100,15 +100,15 @@ export class BulkReviewCheckBookItemDto {
   approvalRemarks?: string;
 }
 
-export class BulkReviewCheckBooksDto {
-  @ApiProperty({ description: 'List of reviews', type: [BulkReviewCheckBookItemDto] })
+export class BulkReviewChequeBooksDto {
+  @ApiProperty({ description: 'List of reviews', type: [BulkReviewChequeBookItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => BulkReviewCheckBookItemDto)
-  reviews: BulkReviewCheckBookItemDto[];
+  @Type(() => BulkReviewChequeBookItemDto)
+  reviews: BulkReviewChequeBookItemDto[];
 }
 
-export class SaveCheckBookAllocationItemDto {
+export class SaveChequeBookAllocationItemDto {
   @ApiProperty({ description: 'Check Book entry ID (UUID)' })
   @IsUUID()
   @IsNotEmpty()
@@ -130,10 +130,10 @@ export class SaveCheckBookAllocationItemDto {
   remarks?: string;
 }
 
-export class SaveCheckBookAllocationsDto {
-  @ApiProperty({ description: 'List of cashier allocations', type: [SaveCheckBookAllocationItemDto] })
+export class SaveChequeBookAllocationsDto {
+  @ApiProperty({ description: 'List of cashier allocations', type: [SaveChequeBookAllocationItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => SaveCheckBookAllocationItemDto)
-  allocations: SaveCheckBookAllocationItemDto[];
+  @Type(() => SaveChequeBookAllocationItemDto)
+  allocations: SaveChequeBookAllocationItemDto[];
 }

@@ -32,7 +32,7 @@ import { MailModule } from "./mail/mail.module";
 import { StorageModule } from "./storage/storage.module";
 import { ManualBillBookModule } from "./manual-bill-books/manual-bill-book.module";
 import { CurrencyRatesModule } from "./currency-rates/currency-rates.module";
-import { CheckBookModule } from "./checkbooks/checkbook.module";
+import { ChequeBookModule } from "./chequebooks/chequebook.module";
 
 @Module({
   imports: [
@@ -64,7 +64,7 @@ import { CheckBookModule } from "./checkbooks/checkbook.module";
     ExpenseIncomeBookingMasterModule,
     MailModule,
     ManualBillBookModule,
-    CheckBookModule,
+    ChequeBookModule,
     AuditLogModule,
     StorageModule,
   ],

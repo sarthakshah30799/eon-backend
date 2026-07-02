@@ -1,25 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In, Between } from 'typeorm';
-import { CheckBook } from './entities/check-book.entity';
-import { CheckBookAllocation } from './entities/check-book-allocation.entity';
+import { ChequeBook } from './entities/cheque-book.entity';
+import { ChequeBookAllocation } from './entities/cheque-book-allocation.entity';
 import { Branch } from '../branches/branch.entity';
-import { CreateCheckBookDto, ApproveRejectCheckBookDto, BulkReviewCheckBooksDto, SaveCheckBookAllocationsDto } from './dto/checkbook.dto';
+import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAllocationsDto } from './dto/chequebook.dto';
 
 @Injectable()
-export class CheckBookService {
+export class ChequeBookService {
   constructor(
-    @InjectRepository(CheckBook, 'database2')
-    private readonly checkBookRepository: Repository<CheckBook>,
+    @InjectRepository(ChequeBook, 'database2')
+    private readonly checkBookRepository: Repository<ChequeBook>,
 
-    @InjectRepository(CheckBookAllocation, 'database2')
-    private readonly allocationRepository: Repository<CheckBookAllocation>,
+    @InjectRepository(ChequeBookAllocation, 'database2')
+    private readonly allocationRepository: Repository<ChequeBookAllocation>,
 
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
   ) {}
 
-  async create(dto: CreateCheckBookDto, userId: string): Promise<CheckBook> {
+  async create(dto: CreateChequeBookDto, userId: string): Promise<ChequeBook> {
     const {
       dispatchDate,
       branchId,
@@ -154,7 +154,7 @@ export class CheckBookService {
     });
   }
 
-  async approveOrReject(id: string, dto: ApproveRejectCheckBookDto, userId: string): Promise<CheckBook> {
+  async approveOrReject(id: string, dto: ApproveRejectChequeBookDto, userId: string): Promise<ChequeBook> {
     const book = await this.checkBookRepository.findOne({ where: { id } });
     if (!book) {
       throw new NotFoundException(`Check Book entry with ID ${id} not found`);
@@ -171,7 +171,7 @@ export class CheckBookService {
     return this.checkBookRepository.save(book);
   }
 
-  async bulkReview(dto: BulkReviewCheckBooksDto, userId: string): Promise<any[]> {
+  async bulkReview(dto: BulkReviewChequeBooksDto, userId: string): Promise<any[]> {
     const results = [];
     for (const item of dto.reviews) {
       const book = await this.checkBookRepository.findOne({ where: { id: item.id } });
@@ -187,7 +187,7 @@ export class CheckBookService {
     return results;
   }
 
-  async saveAllocations(dto: SaveCheckBookAllocationsDto, userId: string): Promise<any[]> {
+  async saveAllocations(dto: SaveChequeBookAllocationsDto, userId: string): Promise<any[]> {
     const results = [];
     for (const item of dto.allocations) {
       let allocation = await this.allocationRepository.findOne({
@@ -215,7 +215,7 @@ export class CheckBookService {
     return results;
   }
 
-  async getAllocationsByBookIds(checkBookIds: string[]): Promise<CheckBookAllocation[]> {
+  async getAllocationsByBookIds(checkBookIds: string[]): Promise<ChequeBookAllocation[]> {
     if (checkBookIds.length === 0) return [];
     return this.allocationRepository.find({
       where: {

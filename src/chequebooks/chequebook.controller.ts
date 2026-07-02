@@ -1,21 +1,21 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
-import { CheckBookService } from './checkbook.service';
-import { CreateCheckBookDto, ApproveRejectCheckBookDto, BulkReviewCheckBooksDto, SaveCheckBookAllocationsDto } from './dto/checkbook.dto';
+import { ChequeBookService } from './chequebook.service';
+import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAllocationsDto } from './dto/chequebook.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
-@ApiTags('checkbooks')
+@ApiTags('chequebooks')
 @ApiCookieAuth('sessionId')
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('checkbooks')
-export class CheckBookController {
-  constructor(private readonly service: CheckBookService) {}
+@Controller('chequebooks')
+export class ChequeBookController {
+  constructor(private readonly service: ChequeBookService) {}
 
   @Post('dispatch')
   @ApiOperation({ summary: 'Create check book dispatch' })
   @ApiResponse({ status: 201, description: 'Dispatch created successfully' })
-  async create(@Body() dto: CreateCheckBookDto, @Session() session: any) {
+  async create(@Body() dto: CreateChequeBookDto, @Session() session: any) {
     return this.service.create(dto, session.userId);
   }
 
@@ -54,7 +54,7 @@ export class CheckBookController {
   @ApiOperation({ summary: 'Bulk approve or reject check book dispatches' })
   @ApiResponse({ status: 200, description: 'Dispatches reviewed successfully' })
   async bulkReview(
-    @Body() dto: BulkReviewCheckBooksDto,
+    @Body() dto: BulkReviewChequeBooksDto,
     @Session() session: any,
   ) {
     return this.service.bulkReview(dto, session.userId);
@@ -66,7 +66,7 @@ export class CheckBookController {
   @ApiResponse({ status: 200, description: 'Dispatch updated successfully' })
   async approveOrReject(
     @Param('id') id: string,
-    @Body() dto: ApproveRejectCheckBookDto,
+    @Body() dto: ApproveRejectChequeBookDto,
     @Session() session: any,
   ) {
     return this.service.approveOrReject(id, dto, session.userId);
@@ -76,7 +76,7 @@ export class CheckBookController {
   @ApiOperation({ summary: 'Save check book cashier allocations' })
   @ApiResponse({ status: 201, description: 'Allocations saved successfully' })
   async saveAllocations(
-    @Body() dto: SaveCheckBookAllocationsDto,
+    @Body() dto: SaveChequeBookAllocationsDto,
     @Session() session: any,
   ) {
     return this.service.saveAllocations(dto, session.userId);
