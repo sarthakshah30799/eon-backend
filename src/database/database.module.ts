@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigService } from '../config/config.service';
-import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { ConfigService } from "../config/config.service";
+import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 
 @Module({
   imports: [
@@ -9,7 +9,7 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
+        type: "postgres",
         host: configService.database.host,
         port: configService.database.port,
         username: configService.database.username,
@@ -17,8 +17,11 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
         database: configService.database.database,
         ssl: configService.database.ssl,
         autoLoadEntities: true,
-        entities: [__dirname + '/../!(manual-bill-books)/**/*.entity{.ts,.js}'],
-        migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+        entities: [
+          __dirname +
+            "/../!(manual-bill-books|chequebooks)/**/*.entity{.ts,.js}",
+        ],
+        migrations: [__dirname + "/../migrations/*{.ts,.js}"],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: configService.database.migrationsRun,
         logging: true,
@@ -27,17 +30,20 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
     }),
     // Secondary Database Connection
     TypeOrmModule.forRootAsync({
-      name: 'database2', // Unique name for the second connection
+      name: "database2", // Unique name for the second connection
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
+        type: "postgres",
         host: configService.database2.host,
         port: configService.database2.port,
         username: configService.database2.username,
         password: configService.database2.password,
         database: configService.database2.database,
         ssl: configService.database.ssl,
-        entities: [__dirname + '/../manual-bill-books/**/*.entity{.ts,.js}'],
+        entities: [
+          __dirname + "/../manual-bill-books/**/*.entity{.ts,.js}",
+          __dirname + "/../chequebooks/**/*.entity{.ts,.js}",
+        ],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,
         logging: true,
@@ -46,4 +52,4 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
     }),
   ],
 })
-export class DatabaseModule { }
+export class DatabaseModule {}

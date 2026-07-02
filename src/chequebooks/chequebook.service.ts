@@ -1,25 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In, Between } from 'typeorm';
-import { ManualBook } from './entities/manual-book.entity';
-import { ManualBookAllocation } from './entities/manual-book-allocation.entity';
+import { ChequeBook } from './entities/cheque-book.entity';
+import { ChequeBookAllocation } from './entities/cheque-book-allocation.entity';
 import { Branch } from '../branches/branch.entity';
-import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto } from './dto/manual-bill-book.dto';
+import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAllocationsDto } from './dto/chequebook.dto';
 
 @Injectable()
-export class ManualBillBookService {
+export class ChequeBookService {
   constructor(
-    @InjectRepository(ManualBook, 'database2')
-    private readonly manualBookRepository: Repository<ManualBook>,
+    @InjectRepository(ChequeBook, 'database2')
+    private readonly checkBookRepository: Repository<ChequeBook>,
 
-    @InjectRepository(ManualBookAllocation, 'database2')
-    private readonly allocationRepository: Repository<ManualBookAllocation>,
+    @InjectRepository(ChequeBookAllocation, 'database2')
+    private readonly allocationRepository: Repository<ChequeBookAllocation>,
 
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
   ) {}
 
-  async create(dto: CreateManualBookDto, userId: string): Promise<ManualBook> {
+  async create(dto: CreateChequeBookDto, userId: string): Promise<ChequeBook> {
     const {
       dispatchDate,
       branchId,
@@ -42,11 +42,11 @@ export class ManualBillBookService {
     const numBooks = bookNoTo - bookNoFrom + 1;
     const mvNoTo = mvNoFrom + (numBooks * vouchersPerBook) - 1;
 
-    // Auto-generate branch-specific sequence number (no) e.g., MBYY00001
+    // Auto-generate branch-specific sequence number (no) e.g., CBYY00001
     const year = new Date(dispatchDate).getFullYear().toString().slice(-2); // e.g. "26"
-    const prefix = `MB${year}`;
+    const prefix = `CB${year}`;
 
-    const lastRecord = await this.manualBookRepository.findOne({
+    const lastRecord = await this.checkBookRepository.findOne({
       where: {
         branchId,
         no: Like(`${prefix}%`),
@@ -62,9 +62,10 @@ export class ManualBillBookService {
         nextSeq = lastSeq + 1;
       }
     }
+
     const no = `${prefix}${String(nextSeq).padStart(5, '0')}`;
 
-    const book = this.manualBookRepository.create({
+    const book = this.checkBookRepository.create({
       dispatchDate,
       no,
       branchId,
@@ -81,7 +82,7 @@ export class ManualBillBookService {
       updatedBy: userId,
     });
 
-    return this.manualBookRepository.save(book);
+    return this.checkBookRepository.save(book);
   }
 
   async getNextNumber(branchId: string, dispatchDate: string): Promise<{ nextNumber: string }> {
@@ -89,9 +90,9 @@ export class ManualBillBookService {
       return { nextNumber: '' };
     }
     const year = new Date(dispatchDate).getFullYear().toString().slice(-2);
-    const prefix = `MB${year}`;
+    const prefix = `CB${year}`;
 
-    const lastRecord = await this.manualBookRepository.findOne({
+    const lastRecord = await this.checkBookRepository.findOne({
       where: {
         branchId,
         no: Like(`${prefix}%`),
@@ -127,7 +128,7 @@ export class ManualBillBookService {
       where.dispatchDate = Between(fromDate, toDate);
     }
 
-    const books = await this.manualBookRepository.find({
+    const books = await this.checkBookRepository.find({
       where,
       order: { createdAt: 'DESC' },
     });
@@ -153,10 +154,10 @@ export class ManualBillBookService {
     });
   }
 
-  async approveOrReject(id: string, dto: ApproveRejectManualBookDto, userId: string): Promise<ManualBook> {
-    const book = await this.manualBookRepository.findOne({ where: { id } });
+  async approveOrReject(id: string, dto: ApproveRejectChequeBookDto, userId: string): Promise<ChequeBook> {
+    const book = await this.checkBookRepository.findOne({ where: { id } });
     if (!book) {
-      throw new NotFoundException(`Manual Book entry with ID ${id} not found`);
+      throw new NotFoundException(`Check Book entry with ID ${id} not found`);
     }
 
     book.status = dto.status;
@@ -167,47 +168,37 @@ export class ManualBillBookService {
     book.approvedBy = userId;
     book.updatedBy = userId;
 
-    return this.manualBookRepository.save(book);
+    return this.checkBookRepository.save(book);
   }
 
-  async bulkReview(dto: BulkReviewManualBooksDto, userId: string): Promise<any[]> {
+  async bulkReview(dto: BulkReviewChequeBooksDto, userId: string): Promise<any[]> {
     const results = [];
     for (const item of dto.reviews) {
-      const book = await this.manualBookRepository.findOne({ where: { id: item.id } });
+      const book = await this.checkBookRepository.findOne({ where: { id: item.id } });
       if (!book) continue;
       book.status = item.status;
       book.approvalRemarks = item.approvalRemarks;
       book.approvedAt = new Date();
       book.approvedBy = userId;
       book.updatedBy = userId;
-      const saved = await this.manualBookRepository.save(book);
+      const saved = await this.checkBookRepository.save(book);
       results.push(saved);
     }
     return results;
   }
 
-  async getCashiers(branchId: string): Promise<any[]> {
-    return this.manualBookRepository.manager.query(`
-      SELECT u.id, u.name
-      FROM users u
-      JOIN user_roles ur ON ur.user_id = u.id
-      JOIN roles r ON ur.role_id = r.id
-      WHERE ur.branch_id = $1 AND r.code = 'CASHIER' AND u.is_active = true
-    `, [branchId]);
-  }
-
-  async saveAllocations(dto: SaveAllocationsDto, userId: string): Promise<any[]> {
+  async saveAllocations(dto: SaveChequeBookAllocationsDto, userId: string): Promise<any[]> {
     const results = [];
     for (const item of dto.allocations) {
       let allocation = await this.allocationRepository.findOne({
         where: {
-          manualBookId: item.manualBookId,
+          checkBookId: item.checkBookId,
           bookNo: item.bookNo,
         }
       });
       if (!allocation) {
         allocation = this.allocationRepository.create({
-          manualBookId: item.manualBookId,
+          checkBookId: item.checkBookId,
           bookNo: item.bookNo,
           cashierId: item.cashierId,
           remarks: item.remarks,
@@ -224,11 +215,11 @@ export class ManualBillBookService {
     return results;
   }
 
-  async getAllocationsByBookIds(manualBookIds: string[]): Promise<ManualBookAllocation[]> {
-    if (manualBookIds.length === 0) return [];
+  async getAllocationsByBookIds(checkBookIds: string[]): Promise<ChequeBookAllocation[]> {
+    if (checkBookIds.length === 0) return [];
     return this.allocationRepository.find({
       where: {
-        manualBookId: In(manualBookIds),
+        checkBookId: In(checkBookIds),
       }
     });
   }

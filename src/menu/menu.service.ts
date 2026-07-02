@@ -94,7 +94,11 @@ export class MenuService {
       normalizedPath === '/manual-bill-books' ||
       normalizedPath.startsWith('/manual-bill-books/') ||
       normalizedPath === 'manual-bill-books' ||
-      normalizedPath.startsWith('manual-bill-books/')
+      normalizedPath.startsWith('manual-bill-books/') ||
+      normalizedPath === '/chequebooks' ||
+      normalizedPath.startsWith('/chequebooks/') ||
+      normalizedPath === 'chequebooks' ||
+      normalizedPath.startsWith('chequebooks/')
     ) {
       return true;
     }
