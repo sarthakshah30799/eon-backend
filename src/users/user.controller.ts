@@ -22,13 +22,21 @@ export class UserController {
     @Session() session: any,
     @Query('activeOnly') activeOnly = 'true',
     @Query('search') search?: string,
+    @Query('branchId') branchId?: string,
+    @Query('roleCode') roleCode?: string,
   ): Promise<UserResponseDto[]> {
     const user = await this.userService.findById(session.userId, session.userId, {
       activeBranchId: session?.activeBranchId ?? null,
       activeCounterId: session?.activeCounterId ?? null,
     });
     if (user.isAdmin) {
-      return this.userService.findAll(session.userId, activeOnly !== 'false', search);
+      return this.userService.findAll(
+        session.userId,
+        activeOnly !== 'false',
+        search,
+        branchId,
+        roleCode,
+      );
     }
 
     const canViewUsers = user.permissions?.['/user-profile']?.includes('view') === true;
@@ -37,7 +45,13 @@ export class UserController {
       return [];
     }
 
-    return this.userService.findAll(session.userId, activeOnly !== 'false', search);
+    return this.userService.findAll(
+      session.userId,
+      activeOnly !== 'false',
+      search,
+      branchId,
+      roleCode,
+    );
   }
 
   @Get(':id')

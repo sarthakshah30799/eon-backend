@@ -54,4 +54,10 @@ export class AccountProfileListQueryDto {
   @IsBoolean()
   @IsOptional()
   active?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by bulk purchase support" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  bulkPurchase?: boolean;
 }
