@@ -13,7 +13,10 @@ export const AppDataSource2 = new DataSource({
   password: configService.database2.password,
   database: configService.database2.database,
   ssl: configService.database.ssl,
-  entities: [__dirname + "/../manual-bill-books/**/*.entity{.ts,.js}"],
+  entities: [
+    __dirname + "/../manual-bill-books/**/*.entity{.ts,.js}",
+    __dirname + "/../checkbooks/**/*.entity{.ts,.js}",
+  ],
   migrations: [__dirname + "/../migrations2/*{.ts,.js}"],
   synchronize: configService.database.synchronize,
   namingStrategy: new SnakeNamingStrategy(),
