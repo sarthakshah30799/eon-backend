@@ -532,7 +532,7 @@ async function main() {
     console.log("Onboarding menu tree...");
 
     const adminMenuId = await upsertMenu(client, {
-      name: "ADMIN",
+      name: "Admin",
       path: null,
       icon: "shield",
       parentId: null,
@@ -544,19 +544,19 @@ async function main() {
     });
 
     const adminMenus = [
-      { name: "COMPANY PROFILE", path: "/admin/company-profile", icon: "building" },
-      { name: "BRANCH PROFILE", path: "/admin/branch-profile", icon: "sitemap" },
-      { name: "COUNTER PROFILE", path: "/admin/counter-profile", icon: "counter" },
-      { name: "DOCUMENT PROFILE", path: "/admin/document-profile", icon: "file-text" },
-      { name: "MISCELLANEOUS PROFILE", path: "/admin/miscellaneous-profile", icon: "layout-grid" },
-      { name: "PRODUCT PROFILE", path: "/admin/product-profile", icon: "archive" },
-      { name: "COUNTRY PROFILE", path: "/admin/country-profile", icon: "globe" },
-      { name: "STATE PROFILE", path: "/admin/state-profile", icon: "map" },
-      { name: "ACCOUNTS PROFILE", path: "/admin/accounts-profile", icon: "book" },
-      { name: "USER ROLE", path: "/admin/user-role", icon: "shield" },
-      { name: "TDS PROFILE", path: "/admin/tds-profile", icon: "receipt" },
-      { name: "MENU MANAGEMENT", path: "/admin/menu-management", icon: "menu" },
-      { name: "ADDITIONAL SETTINGS", path: "/admin/additional-settings", icon: "settings" },
+      { name: "Company Profile", path: "/admin/company-profile", icon: "building" },
+      { name: "Branch Profile", path: "/admin/branch-profile", icon: "sitemap" },
+      { name: "Counter Profile", path: "/admin/counter-profile", icon: "counter" },
+      { name: "Document Profile", path: "/admin/document-profile", icon: "file-text" },
+      { name: "Miscellaneous Profile", path: "/admin/miscellaneous-profile", icon: "layout-grid" },
+      { name: "Product Profile", path: "/admin/product-profile", icon: "archive" },
+      { name: "Country Profile", path: "/admin/country-profile", icon: "globe" },
+      { name: "State Profile", path: "/admin/state-profile", icon: "map" },
+      { name: "Accounts Profile", path: "/admin/accounts-profile", icon: "book" },
+      { name: "User Role", path: "/admin/user-role", icon: "shield" },
+      { name: "Tds Profile", path: "/admin/tds-profile", icon: "receipt" },
+      { name: "Menu Management", path: "/admin/menu-management", icon: "menu" },
+      { name: "Additional Settings", path: "/admin/additional-settings", icon: "settings" },
     ];
 
     for (let index = 0; index < adminMenus.length; index += 1) {
@@ -575,7 +575,7 @@ async function main() {
     }
 
     const partyProfilesMenuId = await upsertMenu(client, {
-      name: "PARTY PROFILES",
+      name: "Party Profiles",
       path: null,
       icon: "users",
       parentId: null,
@@ -587,17 +587,17 @@ async function main() {
     });
 
     const partyProfileMenus = [
-      { name: "CORPORATE CLIENT PROFILE", path: "/party-profiles/corporate-client", icon: "users" },
-      { name: "FFMC PROFILE", path: "/party-profiles/ffmc", icon: "badge-check" },
-      { name: "RF PROFILE", path: "/party-profiles/rf", icon: "badge-check" },
-      { name: "AUTHORISED DEALER PROFILE", path: "/party-profiles/authorised-dealer", icon: "badge-check" },
-      { name: "RMC PROFILE", path: "/party-profiles/rmc", icon: "badge-check" },
-      { name: "FRANCHISE PROFILE", path: "/party-profiles/franchise", icon: "badge-check" },
-      { name: "AGENT PROFILE", path: "/party-profiles/agent", icon: "badge-check" },
-      { name: "FOREIGN CORRESPONDENT PROFILE", path: "/party-profiles/foreign-correspondent", icon: "badge-check" },
-      { name: "MARKETING EXECUTIVE PROFILE", path: "/party-profiles/marketing-executive", icon: "badge-check" },
-      { name: "CARD ISSUER PROFILE", path: "/party-profiles/card-issuer-profile", icon: "badge-check" },
-      { name: "MISC PROFILE", path: "/party-profiles/misc-profile", icon: "badge-check" },
+      { name: "Corporate Client Profile", path: "/party-profiles/corporate-client", icon: "users" },
+      { name: "Ffmc Profile", path: "/party-profiles/ffmc", icon: "badge-check" },
+      { name: "Rf Profile", path: "/party-profiles/rf", icon: "badge-check" },
+      { name: "Authorised Dealer Profile", path: "/party-profiles/authorised-dealer", icon: "badge-check" },
+      { name: "Rmc Profile", path: "/party-profiles/rmc", icon: "badge-check" },
+      { name: "Franchise Profile", path: "/party-profiles/franchise", icon: "badge-check" },
+      { name: "Agent Profile", path: "/party-profiles/agent", icon: "badge-check" },
+      { name: "Foreign Correspondent Profile", path: "/party-profiles/foreign-correspondent", icon: "badge-check" },
+      { name: "Marketing Executive Profile", path: "/party-profiles/marketing-executive", icon: "badge-check" },
+      { name: "Card Issuer Profile", path: "/party-profiles/card-issuer-profile", icon: "badge-check" },
+      { name: "Misc Profile", path: "/party-profiles/misc-profile", icon: "badge-check" },
     ];
 
     for (let index = 0; index < partyProfileMenus.length; index += 1) {
@@ -616,11 +616,11 @@ async function main() {
     }
 
     const standaloneMenus = [
-      { name: "USER PROFILE", path: "/user-profile", icon: "users" },
-      { name: "FINANCIAL PROFILE", path: "/financial-profile", icon: "dollar-sign" },
-      { name: "CURRENCY PROFILE", path: "/currency-profile", icon: "dollar-sign" },
-      { name: "EXPENSE BOOKING MASTER", path: "/expense-booking", icon: "receipt" },
-      { name: "INCOME BOOKING MASTER", path: "/income-booking", icon: "credit-card" },
+      { name: "User Profile", path: "/user-profile", icon: "users" },
+      { name: "Financial Profile", path: "/financial-profile", icon: "dollar-sign" },
+      { name: "Currency Profile", path: "/currency-profile", icon: "dollar-sign" },
+      { name: "Expense Booking Master", path: "/expense-booking", icon: "receipt" },
+      { name: "Income Booking Master", path: "/income-booking", icon: "credit-card" },
     ];
 
     for (let index = 0; index < standaloneMenus.length; index += 1) {
