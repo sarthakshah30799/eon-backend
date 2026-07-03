@@ -49,6 +49,13 @@ export class MenuController {
     );
   }
 
+  @Get('rights-tree')
+  @ApiOperation({ summary: 'Get menu tree for rights management' })
+  @ApiResponse({ status: 200, description: 'Menu tree for rights management', type: [MenuResponseDto] })
+  async findRightsTree(): Promise<MenuResponseDto[]> {
+    return this.menuService.findRightsTree();
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all menus (flat list)' })
   @ApiResponse({ status: 200, description: 'List of menus', type: [MenuResponseDto] })
