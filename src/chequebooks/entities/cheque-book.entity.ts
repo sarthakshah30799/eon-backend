@@ -14,8 +14,8 @@ export class ChequeBook {
   @Column({ name: 'branch_id', type: 'uuid' })
   branchId: string;
 
-  @Column({ name: 'transaction_type', type: 'varchar', length: 100 })
-  transactionType: string;
+  @Column({ name: 'bank_account_code', type: 'uuid', nullable: true })
+  bankAccountCode?: string;
 
   @Column({ name: 'book_no_from', type: 'integer' })
   bookNoFrom: number;

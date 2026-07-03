@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { ManualBillBookService } from './manual-bill-book.service';
-import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto } from './dto/manual-bill-book.dto';
+import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/manual-bill-book.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
@@ -88,5 +88,37 @@ export class ManualBillBookController {
   async getAllocations(@Query('manualBookIds') idsStr: string) {
     const ids = idsStr ? idsStr.split(',') : [];
     return this.service.getAllocationsByBookIds(ids);
+  }
+
+  @Get('allocations/:allocationId/pages')
+  @ApiOperation({ summary: 'Get pages for an allocation' })
+  @ApiResponse({ status: 200, description: 'List of pages' })
+  async getPages(@Param('allocationId') allocationId: string) {
+    return this.service.getPagesByAllocationId(allocationId);
+  }
+
+  @Put('pages/status')
+  @ApiOperation({ summary: 'Update page status (Void / Lost)' })
+  @ApiResponse({ status: 200, description: 'Pages updated' })
+  async updatePagesStatus(
+    @Body() dto: UpdatePageStatusDto,
+    @Session() session: any,
+  ) {
+    return this.service.updatePagesStatus(dto, session.userId);
+  }
+
+  @Post('pages/return')
+  @ApiOperation({ summary: 'Return pages (delete from database)' })
+  @ApiResponse({ status: 200, description: 'Pages returned' })
+  async returnPages(@Body() dto: ReturnPagesDto) {
+    return this.service.returnPages(dto);
+  }
+
+  @Get('pages/search')
+  @ApiOperation({ summary: 'Search page status' })
+  @ApiResponse({ status: 200, description: 'Page tracking status' })
+  async searchPage(@Query('pageNo') pageNoStr: string) {
+    const pageNo = parseInt(pageNoStr, 10);
+    return this.service.searchPage(pageNo);
   }
 }

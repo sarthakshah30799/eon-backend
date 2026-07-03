@@ -13,10 +13,10 @@ export class CreateChequeBookDto {
   @IsNotEmpty()
   branchId: string;
 
-  @ApiProperty({ description: 'Transaction Type', example: 'PB-RETAIL PURCHASE' })
+  @ApiProperty({ description: 'Bank Account Code', example: 'AXISHO' })
   @IsString()
   @IsNotEmpty()
-  transactionType: string;
+  bankAccountCode: string;
 
   @ApiProperty({ description: 'Book No. From', example: 101 })
   @IsNumber()
@@ -136,4 +136,28 @@ export class SaveChequeBookAllocationsDto {
   @ValidateNested({ each: true })
   @Type(() => SaveChequeBookAllocationItemDto)
   allocations: SaveChequeBookAllocationItemDto[];
+}
+
+export class UpdatePageStatusDto {
+  @ApiProperty({ description: 'List of page numbers', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
+
+  @ApiProperty({ description: 'New status for the pages', enum: ['Void', 'Lost'] })
+  @IsString()
+  @IsNotEmpty()
+  status: 'Void' | 'Lost';
+
+  @ApiProperty({ description: 'Optional remarks explaining why', required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+export class ReturnPagesDto {
+  @ApiProperty({ description: 'List of page numbers to return', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
 }

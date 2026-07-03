@@ -3,8 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In, Between } from 'typeorm';
 import { ChequeBook } from './entities/cheque-book.entity';
 import { ChequeBookAllocation } from './entities/cheque-book-allocation.entity';
+import { ChequeBookPageTracking } from './entities/cheque-book-page-tracking.entity';
 import { Branch } from '../branches/branch.entity';
-import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAllocationsDto } from './dto/chequebook.dto';
+import { AccountProfile } from '../account-profiles/account-profile.entity';
+import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAllocationsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/chequebook.dto';
 
 @Injectable()
 export class ChequeBookService {
@@ -15,15 +17,21 @@ export class ChequeBookService {
     @InjectRepository(ChequeBookAllocation, 'database2')
     private readonly allocationRepository: Repository<ChequeBookAllocation>,
 
+    @InjectRepository(ChequeBookPageTracking, 'database2')
+    private readonly pageTrackingRepository: Repository<ChequeBookPageTracking>,
+
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
+
+    @InjectRepository(AccountProfile)
+    private readonly accountProfileRepository: Repository<AccountProfile>,
   ) {}
 
   async create(dto: CreateChequeBookDto, userId: string): Promise<ChequeBook> {
     const {
       dispatchDate,
       branchId,
-      transactionType,
+      bankAccountCode,
       bookNoFrom,
       bookNoTo,
       vouchersPerBook,
@@ -69,7 +77,7 @@ export class ChequeBookService {
       dispatchDate,
       no,
       branchId,
-      transactionType,
+      bankAccountCode,
       bookNoFrom,
       bookNoTo,
       vouchersPerBook,
@@ -116,14 +124,14 @@ export class ChequeBookService {
   async findAll(
     branchId?: string,
     status?: string,
-    transactionType?: string,
+    bankAccountCode?: string,
     fromDate?: string,
     toDate?: string,
   ): Promise<any[]> {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
-    if (transactionType && transactionType !== 'ALL') where.transactionType = transactionType;
+    if (bankAccountCode && bankAccountCode !== 'ALL') where.bankAccountCode = bankAccountCode;
     if (fromDate && toDate) {
       where.dispatchDate = Between(fromDate, toDate);
     }
@@ -144,12 +152,22 @@ export class ChequeBookService {
     });
     const branchMap = new Map(branches.map((b) => [b.id, b]));
 
+    // Fetch account profiles from DB1 in a single query
+    const accountIds = Array.from(new Set(books.map((b) => b.bankAccountCode).filter(Boolean)));
+    const accounts = accountIds.length > 0
+      ? await this.accountProfileRepository.find({ where: { id: In(accountIds) } })
+      : [];
+    const accountMap = new Map(accounts.map((a) => [a.id, a]));
+
     return books.map((book) => {
       const branch = branchMap.get(book.branchId);
+      const account = accountMap.get(book.bankAccountCode);
       return {
         ...book,
         branchName: branch ? branch.name : 'Unknown Branch',
         branchCode: branch ? branch.code : '',
+        bankAccountCodeLabel: account ? `${account.accountCode} - ${account.accountName}` : 'Unknown Bank Account',
+        bankAccountCodeName: account ? account.accountCode : '',
       };
     });
   }
@@ -211,6 +229,40 @@ export class ChequeBookService {
       }
       const saved = await this.allocationRepository.save(allocation);
       results.push(saved);
+
+      // Initialize page tracking for every page in the allocated book
+      const book = await this.checkBookRepository.findOne({ where: { id: saved.checkBookId } });
+      if (book) {
+        const offset = saved.bookNo - book.bookNoFrom;
+        const startPageNo = book.mvNoFrom + offset * book.vouchersPerBook;
+        const endPageNo = startPageNo + book.vouchersPerBook - 1;
+
+        const existingPages = await this.pageTrackingRepository.find({
+          where: { pageNo: Between(startPageNo, endPageNo) },
+        });
+        const existingPageNos = new Set(existingPages.map(p => p.pageNo));
+
+        const pagesToInsert = [];
+        for (let p = startPageNo; p <= endPageNo; p++) {
+          if (!existingPageNos.has(p)) {
+            pagesToInsert.push({
+              checkBookId: saved.checkBookId,
+              allocationId: saved.id,
+              pageNo: p,
+              status: 'Allocated',
+            });
+          } else {
+            const existing = existingPages.find(ep => ep.pageNo === p);
+            if (existing && existing.status === 'Allocated') {
+              existing.allocationId = saved.id;
+              await this.pageTrackingRepository.save(existing);
+            }
+          }
+        }
+        if (pagesToInsert.length > 0) {
+          await this.pageTrackingRepository.insert(pagesToInsert);
+        }
+      }
     }
     return results;
   }
@@ -222,5 +274,45 @@ export class ChequeBookService {
         checkBookId: In(checkBookIds),
       }
     });
+  }
+
+  async getPagesByAllocationId(allocationId: string): Promise<ChequeBookPageTracking[]> {
+    return this.pageTrackingRepository.find({
+      where: { allocationId },
+      order: { pageNo: 'ASC' },
+    });
+  }
+
+  async updatePagesStatus(dto: UpdatePageStatusDto, userId: string): Promise<any> {
+    const { pageNos, status, remarks } = dto;
+    await this.pageTrackingRepository.update(
+      { pageNo: In(pageNos) },
+      {
+        status,
+        remarks,
+        updatedBy: userId,
+      }
+    );
+    return { success: true };
+  }
+
+  async returnPages(dto: ReturnPagesDto): Promise<any> {
+    const { pageNos } = dto;
+    await this.pageTrackingRepository.delete({
+      pageNo: In(pageNos),
+      status: 'Allocated',
+    });
+    return { success: true };
+  }
+
+  async searchPage(pageNo: number): Promise<any> {
+    const page = await this.pageTrackingRepository.findOne({
+      where: { pageNo },
+      relations: ['checkBook', 'allocation'],
+    });
+    if (!page) {
+      throw new NotFoundException(`Cheque leaf/page number ${pageNo} not found in tracking`);
+    }
+    return page;
   }
 }

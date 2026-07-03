@@ -137,3 +137,27 @@ export class SaveAllocationsDto {
   @Type(() => SaveAllocationItemDto)
   allocations: SaveAllocationItemDto[];
 }
+
+export class UpdatePageStatusDto {
+  @ApiProperty({ description: 'List of page numbers', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
+
+  @ApiProperty({ description: 'New status for the pages', enum: ['Void', 'Lost'] })
+  @IsString()
+  @IsNotEmpty()
+  status: 'Void' | 'Lost';
+
+  @ApiProperty({ description: 'Optional remarks explaining why', required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+export class ReturnPagesDto {
+  @ApiProperty({ description: 'List of page numbers to return', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
+}

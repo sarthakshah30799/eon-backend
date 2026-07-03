@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In, Between } from 'typeorm';
 import { ManualBook } from './entities/manual-book.entity';
 import { ManualBookAllocation } from './entities/manual-book-allocation.entity';
+import { ManualBookPageTracking } from './entities/manual-book-page-tracking.entity';
 import { Branch } from '../branches/branch.entity';
-import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto } from './dto/manual-bill-book.dto';
+import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/manual-bill-book.dto';
 
 @Injectable()
 export class ManualBillBookService {
@@ -14,6 +15,9 @@ export class ManualBillBookService {
 
     @InjectRepository(ManualBookAllocation, 'database2')
     private readonly allocationRepository: Repository<ManualBookAllocation>,
+
+    @InjectRepository(ManualBookPageTracking, 'database2')
+    private readonly pageTrackingRepository: Repository<ManualBookPageTracking>,
 
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
@@ -220,6 +224,40 @@ export class ManualBillBookService {
       }
       const saved = await this.allocationRepository.save(allocation);
       results.push(saved);
+
+      // Initialize page tracking for every page in the allocated manual bill book
+      const book = await this.manualBookRepository.findOne({ where: { id: saved.manualBookId } });
+      if (book) {
+        const offset = saved.bookNo - book.bookNoFrom;
+        const startPageNo = book.mvNoFrom + offset * book.vouchersPerBook;
+        const endPageNo = startPageNo + book.vouchersPerBook - 1;
+
+        const existingPages = await this.pageTrackingRepository.find({
+          where: { pageNo: Between(startPageNo, endPageNo) },
+        });
+        const existingPageNos = new Set(existingPages.map(p => p.pageNo));
+
+        const pagesToInsert = [];
+        for (let p = startPageNo; p <= endPageNo; p++) {
+          if (!existingPageNos.has(p)) {
+            pagesToInsert.push({
+              manualBookId: saved.manualBookId,
+              allocationId: saved.id,
+              pageNo: p,
+              status: 'Allocated',
+            });
+          } else {
+            const existing = existingPages.find(ep => ep.pageNo === p);
+            if (existing && existing.status === 'Allocated') {
+              existing.allocationId = saved.id;
+              await this.pageTrackingRepository.save(existing);
+            }
+          }
+        }
+        if (pagesToInsert.length > 0) {
+          await this.pageTrackingRepository.insert(pagesToInsert);
+        }
+      }
     }
     return results;
   }
@@ -231,5 +269,45 @@ export class ManualBillBookService {
         manualBookId: In(manualBookIds),
       }
     });
+  }
+
+  async getPagesByAllocationId(allocationId: string): Promise<ManualBookPageTracking[]> {
+    return this.pageTrackingRepository.find({
+      where: { allocationId },
+      order: { pageNo: 'ASC' },
+    });
+  }
+
+  async updatePagesStatus(dto: UpdatePageStatusDto, userId: string): Promise<any> {
+    const { pageNos, status, remarks } = dto;
+    await this.pageTrackingRepository.update(
+      { pageNo: In(pageNos) },
+      {
+        status,
+        remarks,
+        updatedBy: userId,
+      }
+    );
+    return { success: true };
+  }
+
+  async returnPages(dto: ReturnPagesDto): Promise<any> {
+    const { pageNos } = dto;
+    await this.pageTrackingRepository.delete({
+      pageNo: In(pageNos),
+      status: 'Allocated',
+    });
+    return { success: true };
+  }
+
+  async searchPage(pageNo: number): Promise<any> {
+    const page = await this.pageTrackingRepository.findOne({
+      where: { pageNo },
+      relations: ['manualBook', 'allocation'],
+    });
+    if (!page) {
+      throw new NotFoundException(`Bill leaf/page number ${pageNo} not found in tracking`);
+    }
+    return page;
   }
 }
