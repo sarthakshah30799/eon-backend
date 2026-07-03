@@ -25,6 +25,50 @@ export class MenuService {
     return menus.map(menu => MenuResponseDto.fromEntity(menu, false));
   }
 
+  private async getMenuDtosWithoutAdminBranch(): Promise<MenuResponseDto[]> {
+    const rows = await this.menuRepository.query(`
+      WITH RECURSIVE excluded AS (
+        SELECT id
+        FROM menus
+        WHERE is_admin = true
+
+        UNION ALL
+
+        SELECT menu.id
+        FROM menus menu
+        INNER JOIN excluded branch ON menu.parent_id = branch.id
+      )
+      SELECT
+        menu.id,
+        menu.is_admin AS "isAdmin",
+        menu.name,
+        menu.path,
+        menu.icon,
+        parent.id AS "parentId",
+        menu.sort_order AS "sortOrder",
+        menu.is_active AS "isActive"
+      FROM menus menu
+      LEFT JOIN menus parent ON parent.id = menu.parent_id
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM excluded branch
+        WHERE branch.id = menu.id
+      )
+      ORDER BY menu.sort_order IS NULL ASC, menu.sort_order ASC, menu.name ASC
+    `);
+
+    return rows.map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      isAdmin: row.isAdmin as boolean,
+      name: row.name as string,
+      path: (row.path as string | null) ?? null,
+      icon: (row.icon as string | null) ?? null,
+      parentId: (row.parentId as string | null) ?? null,
+      sortOrder: Number(row.sortOrder ?? 0),
+      isActive: row.isActive as boolean,
+    }));
+  }
+
   private buildVisibleMenuDtos(
     menus: MenuResponseDto[],
     includeAdminMenus: boolean
@@ -90,19 +134,6 @@ export class MenuService {
       return false;
     }
 
-    if (
-      normalizedPath === '/manual-bill-books' ||
-      normalizedPath.startsWith('/manual-bill-books/') ||
-      normalizedPath === 'manual-bill-books' ||
-      normalizedPath.startsWith('manual-bill-books/') ||
-      normalizedPath === '/chequebooks' ||
-      normalizedPath.startsWith('/chequebooks/') ||
-      normalizedPath === 'chequebooks' ||
-      normalizedPath.startsWith('chequebooks/')
-    ) {
-      return true;
-    }
-
     const grantedPermissions = permissions?.[normalizedPath];
     return Boolean(grantedPermissions?.length);
   }
@@ -156,6 +187,11 @@ export class MenuService {
     }
 
     return null;
+  }
+
+  async findRightsTree(): Promise<MenuResponseDto[]> {
+    const menus = await this.getMenuDtosWithoutAdminBranch();
+    return this.buildTree(menus.filter(menu => menu.isActive));
   }
 
   async findTree(

@@ -146,6 +146,8 @@ export class UserService {
     currentUserId?: string,
     activeOnly = true,
     search?: string,
+    branchId?: string,
+    roleCode?: string,
   ): Promise<UserResponseDto[]> {
     const requesterIsAdmin = await this.isRequesterAdmin(currentUserId);
     const trimmedSearch = search?.trim();
@@ -181,6 +183,14 @@ export class UserService {
             .orWhere('user.designation ILIKE :search', { search: `%${trimmedSearch}%` });
         })
       );
+    }
+
+    if (branchId) {
+      query.andWhere('branch.id = :branchId', { branchId });
+    }
+
+    if (roleCode) {
+      query.andWhere('role.code = :roleCode', { roleCode });
     }
 
     const users = await query.getMany();

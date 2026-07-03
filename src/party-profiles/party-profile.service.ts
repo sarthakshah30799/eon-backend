@@ -545,11 +545,11 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
-    const type = query.type ?? ClientType.CORPORATE_CLIENT;
+    const types = (query.type?.length ? query.type : [ClientType.CORPORATE_CLIENT]) as ClientType[];
     if (user) {
-      this.assertPartyProfileAccess(user, type, "view");
+      types.forEach(type => this.assertPartyProfileAccess(user, type, "view"));
     }
-    qb.where("pp.type::text = :type", { type });
+    qb.where("pp.type::text IN (:...types)", { types });
 
     if (query.search) {
       qb.andWhere(
