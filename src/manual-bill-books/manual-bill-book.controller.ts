@@ -148,4 +148,55 @@ export class ManualBillBookController {
     const branchId = !session.isAdmin ? session.activeBranchId : undefined;
     return this.service.searchPage(pageNo, branchId);
   }
+
+  @Get('dp-mapping/search')
+  @ApiOperation({ summary: 'Search manual book pages for DP mapping' })
+  async searchDPMapping(
+    @Session() session: any,
+    @Query('transactionType') transactionType: string,
+    @Query('bookNo') bookNoStr: string,
+    @Query('mvNoFrom') mvNoFromStr: string,
+    @Query('mvNoTo') mvNoToStr: string,
+    @Query('actionType') actionType: 'MAP' | 'UNMAP',
+  ) {
+    const bookNo = parseInt(bookNoStr, 10);
+    const mvNoFrom = parseInt(mvNoFromStr, 10);
+    const mvNoTo = parseInt(mvNoToStr, 10);
+    const branchId = session.activeBranchId;
+    const currentUserId = session.userId;
+    return this.service.searchDPMapping({
+      branchId,
+      currentUserId,
+      transactionType,
+      bookNo,
+      mvNoFrom,
+      mvNoTo,
+      actionType,
+    });
+  }
+
+  @Post('dp-mapping/allocate')
+  @ApiOperation({ summary: 'Allocate manual book pages to a Delivery Person' })
+  async allocateToDP(
+    @Session() session: any,
+    @Body() body: { pageIds: string[]; deliveryPersonId: string; remarks?: string },
+  ) {
+    return this.service.allocateToDP(body.pageIds, body.deliveryPersonId, session.userId, body.remarks);
+  }
+
+  @Post('dp-mapping/deallocate')
+  @ApiOperation({ summary: 'Deallocate manual book pages back to Cashier' })
+  async deallocateFromDP(
+    @Session() session: any,
+    @Body() body: { pageIds: string[]; remarks?: string },
+  ) {
+    return this.service.deallocateFromDP(body.pageIds, session.userId, body.remarks);
+  }
+
+  @Get('dp-mapping/delivery-persons')
+  @ApiOperation({ summary: 'Get list of active delivery persons in the cashier branch' })
+  async getDeliveryPersons(@Session() session: any) {
+    const branchId = session.activeBranchId;
+    return this.service.getDeliveryPersons(branchId);
+  }
 }

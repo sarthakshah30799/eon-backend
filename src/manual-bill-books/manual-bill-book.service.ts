@@ -362,4 +362,186 @@ export class ManualBillBookService {
       assignedToUser: users[0] || null,
     };
   }
+
+  async searchDPMapping(params: {
+    branchId: string;
+    currentUserId: string;
+    transactionType: string;
+    bookNo: number;
+    mvNoFrom: number;
+    mvNoTo: number;
+    actionType: 'MAP' | 'UNMAP';
+  }): Promise<any[]> {
+    const { branchId, currentUserId, transactionType, bookNo, mvNoFrom, mvNoTo, actionType } = params;
+
+    // Get active delivery persons in the branch
+    const deliveryPersons = await this.branchRepository.manager.query(`
+      SELECT DISTINCT u.id, u.name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.branch_id = $1 
+        AND u.is_active = true 
+        AND r.is_delivery_boy = true
+    `, [branchId]);
+    const dpIds = deliveryPersons.map((u: any) => u.id);
+
+    if (actionType === 'UNMAP' && dpIds.length === 0) {
+      return [];
+    }
+
+    // Find all manual books matching branch, transactionType (if not ALL), and book range containing bookNo
+    const queryBooks = await this.manualBookRepository.createQueryBuilder('mb')
+      .where('mb.branchId = :branchId', { branchId })
+      .andWhere('mb.status = :status', { status: 'Approved' })
+      .andWhere('mb.bookNoFrom <= :bookNo', { bookNo })
+      .andWhere('mb.bookNoTo >= :bookNo', { bookNo })
+      .andWhere(transactionType === 'ALL' ? '1=1' : 'mb.transactionType = :transactionType', { transactionType })
+      .getMany();
+
+    if (queryBooks.length === 0) {
+      return [];
+    }
+
+    const matchedPages: ManualBookPageTracking[] = [];
+    const bookMap = new Map<string, typeof queryBooks[0]>();
+
+    for (const book of queryBooks) {
+      bookMap.set(book.id, book);
+      const offset = bookNo - book.bookNoFrom;
+      const startPage = book.mvNoFrom + offset * book.vouchersPerBook;
+      const endPage = startPage + book.vouchersPerBook - 1;
+
+      const rangeStart = Math.max(mvNoFrom, startPage);
+      const rangeEnd = Math.min(mvNoTo, endPage);
+
+      if (rangeStart > rangeEnd) {
+        continue;
+      }
+
+      const qb = this.pageTrackingRepository.createQueryBuilder('pt')
+        .where('pt.manualBookId = :bookId', { bookId: book.id })
+        .andWhere('pt.pageNo >= :rangeStart', { rangeStart })
+        .andWhere('pt.pageNo <= :rangeEnd', { rangeEnd })
+        .andWhere('pt.status = :status', { status: 'ALLOCATED' });
+
+      if (actionType === 'MAP') {
+        qb.andWhere('pt.assignedToUserId = :currentUserId', { currentUserId });
+      } else {
+        qb.andWhere('pt.assignedToUserId IN (:...dpIds)', { dpIds });
+      }
+
+      const pages = await qb.getMany();
+      matchedPages.push(...pages);
+    }
+
+    if (matchedPages.length === 0) {
+      return [];
+    }
+
+    // Map names to ids
+    const userNamesMap: Record<string, string> = {};
+    deliveryPersons.forEach((u: any) => {
+      userNamesMap[u.id] = u.name;
+    });
+    const currentUser = await this.branchRepository.manager.query(`
+      SELECT name FROM users WHERE id = $1
+    `, [currentUserId]);
+    if (currentUser[0]) {
+      userNamesMap[currentUserId] = currentUser[0].name;
+    }
+
+    // Sort by pageNo
+    matchedPages.sort((a, b) => a.pageNo - b.pageNo);
+
+    // Group contiguous pages
+    const groups: any[] = [];
+    let currentGroup: any = null;
+
+    for (const page of matchedPages) {
+      const book = bookMap.get(page.manualBookId);
+      if (!book) continue;
+
+      if (!currentGroup) {
+        currentGroup = {
+          manualBookId: page.manualBookId,
+          bookNo: bookNo,
+          transactionType: book.transactionType,
+          mvNoFrom: page.pageNo,
+          mvNoTo: page.pageNo,
+          qty: 1,
+          assignedToUserId: page.assignedToUserId,
+          assignedToUserName: userNamesMap[page.assignedToUserId] || 'Unknown',
+          pageIds: [page.id],
+          remarks: page.remarks || '',
+        };
+      } else {
+        const isContiguous = page.pageNo === currentGroup.mvNoTo + 1;
+        const sameAssignee = page.assignedToUserId === currentGroup.assignedToUserId;
+        const sameBook = page.manualBookId === currentGroup.manualBookId;
+        if (isContiguous && sameAssignee && sameBook) {
+          currentGroup.mvNoTo = page.pageNo;
+          currentGroup.qty++;
+          currentGroup.pageIds.push(page.id);
+        } else {
+          groups.push(currentGroup);
+          currentGroup = {
+            manualBookId: page.manualBookId,
+            bookNo: bookNo,
+            transactionType: book.transactionType,
+            mvNoFrom: page.pageNo,
+            mvNoTo: page.pageNo,
+            qty: 1,
+            assignedToUserId: page.assignedToUserId,
+            assignedToUserName: userNamesMap[page.assignedToUserId] || 'Unknown',
+            pageIds: [page.id],
+            remarks: page.remarks || '',
+          };
+        }
+      }
+    }
+    if (currentGroup) {
+      groups.push(currentGroup);
+    }
+
+    return groups;
+  }
+
+  async allocateToDP(pageIds: string[], deliveryPersonId: string, updatedBy: string, remarks?: string): Promise<any> {
+    if (pageIds.length === 0) return { success: true };
+    await this.pageTrackingRepository.update(
+      { id: In(pageIds) },
+      {
+        assignedToUserId: deliveryPersonId,
+        remarks: remarks || null,
+        updatedBy,
+      }
+    );
+    return { success: true };
+  }
+
+  async deallocateFromDP(pageIds: string[], cashierId: string, remarks?: string): Promise<any> {
+    if (pageIds.length === 0) return { success: true };
+    await this.pageTrackingRepository.update(
+      { id: In(pageIds) },
+      {
+        assignedToUserId: cashierId,
+        remarks: remarks || null,
+        updatedBy: cashierId,
+      }
+    );
+    return { success: true };
+  }
+
+  async getDeliveryPersons(branchId: string): Promise<any[]> {
+    return this.branchRepository.manager.query(`
+      SELECT DISTINCT u.id, u.name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.branch_id = $1 
+        AND u.is_active = true 
+        AND r.is_delivery_boy = true
+    `, [branchId]);
+  }
 }

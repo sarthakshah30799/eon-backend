@@ -354,4 +354,111 @@ export class ChequeBookService {
       assignedToUser: users[0] || null,
     };
   }
+
+  async searchCashierReturn(params: {
+    branchId: string;
+    currentUserId: string;
+    bankAccountCode: string;
+    bookNo: number;
+    chequeNoFrom: number;
+    chequeNoTo: number;
+  }): Promise<any[]> {
+    const { branchId, currentUserId, bankAccountCode, bookNo, chequeNoFrom, chequeNoTo } = params;
+
+    const queryBooks = await this.checkBookRepository.createQueryBuilder('cb')
+      .where('cb.branchId = :branchId', { branchId })
+      .andWhere('cb.status = :status', { status: 'Approved' })
+      .andWhere('cb.bookNoFrom <= :bookNo', { bookNo })
+      .andWhere('cb.bookNoTo >= :bookNo', { bookNo })
+      .andWhere(bankAccountCode === 'ALL' ? '1=1' : 'cb.bankAccountCode = :bankAccountCode', { bankAccountCode })
+      .getMany();
+
+    if (queryBooks.length === 0) {
+      return [];
+    }
+
+    const matchedPages: ChequeBookPageTracking[] = [];
+    const bookMap = new Map<string, typeof queryBooks[0]>();
+
+    for (const book of queryBooks) {
+      bookMap.set(book.id, book);
+      const offset = bookNo - book.bookNoFrom;
+      const startPage = book.mvNoFrom + offset * book.vouchersPerBook;
+      const endPage = startPage + book.vouchersPerBook - 1;
+
+      const rangeStart = Math.max(chequeNoFrom, startPage);
+      const rangeEnd = Math.min(chequeNoTo, endPage);
+
+      if (rangeStart > rangeEnd) {
+        continue;
+      }
+
+      const pages = await this.pageTrackingRepository.createQueryBuilder('pt')
+        .where('pt.checkBookId = :bookId', { bookId: book.id })
+        .andWhere('pt.pageNo >= :rangeStart', { rangeStart })
+        .andWhere('pt.pageNo <= :rangeEnd', { rangeEnd })
+        .andWhere('pt.status = :status', { status: 'ALLOCATED' })
+        .andWhere('pt.assignedToUserId = :currentUserId', { currentUserId })
+        .getMany();
+
+      matchedPages.push(...pages);
+    }
+
+    if (matchedPages.length === 0) {
+      return [];
+    }
+
+    // Sort by pageNo
+    matchedPages.sort((a, b) => a.pageNo - b.pageNo);
+
+    // Group contiguous pages
+    const groups: any[] = [];
+    let currentGroup: any = null;
+
+    for (const page of matchedPages) {
+      const book = bookMap.get(page.checkBookId);
+      if (!book) continue;
+
+      if (!currentGroup) {
+        currentGroup = {
+          checkBookId: page.checkBookId,
+          bookNo: bookNo,
+          bankAccountCode: book.bankAccountCode,
+          mvNoFrom: page.pageNo,
+          mvNoTo: page.pageNo,
+          qty: 1,
+          pageIds: [page.id],
+          pageNos: [page.pageNo],
+          remarks: page.remarks || '',
+        };
+      } else {
+        const isContiguous = page.pageNo === currentGroup.mvNoTo + 1;
+        const sameBook = page.checkBookId === currentGroup.checkBookId;
+        if (isContiguous && sameBook) {
+          currentGroup.mvNoTo = page.pageNo;
+          currentGroup.qty++;
+          currentGroup.pageIds.push(page.id);
+          currentGroup.pageNos.push(page.pageNo);
+        } else {
+          groups.push(currentGroup);
+          currentGroup = {
+            checkBookId: page.checkBookId,
+            bookNo: bookNo,
+            bankAccountCode: book.bankAccountCode,
+            mvNoFrom: page.pageNo,
+            mvNoTo: page.pageNo,
+            qty: 1,
+            pageIds: [page.id],
+            pageNos: [page.pageNo],
+            remarks: page.remarks || '',
+          };
+        }
+      }
+    }
+    if (currentGroup) {
+      groups.push(currentGroup);
+    }
+
+    return groups;
+  }
 }

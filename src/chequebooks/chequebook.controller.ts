@@ -138,4 +138,28 @@ export class ChequeBookController {
     const branchId = !session.isAdmin ? session.activeBranchId : undefined;
     return this.service.searchPage(pageNo, branchId);
   }
+
+  @Get('cashier-return/search')
+  @ApiOperation({ summary: 'Search cashier allocated checkbook pages for return' })
+  async searchCashierReturn(
+    @Session() session: any,
+    @Query('bankAccountCode') bankAccountCode: string,
+    @Query('bookNo') bookNoStr: string,
+    @Query('chequeNoFrom') chequeNoFromStr: string,
+    @Query('chequeNoTo') chequeNoToStr: string,
+  ) {
+    const bookNo = parseInt(bookNoStr, 10);
+    const chequeNoFrom = parseInt(chequeNoFromStr, 10);
+    const chequeNoTo = parseInt(chequeNoToStr, 10);
+    const branchId = session.activeBranchId;
+    const currentUserId = session.userId;
+    return this.service.searchCashierReturn({
+      branchId,
+      currentUserId,
+      bankAccountCode,
+      bookNo,
+      chequeNoFrom,
+      chequeNoTo,
+    });
+  }
 }
