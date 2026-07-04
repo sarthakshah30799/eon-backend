@@ -2,20 +2,16 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In, Between } from 'typeorm';
 import { ChequeBook } from './entities/cheque-book.entity';
-import { ChequeBookAllocation } from './entities/cheque-book-allocation.entity';
 import { ChequeBookPageTracking } from './entities/cheque-book-page-tracking.entity';
 import { Branch } from '../branches/branch.entity';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
-import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAllocationsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/chequebook.dto';
+import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAssignmentsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/chequebook.dto';
 
 @Injectable()
 export class ChequeBookService {
   constructor(
     @InjectRepository(ChequeBook, 'database2')
     private readonly checkBookRepository: Repository<ChequeBook>,
-
-    @InjectRepository(ChequeBookAllocation, 'database2')
-    private readonly allocationRepository: Repository<ChequeBookAllocation>,
 
     @InjectRepository(ChequeBookPageTracking, 'database2')
     private readonly pageTrackingRepository: Repository<ChequeBookPageTracking>,
@@ -205,80 +201,114 @@ export class ChequeBookService {
     return results;
   }
 
-  async saveAllocations(dto: SaveChequeBookAllocationsDto, userId: string): Promise<any[]> {
+  async getAuthorizedUsers(branchId: string): Promise<any[]> {
+    return this.branchRepository.manager.query(`
+      SELECT DISTINCT u.id, u.name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.branch_id = $1 
+        AND u.is_active = true
+        AND r.is_cashier = true
+    `, [branchId]);
+  }
+
+  async saveAssignments(dto: SaveChequeBookAssignmentsDto, userId: string): Promise<any[]> {
     const results = [];
-    for (const item of dto.allocations) {
-      let allocation = await this.allocationRepository.findOne({
-        where: {
-          checkBookId: item.checkBookId,
-          bookNo: item.bookNo,
-        }
+    for (const item of dto.assignments) {
+      const book = await this.checkBookRepository.findOne({ where: { id: item.checkBookId } });
+      if (!book) continue;
+
+      const offset = item.bookNo - book.bookNoFrom;
+      const startPageNo = book.mvNoFrom + offset * book.vouchersPerBook;
+      const endPageNo = startPageNo + book.vouchersPerBook - 1;
+
+      const existingPages = await this.pageTrackingRepository.find({
+        where: { pageNo: Between(startPageNo, endPageNo) },
       });
-      if (!allocation) {
-        allocation = this.allocationRepository.create({
-          checkBookId: item.checkBookId,
-          bookNo: item.bookNo,
-          cashierId: item.cashierId,
-          remarks: item.remarks,
-          allocatedBy: userId,
-        });
-      } else {
-        allocation.cashierId = item.cashierId;
-        allocation.remarks = item.remarks;
-        allocation.allocatedBy = userId;
-      }
-      const saved = await this.allocationRepository.save(allocation);
-      results.push(saved);
+      const existingPageNos = new Set(existingPages.map(p => p.pageNo));
 
-      // Initialize page tracking for every page in the allocated book
-      const book = await this.checkBookRepository.findOne({ where: { id: saved.checkBookId } });
-      if (book) {
-        const offset = saved.bookNo - book.bookNoFrom;
-        const startPageNo = book.mvNoFrom + offset * book.vouchersPerBook;
-        const endPageNo = startPageNo + book.vouchersPerBook - 1;
-
-        const existingPages = await this.pageTrackingRepository.find({
-          where: { pageNo: Between(startPageNo, endPageNo) },
-        });
-        const existingPageNos = new Set(existingPages.map(p => p.pageNo));
-
-        const pagesToInsert = [];
-        for (let p = startPageNo; p <= endPageNo; p++) {
-          if (!existingPageNos.has(p)) {
-            pagesToInsert.push({
-              checkBookId: saved.checkBookId,
-              allocationId: saved.id,
-              pageNo: p,
-              status: 'Allocated',
-            });
-          } else {
-            const existing = existingPages.find(ep => ep.pageNo === p);
-            if (existing && existing.status === 'Allocated') {
-              existing.allocationId = saved.id;
-              await this.pageTrackingRepository.save(existing);
-            }
+      const pagesToInsert = [];
+      for (let p = startPageNo; p <= endPageNo; p++) {
+        if (!existingPageNos.has(p)) {
+          pagesToInsert.push({
+            checkBookId: item.checkBookId,
+            assignedToUserId: item.assignedToUserId,
+            pageNo: p,
+            status: 'ALLOCATED',
+            remarks: item.remarks,
+            updatedBy: userId,
+          });
+        } else {
+          const existing = existingPages.find(ep => ep.pageNo === p);
+          if (existing && existing.status === 'ALLOCATED') {
+            existing.assignedToUserId = item.assignedToUserId;
+            existing.remarks = item.remarks;
+            existing.updatedBy = userId;
+            await this.pageTrackingRepository.save(existing);
           }
         }
-        if (pagesToInsert.length > 0) {
-          await this.pageTrackingRepository.insert(pagesToInsert);
-        }
       }
+      if (pagesToInsert.length > 0) {
+        await this.pageTrackingRepository.insert(pagesToInsert);
+      }
+      results.push({ checkBookId: item.checkBookId, bookNo: item.bookNo, assignedToUserId: item.assignedToUserId });
     }
     return results;
   }
 
-  async getAllocationsByBookIds(checkBookIds: string[]): Promise<ChequeBookAllocation[]> {
+  async getAssignmentsByBookIds(checkBookIds: string[]): Promise<any[]> {
     if (checkBookIds.length === 0) return [];
-    return this.allocationRepository.find({
-      where: {
-        checkBookId: In(checkBookIds),
-      }
+    const books = await this.checkBookRepository.find({
+      where: { id: In(checkBookIds) }
     });
+    const bookMap = new Map(books.map(b => [b.id, b]));
+
+    const pages = await this.pageTrackingRepository.find({
+      where: { checkBookId: In(checkBookIds) },
+      order: { pageNo: 'ASC' },
+    });
+
+    const groups: Record<string, { checkBookId: string; bookNo: number; assignedToUserId: string; pageNos: number[]; remarks?: string }> = {};
+
+    for (const p of pages) {
+      const book = bookMap.get(p.checkBookId);
+      if (!book) continue;
+      const offset = Math.floor((p.pageNo - book.mvNoFrom) / book.vouchersPerBook);
+      const bookNo = book.bookNoFrom + offset;
+      const key = `${p.checkBookId}_${bookNo}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          checkBookId: p.checkBookId,
+          bookNo,
+          assignedToUserId: p.assignedToUserId,
+          pageNos: [],
+          remarks: p.remarks,
+        };
+      }
+      groups[key].pageNos.push(p.pageNo);
+    }
+
+    return Object.values(groups).map(g => ({
+      checkBookId: g.checkBookId,
+      bookNo: g.bookNo,
+      cashierId: g.assignedToUserId,
+      remarks: g.remarks,
+    }));
   }
 
-  async getPagesByAllocationId(allocationId: string): Promise<ChequeBookPageTracking[]> {
+  async getPagesByBookNo(checkBookId: string, bookNo: number): Promise<ChequeBookPageTracking[]> {
+    const book = await this.checkBookRepository.findOne({ where: { id: checkBookId } });
+    if (!book) {
+      throw new NotFoundException(`Cheque Book not found`);
+    }
+    const offset = bookNo - book.bookNoFrom;
+    const startPageNo = book.mvNoFrom + offset * book.vouchersPerBook;
+    const endPageNo = startPageNo + book.vouchersPerBook - 1;
+
     return this.pageTrackingRepository.find({
-      where: { allocationId },
+      where: { pageNo: Between(startPageNo, endPageNo) },
       order: { pageNo: 'ASC' },
     });
   }
@@ -300,19 +330,28 @@ export class ChequeBookService {
     const { pageNos } = dto;
     await this.pageTrackingRepository.delete({
       pageNo: In(pageNos),
-      status: 'Allocated',
+      status: 'ALLOCATED',
     });
     return { success: true };
   }
 
-  async searchPage(pageNo: number): Promise<any> {
+  async searchPage(pageNo: number, branchId?: string): Promise<any> {
     const page = await this.pageTrackingRepository.findOne({
       where: { pageNo },
-      relations: ['checkBook', 'allocation'],
+      relations: ['checkBook'],
     });
     if (!page) {
       throw new NotFoundException(`Cheque leaf/page number ${pageNo} not found in tracking`);
     }
-    return page;
+    if (branchId && page.checkBook?.branchId !== branchId) {
+      throw new NotFoundException(`Cheque leaf/page number ${pageNo} not found in tracking`);
+    }
+    const users = await this.branchRepository.manager.query(`
+      SELECT id, name FROM users WHERE id = $1
+    `, [page.assignedToUserId]);
+    return {
+      ...page,
+      assignedToUser: users[0] || null,
+    };
   }
 }

@@ -108,8 +108,8 @@ export class BulkReviewChequeBooksDto {
   reviews: BulkReviewChequeBookItemDto[];
 }
 
-export class SaveChequeBookAllocationItemDto {
-  @ApiProperty({ description: 'Check Book entry ID (UUID)' })
+export class SaveChequeBookAssignmentItemDto {
+  @ApiProperty({ description: 'ChequeBook entry ID (UUID)' })
   @IsUUID()
   @IsNotEmpty()
   checkBookId: string;
@@ -119,10 +119,10 @@ export class SaveChequeBookAllocationItemDto {
   @Min(1)
   bookNo: number;
 
-  @ApiProperty({ description: 'Cashier user ID (UUID)' })
+  @ApiProperty({ description: 'User ID (UUID) to assign the pages to' })
   @IsUUID()
   @IsNotEmpty()
-  cashierId: string;
+  assignedToUserId: string;
 
   @ApiProperty({ description: 'Remarks', required: false })
   @IsString()
@@ -130,12 +130,12 @@ export class SaveChequeBookAllocationItemDto {
   remarks?: string;
 }
 
-export class SaveChequeBookAllocationsDto {
-  @ApiProperty({ description: 'List of cashier allocations', type: [SaveChequeBookAllocationItemDto] })
+export class SaveChequeBookAssignmentsDto {
+  @ApiProperty({ description: 'List of cashier assignments', type: [SaveChequeBookAssignmentItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => SaveChequeBookAllocationItemDto)
-  allocations: SaveChequeBookAllocationItemDto[];
+  @Type(() => SaveChequeBookAssignmentItemDto)
+  assignments: SaveChequeBookAssignmentItemDto[];
 }
 
 export class UpdatePageStatusDto {
@@ -144,10 +144,10 @@ export class UpdatePageStatusDto {
   @IsNumber({}, { each: true })
   pageNos: number[];
 
-  @ApiProperty({ description: 'New status for the pages', enum: ['Void', 'Lost'] })
+  @ApiProperty({ description: 'New status for the pages', enum: ['VOID'] })
   @IsString()
   @IsNotEmpty()
-  status: 'Void' | 'Lost';
+  status: 'VOID';
 
   @ApiProperty({ description: 'Optional remarks explaining why', required: false })
   @IsString()

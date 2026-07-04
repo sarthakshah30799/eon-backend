@@ -1,10 +1,9 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
 import { ManualBook } from './manual-book.entity';
-import { ManualBookAllocation } from './manual-book-allocation.entity';
 
 @Entity('manual_book_page_tracking')
 @Unique('UQ_manual_book_page_tracking_number', ['pageNo'])
-@Index('IDX_manual_book_page_tracking_alloc', ['allocationId'])
+@Index('IDX_manual_book_page_tracking_user', ['assignedToUserId'])
 export class ManualBookPageTracking {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -16,22 +15,18 @@ export class ManualBookPageTracking {
   @JoinColumn({ name: 'manual_book_id' })
   manualBook: ManualBook;
 
-  @Column({ name: 'allocation_id', type: 'uuid' })
-  allocationId: string;
-
-  @ManyToOne(() => ManualBookAllocation, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'allocation_id' })
-  allocation: ManualBookAllocation;
+  @Column({ name: 'assigned_to_user_id', type: 'uuid' })
+  assignedToUserId: string;
 
   @Column({ name: 'page_no', type: 'integer' })
   pageNo: number;
 
   @Column({
     type: 'enum',
-    enum: ['Allocated', 'Used', 'Void', 'Lost'],
-    default: 'Allocated',
+    enum: ['ALLOCATED', 'USED', 'VOID'],
+    default: 'ALLOCATED',
   })
-  status: 'Allocated' | 'Used' | 'Void' | 'Lost';
+  status: 'ALLOCATED' | 'USED' | 'VOID';
 
   @Column({ type: 'text', nullable: true })
   remarks?: string;

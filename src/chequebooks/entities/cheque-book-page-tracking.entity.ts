@@ -1,10 +1,9 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
 import { ChequeBook } from './cheque-book.entity';
-import { ChequeBookAllocation } from './cheque-book-allocation.entity';
 
 @Entity('cheque_book_page_tracking')
 @Unique('UQ_cheque_book_page_tracking_number', ['pageNo'])
-@Index('IDX_cheque_book_page_tracking_alloc', ['allocationId'])
+@Index('IDX_cheque_book_page_tracking_user', ['assignedToUserId'])
 export class ChequeBookPageTracking {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -16,22 +15,18 @@ export class ChequeBookPageTracking {
   @JoinColumn({ name: 'check_book_id' })
   checkBook: ChequeBook;
 
-  @Column({ name: 'allocation_id', type: 'uuid' })
-  allocationId: string;
-
-  @ManyToOne(() => ChequeBookAllocation, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'allocation_id' })
-  allocation: ChequeBookAllocation;
+  @Column({ name: 'assigned_to_user_id', type: 'uuid' })
+  assignedToUserId: string;
 
   @Column({ name: 'page_no', type: 'integer' })
   pageNo: number;
 
   @Column({
     type: 'enum',
-    enum: ['Allocated', 'Used', 'Void', 'Lost'],
-    default: 'Allocated',
+    enum: ['ALLOCATED', 'USED', 'VOID'],
+    default: 'ALLOCATED',
   })
-  status: 'Allocated' | 'Used' | 'Void' | 'Lost';
+  status: 'ALLOCATED' | 'USED' | 'VOID';
 
   @Column({ type: 'text', nullable: true })
   remarks?: string;

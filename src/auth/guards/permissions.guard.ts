@@ -110,6 +110,8 @@ export class PermissionsGuard implements CanActivate {
       }
 
       menuPath = `/party-profiles/${String(requestedType).trim().toLowerCase().replace(/_/g, '-')}`;
+    } else if (path.includes('/manual-bill-books')) {
+      menuPath = '/manual-bill-books';
     }
 
     if (!menuPath) {
