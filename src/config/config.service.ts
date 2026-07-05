@@ -38,7 +38,8 @@ export class ConfigService {
   }
 
   get port(): number {
-    return this.getNumber('PORT') || 3000;
+    const p = this.getOptional('PORT');
+    return p ? parseInt(p, 10) : 3000;
   }
 
   get database() {
