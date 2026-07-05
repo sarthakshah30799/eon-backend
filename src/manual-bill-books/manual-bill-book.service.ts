@@ -218,16 +218,16 @@ export class ManualBillBookService {
         if (!existingPageNos.has(p)) {
           pagesToInsert.push({
             manualBookId: item.manualBookId,
-            assignedToUserId: item.assignedToUserId,
+            userId: item.userId,
             pageNo: p,
-            status: 'ALLOCATED',
+            isVoided: false,
             remarks: item.remarks,
             updatedBy: userId,
           });
         } else {
           const existing = existingPages.find(ep => ep.pageNo === p);
-          if (existing && existing.status === 'ALLOCATED') {
-            existing.assignedToUserId = item.assignedToUserId;
+          if (existing && !existing.isVoided) {
+            existing.userId = item.userId;
             existing.remarks = item.remarks;
             existing.updatedBy = userId;
             await this.pageTrackingRepository.save(existing);
@@ -237,7 +237,7 @@ export class ManualBillBookService {
       if (pagesToInsert.length > 0) {
         await this.pageTrackingRepository.insert(pagesToInsert);
       }
-      results.push({ manualBookId: item.manualBookId, bookNo: item.bookNo, assignedToUserId: item.assignedToUserId });
+      results.push({ manualBookId: item.manualBookId, bookNo: item.bookNo, userId: item.userId });
     }
     return results;
   }
@@ -254,7 +254,7 @@ export class ManualBillBookService {
       order: { pageNo: 'ASC' },
     });
 
-    const groups: Record<string, { manualBookId: string; bookNo: number; assignedToUserId: string; pageNos: number[]; remarks?: string }> = {};
+    const groups: Record<string, { manualBookId: string; bookNo: number; userId: string; pageNos: number[]; remarks?: string }> = {};
 
     for (const p of pages) {
       const book = bookMap.get(p.manualBookId);
@@ -267,7 +267,7 @@ export class ManualBillBookService {
         groups[key] = {
           manualBookId: p.manualBookId,
           bookNo,
-          assignedToUserId: p.assignedToUserId,
+          userId: p.userId,
           pageNos: [],
           remarks: p.remarks,
         };
@@ -278,7 +278,7 @@ export class ManualBillBookService {
     return Object.values(groups).map(g => ({
       manualBookId: g.manualBookId,
       bookNo: g.bookNo,
-      cashierId: g.assignedToUserId,
+      cashierId: g.userId,
       remarks: g.remarks,
     }));
   }
@@ -304,17 +304,17 @@ export class ManualBillBookService {
       where: { pageNo: In(pageNos) },
     });
 
-    const nonAllocatedPages = pages.filter(p => p.status !== 'ALLOCATED');
-    if (nonAllocatedPages.length > 0) {
+    const voidedPages = pages.filter(p => p.isVoided);
+    if (voidedPages.length > 0) {
       throw new ForbiddenException(
-        `Cannot transfer pages that are not in ALLOCATED status: ${nonAllocatedPages.map(p => p.pageNo).join(', ')}`
+        `Cannot transfer pages that are voided: ${voidedPages.map(p => p.pageNo).join(', ')}`
       );
     }
 
     await this.pageTrackingRepository.update(
       { pageNo: In(pageNos) },
       {
-        assignedToUserId: targetUserId,
+        userId: targetUserId,
         updatedBy: userId,
       }
     );
@@ -322,11 +322,11 @@ export class ManualBillBookService {
   }
 
   async updatePagesStatus(dto: UpdatePageStatusDto, userId: string): Promise<any> {
-    const { pageNos, status, remarks } = dto;
+    const { pageNos, remarks } = dto;
     await this.pageTrackingRepository.update(
       { pageNo: In(pageNos) },
       {
-        status,
+        isVoided: true,
         remarks,
         updatedBy: userId,
       }
@@ -338,7 +338,7 @@ export class ManualBillBookService {
     const { pageNos } = dto;
     await this.pageTrackingRepository.delete({
       pageNo: In(pageNos),
-      status: 'ALLOCATED',
+      isVoided: false,
     });
     return { success: true };
   }
@@ -356,7 +356,7 @@ export class ManualBillBookService {
     }
     const users = await this.branchRepository.manager.query(`
       SELECT id, name FROM users WHERE id = $1
-    `, [page.assignedToUserId]);
+    `, [page.userId]);
     return {
       ...page,
       assignedToUser: users[0] || null,
@@ -468,12 +468,12 @@ export class ManualBillBookService {
         .where('pt.manualBookId = :bookId', { bookId: book.id })
         .andWhere('pt.pageNo >= :rangeStart', { rangeStart })
         .andWhere('pt.pageNo <= :rangeEnd', { rangeEnd })
-        .andWhere('pt.status = :status', { status: 'ALLOCATED' });
+        .andWhere('pt.isVoided = :isVoided', { isVoided: false });
 
       if (actionType === 'MAP') {
-        qb.andWhere('pt.assignedToUserId = :currentUserId', { currentUserId });
+        qb.andWhere('pt.userId = :currentUserId', { currentUserId });
       } else {
-        qb.andWhere('pt.assignedToUserId IN (:...dpIds)', { dpIds });
+        qb.andWhere('pt.userId IN (:...dpIds)', { dpIds });
       }
 
       const pages = await qb.getMany();
@@ -515,14 +515,14 @@ export class ManualBillBookService {
           mvNoFrom: page.pageNo,
           mvNoTo: page.pageNo,
           qty: 1,
-          assignedToUserId: page.assignedToUserId,
-          assignedToUserName: userNamesMap[page.assignedToUserId] || 'Unknown',
+          userId: page.userId,
+          assignedToUserName: userNamesMap[page.userId] || 'Unknown',
           pageIds: [page.id],
           remarks: page.remarks || '',
         };
       } else {
         const isContiguous = page.pageNo === currentGroup.mvNoTo + 1;
-        const sameAssignee = page.assignedToUserId === currentGroup.assignedToUserId;
+        const sameAssignee = page.userId === currentGroup.userId;
         const sameBook = page.manualBookId === currentGroup.manualBookId;
         if (isContiguous && sameAssignee && sameBook) {
           currentGroup.mvNoTo = page.pageNo;
@@ -537,8 +537,8 @@ export class ManualBillBookService {
             mvNoFrom: page.pageNo,
             mvNoTo: page.pageNo,
             qty: 1,
-            assignedToUserId: page.assignedToUserId,
-            assignedToUserName: userNamesMap[page.assignedToUserId] || 'Unknown',
+            userId: page.userId,
+            assignedToUserName: userNamesMap[page.userId] || 'Unknown',
             pageIds: [page.id],
             remarks: page.remarks || '',
           };
@@ -557,7 +557,7 @@ export class ManualBillBookService {
     await this.pageTrackingRepository.update(
       { id: In(pageIds) },
       {
-        assignedToUserId: deliveryPersonId,
+        userId: deliveryPersonId,
         remarks: remarks || null,
         updatedBy,
       }
@@ -570,7 +570,7 @@ export class ManualBillBookService {
     await this.pageTrackingRepository.update(
       { id: In(pageIds) },
       {
-        assignedToUserId: cashierId,
+        userId: cashierId,
         remarks: remarks || null,
         updatedBy: cashierId,
       }

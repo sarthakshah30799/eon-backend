@@ -122,7 +122,7 @@ export class SaveChequeBookAssignmentItemDto {
   @ApiProperty({ description: 'User ID (UUID) to assign the pages to' })
   @IsUUID()
   @IsNotEmpty()
-  assignedToUserId: string;
+  userId: string;
 
   @ApiProperty({ description: 'Remarks', required: false })
   @IsString()

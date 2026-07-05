@@ -3,7 +3,7 @@ import { ChequeBook } from './cheque-book.entity';
 
 @Entity('cheque_book_page_tracking')
 @Unique('UQ_cheque_book_page_tracking_number', ['pageNo'])
-@Index('IDX_cheque_book_page_tracking_user', ['assignedToUserId'])
+@Index('IDX_cheque_book_page_tracking_user', ['userId'])
 export class ChequeBookPageTracking {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -15,18 +15,16 @@ export class ChequeBookPageTracking {
   @JoinColumn({ name: 'check_book_id' })
   checkBook: ChequeBook;
 
-  @Column({ name: 'assigned_to_user_id', type: 'uuid' })
-  assignedToUserId: string;
+  @Column({ name: 'user_id', type: 'uuid' })
+  userId: string;
 
   @Column({ name: 'page_no', type: 'integer' })
   pageNo: number;
 
-  @Column({
-    type: 'enum',
-    enum: ['ALLOCATED', 'USED', 'VOID'],
-    default: 'ALLOCATED',
-  })
-  status: 'ALLOCATED' | 'USED' | 'VOID';
+  @Column({ name: 'is_voided', type: 'boolean', default: false })
+  isVoided: boolean;
+
+
 
   @Column({ type: 'text', nullable: true })
   remarks?: string;

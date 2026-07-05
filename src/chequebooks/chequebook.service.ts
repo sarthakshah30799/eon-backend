@@ -233,16 +233,16 @@ export class ChequeBookService {
         if (!existingPageNos.has(p)) {
           pagesToInsert.push({
             checkBookId: item.checkBookId,
-            assignedToUserId: item.assignedToUserId,
+            userId: item.userId,
             pageNo: p,
-            status: 'ALLOCATED',
+            isVoided: false,
             remarks: item.remarks,
             updatedBy: userId,
           });
         } else {
           const existing = existingPages.find(ep => ep.pageNo === p);
-          if (existing && existing.status === 'ALLOCATED') {
-            existing.assignedToUserId = item.assignedToUserId;
+          if (existing && !existing.isVoided) {
+            existing.userId = item.userId;
             existing.remarks = item.remarks;
             existing.updatedBy = userId;
             await this.pageTrackingRepository.save(existing);
@@ -252,7 +252,7 @@ export class ChequeBookService {
       if (pagesToInsert.length > 0) {
         await this.pageTrackingRepository.insert(pagesToInsert);
       }
-      results.push({ checkBookId: item.checkBookId, bookNo: item.bookNo, assignedToUserId: item.assignedToUserId });
+      results.push({ checkBookId: item.checkBookId, bookNo: item.bookNo, userId: item.userId });
     }
     return results;
   }
@@ -269,7 +269,7 @@ export class ChequeBookService {
       order: { pageNo: 'ASC' },
     });
 
-    const groups: Record<string, { checkBookId: string; bookNo: number; assignedToUserId: string; pageNos: number[]; remarks?: string }> = {};
+    const groups: Record<string, { checkBookId: string; bookNo: number; userId: string; pageNos: number[]; remarks?: string }> = {};
 
     for (const p of pages) {
       const book = bookMap.get(p.checkBookId);
@@ -282,7 +282,7 @@ export class ChequeBookService {
         groups[key] = {
           checkBookId: p.checkBookId,
           bookNo,
-          assignedToUserId: p.assignedToUserId,
+          userId: p.userId,
           pageNos: [],
           remarks: p.remarks,
         };
@@ -293,7 +293,7 @@ export class ChequeBookService {
     return Object.values(groups).map(g => ({
       checkBookId: g.checkBookId,
       bookNo: g.bookNo,
-      cashierId: g.assignedToUserId,
+      cashierId: g.userId,
       remarks: g.remarks,
     }));
   }
@@ -314,11 +314,11 @@ export class ChequeBookService {
   }
 
   async updatePagesStatus(dto: UpdatePageStatusDto, userId: string): Promise<any> {
-    const { pageNos, status, remarks } = dto;
+    const { pageNos, remarks } = dto;
     await this.pageTrackingRepository.update(
       { pageNo: In(pageNos) },
       {
-        status,
+        isVoided: true,
         remarks,
         updatedBy: userId,
       }
@@ -330,7 +330,7 @@ export class ChequeBookService {
     const { pageNos } = dto;
     await this.pageTrackingRepository.delete({
       pageNo: In(pageNos),
-      status: 'ALLOCATED',
+      isVoided: false,
     });
     return { success: true };
   }
@@ -348,7 +348,7 @@ export class ChequeBookService {
     }
     const users = await this.branchRepository.manager.query(`
       SELECT id, name FROM users WHERE id = $1
-    `, [page.assignedToUserId]);
+    `, [page.userId]);
     return {
       ...page,
       assignedToUser: users[0] || null,
@@ -450,8 +450,8 @@ export class ChequeBookService {
         .where('pt.checkBookId = :bookId', { bookId: book.id })
         .andWhere('pt.pageNo >= :rangeStart', { rangeStart })
         .andWhere('pt.pageNo <= :rangeEnd', { rangeEnd })
-        .andWhere('pt.status = :status', { status: 'ALLOCATED' })
-        .andWhere('pt.assignedToUserId = :currentUserId', { currentUserId })
+        .andWhere('pt.isVoided = :isVoided', { isVoided: false })
+        .andWhere('pt.userId = :currentUserId', { currentUserId })
         .getMany();
 
       matchedPages.push(...pages);
