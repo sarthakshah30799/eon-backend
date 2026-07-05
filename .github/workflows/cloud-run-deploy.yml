@@ -44,7 +44,6 @@ jobs:
         run: |
           # Create a temporary environment file to securely handle all secrets
           cat <<EOF > .env.yaml
-          PORT: '${{ secrets.PORT }}'
           NODE_ENV: '${{ secrets.NODE_ENV }}'
           SESSION_SECRET: '${{ secrets.SESSION_SECRET }}'
           DB_HOST: '${{ secrets.DB_HOST }}'
