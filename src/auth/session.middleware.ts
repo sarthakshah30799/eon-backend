@@ -12,7 +12,7 @@ export class SessionMiddleware implements NestMiddleware {
   constructor(
     private readonly configService: ConfigService,
     private readonly sessionPolicyService: SessionPolicyService,
-  ) {}
+  ) { }
 
   async use(req: Request, res: Response, next: NextFunction) {
     const ssl = this.configService.database.ssl;
@@ -37,7 +37,7 @@ export class SessionMiddleware implements NestMiddleware {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       },
       name: 'sessionId',
     });

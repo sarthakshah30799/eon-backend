@@ -1,0 +1,80 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - fix/field-mapping
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2️⃣ Authenticate to GCP
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 3️⃣ Set up gcloud CLI
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          export_default_credentials: true
+
+      # 4️⃣ Configure Docker to push to gcr.io
+      - name: Configure Docker for gcr.io
+        run: gcloud auth configure-docker gcr.io --quiet
+
+      # 5️⃣ Build Docker image
+      - name: Build Docker image
+        run: docker build --no-cache -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/maraekat-backend:latest .
+
+      # 6️⃣ Push Docker image
+      - name: Push Docker image
+        run: docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/maraekat-backend:latest
+
+      # 7️⃣ Deploy to Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
+          # Create a temporary environment file to securely handle all secrets
+          cat <<EOF > .env.yaml
+          NODE_ENV: '${{ secrets.NODE_ENV }}'
+          SESSION_SECRET: '${{ secrets.SESSION_SECRET }}'
+          DB_HOST: '${{ secrets.DB_HOST }}'
+          DB_PORT: '${{ secrets.DB_PORT }}'
+          DB_USERNAME: '${{ secrets.DB_USERNAME }}'
+          DB_PASSWORD: '${{ secrets.DB_PASSWORD }}'
+          DB_DATABASE: '${{ secrets.DB_DATABASE }}'
+          DB_SYNCHRONIZE: '${{ secrets.DB_SYNCHRONIZE }}'
+          DB_MIGRATIONS_RUN: '${{ secrets.DB_MIGRATIONS_RUN }}'
+          DB_SSL: '${{ secrets.DB_SSL }}'
+          DB_SSL_REJECT_UNAUTHORIZED: '${{ secrets.DB_SSL_REJECT_UNAUTHORIZED }}'
+          DB2_HOST: '${{ secrets.DB2_HOST }}'
+          DB2_PORT: '${{ secrets.DB2_PORT }}'
+          DB2_USERNAME: '${{ secrets.DB2_USERNAME }}'
+          DB2_PASSWORD: '${{ secrets.DB2_PASSWORD }}'
+          DB2_DATABASE: '${{ secrets.DB2_DATABASE }}'
+          DB2_SSL: '${{ secrets.DB2_SSL }}'
+          DB2_SSL_REJECT_UNAUTHORIZED: '${{ secrets.DB2_SSL_REJECT_UNAUTHORIZED }}'
+          GCP_PROJECT_ID: '${{ secrets.GCP_PROJECT_ID }}'
+          GCP_PRIVATE_KEY: '${{ secrets.GCP_PRIVATE_KEY }}'
+          GCP_CLIENT_EMAIL: '${{ secrets.GCP_CLIENT_EMAIL }}'
+          GCP_BUCKET_NAME: '${{ secrets.GCP_BUCKET_NAME }}'
+          EOF
+          
+          # Deploy using the single, reliable --env-vars-file flag
+          gcloud run deploy maraekat-backend \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/maraekat-backend:latest \
+            --platform managed \
+            --region ${{ secrets.CLOUD_RUN_REGION }} \
+            --allow-unauthenticated \
+            --env-vars-file .env.yaml
+
+          # Clean up the temporary file
+          rm .env.yaml
