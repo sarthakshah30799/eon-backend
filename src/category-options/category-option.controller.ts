@@ -23,6 +23,7 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CreateSelectOptionDto } from "./dto/create-category-option.dto";
 import { UpdateSelectOptionDto } from "./dto/update-category-option.dto";
 import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
+import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { SelectOptionService } from "./category-option.service";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
 
@@ -55,6 +56,20 @@ export class SelectOptionController {
   })
   async getAllOptions(@Query('search') search?: string): Promise<SelectOptionResponseDto[]> {
     return this.selectOptionService.getAllOptions(search);
+  }
+
+  @Get("static/:code")
+  @ApiOperation({ summary: "Get static select options for a code" })
+  @ApiParam({ name: "code", description: "Static lookup code" })
+  @ApiResponse({
+    status: 200,
+    description: "List of static select options",
+    type: [StaticSelectOptionResponseDto],
+  })
+  async getStaticOptionsByCode(
+    @Param("code") code: string,
+  ): Promise<StaticSelectOptionResponseDto[]> {
+    return this.selectOptionService.getStaticOptionsByCode(code);
   }
 
   @Get("item/:id")

@@ -33,6 +33,7 @@ import { StorageModule } from "./storage/storage.module";
 import { ManualBillBookModule } from "./manual-bill-books/manual-bill-book.module";
 import { CurrencyRatesModule } from "./currency-rates/currency-rates.module";
 import { ChequeBookModule } from "./chequebooks/chequebook.module";
+import { TransactionsModule } from "./transactions/transactions.module";
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { ChequeBookModule } from "./chequebooks/chequebook.module";
     MailModule,
     ManualBillBookModule,
     ChequeBookModule,
+    TransactionsModule,
     AuditLogModule,
     StorageModule,
   ],

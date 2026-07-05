@@ -1,6 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsOptional, IsString, IsNumber, Min } from 'class-validator';
+
+const parseBoolean = ({ value }: { value: unknown }) => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+};
 
 export class DocumentProfileListQueryDto {
   @ApiPropertyOptional()
@@ -23,8 +29,8 @@ export class DocumentProfileListQueryDto {
   limit?: number;
 
   @ApiPropertyOptional()
+  @Transform(parseBoolean)
   @IsBoolean()
   @IsOptional()
   active?: boolean;
 }
-

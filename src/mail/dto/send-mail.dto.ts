@@ -31,4 +31,9 @@ export class SendMailDto {
   @IsString()
   @IsNotEmpty()
   text: string;
+
+  @ApiProperty({ example: '<p>Body content</p>', required: false })
+  @IsString()
+  @IsOptional()
+  html?: string;
 }
