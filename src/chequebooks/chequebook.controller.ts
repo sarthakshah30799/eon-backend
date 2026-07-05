@@ -146,14 +146,14 @@ export class ChequeBookController {
     @Session() session: any,
     @Query('branchId') branchId?: string,
     @Query('accountId') accountId?: string,
-    @Query('assignedToUserId') assignedToUserId?: string,
+    @Query('userId') userId?: string,
   ) {
     const effectiveBranchId = !session.isAdmin ? session.activeBranchId : branchId;
-    const effectiveAssignedToUserId = assignedToUserId || session.userId;
+    const effectiveUserId = userId || session.userId;
     return this.service.getSelectablePages(
       effectiveBranchId,
       accountId,
-      effectiveAssignedToUserId
+      effectiveUserId
     );
   }
 

@@ -1,18 +1,30 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In, Between } from 'typeorm';
-import { ManualBook } from './entities/manual-book.entity';
-import { ManualBookPageTracking } from './entities/manual-book-page-tracking.entity';
-import { Branch } from '../branches/branch.entity';
-import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, AssignPagesDto, TransferPagesDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/manual-bill-book.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Like, In, Between } from "typeorm";
+import { ManualBook } from "./entities/manual-book.entity";
+import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.entity";
+import { Branch } from "../branches/branch.entity";
+import {
+  CreateManualBookDto,
+  ApproveRejectManualBookDto,
+  BulkReviewManualBooksDto,
+  AssignPagesDto,
+  TransferPagesDto,
+  UpdatePageStatusDto,
+  ReturnPagesDto,
+} from "./dto/manual-bill-book.dto";
 
 @Injectable()
 export class ManualBillBookService {
   constructor(
-    @InjectRepository(ManualBook, 'database2')
+    @InjectRepository(ManualBook, "database2")
     private readonly manualBookRepository: Repository<ManualBook>,
 
-    @InjectRepository(ManualBookPageTracking, 'database2')
+    @InjectRepository(ManualBookPageTracking, "database2")
     private readonly pageTrackingRepository: Repository<ManualBookPageTracking>,
 
     @InjectRepository(Branch)
@@ -33,14 +45,16 @@ export class ManualBillBookService {
     } = dto;
 
     // Verify branch exists in primary DB
-    const branch = await this.branchRepository.findOne({ where: { id: branchId } });
+    const branch = await this.branchRepository.findOne({
+      where: { id: branchId },
+    });
     if (!branch) {
       throw new NotFoundException(`Branch with ID ${branchId} not found`);
     }
 
     // Auto-calculate mvNoTo: mvNoFrom + (numBooks * vouchersPerBook) - 1
     const numBooks = bookNoTo - bookNoFrom + 1;
-    const mvNoTo = mvNoFrom + (numBooks * vouchersPerBook) - 1;
+    const mvNoTo = mvNoFrom + numBooks * vouchersPerBook - 1;
 
     // Auto-generate branch-specific sequence number (no) e.g., MBYY00001
     const year = new Date(dispatchDate).getFullYear().toString().slice(-2); // e.g. "26"
@@ -51,7 +65,7 @@ export class ManualBillBookService {
         branchId,
         no: Like(`${prefix}%`),
       },
-      order: { no: 'DESC' },
+      order: { no: "DESC" },
     });
 
     let nextSeq = 1;
@@ -62,7 +76,7 @@ export class ManualBillBookService {
         nextSeq = lastSeq + 1;
       }
     }
-    const no = `${prefix}${String(nextSeq).padStart(5, '0')}`;
+    const no = `${prefix}${String(nextSeq).padStart(5, "0")}`;
 
     const book = this.manualBookRepository.create({
       dispatchDate,
@@ -76,7 +90,7 @@ export class ManualBillBookService {
       mvNoTo,
       assignedTo,
       remarks,
-      status: 'Pending',
+      status: "Pending",
       createdBy: userId,
       updatedBy: userId,
     });
@@ -84,9 +98,12 @@ export class ManualBillBookService {
     return this.manualBookRepository.save(book);
   }
 
-  async getNextNumber(branchId: string, dispatchDate: string): Promise<{ nextNumber: string }> {
+  async getNextNumber(
+    branchId: string,
+    dispatchDate: string,
+  ): Promise<{ nextNumber: string }> {
     if (!branchId || !dispatchDate) {
-      return { nextNumber: '' };
+      return { nextNumber: "" };
     }
     const year = new Date(dispatchDate).getFullYear().toString().slice(-2);
     const prefix = `MB${year}`;
@@ -96,7 +113,7 @@ export class ManualBillBookService {
         branchId,
         no: Like(`${prefix}%`),
       },
-      order: { no: 'DESC' },
+      order: { no: "DESC" },
     });
 
     let nextSeq = 1;
@@ -108,7 +125,7 @@ export class ManualBillBookService {
       }
     }
 
-    const nextNumber = `${prefix}${String(nextSeq).padStart(5, '0')}`;
+    const nextNumber = `${prefix}${String(nextSeq).padStart(5, "0")}`;
     return { nextNumber };
   }
 
@@ -122,14 +139,15 @@ export class ManualBillBookService {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
-    if (transactionType && transactionType !== 'ALL') where.transactionType = transactionType;
+    if (transactionType && transactionType !== "ALL")
+      where.transactionType = transactionType;
     if (fromDate && toDate) {
       where.dispatchDate = Between(fromDate, toDate);
     }
 
     const books = await this.manualBookRepository.find({
       where,
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
 
     if (books.length === 0) {
@@ -147,13 +165,17 @@ export class ManualBillBookService {
       const branch = branchMap.get(book.branchId);
       return {
         ...book,
-        branchName: branch ? branch.name : 'Unknown Branch',
-        branchCode: branch ? branch.code : '',
+        branchName: branch ? branch.name : "Unknown Branch",
+        branchCode: branch ? branch.code : "",
       };
     });
   }
 
-  async approveOrReject(id: string, dto: ApproveRejectManualBookDto, userId: string): Promise<ManualBook> {
+  async approveOrReject(
+    id: string,
+    dto: ApproveRejectManualBookDto,
+    userId: string,
+  ): Promise<ManualBook> {
     const book = await this.manualBookRepository.findOne({ where: { id } });
     if (!book) {
       throw new NotFoundException(`Manual Book entry with ID ${id} not found`);
@@ -170,10 +192,15 @@ export class ManualBillBookService {
     return this.manualBookRepository.save(book);
   }
 
-  async bulkReview(dto: BulkReviewManualBooksDto, userId: string): Promise<any[]> {
+  async bulkReview(
+    dto: BulkReviewManualBooksDto,
+    userId: string,
+  ): Promise<any[]> {
     const results = [];
     for (const item of dto.reviews) {
-      const book = await this.manualBookRepository.findOne({ where: { id: item.id } });
+      const book = await this.manualBookRepository.findOne({
+        where: { id: item.id },
+      });
       if (!book) continue;
       book.status = item.status;
       book.approvalRemarks = item.approvalRemarks;
@@ -187,7 +214,8 @@ export class ManualBillBookService {
   }
 
   async getAuthorizedUsers(branchId: string): Promise<any[]> {
-    return this.branchRepository.manager.query(`
+    return this.branchRepository.manager.query(
+      `
       SELECT DISTINCT u.id, u.name
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
@@ -195,13 +223,17 @@ export class ManualBillBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true
         AND r.is_cashier = true
-    `, [branchId]);
+    `,
+      [branchId],
+    );
   }
 
   async saveAssignments(dto: AssignPagesDto, userId: string): Promise<any[]> {
     const results = [];
     for (const item of dto.assignments) {
-      const book = await this.manualBookRepository.findOne({ where: { id: item.manualBookId } });
+      const book = await this.manualBookRepository.findOne({
+        where: { id: item.manualBookId },
+      });
       if (!book) continue;
 
       const offset = item.bookNo - book.bookNoFrom;
@@ -211,7 +243,7 @@ export class ManualBillBookService {
       const existingPages = await this.pageTrackingRepository.find({
         where: { pageNo: Between(startPageNo, endPageNo) },
       });
-      const existingPageNos = new Set(existingPages.map(p => p.pageNo));
+      const existingPageNos = new Set(existingPages.map((p) => p.pageNo));
 
       const pagesToInsert = [];
       for (let p = startPageNo; p <= endPageNo; p++) {
@@ -225,7 +257,7 @@ export class ManualBillBookService {
             updatedBy: userId,
           });
         } else {
-          const existing = existingPages.find(ep => ep.pageNo === p);
+          const existing = existingPages.find((ep) => ep.pageNo === p);
           if (existing && !existing.isVoided) {
             existing.userId = item.userId;
             existing.remarks = item.remarks;
@@ -237,7 +269,11 @@ export class ManualBillBookService {
       if (pagesToInsert.length > 0) {
         await this.pageTrackingRepository.insert(pagesToInsert);
       }
-      results.push({ manualBookId: item.manualBookId, bookNo: item.bookNo, userId: item.userId });
+      results.push({
+        manualBookId: item.manualBookId,
+        bookNo: item.bookNo,
+        userId: item.userId,
+      });
     }
     return results;
   }
@@ -245,21 +281,32 @@ export class ManualBillBookService {
   async getAssignmentsByBookIds(manualBookIds: string[]): Promise<any[]> {
     if (manualBookIds.length === 0) return [];
     const books = await this.manualBookRepository.find({
-      where: { id: In(manualBookIds) }
+      where: { id: In(manualBookIds) },
     });
-    const bookMap = new Map(books.map(b => [b.id, b]));
+    const bookMap = new Map(books.map((b) => [b.id, b]));
 
     const pages = await this.pageTrackingRepository.find({
       where: { manualBookId: In(manualBookIds) },
-      order: { pageNo: 'ASC' },
+      order: { pageNo: "ASC" },
     });
 
-    const groups: Record<string, { manualBookId: string; bookNo: number; userId: string; pageNos: number[]; remarks?: string }> = {};
+    const groups: Record<
+      string,
+      {
+        manualBookId: string;
+        bookNo: number;
+        userId: string;
+        pageNos: number[];
+        remarks?: string;
+      }
+    > = {};
 
     for (const p of pages) {
       const book = bookMap.get(p.manualBookId);
       if (!book) continue;
-      const offset = Math.floor((p.pageNo - book.mvNoFrom) / book.vouchersPerBook);
+      const offset = Math.floor(
+        (p.pageNo - book.mvNoFrom) / book.vouchersPerBook,
+      );
       const bookNo = book.bookNoFrom + offset;
       const key = `${p.manualBookId}_${bookNo}`;
 
@@ -275,7 +322,7 @@ export class ManualBillBookService {
       groups[key].pageNos.push(p.pageNo);
     }
 
-    return Object.values(groups).map(g => ({
+    return Object.values(groups).map((g) => ({
       manualBookId: g.manualBookId,
       bookNo: g.bookNo,
       cashierId: g.userId,
@@ -283,8 +330,13 @@ export class ManualBillBookService {
     }));
   }
 
-  async getPagesByBookNo(manualBookId: string, bookNo: number): Promise<ManualBookPageTracking[]> {
-    const book = await this.manualBookRepository.findOne({ where: { id: manualBookId } });
+  async getPagesByBookNo(
+    manualBookId: string,
+    bookNo: number,
+  ): Promise<ManualBookPageTracking[]> {
+    const book = await this.manualBookRepository.findOne({
+      where: { id: manualBookId },
+    });
     if (!book) {
       throw new NotFoundException(`Manual Book not found`);
     }
@@ -294,7 +346,7 @@ export class ManualBillBookService {
 
     return this.pageTrackingRepository.find({
       where: { pageNo: Between(startPageNo, endPageNo) },
-      order: { pageNo: 'ASC' },
+      order: { pageNo: "ASC" },
     });
   }
 
@@ -304,10 +356,10 @@ export class ManualBillBookService {
       where: { pageNo: In(pageNos) },
     });
 
-    const voidedPages = pages.filter(p => p.isVoided);
+    const voidedPages = pages.filter((p) => p.isVoided);
     if (voidedPages.length > 0) {
       throw new ForbiddenException(
-        `Cannot transfer pages that are voided: ${voidedPages.map(p => p.pageNo).join(', ')}`
+        `Cannot transfer pages that are voided: ${voidedPages.map((p) => p.pageNo).join(", ")}`,
       );
     }
 
@@ -316,12 +368,15 @@ export class ManualBillBookService {
       {
         userId: targetUserId,
         updatedBy: userId,
-      }
+      },
     );
     return { success: true };
   }
 
-  async updatePagesStatus(dto: UpdatePageStatusDto, userId: string): Promise<any> {
+  async updatePagesStatus(
+    dto: UpdatePageStatusDto,
+    userId: string,
+  ): Promise<any> {
     const { pageNos, remarks } = dto;
     await this.pageTrackingRepository.update(
       { pageNo: In(pageNos) },
@@ -329,7 +384,7 @@ export class ManualBillBookService {
         isVoided: true,
         remarks,
         updatedBy: userId,
-      }
+      },
     );
     return { success: true };
   }
@@ -346,51 +401,61 @@ export class ManualBillBookService {
   async searchPage(pageNo: number, branchId?: string): Promise<any> {
     const page = await this.pageTrackingRepository.findOne({
       where: { pageNo },
-      relations: ['manualBook'],
+      relations: ["manualBook"],
     });
     if (!page) {
-      throw new NotFoundException(`Bill leaf/page number ${pageNo} not found in tracking`);
+      throw new NotFoundException(
+        `Bill leaf/page number ${pageNo} not found in tracking`,
+      );
     }
     if (branchId && page.manualBook?.branchId !== branchId) {
-      throw new NotFoundException(`Bill leaf/page number ${pageNo} not found in tracking`);
+      throw new NotFoundException(
+        `Bill leaf/page number ${pageNo} not found in tracking`,
+      );
     }
-    const users = await this.branchRepository.manager.query(`
+    const users = await this.branchRepository.manager.query(
+      `
       SELECT id, name FROM users WHERE id = $1
-    `, [page.userId]);
+    `,
+      [page.userId],
+    );
     return {
       ...page,
       assignedToUser: users[0] || null,
     };
   }
 
-  async getSelectablePages(branchId?: string, assignedToUserId?: string): Promise<any[]> {
-    const query = this.pageTrackingRepository.createQueryBuilder('pt')
-      .innerJoinAndSelect('pt.manualBook', 'book')
-      .where('pt.status = :status', { status: 'ALLOCATED' });
+  async getSelectablePages(
+    branchId?: string,
+    userId?: string,
+  ): Promise<any[]> {
+    const query = this.pageTrackingRepository
+      .createQueryBuilder("pt")
+      .innerJoinAndSelect("pt.manualBook", "book")
+      .where("pt.status = :status", { status: "ALLOCATED" });
 
     if (branchId) {
-      query.andWhere('book.branchId = :branchId', { branchId });
+      query.andWhere("book.branchId = :branchId", { branchId });
     }
 
-    if (assignedToUserId) {
-      query.andWhere('pt.assignedToUserId = :assignedToUserId', {
-        assignedToUserId,
+    if (userId) {
+      query.andWhere("pt.userId = :userId", {
+        userId,
       });
     }
 
     const pages = await query
-      .orderBy('book.dispatchDate', 'DESC')
-      .addOrderBy('book.no', 'DESC')
-      .addOrderBy('book.bookNoFrom', 'ASC')
-      .addOrderBy('pt.pageNo', 'ASC')
+      .orderBy("book.dispatchDate", "DESC")
+      .addOrderBy("book.no", "DESC")
+      .addOrderBy("book.bookNoFrom", "ASC")
+      .addOrderBy("pt.pageNo", "ASC")
       .getMany();
 
-    return pages.map(page => ({
+    return pages.map((page) => ({
       id: page.id,
       manualBookId: page.manualBookId,
-      assignedToUserId: page.assignedToUserId,
+      userId: page.userId,
       pageNo: page.pageNo,
-      status: page.status,
       remarks: page.remarks ?? null,
       manualBook: page.manualBook
         ? {
@@ -415,12 +480,21 @@ export class ManualBillBookService {
     bookNo: number;
     mvNoFrom: number;
     mvNoTo: number;
-    actionType: 'MAP' | 'UNMAP';
+    actionType: "MAP" | "UNMAP";
   }): Promise<any[]> {
-    const { branchId, currentUserId, transactionType, bookNo, mvNoFrom, mvNoTo, actionType } = params;
+    const {
+      branchId,
+      currentUserId,
+      transactionType,
+      bookNo,
+      mvNoFrom,
+      mvNoTo,
+      actionType,
+    } = params;
 
     // Get active delivery persons in the branch
-    const deliveryPersons = await this.branchRepository.manager.query(`
+    const deliveryPersons = await this.branchRepository.manager.query(
+      `
       SELECT DISTINCT u.id, u.name
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
@@ -428,20 +502,28 @@ export class ManualBillBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true 
         AND r.is_delivery_boy = true
-    `, [branchId]);
+    `,
+      [branchId],
+    );
     const dpIds = deliveryPersons.map((u: any) => u.id);
 
-    if (actionType === 'UNMAP' && dpIds.length === 0) {
+    if (actionType === "UNMAP" && dpIds.length === 0) {
       return [];
     }
 
     // Find all manual books matching branch, transactionType (if not ALL), and book range containing bookNo
-    const queryBooks = await this.manualBookRepository.createQueryBuilder('mb')
-      .where('mb.branchId = :branchId', { branchId })
-      .andWhere('mb.status = :status', { status: 'Approved' })
-      .andWhere('mb.bookNoFrom <= :bookNo', { bookNo })
-      .andWhere('mb.bookNoTo >= :bookNo', { bookNo })
-      .andWhere(transactionType === 'ALL' ? '1=1' : 'mb.transactionType = :transactionType', { transactionType })
+    const queryBooks = await this.manualBookRepository
+      .createQueryBuilder("mb")
+      .where("mb.branchId = :branchId", { branchId })
+      .andWhere("mb.status = :status", { status: "Approved" })
+      .andWhere("mb.bookNoFrom <= :bookNo", { bookNo })
+      .andWhere("mb.bookNoTo >= :bookNo", { bookNo })
+      .andWhere(
+        transactionType === "ALL"
+          ? "1=1"
+          : "mb.transactionType = :transactionType",
+        { transactionType },
+      )
       .getMany();
 
     if (queryBooks.length === 0) {
@@ -449,7 +531,7 @@ export class ManualBillBookService {
     }
 
     const matchedPages: ManualBookPageTracking[] = [];
-    const bookMap = new Map<string, typeof queryBooks[0]>();
+    const bookMap = new Map<string, (typeof queryBooks)[0]>();
 
     for (const book of queryBooks) {
       bookMap.set(book.id, book);
@@ -464,16 +546,17 @@ export class ManualBillBookService {
         continue;
       }
 
-      const qb = this.pageTrackingRepository.createQueryBuilder('pt')
-        .where('pt.manualBookId = :bookId', { bookId: book.id })
-        .andWhere('pt.pageNo >= :rangeStart', { rangeStart })
-        .andWhere('pt.pageNo <= :rangeEnd', { rangeEnd })
-        .andWhere('pt.isVoided = :isVoided', { isVoided: false });
+      const qb = this.pageTrackingRepository
+        .createQueryBuilder("pt")
+        .where("pt.manualBookId = :bookId", { bookId: book.id })
+        .andWhere("pt.pageNo >= :rangeStart", { rangeStart })
+        .andWhere("pt.pageNo <= :rangeEnd", { rangeEnd })
+        .andWhere("pt.isVoided = :isVoided", { isVoided: false });
 
-      if (actionType === 'MAP') {
-        qb.andWhere('pt.userId = :currentUserId', { currentUserId });
+      if (actionType === "MAP") {
+        qb.andWhere("pt.userId = :currentUserId", { currentUserId });
       } else {
-        qb.andWhere('pt.userId IN (:...dpIds)', { dpIds });
+        qb.andWhere("pt.userId IN (:...dpIds)", { dpIds });
       }
 
       const pages = await qb.getMany();
@@ -489,9 +572,12 @@ export class ManualBillBookService {
     deliveryPersons.forEach((u: any) => {
       userNamesMap[u.id] = u.name;
     });
-    const currentUser = await this.branchRepository.manager.query(`
+    const currentUser = await this.branchRepository.manager.query(
+      `
       SELECT name FROM users WHERE id = $1
-    `, [currentUserId]);
+    `,
+      [currentUserId],
+    );
     if (currentUser[0]) {
       userNamesMap[currentUserId] = currentUser[0].name;
     }
@@ -516,9 +602,9 @@ export class ManualBillBookService {
           mvNoTo: page.pageNo,
           qty: 1,
           userId: page.userId,
-          assignedToUserName: userNamesMap[page.userId] || 'Unknown',
+          assignedToUserName: userNamesMap[page.userId] || "Unknown",
           pageIds: [page.id],
-          remarks: page.remarks || '',
+          remarks: page.remarks || "",
         };
       } else {
         const isContiguous = page.pageNo === currentGroup.mvNoTo + 1;
@@ -538,9 +624,9 @@ export class ManualBillBookService {
             mvNoTo: page.pageNo,
             qty: 1,
             userId: page.userId,
-            assignedToUserName: userNamesMap[page.userId] || 'Unknown',
+            assignedToUserName: userNamesMap[page.userId] || "Unknown",
             pageIds: [page.id],
-            remarks: page.remarks || '',
+            remarks: page.remarks || "",
           };
         }
       }
@@ -552,7 +638,12 @@ export class ManualBillBookService {
     return groups;
   }
 
-  async allocateToDP(pageIds: string[], deliveryPersonId: string, updatedBy: string, remarks?: string): Promise<any> {
+  async allocateToDP(
+    pageIds: string[],
+    deliveryPersonId: string,
+    updatedBy: string,
+    remarks?: string,
+  ): Promise<any> {
     if (pageIds.length === 0) return { success: true };
     await this.pageTrackingRepository.update(
       { id: In(pageIds) },
@@ -560,12 +651,16 @@ export class ManualBillBookService {
         userId: deliveryPersonId,
         remarks: remarks || null,
         updatedBy,
-      }
+      },
     );
     return { success: true };
   }
 
-  async deallocateFromDP(pageIds: string[], cashierId: string, remarks?: string): Promise<any> {
+  async deallocateFromDP(
+    pageIds: string[],
+    cashierId: string,
+    remarks?: string,
+  ): Promise<any> {
     if (pageIds.length === 0) return { success: true };
     await this.pageTrackingRepository.update(
       { id: In(pageIds) },
@@ -573,13 +668,14 @@ export class ManualBillBookService {
         userId: cashierId,
         remarks: remarks || null,
         updatedBy: cashierId,
-      }
+      },
     );
     return { success: true };
   }
 
   async getDeliveryPersons(branchId: string): Promise<any[]> {
-    return this.branchRepository.manager.query(`
+    return this.branchRepository.manager.query(
+      `
       SELECT DISTINCT u.id, u.name
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
@@ -587,6 +683,8 @@ export class ManualBillBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true 
         AND r.is_delivery_boy = true
-    `, [branchId]);
+    `,
+      [branchId],
+    );
   }
 }
