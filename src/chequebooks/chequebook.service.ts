@@ -355,6 +355,59 @@ export class ChequeBookService {
     };
   }
 
+  async getSelectablePages(
+    branchId?: string,
+    accountId?: string,
+    assignedToUserId?: string
+  ): Promise<any[]> {
+    const query = this.pageTrackingRepository.createQueryBuilder('pt')
+      .innerJoinAndSelect('pt.checkBook', 'book')
+      .where('pt.status = :status', { status: 'ALLOCATED' });
+
+    if (branchId) {
+      query.andWhere('book.branchId = :branchId', { branchId });
+    }
+
+    if (accountId) {
+      query.andWhere('book.bankAccountCode = :accountId', { accountId });
+    }
+
+    if (assignedToUserId) {
+      query.andWhere('pt.assignedToUserId = :assignedToUserId', {
+        assignedToUserId,
+      });
+    }
+
+    const pages = await query
+      .orderBy('book.dispatchDate', 'DESC')
+      .addOrderBy('book.no', 'DESC')
+      .addOrderBy('book.bookNoFrom', 'ASC')
+      .addOrderBy('pt.pageNo', 'ASC')
+      .getMany();
+
+    return pages.map(page => ({
+      id: page.id,
+      checkBookId: page.checkBookId,
+      assignedToUserId: page.assignedToUserId,
+      pageNo: page.pageNo,
+      status: page.status,
+      remarks: page.remarks ?? null,
+      checkBook: page.checkBook
+        ? {
+            id: page.checkBook.id,
+            no: page.checkBook.no,
+            bookNoFrom: page.checkBook.bookNoFrom,
+            bookNoTo: page.checkBook.bookNoTo,
+            vouchersPerBook: page.checkBook.vouchersPerBook,
+            mvNoFrom: page.checkBook.mvNoFrom,
+            mvNoTo: page.checkBook.mvNoTo,
+            branchId: page.checkBook.branchId,
+            bankAccountCode: page.checkBook.bankAccountCode ?? null,
+          }
+        : null,
+    }));
+  }
+
   async searchCashierReturn(params: {
     branchId: string;
     currentUserId: string;

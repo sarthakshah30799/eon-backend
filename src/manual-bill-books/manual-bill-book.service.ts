@@ -363,6 +363,51 @@ export class ManualBillBookService {
     };
   }
 
+  async getSelectablePages(branchId?: string, assignedToUserId?: string): Promise<any[]> {
+    const query = this.pageTrackingRepository.createQueryBuilder('pt')
+      .innerJoinAndSelect('pt.manualBook', 'book')
+      .where('pt.status = :status', { status: 'ALLOCATED' });
+
+    if (branchId) {
+      query.andWhere('book.branchId = :branchId', { branchId });
+    }
+
+    if (assignedToUserId) {
+      query.andWhere('pt.assignedToUserId = :assignedToUserId', {
+        assignedToUserId,
+      });
+    }
+
+    const pages = await query
+      .orderBy('book.dispatchDate', 'DESC')
+      .addOrderBy('book.no', 'DESC')
+      .addOrderBy('book.bookNoFrom', 'ASC')
+      .addOrderBy('pt.pageNo', 'ASC')
+      .getMany();
+
+    return pages.map(page => ({
+      id: page.id,
+      manualBookId: page.manualBookId,
+      assignedToUserId: page.assignedToUserId,
+      pageNo: page.pageNo,
+      status: page.status,
+      remarks: page.remarks ?? null,
+      manualBook: page.manualBook
+        ? {
+            id: page.manualBook.id,
+            no: page.manualBook.no,
+            bookNoFrom: page.manualBook.bookNoFrom,
+            bookNoTo: page.manualBook.bookNoTo,
+            vouchersPerBook: page.manualBook.vouchersPerBook,
+            mvNoFrom: page.manualBook.mvNoFrom,
+            mvNoTo: page.manualBook.mvNoTo,
+            branchId: page.manualBook.branchId,
+            transactionType: page.manualBook.transactionType,
+          }
+        : null,
+    }));
+  }
+
   async searchDPMapping(params: {
     branchId: string;
     currentUserId: string;

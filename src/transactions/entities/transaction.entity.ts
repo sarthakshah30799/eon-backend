@@ -67,6 +67,16 @@ export class Transaction extends BaseEntity {
   @Column({ type: "jsonb", name: "agent_profile_snapshot", nullable: true })
   agentProfileSnapshot: TransactionReferenceSnapshotValue;
 
+  @Column({ type: "uuid", name: "manual_book_page_id", nullable: true })
+  manualBookPageId: string | null;
+
+  @Column({
+    type: "jsonb",
+    name: "manual_book_page_snapshot",
+    nullable: true,
+  })
+  manualBookPageSnapshot: TransactionReferenceSnapshotValue;
+
   @Column({
     type: "enum",
     enum: TransactionType,

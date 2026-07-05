@@ -39,6 +39,16 @@ export class TransactionPayment extends BaseEntity {
   @Column({ type: "jsonb", name: "account_snapshot", nullable: true })
   accountSnapshot: TransactionReferenceSnapshotValue;
 
+  @Column({ type: "uuid", name: "cheque_page_id", nullable: true })
+  chequePageId: string | null;
+
+  @Column({
+    type: "jsonb",
+    name: "cheque_page_snapshot",
+    nullable: true,
+  })
+  chequePageSnapshot: TransactionReferenceSnapshotValue;
+
   @Column({
     type: "enum",
     enum: TransactionPaymentMethod,

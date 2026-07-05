@@ -139,6 +139,24 @@ export class ChequeBookController {
     return this.service.searchPage(pageNo, branchId);
   }
 
+  @Get('pages/selectable')
+  @ApiOperation({ summary: 'Get selectable cheque book pages for the current branch, account and assignee' })
+  @ApiResponse({ status: 200, description: 'Selectable pages' })
+  async getSelectablePages(
+    @Session() session: any,
+    @Query('branchId') branchId?: string,
+    @Query('accountId') accountId?: string,
+    @Query('assignedToUserId') assignedToUserId?: string,
+  ) {
+    const effectiveBranchId = !session.isAdmin ? session.activeBranchId : branchId;
+    const effectiveAssignedToUserId = assignedToUserId || session.userId;
+    return this.service.getSelectablePages(
+      effectiveBranchId,
+      accountId,
+      effectiveAssignedToUserId
+    );
+  }
+
   @Get('cashier-return/search')
   @ApiOperation({ summary: 'Search cashier allocated checkbook pages for return' })
   async searchCashierReturn(
