@@ -4,7 +4,12 @@ import { Repository, Like, In, Between } from 'typeorm';
 import { ManualBook } from './entities/manual-book.entity';
 import { ManualBookPageTracking } from './entities/manual-book-page-tracking.entity';
 import { Branch } from '../branches/branch.entity';
+import { SelectOption } from '../category-options/category-option.entity';
+import { User } from '../users/user.entity';
 import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, AssignPagesDto, TransferPagesDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/manual-bill-book.dto';
+
+const isUuid = (val: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
 @Injectable()
 export class ManualBillBookService {
@@ -143,12 +148,40 @@ export class ManualBillBookService {
     });
     const branchMap = new Map(branches.map((b) => [b.id, b]));
 
+    // Fetch transaction options from DB1
+    const transactionTypeIds = Array.from(
+      new Set(books.map((b) => b.transactionType).filter((id) => id && isUuid(id)))
+    );
+    let selectOptions: SelectOption[] = [];
+    if (transactionTypeIds.length > 0) {
+      selectOptions = await this.branchRepository.manager.find(SelectOption, {
+        where: { id: In(transactionTypeIds) },
+      });
+    }
+    const optionMap = new Map(selectOptions.map((o) => [o.id, o]));
+
+    // Fetch assigned users from DB1
+    const assignedToIds = Array.from(
+      new Set(books.map((b) => b.assignedTo).filter((id) => id && isUuid(id)))
+    );
+    let assignedUsers: User[] = [];
+    if (assignedToIds.length > 0) {
+      assignedUsers = await this.branchRepository.manager.find(User, {
+        where: { id: In(assignedToIds) },
+      });
+    }
+    const userMap = new Map(assignedUsers.map((u) => [u.id, u]));
+
     return books.map((book) => {
       const branch = branchMap.get(book.branchId);
+      const option = optionMap.get(book.transactionType);
+      const assignedUser = userMap.get(book.assignedTo);
       return {
         ...book,
         branchName: branch ? branch.name : 'Unknown Branch',
         branchCode: branch ? branch.code : '',
+        transactionTypeLabel: option ? option.label : book.transactionType,
+        assignedToName: assignedUser ? assignedUser.name : book.assignedTo,
       };
     });
   }
@@ -195,6 +228,18 @@ export class ManualBillBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true
         AND r.is_cashier = true
+    `, [branchId]);
+  }
+
+  async getBranchManagers(branchId: string): Promise<any[]> {
+    return this.branchRepository.manager.query(`
+      SELECT DISTINCT u.id, u.name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.branch_id = $1 
+        AND u.is_active = true
+        AND r.is_brn_mgr = true
     `, [branchId]);
   }
 
@@ -439,6 +484,18 @@ export class ManualBillBookService {
       return [];
     }
 
+    // Fetch transaction options from DB1
+    const transactionTypeIds = Array.from(
+      new Set(queryBooks.map((b) => b.transactionType).filter((id) => id && isUuid(id)))
+    );
+    let selectOptions: SelectOption[] = [];
+    if (transactionTypeIds.length > 0) {
+      selectOptions = await this.branchRepository.manager.find(SelectOption, {
+        where: { id: In(transactionTypeIds) },
+      });
+    }
+    const optionMap = new Map(selectOptions.map((o) => [o.id, o]));
+
     // Map names to ids
     const userNamesMap: Record<string, string> = {};
     deliveryPersons.forEach((u: any) => {
@@ -462,11 +519,14 @@ export class ManualBillBookService {
       const book = bookMap.get(page.manualBookId);
       if (!book) continue;
 
+      const option = optionMap.get(book.transactionType);
+
       if (!currentGroup) {
         currentGroup = {
           manualBookId: page.manualBookId,
           bookNo: bookNo,
           transactionType: book.transactionType,
+          transactionTypeLabel: option ? option.label : book.transactionType,
           mvNoFrom: page.pageNo,
           mvNoTo: page.pageNo,
           qty: 1,
@@ -489,6 +549,7 @@ export class ManualBillBookService {
             manualBookId: page.manualBookId,
             bookNo: bookNo,
             transactionType: book.transactionType,
+            transactionTypeLabel: option ? option.label : book.transactionType,
             mvNoFrom: page.pageNo,
             mvNoTo: page.pageNo,
             qty: 1,

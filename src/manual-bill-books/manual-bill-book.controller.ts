@@ -59,6 +59,19 @@ export class ManualBillBookController {
     return this.service.getAuthorizedUsers(effectiveBranchId);
   }
 
+  @Get('branch-managers')
+  @ApiOperation({ summary: 'Get branch managers for a branch' })
+  async getBranchManagers(
+    @Session() session: any,
+    @Query('branchId') branchId: string,
+  ) {
+    let effectiveBranchId = branchId;
+    if (!session.isAdmin) {
+      effectiveBranchId = session.activeBranchId;
+    }
+    return this.service.getBranchManagers(effectiveBranchId);
+  }
+
   @Put('dispatches/bulk-review')
   @ApiOperation({ summary: 'Bulk approve or reject manual bill book dispatches' })
   @ApiResponse({ status: 200, description: 'Dispatches reviewed successfully' })
