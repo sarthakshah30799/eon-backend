@@ -32,8 +32,14 @@ export class AuthService {
 
   async login(user: User, session: any): Promise<{ message: string; sessionsInvalidated: number }> {
     // Note: lastLoginAt is already updated in validateUser method
+    const isHoStaff = user.userRoles?.some(userRole => userRole.role?.isHoStaff) === true;
     return this.sessionPolicyService.applyLoginSessionPolicy(
-      user,
+      {
+        id: user.id,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        isHoStaff,
+      },
       session,
       (userId: string, currentSessionId?: string) =>
         this.sessionService.invalidateUserSessions(userId, currentSessionId),

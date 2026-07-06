@@ -18,5 +18,4 @@ export enum CategoryOptionCodeEnum {
   TdsGroup = "TDSGROUP",
   MasterDocument = "MASTER",
   TransactionDocument = "TRANSACTION",
-  ChequeBookTransactionType = "CHEQUEBOOKTRANSACTIONTYPE",
 }

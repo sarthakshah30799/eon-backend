@@ -1,10 +1,11 @@
-import { Entity, Column, Index, ManyToOne, JoinColumn } from "typeorm";
+import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { State } from "../state/state.entity";
 import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
+import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
 
 export enum ClientType {
   CORPORATE_CLIENT = "CORPORATE_CLIENT",
@@ -193,6 +194,9 @@ export class PartyProfile extends BaseEntity {
 
   @Column({ type: "boolean", default: false })
   purchase: boolean;
+
+  @OneToMany(() => PartyProfileCommissionRule, rule => rule.partyProfile)
+  commissionRules: PartyProfileCommissionRule[];
 
   @Column({ type: "boolean", default: false })
   applyTax: boolean;

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { PartyProfile, ClientType } from "../party-profile.entity";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
+import { PartyProfileCommissionRuleResponseDto } from "./party-profile-commission-rule-response.dto";
 
 export class PartyProfileResponseDto {
   @ApiProperty({ description: "UUID of the party profile" })
@@ -136,6 +137,13 @@ export class PartyProfileResponseDto {
   @ApiProperty({ description: "Purchase flag" })
   purchase: boolean;
 
+  @ApiProperty({
+    description: "Commission rules for agent profiles",
+    type: [PartyProfileCommissionRuleResponseDto],
+    required: false,
+  })
+  commissionRules?: PartyProfileCommissionRuleResponseDto[];
+
   @ApiProperty({ description: "Apply Tax flag" })
   applyTax: boolean;
 
@@ -262,6 +270,11 @@ export class PartyProfileResponseDto {
     dto.eefcClient = entity.eefcClient;
     dto.sale = entity.sale;
     dto.purchase = entity.purchase;
+    dto.commissionRules = Array.isArray(entity.commissionRules)
+      ? entity.commissionRules.map(rule =>
+          PartyProfileCommissionRuleResponseDto.fromValue(rule),
+        )
+      : [];
     dto.applyTax = entity.applyTax;
     dto.igstOnly = entity.igstOnly;
     dto.gstNo = entity.gstNo;

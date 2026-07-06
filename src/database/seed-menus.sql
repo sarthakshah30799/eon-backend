@@ -89,7 +89,7 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'Additional Settings', '/admin/additional-settings', 'settings', v_admin_id, 13, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Manual Bill Books', '/admin/manual-bill-books', 'book-open', v_admin_id, 14, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Manual Bill Books', '/manual-bill-books', 'book-open', v_admin_id, 14, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'Chequebooks', '/admin/chequebooks', 'book-open', v_admin_id, 15, true, v_system_user, v_system_user);

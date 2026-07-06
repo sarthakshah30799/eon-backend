@@ -19,6 +19,16 @@ import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.dto";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
+import { Currency } from "../currencies/currency.entity";
+import { Product } from "../products/product.entity";
+import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
+import {
+  PartyProfileCommissionTypeEnum,
+} from "./types/party-profile-commission-rule.types";
+import {
+  parseCommissionRulesCsv,
+  serializeCommissionRulesToCsv,
+} from "./party-profile-commission-csv.util";
 
 type PartyProfileAction = "view" | "add" | "modify" | "delete";
 
@@ -67,6 +77,12 @@ export class PartyProfileService {
     private readonly stateRepository: Repository<State>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Currency)
+    private readonly currencyRepository: Repository<Currency>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
+    @InjectRepository(PartyProfileCommissionRule)
+    private readonly partyProfileCommissionRuleRepository: Repository<PartyProfileCommissionRule>,
   ) {}
 
   private async getCurrentUser(userId: string) {
@@ -456,6 +472,7 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption")
+      .leftJoinAndSelect("pp.commissionRules", "commissionRules")
       .where("pp.status = :status", { status: WorkflowStatus.PENDING });
 
     if (!user?.isAdmin) {
@@ -493,6 +510,7 @@ export class PartyProfileService {
         "marketingExecutive",
         "businessNature",
         "tdsGroup",
+        "commissionRules",
       ],
     });
 
@@ -505,6 +523,144 @@ export class PartyProfileService {
     }
 
     return PartyProfileResponseDto.fromEntity(client);
+  }
+
+  async getCommissionTemplate(id: string, userId?: string): Promise<string> {
+    const user = userId ? await this.getCurrentUser(userId) : null;
+    const client = await this.partyProfileRepository.findOne({
+      where: { id },
+    });
+
+    if (!client) {
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
+    }
+
+    if (user) {
+      this.assertPartyProfileAccess(user, client.type, "view");
+    }
+
+    const commissionRules = await this.partyProfileCommissionRuleRepository.find({
+      where: { partyProfileId: id },
+      order: { currencyCode: "ASC", productCode: "ASC" },
+    });
+
+    return serializeCommissionRulesToCsv(
+      commissionRules.map(rule => ({
+        currencyCode: rule.currencyCode,
+        currencyName: rule.currencyName,
+        productCode: rule.productCode,
+        productDescription: rule.productDescription,
+        commissionType: rule.commissionType,
+        commissionValue: rule.commissionValue,
+      })),
+    );
+  }
+
+  async uploadCommissionTemplate(
+    id: string,
+    csvContent: string,
+    userId: string,
+  ): Promise<PartyProfileResponseDto> {
+    const user = await this.getCurrentUser(userId);
+    const client = await this.partyProfileRepository.findOne({
+      where: { id },
+    });
+
+    if (!client) {
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
+    }
+
+    this.assertPartyProfileAccess(user, client.type, "modify");
+
+    if (client.type !== ClientType.AGENT) {
+      throw new BadRequestException(
+        "Commission rules are only available for agent profiles",
+      );
+    }
+
+    const parsedRules = parseCommissionRulesCsv(csvContent);
+    const existingRules = await this.partyProfileCommissionRuleRepository.find({
+      where: { partyProfileId: client.id },
+    });
+    const mergedRules = new Map<string, PartyProfileCommissionRule>(
+      existingRules.map(rule => [
+        `${rule.currencyCode}:${rule.productCode}`,
+        rule,
+      ]),
+    );
+
+    for (const rule of parsedRules) {
+      if (
+        !rule.currencyCode ||
+        !rule.productCode ||
+        !rule.commissionType ||
+        !rule.commissionValue
+      ) {
+        throw new BadRequestException(
+          "Each commission row must include currencyCode, productCode, commissionType, and commissionValue",
+        );
+      }
+
+      const currency = await this.currencyRepository.findOne({
+        where: { currencyCode: rule.currencyCode },
+      });
+      if (!currency) {
+        throw new BadRequestException(
+          `Currency code "${rule.currencyCode}" not found`,
+        );
+      }
+
+      const product = await this.productRepository.findOne({
+        where: { productCode: rule.productCode },
+      });
+      if (!product) {
+        throw new BadRequestException(
+          `Product code "${rule.productCode}" not found`,
+        );
+      }
+
+      const key = `${currency.currencyCode}:${product.productCode}`;
+      const existingRule = mergedRules.get(key);
+      mergedRules.set(
+        key,
+        this.partyProfileCommissionRuleRepository.create({
+          id: existingRule?.id,
+          partyProfileId: client.id,
+          partyProfile: client,
+          currencyCode: currency.currencyCode,
+          currencyName: currency.currencyName,
+          productCode: product.productCode,
+          productDescription: product.productDescription,
+          commissionType:
+            rule.commissionType === PartyProfileCommissionTypeEnum.PERCENTAGE
+              ? PartyProfileCommissionTypeEnum.PERCENTAGE
+              : PartyProfileCommissionTypeEnum.PAISA,
+          commissionValue: rule.commissionValue,
+          createdBy: existingRule?.createdBy ?? userId,
+          updatedBy: userId,
+        }),
+      );
+    }
+
+    client.updatedBy = userId;
+    await this.partyProfileRepository.save(client);
+    await this.partyProfileCommissionRuleRepository.upsert(
+      Array.from(mergedRules.values()).map(rule => ({
+        id: rule.id,
+        partyProfileId: rule.partyProfileId,
+        currencyCode: rule.currencyCode,
+        currencyName: rule.currencyName,
+        productCode: rule.productCode,
+        productDescription: rule.productDescription,
+        commissionType: rule.commissionType,
+        commissionValue: rule.commissionValue,
+        createdBy: rule.createdBy,
+        updatedBy: rule.updatedBy,
+      })),
+      ["partyProfileId", "currencyCode", "productCode"],
+    );
+
+    return this.findById(id);
   }
 
   async delete(id: string, userId?: string): Promise<{ message: string }> {
@@ -545,11 +701,24 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
-    const types = (query.type?.length ? query.type : [ClientType.CORPORATE_CLIENT]) as ClientType[];
-    if (user) {
-      types.forEach(type => this.assertPartyProfileAccess(user, type, "view"));
+    const requestedTypes = (query.type?.length
+      ? query.type
+      : [ClientType.CORPORATE_CLIENT]) as ClientType[];
+    const accessibleTypes = user
+      ? requestedTypes.filter(type => this.canAccessPartyProfileType(user, type, "view"))
+      : requestedTypes;
+
+    if (accessibleTypes.length === 0) {
+      return {
+        data: [],
+        page,
+        limit,
+        totalItems: 0,
+        totalPages: 0,
+      };
     }
-    qb.where("pp.type::text IN (:...types)", { types });
+
+    qb.where("pp.type::text IN (:...types)", { types: accessibleTypes });
 
     if (query.search) {
       qb.andWhere(

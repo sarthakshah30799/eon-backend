@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, Not, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
 import { Role } from '../roles/role.entity';
@@ -271,7 +271,9 @@ export class UserService {
     }
 
     if (uppercased.email && uppercased.email !== user.email) {
-      const existing = await this.userRepository.findOne({ where: { email: uppercased.email } });
+      const existing = await this.userRepository.findOne({
+        where: { email: uppercased.email, id: Not(id) },
+      });
       if (existing) {
         throw new ConflictException('User with this email already exists');
       }
@@ -312,6 +314,7 @@ export class UserService {
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
     const user = await this.userRepository.findOne({
       where: { email: loginUserDto.email },
+      relations: USER_RELATIONS,
     });
 
     if (!user || !user.isActive) {
@@ -400,6 +403,7 @@ export class UserService {
   async validateOtpUser(countryCode: string, phoneNumber: string, otp: string): Promise<User | null> {
     const user = await this.userRepository.findOne({
       where: { contactNo: phoneNumber },
+      relations: USER_RELATIONS,
     });
 
     if (!user || !user.isActive) {

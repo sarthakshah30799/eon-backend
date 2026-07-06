@@ -13,6 +13,10 @@ import {
   SessionPolicyValidationCodeEnum,
 } from './session-policy.enum';
 
+type LoginSessionUser = Pick<User, 'id' | 'email' | 'isAdmin'> & {
+  isHoStaff?: boolean;
+};
+
 @Injectable()
 export class SessionPolicyService {
   private cachedPolicy: SessionPolicyConfig | null = null;
@@ -218,7 +222,7 @@ export class SessionPolicyService {
   }
 
   async applyLoginSessionPolicy(
-    user: Pick<User, 'id' | 'email' | 'isAdmin'>,
+    user: LoginSessionUser,
     session: any,
     invalidateUserSessions: (userId: string, currentSessionId?: string) => Promise<void>,
   ): Promise<{ message: string; sessionsInvalidated: number }> {
@@ -232,6 +236,7 @@ export class SessionPolicyService {
     session.userId = user.id;
     session.email = user.email;
     session.isAdmin = user.isAdmin === true;
+    session.isHoStaff = user.isHoStaff === true;
     session.activeBranchId = null;
     session.activeCounterId = null;
     const resolved = this.validatePolicyConfig(policy);

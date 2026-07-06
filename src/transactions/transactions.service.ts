@@ -3,16 +3,54 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { TransactionLog } from './entities/transaction-log.entity';
+import { Transaction } from './entities/transaction.entity';
 import { TransactionLogAction } from './transactions.enums';
 import { RecordTransactionPrintDto } from './dto/record-transaction-print.dto';
 
 @Injectable()
 export class TransactionsService {
   constructor(
+    @InjectRepository(Transaction, 'database2')
+    private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(TransactionLog, 'database2')
     private readonly transactionLogRepository: Repository<TransactionLog>,
     private readonly mailService: MailService,
   ) {}
+
+  async getTransactions(
+    slug?: string,
+    branchId?: string,
+    search?: string,
+  ): Promise<Transaction[]> {
+    const query = this.transactionRepository
+      .createQueryBuilder('transaction')
+      .where('transaction.isLatest = true');
+
+    if (slug) {
+      query.andWhere('transaction.slug = :slug', { slug });
+    }
+
+    if (branchId) {
+      query.andWhere('transaction.branchId = :branchId', { branchId });
+    }
+
+    const trimmedSearch = search?.trim();
+    if (trimmedSearch) {
+      query.andWhere('transaction.number ILIKE :search', {
+        search: `%${trimmedSearch}%`,
+      });
+    }
+
+    query.orderBy('transaction.createdAt', 'DESC');
+
+    return query.getMany();
+  }
+
+  async getTransactionById(id: string): Promise<Transaction | null> {
+    return this.transactionRepository.findOne({
+      where: { id },
+    });
+  }
 
   async recordPrint(
     transactionId: string,
