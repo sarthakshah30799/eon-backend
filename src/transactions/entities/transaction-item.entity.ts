@@ -56,6 +56,9 @@ export class TransactionItem extends BaseEntity {
   @Column({ type: "numeric", name: "rate", precision: 18, scale: 4 })
   rate: string;
 
+  @Column({ type: "numeric", name: "commission", precision: 18, scale: 4, nullable: true })
+  commission: string | null;
+
   @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
   currencySnapshot: TransactionReferenceSnapshotValue;
 
@@ -74,6 +77,9 @@ export class TransactionItem extends BaseEntity {
 
   @Column({ type: "jsonb", name: "pricing_rule_snapshot", nullable: true })
   pricingRuleSnapshot: TransactionPricingRuleSnapshotValue;
+
+  @Column({ type: "jsonb", name: "commission_snapshot", nullable: true })
+  commissionSnapshot: TransactionPricingRuleSnapshotValue;
 
   @Column({ type: "text", nullable: true })
   remarks: string | null;

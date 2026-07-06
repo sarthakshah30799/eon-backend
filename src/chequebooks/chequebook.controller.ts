@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { ChequeBookService } from './chequebook.service';
 import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAssignmentsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/chequebook.dto';
@@ -10,6 +10,8 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('chequebooks')
 export class ChequeBookController {
+  private readonly logger = new Logger(ChequeBookController.name);
+
   constructor(private readonly service: ChequeBookService) {}
 
   @Post('dispatch')
@@ -56,6 +58,9 @@ export class ChequeBookController {
     if (!session.isAdmin) {
       effectiveBranchId = session.activeBranchId;
     }
+    this.logger.log(
+      `[DEBUG] users request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? 'null'} activeBranchId=${session?.activeBranchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'}`
+    );
     return this.service.getAuthorizedUsers(effectiveBranchId);
   }
 
@@ -66,9 +71,12 @@ export class ChequeBookController {
     @Query('branchId') branchId: string,
   ) {
     let effectiveBranchId = branchId;
-    if (!session.isAdmin) {
+    if (!session.isAdmin && !session.isHoStaff) {
       effectiveBranchId = session.activeBranchId;
     }
+    this.logger.log(
+      `[DEBUG] branch-managers request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'}`
+    );
     return this.service.getBranchManagers(effectiveBranchId);
   }
 

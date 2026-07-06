@@ -2,6 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  Logger,
   ForbiddenException,
   NotFoundException,
   UnauthorizedException,
@@ -10,12 +11,20 @@ import { UserService } from '../../users/user.service';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
+  private readonly logger = new Logger(PermissionsGuard.name);
+
   constructor(private readonly userService: UserService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const userId = request.session?.userId;
+    this.logger.log(
+      `[DEBUG] permissions guard start method=${request.method} path=${request.originalUrl ?? request.url} userId=${userId ?? 'null'} activeBranchId=${request.session?.activeBranchId ?? 'null'} activeCounterId=${request.session?.activeCounterId ?? 'null'}`
+    );
     if (!userId) {
+      this.logger.warn(
+        `[DEBUG] permissions guard rejecting unauthenticated request method=${request.method} path=${request.originalUrl ?? request.url}`
+      );
       throw new UnauthorizedException('User not authenticated');
     }
 
@@ -24,6 +33,9 @@ export class PermissionsGuard implements CanActivate {
       activeCounterId: request.session?.activeCounterId ?? null,
     });
     if (!userDto) {
+      this.logger.warn(
+        `[DEBUG] permissions guard rejecting missing user profile method=${request.method} path=${request.originalUrl ?? request.url} userId=${userId}`
+      );
       throw new UnauthorizedException('User profile not found');
     }
 
@@ -32,6 +44,9 @@ export class PermissionsGuard implements CanActivate {
 
     // 1. Allow profile/me and register to bypass
     if (path.endsWith('/register') || path.endsWith('/profile/me')) {
+      this.logger.log(
+        `[DEBUG] permissions guard allow bypass route method=${method} path=${path} userId=${userId}`
+      );
       return true;
     }
 
@@ -43,28 +58,46 @@ export class PermissionsGuard implements CanActivate {
 
     if (isCompanyRoute || isBranchRoute || isCounterRoute) {
       if (method === 'GET' && (isBranchRoute || isCounterRoute)) {
+        this.logger.log(
+          `[DEBUG] permissions guard allow reference GET method=${method} path=${path} userId=${userId}`
+        );
         return true;
       }
       if (!userDto.isAdmin) {
+        this.logger.warn(
+          `[DEBUG] permissions guard deny master-admin route method=${method} path=${path} userId=${userId}`
+        );
         throw new ForbiddenException(
           'Access to Company, Branch, and Counter profiles is restricted to the master administrator.',
         );
       }
+      this.logger.log(
+        `[DEBUG] permissions guard allow master-admin route method=${method} path=${path} userId=${userId}`
+      );
       return true;
     }
 
     if (method === 'GET' && path.includes('/roles') && !path.includes('/permissions')) {
+      this.logger.log(
+        `[DEBUG] permissions guard allow roles GET method=${method} path=${path} userId=${userId}`
+      );
       return true;
     }
 
     // 3. Users marked as admin or HO staff always have absolute access to everything
     if (userDto.isAdmin || userDto.isHoStaff) {
+      this.logger.log(
+        `[DEBUG] permissions guard allow full-access user method=${method} path=${path} userId=${userId} isAdmin=${Boolean(userDto.isAdmin)} isHoStaff=${Boolean(userDto.isHoStaff)}`
+      );
       return true;
     }
 
     const activeBranchId = request.session?.activeBranchId;
     const activeCounterId = request.session?.activeCounterId;
     if (!activeBranchId || !activeCounterId) {
+      this.logger.warn(
+        `[DEBUG] permissions guard deny missing workplace method=${method} path=${path} userId=${userId} activeBranchId=${activeBranchId ?? 'null'} activeCounterId=${activeCounterId ?? 'null'}`
+      );
       throw new ForbiddenException('Workplace not selected');
     }
 
@@ -72,6 +105,10 @@ export class PermissionsGuard implements CanActivate {
     let menuPath = '';
     if (path.includes('/roles')) {
       menuPath = '/admin/user-role';
+    } else if (path.includes('/manual-bill-books')) {
+      menuPath = '/manual-bill-books';
+    } else if (path.includes('/chequebooks')) {
+      menuPath = '/admin/chequebooks';
     } else if (path.includes('/users')) {
       // Allow self-lookup (GET /users/:id matching logged-in user id)
       const isSelf = method === 'GET' && request.params.id === userId;
@@ -89,12 +126,10 @@ export class PermissionsGuard implements CanActivate {
       menuPath = '/admin/product-profile';
     } else if (path.includes('/document-profiles')) {
       if (method === 'GET') {
-        if (userDto.isAdmin) {
-          return true;
-        }
-        throw new ForbiddenException(
-          'Access to document profiles is restricted to administrators.',
+        this.logger.log(
+          `[DEBUG] permissions guard allow document profiles GET method=${method} path=${path} userId=${userId}`
         );
+        return true;
       }
       menuPath = '/admin/document-profile';
     } else if (path.includes('/tds-profiles')) {
@@ -109,12 +144,59 @@ export class PermissionsGuard implements CanActivate {
         return true;
       }
 
-      menuPath = `/party-profiles/${String(requestedType).trim().toLowerCase().replace(/_/g, '-')}`;
-    } else if (path.includes('/manual-bill-books')) {
-      menuPath = '/manual-bill-books';
+      const requestedTypes = Array.isArray(requestedType)
+        ? requestedType
+        : String(requestedType)
+            .split(',')
+            .map(type => type.trim())
+            .filter(Boolean);
+      const requestedMenuPaths = requestedTypes.map(
+        type => `/party-profiles/${String(type).trim().toLowerCase().replace(/_/g, '-')}`
+      );
+
+      if (requestedMenuPaths.length === 0) {
+        return true;
+      }
+
+      const requiredPermission = method === 'POST'
+        ? 'add'
+        : method === 'PUT' || method === 'PATCH'
+          ? 'modify'
+          : method === 'DELETE'
+            ? 'delete'
+            : 'view';
+
+      const hasAnyRequestedPermission = requestedMenuPaths.some(requestedMenuPath =>
+        (userDto.permissions?.[requestedMenuPath] || []).includes(requiredPermission)
+      );
+
+      if (!hasAnyRequestedPermission) {
+        this.logger.warn(
+          `[DEBUG] permissions guard deny party profiles method=${method} path=${path} requestedMenuPaths=${JSON.stringify(requestedMenuPaths)} requiredPermission=${requiredPermission} userPermissions=${JSON.stringify(userDto.permissions)} userId=${userId}`
+        );
+        if (method === 'GET' && !request.params?.id) {
+          request.silentEmptyResult = this.resolveSilentEmptyResult(path, requestedMenuPaths[0]);
+          if (request.silentEmptyResult) {
+            this.logger.warn(
+              `[DEBUG] permissions guard allowing silent empty result method=${method} path=${path} menuPath=${requestedMenuPaths[0]} userId=${userId}`
+            );
+            return true;
+          }
+        }
+
+        throw new NotFoundException(`Resource at ${requestedMenuPaths[0]} not found`);
+      }
+
+      this.logger.log(
+        `[DEBUG] permissions guard allow party profiles method=${method} path=${path} requestedMenuPaths=${JSON.stringify(requestedMenuPaths)} requiredPermission=${requiredPermission} userId=${userId}`
+      );
+      return true;
     }
 
     if (!menuPath) {
+      this.logger.log(
+        `[DEBUG] permissions guard allow unmapped route method=${method} path=${path} userId=${userId}`
+      );
       return true;
     }
 
@@ -130,9 +212,15 @@ export class PermissionsGuard implements CanActivate {
 
     const userPermissions = userDto.permissions?.[menuPath] || [];
     if (!userPermissions.includes(requiredPermission)) {
+      this.logger.warn(
+        `[DEBUG] permissions guard deny permission method=${method} path=${path} menuPath=${menuPath} requiredPermission=${requiredPermission} userPermissions=${JSON.stringify(userPermissions)} userId=${userId}`
+      );
       if (method === 'GET' && !request.params?.id) {
         request.silentEmptyResult = this.resolveSilentEmptyResult(path, menuPath);
         if (request.silentEmptyResult) {
+          this.logger.warn(
+            `[DEBUG] permissions guard allowing silent empty result method=${method} path=${path} menuPath=${menuPath} userId=${userId}`
+          );
           return true;
         }
       }
@@ -140,6 +228,9 @@ export class PermissionsGuard implements CanActivate {
       throw new NotFoundException(`Resource at ${menuPath} not found`);
     }
 
+    this.logger.log(
+      `[DEBUG] permissions guard allow method=${method} path=${path} menuPath=${menuPath} requiredPermission=${requiredPermission} userId=${userId}`
+    );
     return true;
   }
 

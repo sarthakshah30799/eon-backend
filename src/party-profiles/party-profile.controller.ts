@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -9,9 +10,15 @@ import {
   Query,
   UseGuards,
   Session,
+  UploadedFile,
+  UseInterceptors,
+  Res,
+  HttpStatus,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
+  ApiConsumes,
   ApiCookieAuth,
   ApiOperation,
   ApiParam,
@@ -27,6 +34,8 @@ import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.dto";
 import { PartyProfileService } from "./party-profile.service";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { Response } from "express";
 
 @ApiTags("party-profiles")
 @ApiCookieAuth("sessionId")
@@ -119,5 +128,48 @@ export class PartyProfileController {
     @Session() session: any,
   ): Promise<{ message: string }> {
     return this.partyProfileService.delete(id, session.userId);
+  }
+
+  @Get(":id/commission/template")
+  @ApiOperation({ summary: "Download commission template for an agent profile" })
+  @ApiParam({ name: "id", description: "Party profile UUID" })
+  async getCommissionTemplate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Session() session: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.partyProfileService.getCommissionTemplate(
+      id,
+      session.userId,
+    );
+
+    res.status(HttpStatus.OK);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="agent-commission-template.csv"`,
+    );
+    return csv;
+  }
+
+  @Post(":id/commission/upload")
+  @ApiOperation({ summary: "Upload commission rules for an agent profile" })
+  @ApiConsumes("multipart/form-data")
+  @ApiParam({ name: "id", description: "Party profile UUID" })
+  @UseInterceptors(FileInterceptor("file"))
+  async uploadCommissionTemplate(
+    @Param("id", ParseUUIDPipe) id: string,
+    @UploadedFile() file: any,
+    @Session() session: any,
+  ): Promise<PartyProfileResponseDto> {
+    if (!file) {
+      throw new BadRequestException("Commission template file is required");
+    }
+
+    return this.partyProfileService.uploadCommissionTemplate(
+      id,
+      file.buffer.toString("utf8"),
+      session.userId,
+    );
   }
 }

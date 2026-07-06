@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, In, Between } from "typeorm";
 import { ChequeBook } from "./entities/cheque-book.entity";
@@ -18,8 +18,15 @@ import {
 const isUuid = (val: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
+type UserLookup = {
+  id: string;
+  name: string;
+};
+
 @Injectable()
 export class ChequeBookService {
+  private readonly logger = new Logger(ChequeBookService.name);
+
   constructor(
     @InjectRepository(ChequeBook, "database2")
     private readonly checkBookRepository: Repository<ChequeBook>,
@@ -201,7 +208,10 @@ export class ChequeBookService {
           ? `${account.accountCode} - ${account.accountName}`
           : "Unknown Bank Account",
         bankAccountCodeName: account ? account.accountCode : "",
-        assignedToName: assignedUser ? assignedUser.name : book.assignedTo,
+        assignedTo: {
+          id: assignedUser ? assignedUser.id : book.assignedTo,
+          name: assignedUser ? assignedUser.name : book.assignedTo,
+        },
       };
     });
   }
@@ -249,22 +259,69 @@ export class ChequeBookService {
   }
 
   async getAuthorizedUsers(branchId: string): Promise<any[]> {
-    return this.branchRepository.manager.query(
+    this.logger.log(`[DEBUG] getAuthorizedUsers called with branchId=${branchId ?? 'null'}`);
+    const diagnostics = await this.branchRepository.manager.query(
+      `
+      SELECT
+        COUNT(*)::int AS role_rows,
+        COUNT(DISTINCT ur.user_id)::int AS distinct_users,
+        COUNT(*) FILTER (WHERE u.is_active = true)::int AS active_user_rows,
+        COUNT(*) FILTER (WHERE r.is_brn_mgr = true)::int AS branch_manager_rows,
+        COUNT(*) FILTER (WHERE r.is_cashier = true)::int AS cashier_rows,
+        COUNT(*) FILTER (WHERE r.is_delivery_boy = true)::int AS delivery_boy_rows,
+        COUNT(*) FILTER (WHERE r.is_cashier = true OR r.is_delivery_boy = true)::int AS allocation_user_rows,
+        COUNT(*) FILTER (WHERE r.is_admin = true)::int AS admin_rows
+      FROM user_roles ur
+      JOIN users u ON u.id = ur.user_id
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.branch_id = $1
+      `,
+      [branchId],
+    );
+    this.logger.log(
+      `[DEBUG] getAuthorizedUsers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
+    );
+    const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
-      JOIN roles r ON ur.role_id = r.id
+      JOIN roles r ON r.id = ur.role_id
       WHERE ur.branch_id = $1 
         AND u.is_active = true
-        AND r.is_cashier = true
+        AND (r.is_cashier = true OR r.is_delivery_boy = true)
     `,
       [branchId],
     );
+    this.logger.log(
+      `[DEBUG] getAuthorizedUsers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
+    );
+    return rows;
   }
 
-  async getBranchManagers(branchId: string): Promise<any[]> {
-    return this.branchRepository.manager.query(
+  async getBranchManagers(branchId: string): Promise<UserLookup[]> {
+    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'}`);
+    const diagnostics = await this.branchRepository.manager.query(
+      `
+      SELECT
+        COUNT(*)::int AS role_rows,
+        COUNT(DISTINCT ur.user_id)::int AS distinct_users,
+        COUNT(*) FILTER (WHERE u.is_active = true)::int AS active_user_rows,
+        COUNT(*) FILTER (WHERE r.is_brn_mgr = true)::int AS branch_manager_rows,
+        COUNT(*) FILTER (WHERE r.is_cashier = true)::int AS cashier_rows,
+        COUNT(*) FILTER (WHERE r.is_delivery_boy = true)::int AS delivery_boy_rows,
+        COUNT(*) FILTER (WHERE r.is_admin = true)::int AS admin_rows
+      FROM user_roles ur
+      JOIN users u ON u.id = ur.user_id
+      JOIN roles r ON r.id = ur.role_id
+      WHERE ur.branch_id = $1
+      `,
+      [branchId],
+    );
+    this.logger.log(
+      `[DEBUG] getBranchManagers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
+    );
+    const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
       FROM users u
@@ -273,9 +330,13 @@ export class ChequeBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true
         AND r.is_brn_mgr = true
-    `,
+      `,
       [branchId],
     );
+    this.logger.log(
+      `[DEBUG] getBranchManagers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
+    );
+    return rows as UserLookup[];
   }
 
   async saveAssignments(
