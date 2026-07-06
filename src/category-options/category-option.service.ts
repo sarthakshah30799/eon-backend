@@ -1,11 +1,16 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ILike, Repository } from "typeorm";
 import { SelectOption } from "./category-option.entity";
 import { CreateSelectOptionDto } from "./dto/create-category-option.dto";
 import { UpdateSelectOptionDto } from "./dto/update-category-option.dto";
 import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
+import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
+import {
+  getStaticSelectOptions,
+  type StaticSelectOption,
+} from "./category-option-static-options";
 
 type CacheEntry = {
   expiresAt: number;
@@ -30,6 +35,70 @@ export class SelectOptionService {
 
   private normalizeCode(code: string): string {
     return code.trim().replace(/[_\s-]/g, '').toUpperCase();
+  }
+
+  private resolveStaticOptions(code: string): StaticSelectOption[] | null {
+    return getStaticSelectOptions(code);
+  }
+
+  private ensureStaticValueIsAllowed(code: string, value: string): void {
+    const staticOptions = this.resolveStaticOptions(code);
+
+    if (!staticOptions) {
+      return;
+    }
+
+    const normalizedValue = this.normalizeComparableStaticValue(value);
+    const allowedValues = new Set(
+      staticOptions.map(option => this.normalizeComparableStaticValue(option.value)),
+    );
+
+    if (!allowedValues.has(normalizedValue)) {
+      throw new BadRequestException(
+        `Invalid value for static code ${this.normalizeCode(code)}. Allowed values: ${staticOptions
+          .map(option => option.value)
+          .join(', ')}`,
+      );
+    }
+  }
+
+  private normalizeStaticLabel(code: string, value: string): string {
+    const staticOptions = this.resolveStaticOptions(code);
+
+    if (!staticOptions) {
+      return value.trim().toUpperCase();
+    }
+
+    const normalizedValue = this.normalizeComparableStaticValue(value);
+    return (
+      staticOptions.find(
+        option =>
+          this.normalizeComparableStaticValue(option.value) === normalizedValue ||
+          this.normalizeComparableStaticValue(option.label) === normalizedValue,
+      )?.label ??
+      normalizedValue
+    );
+  }
+
+  private normalizeComparableStaticValue(value: string): string {
+    return value.trim().replace(/[_\s-]/g, '').toUpperCase();
+  }
+
+  private resolveStaticValue(code: string, value: string): string {
+    const staticOptions = this.resolveStaticOptions(code);
+
+    if (!staticOptions) {
+      return value.trim().toUpperCase();
+    }
+
+    const normalizedValue = this.normalizeComparableStaticValue(value);
+    const matchedOption = staticOptions.find(
+      option =>
+        this.normalizeComparableStaticValue(option.value) === normalizedValue ||
+        this.normalizeComparableStaticValue(option.label) === normalizedValue,
+    );
+
+    return matchedOption?.value ?? value.trim().toUpperCase();
   }
 
   private invalidateCache(code?: string): void {
@@ -89,6 +158,20 @@ export class SelectOptionService {
     return this.loadOptionsByCode(code);
   }
 
+  async getStaticOptionsByCode(
+    code: string,
+  ): Promise<StaticSelectOptionResponseDto[]> {
+    const staticOptions = this.resolveStaticOptions(code);
+
+    if (!staticOptions) {
+      throw new BadRequestException(
+        `Static select options are not defined for code ${this.normalizeCode(code)}`,
+      );
+    }
+
+    return staticOptions.map(StaticSelectOptionResponseDto.fromValue);
+  }
+
   async getAllOptions(search?: string): Promise<SelectOptionResponseDto[]> {
     const normalizedSearch = search?.trim();
     const options = await this.selectOptionRepository.find({
@@ -118,8 +201,10 @@ export class SelectOptionService {
     userId?: string,
   ): Promise<SelectOptionResponseDto> {
     const normalizedCode = this.normalizeCode(dto.code);
-    const normalizedValue = dto.value.trim().toUpperCase();
-    const normalizedLabel = dto.label.trim().toUpperCase();
+    const normalizedValue = this.resolveStaticValue(normalizedCode, dto.value);
+    const normalizedLabel = this.normalizeStaticLabel(normalizedCode, dto.label);
+
+    this.ensureStaticValueIsAllowed(normalizedCode, normalizedValue);
 
     const existing = await this.selectOptionRepository
       .createQueryBuilder("selectOption")
@@ -162,10 +247,16 @@ export class SelectOptionService {
     }
 
     const nextCode = option.code;
-    const nextValue = dto.value?.trim().toUpperCase() ?? option.value;
-    const nextLabel = dto.label?.trim().toUpperCase() ?? option.label;
+    const nextValue = dto.value
+      ? this.resolveStaticValue(nextCode, dto.value)
+      : option.value;
+    const nextLabel = dto.label
+      ? this.normalizeStaticLabel(nextCode, dto.label)
+      : this.normalizeStaticLabel(nextCode, nextValue);
     const nextSortOrder = dto.sortOrder ?? option.sortOrder;
     const nextIsActive = dto.isActive ?? option.isActive;
+
+    this.ensureStaticValueIsAllowed(nextCode, nextValue);
 
     option.value = nextValue;
     option.label = nextLabel;
@@ -186,7 +277,10 @@ export class SelectOptionService {
 
     for (const item of options) {
       const normalizedCode = this.normalizeCode(item.code);
-      const normalizedValue = item.value.trim().toUpperCase();
+      const normalizedValue = this.resolveStaticValue(normalizedCode, item.value);
+      const normalizedLabel = this.normalizeStaticLabel(normalizedCode, item.label);
+
+      this.ensureStaticValueIsAllowed(normalizedCode, normalizedValue);
       const existing = await this.selectOptionRepository
         .createQueryBuilder("selectOption")
         .where("REPLACE(UPPER(selectOption.code), '_', '') = :code", {
@@ -198,7 +292,7 @@ export class SelectOptionService {
         .getOne();
 
       if (existing) {
-        existing.label = item.label.trim().toUpperCase();
+        existing.label = normalizedLabel;
         existing.sortOrder = item.sortOrder ?? existing.sortOrder;
         existing.isActive = item.isActive ?? existing.isActive;
         existing.updatedBy = userId || this.systemUserId;
@@ -212,7 +306,7 @@ export class SelectOptionService {
         this.selectOptionRepository.create({
           code: normalizedCode,
           value: normalizedValue,
-          label: item.label.trim().toUpperCase(),
+          label: normalizedLabel,
           sortOrder: item.sortOrder ?? 0,
           isActive: item.isActive ?? true,
           createdBy: userId || this.systemUserId,

@@ -1,4 +1,4 @@
-import { SelectQueryBuilder } from 'typeorm';
+import { Brackets, SelectQueryBuilder } from 'typeorm';
 import { DocumentProfile, DocumentSpecificationType } from './document-profile.entity';
 
 export const normalizeSelectionValue = (value?: string | null) =>
@@ -96,9 +96,17 @@ export const applyDocumentProfileFilters = <T extends Record<string, any>>(
   }
 
   if (type) {
-    queryBuilder.andWhere(`${documentProfileAlias}.type = :documentProfileType`, {
-      documentProfileType: type,
-    });
+    queryBuilder.andWhere(
+      new Brackets(brackets => {
+        brackets
+          .where(`LOWER(type.value) = LOWER(:documentProfileType)`, {
+            documentProfileType: type,
+          })
+          .orWhere(`LOWER(type.label) = LOWER(:documentProfileType)`, {
+            documentProfileType: type,
+          });
+      }),
+    );
   }
 
   if (groupSelection) {

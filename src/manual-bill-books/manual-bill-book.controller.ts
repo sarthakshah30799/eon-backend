@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { ManualBillBookService } from './manual-bill-book.service';
-import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, SaveAllocationsDto } from './dto/manual-bill-book.dto';
+import { CreateManualBookDto, ApproveRejectManualBookDto, BulkReviewManualBooksDto, AssignPagesDto, TransferPagesDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/manual-bill-book.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
@@ -32,22 +32,44 @@ export class ManualBillBookController {
   @ApiOperation({ summary: 'Get all manual bill book dispatches' })
   @ApiResponse({ status: 200, description: 'List of dispatches' })
   async findAll(
+    @Session() session: any,
     @Query('branchId') branchId?: string,
     @Query('status') status?: string,
     @Query('transactionType') transactionType?: string,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
   ) {
-    return this.service.findAll(branchId, status, transactionType, fromDate, toDate);
+    let effectiveBranchId = branchId;
+    if (!session.isAdmin) {
+      effectiveBranchId = session.activeBranchId;
+    }
+    return this.service.findAll(effectiveBranchId, status, transactionType, fromDate, toDate);
   }
 
-  @Get('cashiers')
-  @ApiOperation({ summary: 'Get cashiers for a branch' })
-  async getCashiers(@Query('branchId') branchId: string) {
-    return [
-      { id: '9a4c4e78-98e3-470a-bd63-a5b67cdde901', name: 'sonali' },
-      { id: '9a4c4e78-98e3-470a-bd63-a5b67cdde902', name: 'sajipy' },
-    ];
+  @Get('users')
+  @ApiOperation({ summary: 'Get authorized users for manual bill book allocation' })
+  async getAuthorizedUsers(
+    @Session() session: any,
+    @Query('branchId') branchId: string,
+  ) {
+    let effectiveBranchId = branchId;
+    if (!session.isAdmin) {
+      effectiveBranchId = session.activeBranchId;
+    }
+    return this.service.getAuthorizedUsers(effectiveBranchId);
+  }
+
+  @Get('branch-managers')
+  @ApiOperation({ summary: 'Get branch managers for a branch' })
+  async getBranchManagers(
+    @Session() session: any,
+    @Query('branchId') branchId: string,
+  ) {
+    let effectiveBranchId = branchId;
+    if (!session.isAdmin) {
+      effectiveBranchId = session.activeBranchId;
+    }
+    return this.service.getBranchManagers(effectiveBranchId);
   }
 
   @Put('dispatches/bulk-review')
@@ -72,21 +94,138 @@ export class ManualBillBookController {
     return this.service.approveOrReject(id, dto, session.userId);
   }
 
-  @Post('allocations')
-  @ApiOperation({ summary: 'Save manual book cashier allocations' })
-  @ApiResponse({ status: 201, description: 'Allocations saved successfully' })
-  async saveAllocations(
-    @Body() dto: SaveAllocationsDto,
+  @Post('assignments')
+  @ApiOperation({ summary: 'Save manual book page assignments' })
+  @ApiResponse({ status: 201, description: 'Assignments saved successfully' })
+  async saveAssignments(
+    @Body() dto: AssignPagesDto,
     @Session() session: any,
   ) {
-    return this.service.saveAllocations(dto, session.userId);
+    return this.service.saveAssignments(dto, session.userId);
   }
 
-  @Get('allocations')
-  @ApiOperation({ summary: 'Get manual book allocations by book IDs' })
-  @ApiResponse({ status: 200, description: 'List of allocations' })
-  async getAllocations(@Query('manualBookIds') idsStr: string) {
+  @Get('assignments')
+  @ApiOperation({ summary: 'Get manual book page assignments by book IDs' })
+  @ApiResponse({ status: 200, description: 'List of assignments' })
+  async getAssignments(@Query('manualBookIds') idsStr: string) {
     const ids = idsStr ? idsStr.split(',') : [];
-    return this.service.getAllocationsByBookIds(ids);
+    return this.service.getAssignmentsByBookIds(ids);
+  }
+
+  @Get(':manualBookId/books/:bookNo/pages')
+  @ApiOperation({ summary: 'Get pages for a book number' })
+  @ApiResponse({ status: 200, description: 'List of pages' })
+  async getPagesByBookNo(
+    @Param('manualBookId') manualBookId: string,
+    @Param('bookNo') bookNoStr: string,
+  ) {
+    const bookNo = parseInt(bookNoStr, 10);
+    return this.service.getPagesByBookNo(manualBookId, bookNo);
+  }
+
+  @Post('pages/transfer')
+  @ApiOperation({ summary: 'Transfer pages to another user' })
+  @ApiResponse({ status: 200, description: 'Pages transferred' })
+  async transferPages(
+    @Body() dto: TransferPagesDto,
+    @Session() session: any,
+  ) {
+    return this.service.transferPages(dto, session.userId);
+  }
+
+  @Put('pages/status')
+  @ApiOperation({ summary: 'Update page status (Void)' })
+  @ApiResponse({ status: 200, description: 'Pages updated' })
+  async updatePagesStatus(
+    @Body() dto: UpdatePageStatusDto,
+    @Session() session: any,
+  ) {
+    return this.service.updatePagesStatus(dto, session.userId);
+  }
+
+  @Post('pages/return')
+  @ApiOperation({ summary: 'Return pages (delete from database)' })
+  @ApiResponse({ status: 200, description: 'Pages returned' })
+  async returnPages(@Body() dto: ReturnPagesDto) {
+    return this.service.returnPages(dto);
+  }
+
+  @Get('pages/search')
+  @ApiOperation({ summary: 'Search page status' })
+  @ApiResponse({ status: 200, description: 'Page tracking status' })
+  async searchPage(
+    @Session() session: any,
+    @Query('pageNo') pageNoStr: string,
+  ) {
+    const pageNo = parseInt(pageNoStr, 10);
+    const branchId = !session.isAdmin ? session.activeBranchId : undefined;
+    return this.service.searchPage(pageNo, branchId);
+  }
+
+  @Get('pages/selectable')
+  @ApiOperation({ summary: 'Get selectable manual bill book pages for the current branch and assignee' })
+  @ApiResponse({ status: 200, description: 'Selectable pages' })
+  async getSelectablePages(
+    @Session() session: any,
+    @Query('branchId') branchId?: string,
+    @Query('userId') userId?: string,
+  ) {
+    const effectiveBranchId = !session.isAdmin ? session.activeBranchId : branchId;
+    const effectiveUserId = userId || session.userId;
+    return this.service.getSelectablePages(
+      effectiveBranchId,
+      effectiveUserId
+    );
+  }
+
+  @Get('dp-mapping/search')
+  @ApiOperation({ summary: 'Search manual book pages for DP mapping' })
+  async searchDPMapping(
+    @Session() session: any,
+    @Query('transactionType') transactionType: string,
+    @Query('bookNo') bookNoStr: string,
+    @Query('mvNoFrom') mvNoFromStr: string,
+    @Query('mvNoTo') mvNoToStr: string,
+    @Query('actionType') actionType: 'MAP' | 'UNMAP',
+  ) {
+    const bookNo = parseInt(bookNoStr, 10);
+    const mvNoFrom = parseInt(mvNoFromStr, 10);
+    const mvNoTo = parseInt(mvNoToStr, 10);
+    const branchId = session.activeBranchId;
+    const currentUserId = session.userId;
+    return this.service.searchDPMapping({
+      branchId,
+      currentUserId,
+      transactionType,
+      bookNo,
+      mvNoFrom,
+      mvNoTo,
+      actionType,
+    });
+  }
+
+  @Post('dp-mapping/allocate')
+  @ApiOperation({ summary: 'Allocate manual book pages to a Delivery Person' })
+  async allocateToDP(
+    @Session() session: any,
+    @Body() body: { pageIds: string[]; deliveryPersonId: string; remarks?: string },
+  ) {
+    return this.service.allocateToDP(body.pageIds, body.deliveryPersonId, session.userId, body.remarks);
+  }
+
+  @Post('dp-mapping/deallocate')
+  @ApiOperation({ summary: 'Deallocate manual book pages back to Cashier' })
+  async deallocateFromDP(
+    @Session() session: any,
+    @Body() body: { pageIds: string[]; remarks?: string },
+  ) {
+    return this.service.deallocateFromDP(body.pageIds, session.userId, body.remarks);
+  }
+
+  @Get('dp-mapping/delivery-persons')
+  @ApiOperation({ summary: 'Get list of active delivery persons in the cashier branch' })
+  async getDeliveryPersons(@Session() session: any) {
+    const branchId = session.activeBranchId;
+    return this.service.getDeliveryPersons(branchId);
   }
 }

@@ -75,6 +75,7 @@ export class MailController {
       bcc: dto.bcc,
       subject: dto.subject,
       text: dto.text,
+      html: dto.html,
     });
     return { message: 'Email sent successfully', messageId: result.messageId };
   }

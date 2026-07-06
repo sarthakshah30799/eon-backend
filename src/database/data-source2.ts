@@ -16,6 +16,7 @@ export const AppDataSource2 = new DataSource({
   entities: [
     __dirname + "/../manual-bill-books/**/*.entity{.ts,.js}",
     __dirname + "/../chequebooks/**/*.entity{.ts,.js}",
+    __dirname + "/../transactions/**/*.entity{.ts,.js}",
   ],
   migrations: [__dirname + "/../migrations2/*{.ts,.js}"],
   synchronize: configService.database.synchronize,

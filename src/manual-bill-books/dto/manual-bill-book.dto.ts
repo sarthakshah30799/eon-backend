@@ -108,7 +108,7 @@ export class BulkReviewManualBooksDto {
   reviews: BulkReviewItemDto[];
 }
 
-export class SaveAllocationItemDto {
+export class AssignPageItemDto {
   @ApiProperty({ description: 'Manual Book entry ID (UUID)' })
   @IsUUID()
   @IsNotEmpty()
@@ -119,10 +119,10 @@ export class SaveAllocationItemDto {
   @Min(1)
   bookNo: number;
 
-  @ApiProperty({ description: 'Cashier user ID (UUID)' })
+  @ApiProperty({ description: 'User ID (UUID) to assign the pages to' })
   @IsUUID()
   @IsNotEmpty()
-  cashierId: string;
+  userId: string;
 
   @ApiProperty({ description: 'Remarks', required: false })
   @IsString()
@@ -130,10 +130,46 @@ export class SaveAllocationItemDto {
   remarks?: string;
 }
 
-export class SaveAllocationsDto {
-  @ApiProperty({ description: 'List of cashier allocations', type: [SaveAllocationItemDto] })
+export class AssignPagesDto {
+  @ApiProperty({ description: 'List of page assignments', type: [AssignPageItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => SaveAllocationItemDto)
-  allocations: SaveAllocationItemDto[];
+  @Type(() => AssignPageItemDto)
+  assignments: AssignPageItemDto[];
+}
+
+export class TransferPagesDto {
+  @ApiProperty({ description: 'List of page numbers to transfer', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
+
+  @ApiProperty({ description: 'Target User ID (UUID) to transfer to' })
+  @IsUUID()
+  @IsNotEmpty()
+  targetUserId: string;
+}
+
+export class UpdatePageStatusDto {
+  @ApiProperty({ description: 'List of page numbers', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
+
+  @ApiProperty({ description: 'New status for the pages', enum: ['VOID'] })
+  @IsString()
+  @IsNotEmpty()
+  status: 'VOID';
+
+  @ApiProperty({ description: 'Optional remarks explaining why', required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+export class ReturnPagesDto {
+  @ApiProperty({ description: 'List of page numbers to return', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
 }

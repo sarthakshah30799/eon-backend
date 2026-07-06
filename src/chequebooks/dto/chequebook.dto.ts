@@ -13,10 +13,10 @@ export class CreateChequeBookDto {
   @IsNotEmpty()
   branchId: string;
 
-  @ApiProperty({ description: 'Transaction Type', example: 'PB-RETAIL PURCHASE' })
+  @ApiProperty({ description: 'Bank Account Code', example: 'AXISHO' })
   @IsString()
   @IsNotEmpty()
-  transactionType: string;
+  bankAccountCode: string;
 
   @ApiProperty({ description: 'Book No. From', example: 101 })
   @IsNumber()
@@ -108,8 +108,8 @@ export class BulkReviewChequeBooksDto {
   reviews: BulkReviewChequeBookItemDto[];
 }
 
-export class SaveChequeBookAllocationItemDto {
-  @ApiProperty({ description: 'Check Book entry ID (UUID)' })
+export class SaveChequeBookAssignmentItemDto {
+  @ApiProperty({ description: 'ChequeBook entry ID (UUID)' })
   @IsUUID()
   @IsNotEmpty()
   checkBookId: string;
@@ -119,10 +119,10 @@ export class SaveChequeBookAllocationItemDto {
   @Min(1)
   bookNo: number;
 
-  @ApiProperty({ description: 'Cashier user ID (UUID)' })
+  @ApiProperty({ description: 'User ID (UUID) to assign the pages to' })
   @IsUUID()
   @IsNotEmpty()
-  cashierId: string;
+  userId: string;
 
   @ApiProperty({ description: 'Remarks', required: false })
   @IsString()
@@ -130,10 +130,34 @@ export class SaveChequeBookAllocationItemDto {
   remarks?: string;
 }
 
-export class SaveChequeBookAllocationsDto {
-  @ApiProperty({ description: 'List of cashier allocations', type: [SaveChequeBookAllocationItemDto] })
+export class SaveChequeBookAssignmentsDto {
+  @ApiProperty({ description: 'List of cashier assignments', type: [SaveChequeBookAssignmentItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => SaveChequeBookAllocationItemDto)
-  allocations: SaveChequeBookAllocationItemDto[];
+  @Type(() => SaveChequeBookAssignmentItemDto)
+  assignments: SaveChequeBookAssignmentItemDto[];
+}
+
+export class UpdatePageStatusDto {
+  @ApiProperty({ description: 'List of page numbers', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
+
+  @ApiProperty({ description: 'New status for the pages', enum: ['VOID'] })
+  @IsString()
+  @IsNotEmpty()
+  status: 'VOID';
+
+  @ApiProperty({ description: 'Optional remarks explaining why', required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
+}
+
+export class ReturnPagesDto {
+  @ApiProperty({ description: 'List of page numbers to return', type: [Number] })
+  @IsArray()
+  @IsNumber({}, { each: true })
+  pageNos: number[];
 }

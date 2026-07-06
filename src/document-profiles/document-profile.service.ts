@@ -198,10 +198,16 @@ export class DocumentProfileService {
       .where('1 = 1');
 
     applyDocumentProfileFilters(queryBuilder, 'document_profile', {
+      specificationType: query.specificationType,
+      type: query.type,
       groupSelection: query.groupSelection,
       entitySelection: query.entitySelection,
       activeOnly: true,
     });
+
+    queryBuilder
+      .orderBy('document_profile.sortOrder', 'ASC')
+      .addOrderBy('document_profile.documentCode', 'ASC');
 
     const profiles = await queryBuilder.getMany();
 
