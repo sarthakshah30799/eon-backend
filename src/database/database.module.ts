@@ -40,6 +40,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         password: configService.database2.password,
         database: configService.database2.database,
         ssl: configService.database.ssl,
+        autoLoadEntities: true,
         entities: [
           __dirname + "/../manual-bill-books/**/*.entity{.ts,.js}",
           __dirname + "/../chequebooks/**/*.entity{.ts,.js}",

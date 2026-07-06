@@ -22,7 +22,10 @@ import {
   TransactionReferenceSnapshotValue,
 } from "../types/transaction-snapshot.types";
 
-@Index("IDX_transactions_number", ["number"])
+@Index("IDX_transactions_number", ["number"], { unique: true })
+@Index("IDX_transactions_root_transaction_revision", ["rootTransactionId", "revisionNo"], {
+  unique: true,
+})
 @Index("IDX_transactions_root_transaction_id", ["rootTransactionId"])
 @Index("IDX_transactions_branch_id", ["branchId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])

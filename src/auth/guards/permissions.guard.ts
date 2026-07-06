@@ -103,12 +103,14 @@ export class PermissionsGuard implements CanActivate {
 
     // 4. Role-Based Access Control for other profiles
     let menuPath = '';
+    let allowedMenuPaths: string[] | null = null;
     if (path.includes('/roles')) {
       menuPath = '/admin/user-role';
     } else if (path.includes('/manual-bill-books')) {
       menuPath = '/manual-bill-books';
     } else if (path.includes('/chequebooks')) {
-      menuPath = '/admin/chequebooks';
+      menuPath = '/cheque-books';
+      allowedMenuPaths = ['/cheque-books', '/admin/chequebooks'];
     } else if (path.includes('/users')) {
       // Allow self-lookup (GET /users/:id matching logged-in user id)
       const isSelf = method === 'GET' && request.params.id === userId;
@@ -193,6 +195,22 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
+    if (menuPath.startsWith('/admin/')) {
+      if (method === 'GET') {
+        this.logger.log(
+          `[DEBUG] permissions guard allow admin view method=${method} path=${path} menuPath=${menuPath} userId=${userId}`
+        );
+        return true;
+      }
+
+      if (!userDto.isAdmin) {
+        this.logger.warn(
+          `[DEBUG] permissions guard deny admin modify method=${method} path=${path} menuPath=${menuPath} userId=${userId}`
+        );
+        throw new NotFoundException(`Resource at ${menuPath} not found`);
+      }
+    }
+
     if (!menuPath) {
       this.logger.log(
         `[DEBUG] permissions guard allow unmapped route method=${method} path=${path} userId=${userId}`
@@ -210,10 +228,13 @@ export class PermissionsGuard implements CanActivate {
       requiredPermission = 'delete';
     }
 
-    const userPermissions = userDto.permissions?.[menuPath] || [];
-    if (!userPermissions.includes(requiredPermission)) {
+    const permissionPaths = allowedMenuPaths?.length ? allowedMenuPaths : [menuPath];
+    const hasPermission = permissionPaths.some(permissionPath =>
+      (userDto.permissions?.[permissionPath] || []).includes(requiredPermission)
+    );
+    if (!hasPermission) {
       this.logger.warn(
-        `[DEBUG] permissions guard deny permission method=${method} path=${path} menuPath=${menuPath} requiredPermission=${requiredPermission} userPermissions=${JSON.stringify(userPermissions)} userId=${userId}`
+        `[DEBUG] permissions guard deny permission method=${method} path=${path} menuPath=${menuPath} requiredPermission=${requiredPermission} allowedMenuPaths=${JSON.stringify(permissionPaths)} userPermissions=${JSON.stringify(userDto.permissions)} userId=${userId}`
       );
       if (method === 'GET' && !request.params?.id) {
         request.silentEmptyResult = this.resolveSilentEmptyResult(path, menuPath);
@@ -229,7 +250,7 @@ export class PermissionsGuard implements CanActivate {
     }
 
     this.logger.log(
-      `[DEBUG] permissions guard allow method=${method} path=${path} menuPath=${menuPath} requiredPermission=${requiredPermission} userId=${userId}`
+      `[DEBUG] permissions guard allow method=${method} path=${path} menuPath=${menuPath} requiredPermission=${requiredPermission} allowedMenuPaths=${JSON.stringify(permissionPaths)} userId=${userId}`
     );
     return true;
   }

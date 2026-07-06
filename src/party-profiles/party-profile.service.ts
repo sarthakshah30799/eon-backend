@@ -24,6 +24,7 @@ import { Product } from "../products/product.entity";
 import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
 import {
   PartyProfileCommissionTypeEnum,
+  type PartyProfileCommissionType,
 } from "./types/party-profile-commission-rule.types";
 import {
   parseCommissionRulesCsv,
@@ -63,6 +64,15 @@ function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> 
   const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
   return Object.fromEntries(entries) as Partial<T>;
 }
+
+type PartyProfileCommissionRuleInput = {
+  currencyCode: string;
+  currencyName?: string | null;
+  productCode: string;
+  productDescription?: string | null;
+  commissionType: PartyProfileCommissionType;
+  commissionValue: string;
+};
 
 @Injectable()
 export class PartyProfileService {
@@ -184,6 +194,116 @@ export class PartyProfileService {
     ];
   }
 
+  private normalizeCommissionRules(
+    commissionRules?: PartyProfileCommissionRuleInput[] | null,
+  ) {
+    if (!Array.isArray(commissionRules)) {
+      return undefined;
+    }
+
+    return commissionRules.map(rule => ({
+      currencyCode: rule.currencyCode?.trim().toUpperCase(),
+      currencyName: rule.currencyName?.trim() || null,
+      productCode: rule.productCode?.trim().toUpperCase(),
+      productDescription: rule.productDescription?.trim() || null,
+      commissionType: rule.commissionType,
+      commissionValue: rule.commissionValue?.trim(),
+    }));
+  }
+
+  private async syncCommissionRules(
+    client: PartyProfile,
+    commissionRules: PartyProfileCommissionRuleInput[] | undefined,
+    userId: string,
+  ) {
+    if (commissionRules === undefined) {
+      return;
+    }
+
+    if (client.type !== ClientType.AGENT && commissionRules.length > 0) {
+      throw new BadRequestException(
+        "Commission rules are only available for agent profiles",
+      );
+    }
+
+    const resolvedRules: Array<{
+      currencyCode: string;
+      currencyName: string | null;
+      productCode: string;
+      productDescription: string | null;
+      commissionType: PartyProfileCommissionType;
+      commissionValue: string;
+    }> = [];
+
+    for (const rule of commissionRules) {
+      if (
+        !rule.currencyCode ||
+        !rule.productCode ||
+        !rule.commissionType ||
+        !rule.commissionValue
+      ) {
+        throw new BadRequestException(
+          "Each commission row must include currencyCode, productCode, commissionType, and commissionValue",
+        );
+      }
+
+      const currency = await this.currencyRepository.findOne({
+        where: { currencyCode: rule.currencyCode },
+      });
+      if (!currency) {
+        throw new BadRequestException(
+          `Currency code "${rule.currencyCode}" not found`,
+        );
+      }
+
+      const product = await this.productRepository.findOne({
+        where: { productCode: rule.productCode },
+      });
+      if (!product) {
+        throw new BadRequestException(
+          `Product code "${rule.productCode}" not found`,
+        );
+      }
+
+      resolvedRules.push({
+        currencyCode: currency.currencyCode,
+        currencyName: currency.currencyName,
+        productCode: product.productCode,
+        productDescription: product.productDescription,
+        commissionType:
+          rule.commissionType === PartyProfileCommissionTypeEnum.PERCENTAGE
+            ? PartyProfileCommissionTypeEnum.PERCENTAGE
+            : PartyProfileCommissionTypeEnum.PAISA,
+        commissionValue: rule.commissionValue,
+      });
+    }
+
+    await this.partyProfileCommissionRuleRepository.delete({
+      partyProfileId: client.id,
+    });
+
+    if (resolvedRules.length === 0) {
+      return;
+    }
+
+    await this.partyProfileCommissionRuleRepository.save(
+      resolvedRules.map(rule =>
+        this.partyProfileCommissionRuleRepository.create({
+          partyProfileId: client.id,
+          partyProfile: client,
+          currencyCode: rule.currencyCode,
+          currencyName: rule.currencyName,
+          productCode: rule.productCode,
+          productDescription: rule.productDescription,
+          commissionType: rule.commissionType,
+          commissionValue: rule.commissionValue,
+          createdBy: userId,
+          updatedBy: userId,
+        }),
+      ),
+    );
+  }
+
   getTypes(userId?: string) {
     const allTypes = [
       { value: ClientType.CORPORATE_CLIENT, label: 'CORPORATE CLIENT' },
@@ -222,6 +342,7 @@ export class PartyProfileService {
   async create(dto: CreatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
     const normalized = normalizeDto(dto);
+    const commissionRules = this.normalizeCommissionRules(dto.commissionRules);
     this.assertPartyProfileAccess(user, normalized.type ?? dto.type ?? ClientType.CORPORATE_CLIENT, "add");
 
     const existingCode = await this.partyProfileRepository.findOne({
@@ -268,6 +389,7 @@ export class PartyProfileService {
       marketingExecutive,
       businessNature,
       tdsGroup,
+      commissionRules: _commissionRules,
       ...rest
     } = normalized;
 
@@ -294,6 +416,7 @@ export class PartyProfileService {
     });
 
     const saved = await this.partyProfileRepository.save(client);
+    await this.syncCommissionRules(saved, commissionRules, userId);
     return this.findById(saved.id);
   }
 
@@ -305,6 +428,7 @@ export class PartyProfileService {
     }
 
     const normalized = normalizeDto(dto);
+    const commissionRules = this.normalizeCommissionRules(dto.commissionRules);
     this.assertPartyProfileAccess(user, normalized.type ?? client.type, "modify");
 
     if (normalized.name && normalized.name !== client.name) {
@@ -347,6 +471,7 @@ export class PartyProfileService {
       marketingExecutive,
       businessNature,
       tdsGroup,
+      commissionRules: _commissionRules,
       ...updatableFields
     } = normalized;
     const updates = pickDefinedFields(updatableFields);
@@ -405,6 +530,7 @@ export class PartyProfileService {
     client.updatedBy = userId;
 
     await this.partyProfileRepository.save(client);
+    await this.syncCommissionRules(client, commissionRules, userId);
     return this.findById(id);
   }
 

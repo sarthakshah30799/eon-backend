@@ -7,9 +7,10 @@ export enum TransactionPrintCopyType {
 }
 
 export class RecordTransactionPrintDto {
-  @ApiProperty({ enum: TransactionPrintCopyType })
+  @ApiProperty({ enum: TransactionPrintCopyType, required: false })
   @IsEnum(TransactionPrintCopyType)
-  copyType: TransactionPrintCopyType;
+  @IsOptional()
+  copyType?: TransactionPrintCopyType;
 
   @ApiPropertyOptional({ description: 'Customer email address to send the copy to' })
   @IsString()

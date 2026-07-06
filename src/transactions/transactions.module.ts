@@ -10,10 +10,19 @@ import { TransactionEvent } from "./entities/transaction-event.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
 import { MailModule } from "../mail/mail.module";
+import { StorageModule } from "../storage/storage.module";
+import { Currency } from "../currencies/currency.entity";
+import { Product } from "../products/product.entity";
+import { SelectOption } from "../category-options/category-option.entity";
+import { DocumentProfile } from "../document-profiles/document-profile.entity";
+import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { PartyProfile } from "../party-profiles/party-profile.entity";
 
 @Module({
   imports: [
     MailModule,
+    StorageModule,
+    TypeOrmModule.forFeature([Currency, Product, SelectOption, DocumentProfile, AccountProfile, PartyProfile]),
     TypeOrmModule.forFeature(
       [
         Transaction,
