@@ -5,6 +5,7 @@ import { ChequeBook } from "./entities/cheque-book.entity";
 import { ChequeBookPageTracking } from "./entities/cheque-book-page-tracking.entity";
 import { Branch } from "../branches/branch.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { User } from "../users/user.entity";
 import {
   CreateChequeBookDto,
   ApproveRejectChequeBookDto,
@@ -13,6 +14,9 @@ import {
   UpdatePageStatusDto,
   ReturnPagesDto,
 } from "./dto/chequebook.dto";
+
+const isUuid = (val: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
 @Injectable()
 export class ChequeBookService {
@@ -173,9 +177,22 @@ export class ChequeBookService {
         : [];
     const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
+    // Fetch assigned users from DB1
+    const assignedToIds = Array.from(
+      new Set(books.map((b) => b.assignedTo).filter((id) => id && isUuid(id))),
+    );
+    let assignedUsers: User[] = [];
+    if (assignedToIds.length > 0) {
+      assignedUsers = await this.branchRepository.manager.find(User, {
+        where: { id: In(assignedToIds) },
+      });
+    }
+    const userMap = new Map(assignedUsers.map((u) => [u.id, u]));
+
     return books.map((book) => {
       const branch = branchMap.get(book.branchId);
       const account = accountMap.get(book.bankAccountCode);
+      const assignedUser = userMap.get(book.assignedTo);
       return {
         ...book,
         branchName: branch ? branch.name : "Unknown Branch",
@@ -184,6 +201,7 @@ export class ChequeBookService {
           ? `${account.accountCode} - ${account.accountName}`
           : "Unknown Bank Account",
         bankAccountCodeName: account ? account.accountCode : "",
+        assignedToName: assignedUser ? assignedUser.name : book.assignedTo,
       };
     });
   }
@@ -240,6 +258,21 @@ export class ChequeBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true
         AND r.is_cashier = true
+    `,
+      [branchId],
+    );
+  }
+
+  async getBranchManagers(branchId: string): Promise<any[]> {
+    return this.branchRepository.manager.query(
+      `
+      SELECT DISTINCT u.id, u.name
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      JOIN roles r ON ur.role_id = r.id
+      WHERE ur.branch_id = $1 
+        AND u.is_active = true
+        AND r.is_brn_mgr = true
     `,
       [branchId],
     );
