@@ -16,6 +16,9 @@ import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot
 @Index("IDX_transaction_documents_transaction_line", ["transactionId", "lineNo"], {
   unique: true,
 })
+@Index("IDX_transaction_documents_transaction_document_profile", ["transactionId", "documentProfileId"], {
+  unique: true,
+})
 @Entity("transaction_documents")
 export class TransactionDocument extends BaseEntity {
   @Column({ type: "uuid", name: "transaction_id" })
@@ -76,6 +79,9 @@ export class TransactionDocument extends BaseEntity {
 
   @Column({ type: "text", name: "storage_url", nullable: true })
   storageUrl: string | null;
+
+  @Column({ type: "bytea", nullable: true })
+  content: Buffer | null;
 
   @Column({ type: "text", nullable: true })
   remarks: string | null;

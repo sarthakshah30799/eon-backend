@@ -524,7 +524,7 @@ export class ChequeBookService {
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.checkBook", "book")
-      .where("pt.status = :status", { status: "ALLOCATED" });
+      .where("pt.isVoided = :isVoided", { isVoided: false });
 
     if (branchId) {
       query.andWhere("book.branchId = :branchId", { branchId });

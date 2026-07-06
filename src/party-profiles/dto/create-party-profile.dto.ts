@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  IsArray,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -11,9 +12,12 @@ import {
   IsUUID,
   Length,
   Min,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
 import { ClientType } from "../party-profile.entity";
 import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
+import { PartyProfileCommissionRuleDto } from "./party-profile-commission-rule.dto";
 
 export class CreatePartyProfileDto {
   @ApiProperty({ description: "Date of Introduction", example: "2026-06-09T00:00:00Z" })
@@ -344,6 +348,13 @@ export class CreatePartyProfileDto {
   @IsNumber()
   @IsOptional()
   divisionFactor?: number;
+
+  @ApiPropertyOptional({ description: "Commission Rules", type: [PartyProfileCommissionRuleDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartyProfileCommissionRuleDto)
+  @IsOptional()
+  commissionRules?: PartyProfileCommissionRuleDto[];
 
   @ApiPropertyOptional({ description: "Client Profile Type", enum: ClientType, default: ClientType.CORPORATE_CLIENT })
   @IsEnum(ClientType)
