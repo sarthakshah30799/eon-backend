@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('manual_books')
 export class ManualBook {
@@ -12,6 +12,7 @@ export class ManualBook {
   no: string;
 
   @Column({ name: 'branch_id', type: 'uuid' })
+  @Index('IDX_manual_books_branch_id')
   branchId: string;
 
   @Column({ name: 'transaction_type', type: 'varchar', length: 100 })

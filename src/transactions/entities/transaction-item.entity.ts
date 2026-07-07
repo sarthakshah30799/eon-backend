@@ -53,10 +53,13 @@ export class TransactionItem extends BaseEntity {
   @Column({ type: "numeric", name: "quantity", precision: 18, scale: 4 })
   quantity: string;
 
-  @Column({ type: "numeric", name: "rate", precision: 18, scale: 4 })
+  @Column({ type: "numeric", name: "per", nullable: true })
+  per: string | null;
+
+  @Column({ type: "numeric", name: "rate", precision: 18, scale: 7 })
   rate: string;
 
-  @Column({ type: "numeric", name: "commission", precision: 18, scale: 4, nullable: true })
+  @Column({ type: "numeric", name: "commission", precision: 18, scale: 2, nullable: true })
   commission: string | null;
 
   @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })

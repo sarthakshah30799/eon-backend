@@ -63,7 +63,11 @@ export class PartyProfileController {
     @Query() query: PartyProfileListQueryDto,
     @Session() session: any,
   ): Promise<PartyProfileListResponseDto> {
-    return this.partyProfileService.findAll(query, session.userId);
+    return this.partyProfileService.findAll(
+      query,
+      session.userId,
+      session.activeBranchId,
+    );
   }
 
   @Get("review-queue")
@@ -82,7 +86,11 @@ export class PartyProfileController {
     @Param("id") id: string,
     @Session() session: any,
   ): Promise<PartyProfileResponseDto> {
-    return this.partyProfileService.findByIdForUser(id, session.userId);
+    return this.partyProfileService.findByIdForUser(
+      id,
+      session.userId,
+      session.activeBranchId,
+    );
   }
 
   @Post()

@@ -36,6 +36,8 @@ const normalizeOptionalText = (value?: string | null) => {
   return trimmed ? trimmed : null;
 };
 
+const CURRENCY_RATE_DECIMALS = 7;
+
 @Injectable()
 export class CurrencyRatesService {
   constructor(
@@ -389,7 +391,7 @@ export class CurrencyRatesService {
     };
   }
 
-  private round(value: number, scale = 4): string {
+  private round(value: number, scale = CURRENCY_RATE_DECIMALS): string {
     return value.toFixed(Math.max(scale, 0));
   }
 
@@ -405,7 +407,7 @@ export class CurrencyRatesService {
     baseRate: string,
     margin: CurrencyRateSideConfig,
     direction: 'add' | 'subtract',
-    scale = 4,
+    scale = CURRENCY_RATE_DECIMALS,
   ): { marginAmount: string; finalRate: string } {
     const base = this.parseDecimal(baseRate);
     const marginValue = this.parseDecimal(margin.marginValue);

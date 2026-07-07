@@ -17,13 +17,13 @@ export class CurrencyRate extends BaseEntity {
   @Column({ type: 'enum', enum: CurrencyRateProvider })
   provider: CurrencyRateProvider;
 
-  @Column({ type: 'numeric' })
+  @Column({ type: 'numeric', precision: 18, scale: 7 })
   baseBuyRate: string;
 
-  @Column({ type: 'numeric' })
+  @Column({ type: 'numeric', precision: 18, scale: 7 })
   baseSaleRate: string;
 
-  @Column({ type: 'numeric', nullable: true })
+  @Column({ type: 'numeric', precision: 18, scale: 7, nullable: true })
   baseRate: string | null;
 
   @Column({ type: 'boolean', default: true })

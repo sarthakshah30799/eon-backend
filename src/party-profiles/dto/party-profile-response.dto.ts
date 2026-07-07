@@ -3,6 +3,7 @@ import { PartyProfile, ClientType } from "../party-profile.entity";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 import { PartyProfileCommissionRuleResponseDto } from "./party-profile-commission-rule-response.dto";
+import { BranchResponseDto } from "../../branches/dto/branch-response.dto";
 
 export class PartyProfileResponseDto {
   @ApiProperty({ description: "UUID of the party profile" })
@@ -167,11 +168,11 @@ export class PartyProfileResponseDto {
 
 
 
-  @ApiPropertyOptional({ description: "Origin Branch ID" })
-  originBranchId?: string;
+  @ApiPropertyOptional({ description: "Branch ID" })
+  branchId?: string;
 
-  @ApiPropertyOptional({ description: "Origin Branch Name" })
-  originBranchName?: string;
+  @ApiPropertyOptional({ description: "Branch", type: BranchResponseDto })
+  branch?: BranchResponseDto | null;
 
   @ApiPropertyOptional({ description: "Location", type: SelectOptionResponseDto })
   location?: SelectOptionResponseDto | null;
@@ -283,8 +284,8 @@ export class PartyProfileResponseDto {
     dto.stateId = entity.stateId;
     dto.stateName = entity.state?.name;
 
-    dto.originBranchId = entity.originBranchId;
-    dto.originBranchName = entity.originBranch?.name;
+    dto.branchId = entity.branchId;
+    dto.branch = entity.branch ? BranchResponseDto.fromEntity(entity.branch) : null;
     dto.location = entity.location ? SelectOptionResponseDto.fromEntity(entity.location) : null;
     dto.webSite = entity.webSite;
     dto.accountHolderName = entity.accountHolderName;

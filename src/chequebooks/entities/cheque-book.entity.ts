@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('cheque_books')
 export class ChequeBook {
@@ -12,6 +12,7 @@ export class ChequeBook {
   no: string;
 
   @Column({ name: 'branch_id', type: 'uuid' })
+  @Index('IDX_cheque_books_branch_id')
   branchId: string;
 
   @Column({ name: 'bank_account_code', type: 'uuid', nullable: true })

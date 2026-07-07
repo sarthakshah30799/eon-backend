@@ -28,6 +28,7 @@ import {
 })
 @Index("IDX_transactions_root_transaction_id", ["rootTransactionId"])
 @Index("IDX_transactions_branch_id", ["branchId"])
+@Index("IDX_transactions_manual_book_page_id", ["manualBookPageId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])

@@ -195,8 +195,7 @@ export class ManualBillBookController {
     @Query("pageNo") pageNoStr: string,
   ) {
     const pageNo = parseInt(pageNoStr, 10);
-    const branchId = !session.isAdmin ? session.activeBranchId : undefined;
-    return this.service.searchPage(pageNo, branchId);
+    return this.service.searchPage(pageNo, session.activeBranchId);
   }
 
   @Get("pages/selectable")
@@ -210,10 +209,8 @@ export class ManualBillBookController {
     @Query("branchId") branchId?: string,
     @Query("userId") userId?: string,
   ) {
-    const effectiveBranchId = !session.isAdmin
-      ? session.activeBranchId
-      : branchId;
-    const effectiveUserId = userId?.trim() || undefined;
+    const effectiveBranchId = session.activeBranchId;
+    const effectiveUserId = userId?.trim() || session.userId;
     this.logger.log(
       `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"}`
     );

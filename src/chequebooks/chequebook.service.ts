@@ -521,14 +521,16 @@ export class ChequeBookService {
     accountId?: string,
     userId?: string,
   ): Promise<any[]> {
+    if (!branchId) {
+      return [];
+    }
+
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.checkBook", "book")
       .where("pt.isVoided = :isVoided", { isVoided: false });
 
-    if (branchId) {
-      query.andWhere("book.branchId = :branchId", { branchId });
-    }
+    query.andWhere("book.branchId = :branchId", { branchId });
 
     if (accountId) {
       query.andWhere("book.bankAccountCode = :accountId", { accountId });
@@ -537,6 +539,14 @@ export class ChequeBookService {
     if (userId) {
       query.andWhere("pt.userId = :userId", { userId });
     }
+
+    query.andWhere(
+      `NOT EXISTS (
+        SELECT 1
+        FROM transaction_payments tp
+        WHERE tp.cheque_page_id = pt.id
+      )`,
+    );
 
     const pages = await query
       .orderBy("book.dispatchDate", "DESC")

@@ -227,15 +227,16 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "uuid", nullable: true })
   stateId: string;
 
+  @Index("IDX_party_profiles_branch_id")
   @ManyToOne(() => Branch, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({
-    name: "origin_branch_id",
-    foreignKeyConstraintName: "FK_party_profiles_origin_branch_id",
+    name: "branch_id",
+    foreignKeyConstraintName: "FK_party_profiles_branch_id",
   })
-  originBranch: Branch;
+  branch: Branch;
 
   @Column({ type: "uuid", nullable: true })
-  originBranchId: string;
+  branchId: string;
 
   @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({

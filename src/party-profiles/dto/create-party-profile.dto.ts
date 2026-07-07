@@ -287,11 +287,11 @@ export class CreatePartyProfileDto {
   @IsOptional()
   stateId?: string;
 
-  @ApiPropertyOptional({ description: "Origin Branch ID (UUID)" })
+  @ApiPropertyOptional({ description: "Branch ID (UUID)" })
   @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
-  originBranchId?: string;
+  branchId?: string;
 
   @ApiPropertyOptional({ description: "Location" })
   @EmptyStringToUndefined()

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  BadRequestException,
   Get,
   Param,
   Post,
@@ -44,10 +45,16 @@ export class TransactionsController {
     @Query('slug') slug?: string,
     @Query('branchId') branchId?: string,
     @Query('search') search?: string,
+    @Query('status') status?: string,
   ): Promise<Transaction[]> {
     const effectiveBranchId =
       session?.isAdmin || session?.isHoStaff ? branchId || session?.activeBranchId : session?.activeBranchId;
-    return this.transactionsService.getTransactions(slug, effectiveBranchId, search);
+    return this.transactionsService.getTransactions(
+      slug,
+      effectiveBranchId,
+      search,
+      status as any,
+    );
   }
 
   @Post('drafts')
@@ -60,6 +67,25 @@ export class TransactionsController {
     @Session() session: any,
   ): Promise<Transaction> {
     return this.transactionsService.createDraft(body, files, session?.userId ?? null);
+  }
+
+  @Post(':id/approve')
+  @ApiOperation({ summary: 'Approve a draft transaction' })
+  @ApiResponse({ status: 200, description: 'Transaction approved successfully' })
+  async approveTransaction(
+    @Param('id') transactionId: string,
+    @Body() body: { approvalRemarks?: string },
+    @Session() session: any,
+  ): Promise<Transaction> {
+    if (!session?.userId) {
+      throw new BadRequestException('User session not found');
+    }
+
+    return this.transactionsService.approveTransaction(
+      transactionId,
+      session.userId,
+      body?.approvalRemarks ?? null,
+    );
   }
 
   @Get(':id')

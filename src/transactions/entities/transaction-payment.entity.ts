@@ -16,6 +16,7 @@ import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot
 @Index("IDX_transaction_payments_transaction_line", ["transactionId", "lineNo"], {
   unique: true,
 })
+@Index("IDX_transaction_payments_cheque_page_id", ["chequePageId"])
 @Entity("transaction_payments")
 export class TransactionPayment extends BaseEntity {
   @Column({ type: "uuid", name: "transaction_id" })
@@ -70,6 +71,9 @@ export class TransactionPayment extends BaseEntity {
 
   @Column({ type: "varchar", length: 255, name: "branch_name", nullable: true })
   branchName: string | null;
+
+  @Column({ type: "varchar", length: 255, name: "drawn_on", nullable: true })
+  drawnOn: string | null;
 
   @Column({ type: "numeric", precision: 18, scale: 4 })
   amount: string;

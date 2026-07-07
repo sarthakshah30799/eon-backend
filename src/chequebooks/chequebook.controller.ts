@@ -156,8 +156,7 @@ export class ChequeBookController {
     @Query('pageNo') pageNoStr: string,
   ) {
     const pageNo = parseInt(pageNoStr, 10);
-    const branchId = !session.isAdmin ? session.activeBranchId : undefined;
-    return this.service.searchPage(pageNo, branchId);
+    return this.service.searchPage(pageNo, session.activeBranchId);
   }
 
   @Get('pages/selectable')
@@ -169,7 +168,7 @@ export class ChequeBookController {
     @Query('accountId') accountId?: string,
     @Query('userId') userId?: string,
   ) {
-    const effectiveBranchId = !session.isAdmin ? session.activeBranchId : branchId;
+    const effectiveBranchId = session.activeBranchId;
     const effectiveUserId = userId || session.userId;
     return this.service.getSelectablePages(
       effectiveBranchId,

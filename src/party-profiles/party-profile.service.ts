@@ -359,10 +359,10 @@ export class PartyProfileService {
       throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
     }
 
-    if (dto.originBranchId) {
-      const branch = await this.branchRepository.findOne({ where: { id: dto.originBranchId } });
+    if (dto.branchId) {
+      const branch = await this.branchRepository.findOne({ where: { id: dto.branchId } });
       if (!branch) {
-        throw new NotFoundException(`Origin Branch with id ${dto.originBranchId} not found`);
+        throw new NotFoundException(`Branch with id ${dto.branchId} not found`);
       }
     }
 
@@ -440,10 +440,10 @@ export class PartyProfileService {
       }
     }
 
-    if (dto.originBranchId && dto.originBranchId !== client.originBranchId) {
-      const branch = await this.branchRepository.findOne({ where: { id: dto.originBranchId } });
+    if (dto.branchId && dto.branchId !== client.branchId) {
+      const branch = await this.branchRepository.findOne({ where: { id: dto.branchId } });
       if (!branch) {
-        throw new NotFoundException(`Origin Branch with id ${dto.originBranchId} not found`);
+        throw new NotFoundException(`Branch with id ${dto.branchId} not found`);
       }
     }
 
@@ -547,7 +547,7 @@ export class PartyProfileService {
 
     if (!user?.isAdmin) {
       const branchIds = this.getReviewerBranchIds(user);
-      if (!branchIds.length || !client.originBranchId || !branchIds.includes(client.originBranchId)) {
+      if (!branchIds.length || !client.branchId || !branchIds.includes(client.branchId)) {
         throw new ForbiddenException("You are not allowed to review this party profile");
       }
     }
@@ -588,7 +588,7 @@ export class PartyProfileService {
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
       .leftJoinAndSelect("pp.state", "state")
-      .leftJoinAndSelect("pp.originBranch", "originBranch")
+      .leftJoinAndSelect("pp.branch", "branch")
       .leftJoinAndSelect("pp.statusUpdatedBy", "statusUpdatedBy")
       .leftJoinAndSelect("pp.location", "locationOption")
       .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
@@ -606,7 +606,7 @@ export class PartyProfileService {
         return [];
       }
 
-      qb.andWhere("pp.originBranchId IN (:...branchIds)", { branchIds });
+      qb.andWhere("pp.branchId IN (:...branchIds)", { branchIds });
     }
 
     qb.orderBy("pp.createdAt", "ASC");
@@ -619,14 +619,18 @@ export class PartyProfileService {
     return this.findByIdForUser(id, undefined);
   }
 
-  async findByIdForUser(id: string, userId?: string): Promise<PartyProfileResponseDto> {
+  async findByIdForUser(
+    id: string,
+    userId?: string,
+    activeBranchId?: string,
+  ): Promise<PartyProfileResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({
       where: { id },
       relations: [
         "gstState",
         "state",
-        "originBranch",
+        "branch",
         "statusUpdatedBy",
         "location",
         "kycRiskCategory",
@@ -646,6 +650,9 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "view");
+      if (!user.isAdmin && (!activeBranchId || client.branchId !== activeBranchId)) {
+        throw new NotFoundException(`Party Profile with id ${id} not found`);
+      }
     }
 
     return PartyProfileResponseDto.fromEntity(client);
@@ -807,6 +814,7 @@ export class PartyProfileService {
   async findAll(
     query: PartyProfileListQueryDto,
     userId?: string,
+    activeBranchId?: string,
   ): Promise<PartyProfileListResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
     const page = query.page ?? 1;
@@ -817,7 +825,7 @@ export class PartyProfileService {
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
       .leftJoinAndSelect("pp.state", "state")
-      .leftJoinAndSelect("pp.originBranch", "originBranch")
+      .leftJoinAndSelect("pp.branch", "branch")
       .leftJoinAndSelect("pp.location", "locationOption")
       .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
       .leftJoinAndSelect("pp.defaultAgent", "defaultAgentOption")
@@ -826,6 +834,18 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
+
+    if (!activeBranchId) {
+      return {
+        data: [],
+        page,
+        limit,
+        totalItems: 0,
+        totalPages: 0,
+      };
+    }
+
+    qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
 
     const requestedTypes = (query.type?.length
       ? query.type

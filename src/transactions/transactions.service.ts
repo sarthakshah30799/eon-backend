@@ -122,8 +122,26 @@ export class TransactionsService {
         pinCode: true,
         panNo: true,
         gstNo: true,
+        gstStateId: true,
+        stateId: true,
         contactName: true,
         applyTax: true,
+        gstState: {
+          id: true,
+          name: true,
+          code: true,
+          gstStateCode: true,
+        },
+        state: {
+          id: true,
+          name: true,
+          code: true,
+          gstStateCode: true,
+        },
+      },
+      relations: {
+        gstState: true,
+        state: true,
       },
     });
 
@@ -146,6 +164,10 @@ export class TransactionsService {
       pinCode: partyProfile.pinCode ?? null,
       panNo: partyProfile.panNo ?? null,
       gstNo: partyProfile.gstNo ?? null,
+      gstStateId: partyProfile.gstStateId ?? null,
+      gstStateName: partyProfile.gstState?.name ?? null,
+      stateId: partyProfile.stateId ?? null,
+      stateName: partyProfile.state?.name ?? null,
       contactName: partyProfile.contactName ?? null,
       applyTax: Boolean(partyProfile.applyTax),
     } as TransactionReferenceSnapshotValue;
@@ -194,6 +216,7 @@ export class TransactionsService {
     slug?: string,
     branchId?: string,
     search?: string,
+    status?: TransactionStatus,
   ): Promise<Transaction[]> {
     const query = this.transactionRepository
       .createQueryBuilder('transaction')
@@ -205,6 +228,10 @@ export class TransactionsService {
 
     if (branchId) {
       query.andWhere('transaction.branchId = :branchId', { branchId });
+    }
+
+    if (status) {
+      query.andWhere('transaction.status = :status', { status });
     }
 
     const trimmedSearch = search?.trim();
@@ -234,6 +261,23 @@ export class TransactionsService {
         id: true,
         code: true,
         name: true,
+        email: true,
+        phoneNo: true,
+        address1: true,
+        address2: true,
+        address3: true,
+        city: true,
+        pinCode: true,
+        panNo: true,
+        gstNo: true,
+        gstStateId: true,
+        stateId: true,
+        contactName: true,
+        applyTax: true,
+      },
+      relations: {
+        gstState: true,
+        state: true,
       },
     });
     const partyProfileById = new Map(
@@ -252,11 +296,28 @@ export class TransactionsService {
 
       return {
         ...transaction,
-        partyProfileSnapshot: this.toReferenceSnapshot({
-          id: partyProfile.id,
-          code: partyProfile.code,
-          name: partyProfile.name,
-        }),
+        partyProfileSnapshot: {
+          ...this.toReferenceSnapshot({
+            id: partyProfile.id,
+            code: partyProfile.code,
+            name: partyProfile.name,
+          }),
+          email: partyProfile.email ?? null,
+          phoneNo: partyProfile.phoneNo ?? null,
+          address1: partyProfile.address1 ?? null,
+          address2: partyProfile.address2 ?? null,
+          address3: partyProfile.address3 ?? null,
+          city: partyProfile.city ?? null,
+          pinCode: partyProfile.pinCode ?? null,
+          panNo: partyProfile.panNo ?? null,
+          gstNo: partyProfile.gstNo ?? null,
+          gstStateId: partyProfile.gstStateId ?? null,
+          gstStateName: partyProfile.gstState?.name ?? null,
+          stateId: partyProfile.stateId ?? null,
+          stateName: partyProfile.state?.name ?? null,
+          contactName: partyProfile.contactName ?? null,
+          applyTax: Boolean(partyProfile.applyTax),
+        },
       };
     });
   }
@@ -290,6 +351,12 @@ export class TransactionsService {
       }
     }
 
+    const shouldRequireApproval = Boolean(transactionPayload.requiresApproval);
+    const transactionStatus = shouldRequireApproval
+      ? TransactionStatus.DRAFT
+      : TransactionStatus.APPROVED;
+    const now = new Date();
+
     const transaction = await this.transactionRepository.save(
       this.transactionRepository.create({
         rootTransactionId: transactionPayload.rootTransactionId ?? null,
@@ -306,12 +373,12 @@ export class TransactionsService {
         manualBookPageSnapshot: transactionPayload.manualBookPageSnapshot ?? null,
         transactionType: transactionPayload.transactionType,
         tradeMode: transactionPayload.tradeMode,
-        status: TransactionStatus.DRAFT,
+        status: transactionStatus,
         remarks: transactionPayload.remarks ?? null,
-        submittedAt: transactionPayload.requiresApproval ? null : null,
-        approvedAt: null,
+        submittedAt: shouldRequireApproval ? now : now,
+        approvedAt: shouldRequireApproval ? null : now,
         rejectedAt: null,
-        approvedById: null,
+        approvedById: shouldRequireApproval ? null : performedById,
         rejectedById: null,
         approvalRemarks: null,
         rejectionReason: null,
@@ -434,6 +501,7 @@ export class TransactionsService {
           currencyRateId: row.currencyRateId ?? null,
           productCurrencyRateId: row.productCurrencyRateId ?? null,
           quantity: String(row.quantity),
+          per: row.per ?? null,
           rate: String(row.rate),
           commission: row.commission ?? null,
           currencySnapshot: {
@@ -575,6 +643,7 @@ export class TransactionsService {
           referenceNumber: row.referenceNumber ?? null,
           referenceDate: row.referenceDate ?? null,
           branchName: row.branchName ?? null,
+          drawnOn: row.drawnOn ?? null,
           amount: String(row.amount),
           remarks: row.remarks ?? null,
           createdBy: performedById,
@@ -587,10 +656,12 @@ export class TransactionsService {
       this.transactionLogRepository.create({
         transactionId: transaction.id,
         action: TransactionLogAction.CREATE,
-        message: 'Transaction draft created',
+        message: shouldRequireApproval
+          ? 'Transaction draft created'
+          : 'Transaction approved on creation',
         metadata: {
-          status: TransactionStatus.DRAFT,
-          requiresApproval: Boolean(transactionPayload.requiresApproval),
+          status: transactionStatus,
+          requiresApproval: shouldRequireApproval,
         },
         performedById,
         createdBy: performedById,
@@ -633,6 +704,56 @@ export class TransactionsService {
 
     return this.transactionRepository.findOne({
       where: { id: transaction.id },
+    }) as Promise<Transaction>;
+  }
+
+  async approveTransaction(
+    transactionId: string,
+    performedById: string | null,
+    approvalRemarks: string | null = null,
+  ): Promise<Transaction> {
+    if (!performedById) {
+      throw new BadRequestException('User session not found');
+    }
+
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId, isLatest: true },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction with id ${transactionId} not found`);
+    }
+
+    if (transaction.status !== TransactionStatus.DRAFT) {
+      throw new BadRequestException('Only draft transactions can be approved');
+    }
+
+    transaction.status = TransactionStatus.APPROVED;
+    transaction.submittedAt = transaction.submittedAt ?? new Date();
+    transaction.approvedAt = new Date();
+    transaction.approvedById = performedById;
+    transaction.approvalRemarks = approvalRemarks;
+    transaction.updatedBy = performedById;
+
+    const saved = await this.transactionRepository.save(transaction);
+
+    await this.transactionLogRepository.save(
+      this.transactionLogRepository.create({
+        transactionId: saved.id,
+        action: TransactionLogAction.APPROVE,
+        message: 'Transaction approved',
+        metadata: {
+          status: TransactionStatus.APPROVED,
+          approvalRemarks,
+        },
+        performedById,
+        createdBy: performedById,
+        updatedBy: performedById,
+      }),
+    );
+
+    return this.transactionRepository.findOne({
+      where: { id: saved.id },
     }) as Promise<Transaction>;
   }
 
