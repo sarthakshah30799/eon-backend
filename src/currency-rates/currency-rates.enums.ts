@@ -9,7 +9,7 @@ export type CurrencyRateProvider =
 
 export const CurrencyRateMarginType = {
   PERCENT: 'PERCENT',
-  RATE: 'RATE',
+  PAISA: 'PAISA',
 } as const;
 
 export type CurrencyRateMarginType =
