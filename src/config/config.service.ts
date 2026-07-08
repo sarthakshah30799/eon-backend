@@ -47,7 +47,9 @@ export class ConfigService {
   }
 
   get isProduction(): boolean {
-    return this.nodeEnv === 'production';
+    const nodeEnv = this.nodeEnv;
+    console.log(`NODE_ENV: ${nodeEnv}`);
+    return nodeEnv === 'production';
   }
 
   get secretSessionKey(): string {
