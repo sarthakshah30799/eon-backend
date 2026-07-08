@@ -1,10 +1,9 @@
-// company.entity.ts
-import { Entity, Column, OneToMany } from "typeorm";
-import { BaseEntity } from "../base/base.entity";
-import { Branch } from "../branches/branch.entity";
-import { RolesMenuPermission } from "../roles-menu-permission/roles-menu-permission.entity";
+import { Column, Entity, OneToMany } from 'typeorm';
+import { BaseEntity } from '../base/base.entity';
+import { Branch } from '../branches/branch.entity';
+import { RolesMenuPermission } from '../roles-menu-permission/roles-menu-permission.entity';
 
-@Entity("company")
+@Entity('company')
 export class Company extends BaseEntity {
   @OneToMany(() => Branch, (branch) => branch.company)
   branches: Branch[];
@@ -15,36 +14,42 @@ export class Company extends BaseEntity {
   )
   menuPermissions: RolesMenuPermission[];
 
-  @Column({ type: "citext" })
+  @Column({ type: 'citext', nullable: true })
+  shortCode: string;
+
+  @Column({ type: 'citext' })
   name: string;
 
-  @Column({ type: "citext", nullable: true })
-  designation: string;
+  @Column({ type: 'citext', nullable: true })
+  formerlyKnownName: string;
 
-  @Column({ type: "citext", nullable: true })
-  rbiName: string;
+  @Column({ type: 'citext', nullable: true })
+  cinNo: string;
 
-  @Column({ type: "citext", nullable: true })
-  rbiPlace: string;
+  @Column({ type: 'citext', nullable: false, unique: true })
+  panNo: string;
 
-  @Column({ type: "citext" })
-  address1: string;
+  @Column({ type: 'citext', nullable: true })
+  fxRegNo: string;
 
-  @Column({ type: "citext", nullable: true })
-  address2: string;
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  fxRegDate: Date;
 
-  @Column({ type: "citext", nullable: true })
-  address3: string;
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  fromDate: Date;
 
-  @Column({ type: "text" })
-  pincode: string;
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  toDate: Date;
 
-  @Column({ type: "citext" })
-  city: string;
+  @Column({ type: 'text', nullable: true })
+  logo: string;
 
-  @Column({ type: "citext" })
-  state: string;
+  @Column({ type: 'citext', nullable: true })
+  aeonLicNo: string;
 
-  @Column({ type: "citext", default: "India" })
-  country: string;
+  @Column({ type: 'citext', nullable: true })
+  website: string;
+
+  @Column({ type: 'citext', nullable: true })
+  email: string;
 }

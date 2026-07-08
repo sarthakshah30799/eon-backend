@@ -6,6 +6,8 @@ import { CreateCounterDto } from './dto/create-counter.dto';
 import { UpdateCounterDto } from './dto/update-counter.dto';
 import { CounterResponseDto } from './dto/counter-response.dto';
 
+import { uppercaseFields } from '../utils/uppercase.util';
+
 @Injectable()
 export class CounterService {
   constructor(
@@ -13,11 +15,21 @@ export class CounterService {
     private readonly counterRepository: Repository<Counter>,
   ) {}
 
-  async findAll(): Promise<CounterResponseDto[]> {
-    const counters = await this.counterRepository.find({
-      relations: ['branch'],
-      order: { createdAt: 'DESC' },
-    });
+  async findAll(activeOnly = true, search?: string): Promise<CounterResponseDto[]> {
+    const qb = this.counterRepository
+      .createQueryBuilder('counter')
+      .leftJoinAndSelect('counter.branch', 'branch')
+      .orderBy('counter.createdAt', 'DESC');
+
+    if (activeOnly) {
+      qb.andWhere('counter.isActive = :isActive', { isActive: true });
+    }
+
+    if (search) {
+      qb.andWhere('counter.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    const counters = await qb.getMany();
     return counters.map(CounterResponseDto.fromEntity);
   }
 
@@ -33,10 +45,10 @@ export class CounterService {
   }
 
   async create(dto: CreateCounterDto, userId: string): Promise<CounterResponseDto> {
-    const { branchId, ...rest } = dto;
+    const { branchId, ...rest } = uppercaseFields(dto);
     const counter = this.counterRepository.create({
       ...rest,
-      branch: branchId ? { id: branchId } as any : null,
+      branch: branchId ? ({ id: branchId } as any) : null,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -49,10 +61,10 @@ export class CounterService {
     if (!counter) {
       throw new NotFoundException(`Counter with id ${id} not found`);
     }
-    const { branchId, ...rest } = dto;
+    const { branchId, ...rest } = uppercaseFields(dto);
     Object.assign(counter, rest);
     if (branchId !== undefined) {
-      counter.branch = branchId ? { id: branchId } as any : null;
+      counter.branch = branchId ? ({ id: branchId } as any) : null;
     }
     counter.updatedBy = userId;
     await this.counterRepository.save(counter);

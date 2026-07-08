@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Req, Res, UseGuards, Session, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Req, Res, UseGuards, Session, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -6,9 +6,10 @@ import { LoginUserDto } from '../users/dto/login-user.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { SendOtpDto, VerifyOtpDto } from './dto/otp.dto';
-import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
+import { ForgotPasswordDto, ResetPasswordDto, SetupPasswordDto } from './dto/password-reset.dto';
 import { UserService } from '../users/user.service';
 import { AuthenticatedGuard } from './guards/authenticated.guard';
+import { SetWorkplaceDto } from './dto/set-workplace.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -42,6 +43,16 @@ export class AuthController {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    if (user.mustChangePassword) {
+      session.pendingPasswordSetupUserId = user.id;
+      session.pendingPasswordSetupEmail = user.email;
+      return {
+        message: 'Password setup required',
+        requiresPasswordChange: true,
+      };
+    }
+
     return this.authService.login(user, session);
   }
 
@@ -83,6 +94,41 @@ export class AuthController {
     return this.authService.logout(session);
   }
 
+  @Get('workplace')
+  @UseGuards(AuthenticatedGuard)
+  @ApiCookieAuth('sessionId')
+  @ApiOperation({ summary: 'Get current workplace selection from session' })
+  @ApiResponse({ status: 200, description: 'Current workplace selection' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getWorkplace(@Session() session: any) {
+    return this.authService.getWorkplace(session);
+  }
+
+  @Post('workplace')
+  @UseGuards(AuthenticatedGuard)
+  @ApiCookieAuth('sessionId')
+  @ApiOperation({ summary: 'Set current workplace selection in session' })
+  @ApiResponse({ status: 200, description: 'Workplace updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid workplace selection' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({ type: SetWorkplaceDto })
+  async setWorkplace(
+    @Body() dto: SetWorkplaceDto,
+    @Session() session: any,
+  ) {
+    return this.authService.setWorkplace(session, dto);
+  }
+
+  @Delete('workplace')
+  @UseGuards(AuthenticatedGuard)
+  @ApiCookieAuth('sessionId')
+  @ApiOperation({ summary: 'Clear current workplace selection from session' })
+  @ApiResponse({ status: 200, description: 'Workplace cleared successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async clearWorkplace(@Session() session: any) {
+    return this.authService.clearWorkplace(session);
+  }
+
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset' })
   @ApiResponse({ status: 200, description: 'Password reset link successfully generated and logged' })
@@ -101,6 +147,19 @@ export class AuthController {
     return this.authService.resetPassword(dto.email, dto.token, dto.password);
   }
 
+  @Post('setup-password')
+  @ApiCookieAuth('sessionId')
+  @ApiOperation({ summary: 'Complete initial password setup' })
+  @ApiResponse({ status: 200, description: 'Password successfully updated' })
+  @ApiResponse({ status: 400, description: 'Invalid password setup session' })
+  @ApiBody({ type: SetupPasswordDto })
+  async setupPassword(
+    @Body() dto: SetupPasswordDto,
+    @Session() session: any,
+  ) {
+    return this.authService.completeInitialPasswordSetup(session, dto.password);
+  }
+
 
   @Get('me')
   @UseGuards(AuthenticatedGuard)
@@ -109,7 +168,10 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Current user data', type: UserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getCurrentUser(@Session() session: any): Promise<UserResponseDto> {
-    return this.userService.findById(session.userId);
+    return this.userService.findById(session.userId, session.userId, {
+      activeBranchId: session?.activeBranchId ?? null,
+      activeCounterId: session?.activeCounterId ?? null,
+    });
   }
 
   @Get('check')
@@ -120,6 +182,7 @@ export class AuthController {
       authenticated: !!session.userId,
       userId: session.userId || null,
       email: session.email || null,
+      isAdmin: session.isAdmin === true,
     };
   }
 

@@ -1,14 +1,15 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Session } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { CounterService } from './counter.service';
 import { CreateCounterDto } from './dto/create-counter.dto';
 import { UpdateCounterDto } from './dto/update-counter.dto';
 import { CounterResponseDto } from './dto/counter-response.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @ApiTags('counters')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard)
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('counters')
 export class CounterController {
   constructor(private readonly counterService: CounterService) {}
@@ -16,8 +17,11 @@ export class CounterController {
   @Get()
   @ApiOperation({ summary: 'Get all counters' })
   @ApiResponse({ status: 200, description: 'List of counters', type: [CounterResponseDto] })
-  async findAll(): Promise<CounterResponseDto[]> {
-    return this.counterService.findAll();
+  async findAll(
+    @Query('activeOnly') activeOnly = 'false',
+    @Query('search') search?: string,
+  ): Promise<CounterResponseDto[]> {
+    return this.counterService.findAll(activeOnly !== 'false', search);
   }
 
   @Get(':id')

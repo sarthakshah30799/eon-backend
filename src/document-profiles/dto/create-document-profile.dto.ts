@@ -1,0 +1,114 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsNumber,
+  Min,
+  IsUUID,
+  IsEnum,
+  MaxLength,
+} from 'class-validator';
+import { DocumentSpecificationType } from '../document-profile.entity';
+import { Type } from 'class-transformer';
+import { EmptyStringToUndefined } from '../../common/decorators/empty-string-to-undefined.decorator';
+
+export class CreateDocumentProfileDto {
+  @ApiProperty({
+    description: 'Unique document code',
+    example: 'PAN_CARD_FRONT',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  documentCode: string;
+
+  @ApiProperty({
+    description: 'Document description',
+    example: 'PAN card copy front side',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(250)
+  documentDescription: string;
+
+  @ApiProperty({
+    description: 'Allowed document types',
+    type: [String],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  documentType: string[];
+
+  @ApiPropertyOptional({
+    description: 'Is the document required?',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isRequired?: boolean;
+
+  @ApiProperty({
+    description: 'Maximum file size in MB',
+    example: 5,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  maxSizeMb: number;
+
+  @ApiProperty({
+    description: 'Specification type',
+    enum: DocumentSpecificationType,
+  })
+  @IsEnum(DocumentSpecificationType)
+  @IsNotEmpty()
+  specificationType: DocumentSpecificationType;
+
+  @ApiProperty({
+    description: 'Type',
+    format: 'uuid',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  type: string;
+
+  @ApiProperty({
+    description: 'Document group selection',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  groupSelection: string;
+
+  @ApiProperty({
+    description: 'Entity type selection',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  entitySelection: string;
+
+  @ApiPropertyOptional({
+    description: 'Financial year selection',
+  })
+  @EmptyStringToUndefined()
+  @IsUUID()
+  @IsOptional()
+  financialYearSelection?: string;
+
+  @ApiPropertyOptional({ description: 'Profile sort order', default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  sortOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Profile active flag', default: true })
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+}

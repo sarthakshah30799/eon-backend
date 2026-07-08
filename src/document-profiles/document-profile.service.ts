@@ -1,0 +1,243 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Brackets, Repository } from 'typeorm';
+import { SelectOption } from '../category-options/category-option.entity';
+import { DocumentProfile } from './document-profile.entity';
+import { CreateDocumentProfileDto } from './dto/create-document-profile.dto';
+import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
+import { DocumentProfileResponseDto } from './dto/document-profile-response.dto';
+import { DocumentProfileListQueryDto } from './dto/document-profile-list-query.dto';
+import { ResolveDocumentProfilesDto } from './dto/resolve-document-profile-rules.dto';
+import {
+  applyDocumentProfileFilters,
+  normalizeDocumentProfilePayload,
+} from './document-profile.utils';
+import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
+import { DocumentSpecificationType } from './document-profile.entity';
+
+@Injectable()
+export class DocumentProfileService {
+  constructor(
+    @InjectRepository(DocumentProfile)
+    private readonly documentProfileRepository: Repository<DocumentProfile>,
+  ) {}
+
+  async findAll(
+    query?: DocumentProfileListQueryDto,
+  ): Promise<DocumentProfileResponseDto[]> {
+    const queryBuilder = this.documentProfileRepository
+      .createQueryBuilder('document_profile')
+      .leftJoinAndSelect('document_profile.type', 'type')
+      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection');
+
+    if (query?.search?.trim()) {
+      const search = `%${query.search.trim()}%`;
+      queryBuilder.andWhere(
+        new Brackets(brackets => {
+          brackets
+            .where('"document_profile"."document_code" ILIKE :search', { search })
+            .orWhere('"document_profile"."specification_type"::text ILIKE :search', {
+              search,
+            })
+            .orWhere('type.label ILIKE :search', { search })
+            .orWhere('type.value ILIKE :search', { search })
+            .orWhere('entitySelection.label ILIKE :search', { search })
+            .orWhere('entitySelection.value ILIKE :search', { search })
+            .orWhere(
+              `EXISTS (
+                SELECT 1
+                FROM unnest("document_profile"."document_type") AS document_type
+                WHERE document_type ILIKE :search
+              )`,
+              { search },
+            );
+        }),
+      );
+    }
+
+    const profiles = await queryBuilder.getMany();
+
+    return profiles.map(profile =>
+      DocumentProfileResponseDto.fromEntity(profile),
+    );
+  }
+
+  async findById(id: string): Promise<DocumentProfileResponseDto> {
+    const profile = await this.documentProfileRepository
+      .createQueryBuilder('document_profile')
+      .leftJoinAndSelect('document_profile.type', 'type')
+      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection')
+      .where('document_profile.id = :id', { id })
+      .getOne();
+
+    if (!profile) {
+      throw new NotFoundException(`Document profile with id ${id} not found`);
+    }
+
+    return DocumentProfileResponseDto.fromEntity(profile);
+  }
+
+  async create(
+    dto: CreateDocumentProfileDto,
+    userId: string,
+  ): Promise<DocumentProfileResponseDto> {
+    const normalizedCode = dto.documentCode.trim().toUpperCase();
+    await this.ensureDocumentCodeIsUnique(normalizedCode);
+    this.ensureValidDocumentTypes(dto.documentType);
+
+    const profile = this.documentProfileRepository.create(
+      normalizeDocumentProfilePayload({
+        documentCode: normalizedCode,
+        documentDescription: dto.documentDescription,
+        documentType: dto.documentType,
+        isRequired: dto.isRequired ?? false,
+        maxSizeMb: dto.maxSizeMb,
+        specificationType: dto.specificationType,
+        type: { id: dto.type } as SelectOption,
+        groupSelection: { id: dto.groupSelection } as SelectOption,
+        entitySelection: { id: dto.entitySelection } as SelectOption,
+        financialYearSelection: dto.financialYearSelection
+          ? ({ id: dto.financialYearSelection } as SelectOption)
+          : null,
+        active: dto.active ?? true,
+        sortOrder: dto.sortOrder ?? 0,
+      }) as DocumentProfile,
+    );
+    profile.createdBy = userId;
+    profile.updatedBy = userId;
+
+    const saved = await this.documentProfileRepository.save(profile);
+    return this.findById(saved.id);
+  }
+
+  async update(
+    id: string,
+    dto: UpdateDocumentProfileDto,
+    userId: string,
+  ): Promise<DocumentProfileResponseDto> {
+    const profile = await this.documentProfileRepository.findOne({
+      where: { id },
+    });
+
+    if (!profile) {
+      throw new NotFoundException(`Document profile with id ${id} not found`);
+    }
+
+    const nextCode = (dto.documentCode ?? profile.documentCode).trim().toUpperCase();
+    if (nextCode !== profile.documentCode) {
+      await this.ensureDocumentCodeIsUnique(nextCode, id);
+    }
+
+    const nextDocumentType = dto.documentType ?? profile.documentType;
+    if (dto.documentType) {
+      this.ensureValidDocumentTypes(dto.documentType);
+    }
+
+    Object.assign(
+      profile,
+      normalizeDocumentProfilePayload({
+        documentCode: nextCode,
+        documentDescription: dto.documentDescription ?? profile.documentDescription,
+        documentType: nextDocumentType,
+        isRequired: dto.isRequired ?? profile.isRequired,
+        maxSizeMb: dto.maxSizeMb ?? profile.maxSizeMb,
+        specificationType: dto.specificationType ?? profile.specificationType,
+        type: dto.type ? ({ id: dto.type } as SelectOption) : profile.type,
+        groupSelection: dto.groupSelection
+          ? ({ id: dto.groupSelection } as SelectOption)
+          : profile.groupSelection,
+        entitySelection: dto.entitySelection
+          ? ({ id: dto.entitySelection } as SelectOption)
+          : profile.entitySelection,
+        financialYearSelection: dto.financialYearSelection
+          ? ({ id: dto.financialYearSelection } as SelectOption)
+          : dto.financialYearSelection === null
+            ? null
+            : profile.financialYearSelection,
+        active: dto.active ?? profile.active,
+        sortOrder: dto.sortOrder ?? profile.sortOrder,
+      }) as DocumentProfile,
+    );
+    profile.updatedBy = userId;
+
+    await this.documentProfileRepository.save(profile);
+    return this.findById(id);
+  }
+
+  async delete(id: string): Promise<{ message: string }> {
+    const profile = await this.documentProfileRepository.findOne({
+      where: { id },
+    });
+
+    if (!profile) {
+      throw new NotFoundException(`Document profile with id ${id} not found`);
+    }
+
+    await this.documentProfileRepository.remove(profile);
+    return { message: `Document profile with id ${id} deleted successfully` };
+  }
+
+  async resolveRules(
+    query: ResolveDocumentProfilesDto,
+  ): Promise<DocumentProfileResponseDto[]> {
+    const queryBuilder = this.documentProfileRepository
+      .createQueryBuilder('document_profile')
+      .leftJoinAndSelect('document_profile.type', 'type')
+      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
+      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
+      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection')
+      .where('1 = 1');
+
+    applyDocumentProfileFilters(queryBuilder, 'document_profile', {
+      specificationType: query.specificationType,
+      type: query.type,
+      groupSelection: query.groupSelection,
+      entitySelection: query.entitySelection,
+      activeOnly: true,
+    });
+
+    queryBuilder
+      .orderBy('document_profile.sortOrder', 'ASC')
+      .addOrderBy('document_profile.documentCode', 'ASC');
+
+    const profiles = await queryBuilder.getMany();
+
+    return profiles.map(profile =>
+      DocumentProfileResponseDto.fromEntity(profile),
+    );
+  }
+
+  private async ensureDocumentCodeIsUnique(
+    documentCode: string,
+    excludeProfileId?: string,
+  ) {
+    const existingProfile = await this.documentProfileRepository.findOne({
+      where: { documentCode },
+    });
+
+    if (existingProfile && existingProfile.id !== excludeProfileId) {
+      throw new ConflictException(
+        `Document profile with code "${documentCode}" already exists`,
+      );
+    }
+  }
+
+  private ensureValidDocumentTypes(documentTypes: string[]) {
+    const invalidType = documentTypes.find(
+      type => !DOCUMENT_TYPE_OPTIONS.includes(type.trim().toUpperCase() as never),
+    );
+
+    if (invalidType) {
+      throw new BadRequestException(`Unsupported document type "${invalidType}"`);
+    }
+  }
+}

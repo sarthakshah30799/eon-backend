@@ -1,12 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Menu } from '../menu.entity';
+import { normalizeMenuPath } from '../menu-path.util';
 
 export class MenuResponseDto {
   @ApiProperty() id: string;
+  @ApiProperty() isAdmin: boolean;
   @ApiProperty() name: string;
-  @ApiProperty({ required: false }) path: string;
-  @ApiProperty({ required: false }) icon: string;
-  @ApiProperty({ required: false }) parentId: string;
+  @ApiProperty({ required: false, nullable: true }) path: string | null;
+  @ApiProperty({ required: false, nullable: true }) icon: string | null;
+  @ApiProperty({ required: false, nullable: true }) parentId: string | null;
   @ApiProperty() sortOrder: number;
   @ApiProperty() isActive: boolean;
   @ApiProperty({ type: () => [MenuResponseDto], required: false })
@@ -15,8 +17,9 @@ export class MenuResponseDto {
   static fromEntity(entity: Menu, includeChildren = false): MenuResponseDto {
     const dto = new MenuResponseDto();
     dto.id = entity.id;
+    dto.isAdmin = entity.isAdmin;
     dto.name = entity.name;
-    dto.path = entity.path;
+    dto.path = normalizeMenuPath(entity.path);
     dto.icon = entity.icon;
     dto.parentId = entity.parent?.id || null;
     dto.sortOrder = entity.sortOrder;

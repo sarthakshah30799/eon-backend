@@ -1,0 +1,126 @@
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class ProductAccountLink1782879557513 implements MigrationInterface {
+    name = 'ProductAccountLink1782879557513'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "ac_of_issuer"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "commission_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "fake_account"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "bulk_pur_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "open_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "closing_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "expense_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "bulk_sale_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "purchase_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "sale_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "profit_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "bulk_profic_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "purchase_ret_canc_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "purchase_blk_canc_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "sale_ret_canc_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "sale_blk_canc_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "branch_pur_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "branch_sale_ac"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "profit_ac_brn_sale"`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "ac_of_issuer_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "commission_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "fake_account_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "bulk_pur_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "open_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "closing_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "expense_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "bulk_sale_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "purchase_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "sale_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "profit_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "bulk_profic_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "purchase_ret_canc_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "purchase_blk_canc_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "sale_ret_canc_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "sale_blk_canc_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "branch_pur_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "branch_sale_ac_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "profit_ac_brn_sale_id" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_7ccf5f68ffc94494ef73264c679" FOREIGN KEY ("ac_of_issuer_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_e1c31f79686484eb0bf6f7ded7e" FOREIGN KEY ("commission_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_b79cc3bd3991c1ce2150d1fe7e2" FOREIGN KEY ("fake_account_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_348dd2a75cc493fb828bdf12a5a" FOREIGN KEY ("bulk_pur_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_98714623306735160e63816a7d3" FOREIGN KEY ("open_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_b198171df30b60dec8bae22f0f2" FOREIGN KEY ("closing_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_1c0450c3ffd42c6387eb31fa072" FOREIGN KEY ("expense_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_5f1459f9512a017dc9d5a464b15" FOREIGN KEY ("bulk_sale_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_663d338d60c8676e2b63ed6c7bb" FOREIGN KEY ("purchase_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_012440082eb872a63f23ddadef6" FOREIGN KEY ("sale_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_0785d94f19ca9605386440741c4" FOREIGN KEY ("profit_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_2d01caf540f459a46f28ab460a4" FOREIGN KEY ("bulk_profic_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_22e86eca63659dbd19a97cad9bf" FOREIGN KEY ("purchase_ret_canc_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_0e80eb7a10e6e355857c5b42431" FOREIGN KEY ("purchase_blk_canc_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_4316110e44ee315cc55faf1dd2d" FOREIGN KEY ("sale_ret_canc_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_935a4408f50c37d986ea3de91f0" FOREIGN KEY ("sale_blk_canc_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_98669a223145f28b994d6610c7c" FOREIGN KEY ("branch_pur_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_d24ddff3ca49f84f2079be129b9" FOREIGN KEY ("branch_sale_ac_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "products" ADD CONSTRAINT "FK_02fd4f6222c428fa0604dd82abf" FOREIGN KEY ("profit_ac_brn_sale_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_02fd4f6222c428fa0604dd82abf"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_d24ddff3ca49f84f2079be129b9"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_98669a223145f28b994d6610c7c"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_935a4408f50c37d986ea3de91f0"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_4316110e44ee315cc55faf1dd2d"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_0e80eb7a10e6e355857c5b42431"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_22e86eca63659dbd19a97cad9bf"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_2d01caf540f459a46f28ab460a4"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_0785d94f19ca9605386440741c4"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_012440082eb872a63f23ddadef6"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_663d338d60c8676e2b63ed6c7bb"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_5f1459f9512a017dc9d5a464b15"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_1c0450c3ffd42c6387eb31fa072"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_b198171df30b60dec8bae22f0f2"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_98714623306735160e63816a7d3"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_348dd2a75cc493fb828bdf12a5a"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_b79cc3bd3991c1ce2150d1fe7e2"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_e1c31f79686484eb0bf6f7ded7e"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP CONSTRAINT "FK_7ccf5f68ffc94494ef73264c679"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "profit_ac_brn_sale_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "branch_sale_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "branch_pur_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "sale_blk_canc_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "sale_ret_canc_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "purchase_blk_canc_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "purchase_ret_canc_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "bulk_profic_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "profit_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "sale_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "purchase_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "bulk_sale_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "expense_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "closing_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "open_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "bulk_pur_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "fake_account_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "commission_ac_id"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "ac_of_issuer_id"`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "profit_ac_brn_sale" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "branch_sale_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "branch_pur_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "sale_blk_canc_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "sale_ret_canc_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "purchase_blk_canc_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "purchase_ret_canc_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "bulk_profic_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "profit_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "sale_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "purchase_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "bulk_sale_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "expense_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "closing_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "open_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "bulk_pur_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "fake_account" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "commission_ac" citext`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "ac_of_issuer" citext`);
+    }
+
+}

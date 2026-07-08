@@ -10,6 +10,9 @@ import {
 import { BaseEntity } from "../base/base.entity";
 import { Company } from "../company/company.entity";
 import { Counter } from "../counters/counter.entity";
+import { Country } from "../country/country.entity";
+import { SelectOption } from "../category-options/category-option.entity";
+import { State } from "../state/state.entity";
 
 @Entity("branches")
 export class Branch extends BaseEntity {
@@ -24,8 +27,27 @@ export class Branch extends BaseEntity {
   @JoinColumn({ name: "company_id" })
   company: Company;
 
+  @Index()
+  @ManyToOne(() => Country, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "country_id" })
+  country: Country;
+
+  @Index()
+  @ManyToOne(() => State, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "state_id" })
+  state: State;
+
   @Column({ type: "citext", unique: true })
-  branchCode: string;
+  code: string;
+
+  @Column({ type: "citext" })
+  name: string;
 
   @Column({ type: "int", unique: true })
   branchNumber: number;
@@ -39,48 +61,57 @@ export class Branch extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   address3: string;
 
-  @Column({ type: "text" })
-  pincode: string;
-
   @Column({ type: "citext" })
   city: string;
 
-  @Column({ type: "citext" })
-  state: string;
-
-  @Column({ type: "citext", default: "India" })
-  country: string;
-
-  @Index()
-  @Column({ type: "char", length: 2 })
-  stateCode: string;
-
-  @Index()
-  @Column({ type: "text" })
-  gstStateCode: string;
-
-  @Column({ type: "char", length: 2, default: "IN" })
-  countryCode1: string;
+  @Column({ type: "citext", nullable: true })
+  gstState: string;
 
   @Column({ type: "text" })
-  phoneNumber1: string;
-
-  @Column({ type: "char", length: 2, default: "IN" })
-  countryCode2: string;
-
-  @Column({ type: "text", nullable: true })
-  phoneNumber2: string;
+  pinCode: string;
 
   @Column({ type: "citext", nullable: true })
-  contactPersonName: string;
+  gstNo: string;
 
-  @Column({ type: "char", length: 2, default: "IN" })
-  contactPersonCountryCode: string;
-
-  @Column({ type: "text", nullable: true })
-  contactPersonPhone: string;
-
-  @Index()
   @Column({ type: "citext", nullable: true })
-  operationGroup: string;
+  fxRegNo: string;
+
+  @Column({ type: "timestamp with time zone", nullable: true })
+  fxRegDate: Date;
+
+  @Column({ type: "citext", nullable: true })
+  contactName: string;
+
+  @Column({ type: "citext", nullable: true })
+  contactNo: string;
+
+  @Column({ type: "citext", nullable: true })
+  branchEmail: string;
+
+  @Column({ type: "citext", nullable: true })
+  aeonBranchLic: string;
+
+  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    foreignKeyConstraintName: "FK_branches_location_type",
+  })
+  locationType: SelectOption | null;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  cashHolding: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  cashHoldingTemp: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  currHolding: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
+  currHoldingTemp: number;
+
+  @Column({ type: "boolean", default: false })
+  isHeadOffice: boolean;
+
+  @Column({ type: "boolean", default: true })
+  isActive: boolean;
 }

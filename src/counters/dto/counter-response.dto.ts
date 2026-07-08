@@ -3,11 +3,12 @@ import { Counter } from '../counter.entity';
 
 export class CounterResponseDto {
   @ApiProperty() id: string;
-  @ApiProperty() counterCode: string;
+  @ApiProperty() counterNo: number;
   @ApiProperty() name: string;
-  @ApiProperty({ required: false }) description: string;
-  @ApiProperty({ required: false }) remark: string;
-  @ApiProperty() status: string;
+  @ApiProperty() isActive: boolean;
+  @ApiProperty() isRetail: boolean;
+  @ApiProperty() isBulk: boolean;
+  @ApiProperty() isCombine: boolean;
   @ApiProperty({ required: false }) branchId: string;
   @ApiProperty({ required: false }) branchCode: string;
   @ApiProperty() createdAt: Date;
@@ -16,13 +17,14 @@ export class CounterResponseDto {
   static fromEntity(entity: Counter): CounterResponseDto {
     const dto = new CounterResponseDto();
     dto.id = entity.id;
-    dto.counterCode = entity.counterCode;
+    dto.counterNo = entity.counterNo;
     dto.name = entity.name;
-    dto.description = entity.description;
-    dto.remark = entity.remark;
-    dto.status = entity.status;
+    dto.isActive = entity.isActive;
+    dto.isRetail = entity.isRetail;
+    dto.isBulk = entity.isBulk;
+    dto.isCombine = entity.isCombine;
     dto.branchId = entity.branch?.id || null;
-    dto.branchCode = entity.branch?.branchCode || null;
+    dto.branchCode = entity.branch?.code || null;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

@@ -11,6 +11,10 @@ import { BaseEntity } from "../base/base.entity";
 
 @Entity("menus")
 export class Menu extends BaseEntity {
+  @Index()
+  @Column({ type: "boolean", default: false })
+  isAdmin: boolean;
+
   @Column({ type: "citext" })
   name: string;
 
