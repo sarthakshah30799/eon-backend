@@ -36,14 +36,14 @@ export class SessionMiddleware implements NestMiddleware {
         tableName: 'user_sessions',
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+      secret: this.configService.secretSessionKey || 'your-secret-key-change-in-production',
       resave: false,
       saveUninitialized: false,
       cookie: {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        secure: this.configService.isProduction,
+        sameSite: this.configService.isProduction ? 'none' : 'lax',
       },
       name: 'sessionId',
     });

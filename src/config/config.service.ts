@@ -42,6 +42,18 @@ export class ConfigService {
     return p ? parseInt(p, 10) : 3000;
   }
 
+  get nodeEnv(): string {
+    return this.get('NODE_ENV');
+  }
+
+  get isProduction(): boolean {
+    return this.nodeEnv === 'production';
+  }
+
+  get secretSessionKey(): string {
+    return this.get('SESSION_SECRET');
+  }
+
   get database() {
     const sslEnabled = this.getOptionalBoolean('DB_SSL') === true;
     return {
