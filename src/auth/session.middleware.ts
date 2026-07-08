@@ -1,9 +1,9 @@
-import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
-import session from 'express-session';
-import connectPgSimple from 'connect-pg-simple';
-import { ConfigService } from '../config/config.service';
-import { SessionPolicyService } from '../session-policy/session-policy.service';
+import { Injectable, NestMiddleware, Logger } from "@nestjs/common";
+import { Request, Response, NextFunction } from "express";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { ConfigService } from "../config/config.service";
+import { SessionPolicyService } from "../session-policy/session-policy.service";
 
 const PgSession = connectPgSimple(session);
 
@@ -14,11 +14,11 @@ export class SessionMiddleware implements NestMiddleware {
   constructor(
     private readonly configService: ConfigService,
     private readonly sessionPolicyService: SessionPolicyService,
-  ) { }
+  ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     this.logger.log(
-      `[DEBUG] incoming request method=${req.method} path=${req.originalUrl ?? req.url} cookieSession=${Boolean((req as any).cookies?.sessionId)}`
+      `[DEBUG] incoming request method=${req.method} path=${req.originalUrl ?? req.url} cookieSession=${Boolean((req as any).cookies?.sessionId)} && ${this.configService.isProduction}`,
     );
 
     const ssl = this.configService.database.ssl;
@@ -33,19 +33,21 @@ export class SessionMiddleware implements NestMiddleware {
           database: this.configService.database.database,
           ssl,
         },
-        tableName: 'user_sessions',
+        tableName: "user_sessions",
         createTableIfMissing: true,
       }),
-      secret: this.configService.secretSessionKey || 'your-secret-key-change-in-production',
+      secret:
+        this.configService.secretSessionKey ||
+        "your-secret-key-change-in-production",
       resave: false,
       saveUninitialized: false,
       cookie: {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true,
-        secure: this.configService.isProduction,
-        sameSite: this.configService.isProduction ? 'none' : 'lax',
+        secure: false,
+        sameSite: "lax",
       },
-      name: 'sessionId',
+      name: "sessionId",
     });
 
     sessionMiddleware(req, res, async (error) => {
@@ -60,20 +62,24 @@ export class SessionMiddleware implements NestMiddleware {
 
       try {
         const policy = await this.sessionPolicyService.getSessionPolicy();
-        const sessionData = req.session as (typeof req.session & { userId?: string }) | undefined;
+        const sessionData = req.session as
+          | (typeof req.session & { userId?: string })
+          | undefined;
 
         this.logger.log(
-          `[DEBUG] session attached method=${req.method} path=${req.originalUrl ?? req.url} userId=${sessionData?.userId ?? 'null'} activeBranchId=${sessionData?.activeBranchId ?? 'null'} activeCounterId=${sessionData?.activeCounterId ?? 'null'} sessionExpired=${Boolean((req as any).sessionExpired)}`
+          `[DEBUG] session attached method=${req.method} path=${req.originalUrl ?? req.url} userId=${sessionData?.userId ?? "null"} activeBranchId=${sessionData?.activeBranchId ?? "null"} activeCounterId=${sessionData?.activeCounterId ?? "null"} sessionExpired=${Boolean((req as any).sessionExpired)}`,
         );
 
         if (sessionData?.userId) {
           if (policy.idleTimeoutSeconds > 0) {
-            if (this.sessionPolicyService.isSessionExpired(sessionData, policy)) {
+            if (
+              this.sessionPolicyService.isSessionExpired(sessionData, policy)
+            ) {
               (req as any).sessionExpired = true;
               this.logger.log(
-                `[DEBUG] session expired method=${req.method} path=${req.originalUrl ?? req.url} userId=${sessionData.userId}`
+                `[DEBUG] session expired method=${req.method} path=${req.originalUrl ?? req.url} userId=${sessionData.userId}`,
               );
-              res.clearCookie('sessionId');
+              res.clearCookie("sessionId");
               sessionData.destroy(() => {
                 next();
               });
@@ -94,7 +100,7 @@ export class SessionMiddleware implements NestMiddleware {
       }
 
       this.logger.log(
-        `[DEBUG] request continuing method=${req.method} path=${req.originalUrl ?? req.url}`
+        `[DEBUG] request continuing method=${req.method} path=${req.originalUrl ?? req.url}`,
       );
       next();
     });

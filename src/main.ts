@@ -7,9 +7,11 @@ import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const expressApp = app.getHttpAdapter().getInstance();
 
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ limit: '10mb', extended: true }));
+  expressApp.set('trust proxy', 1);
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
