@@ -5,6 +5,7 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
+  Check,
 } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import {
@@ -28,10 +29,15 @@ import {
 })
 @Index("IDX_transactions_root_transaction_id", ["rootTransactionId"])
 @Index("IDX_transactions_branch_id", ["branchId"])
+@Index("IDX_transactions_company_id", ["companyId"])
 @Index("IDX_transactions_manual_book_page_id", ["manualBookPageId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
+@Check(
+  "CHK_transactions_number_required_when_approved",
+  `"status" <> 'APPROVED' OR "number" IS NOT NULL`,
+)
 @Entity("transactions")
 export class Transaction extends BaseEntity {
   @Column({ type: "uuid", name: "root_transaction_id", nullable: true })
@@ -47,8 +53,8 @@ export class Transaction extends BaseEntity {
   @Column({ type: "integer", name: "revision_no", default: 1 })
   revisionNo: number;
 
-  @Column({ type: "varchar", length: 100, name: "number" })
-  number: string;
+  @Column({ type: "varchar", length: 100, name: "number", nullable: true })
+  number: string | null;
 
   @Column({ type: "citext", nullable: true })
   slug: string | null;
@@ -58,6 +64,15 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
   branchSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "company_id", nullable: true })
+  companyId: string | null;
+
+  @Column({ type: "jsonb", name: "company_snapshot", nullable: true })
+  companySnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "citext", name: "sac_code", nullable: true })
+  sacCode: string | null;
 
   @Column({ type: "uuid", name: "party_profile_id" })
   partyProfileId: string;

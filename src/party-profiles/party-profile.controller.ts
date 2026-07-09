@@ -149,6 +149,7 @@ export class PartyProfileController {
     const csv = await this.partyProfileService.getCommissionTemplate(
       id,
       session.userId,
+      session.activeBranchId,
     );
 
     res.status(HttpStatus.OK);
@@ -178,6 +179,7 @@ export class PartyProfileController {
       id,
       file.buffer.toString("utf8"),
       session.userId,
+      session.activeBranchId,
     );
   }
 }

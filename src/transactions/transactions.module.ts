@@ -17,12 +17,29 @@ import { SelectOption } from "../category-options/category-option.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
+import { CompanyModule } from "../company/company.module";
+import { Branch } from "../branches/branch.entity";
+import { User } from "../users/user.entity";
+import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
+import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
+import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 
 @Module({
   imports: [
+    CompanyModule,
+    AdditionalSettingModule,
     MailModule,
     StorageModule,
-    TypeOrmModule.forFeature([Currency, Product, SelectOption, DocumentProfile, AccountProfile, PartyProfile]),
+    TypeOrmModule.forFeature([
+      Currency,
+      Product,
+      SelectOption,
+      DocumentProfile,
+      AccountProfile,
+      PartyProfile,
+      Branch,
+      User,
+    ]),
     TypeOrmModule.forFeature(
       [
         Transaction,
@@ -32,6 +49,8 @@ import { PartyProfile } from "../party-profiles/party-profile.entity";
         TransactionPayment,
         TransactionLog,
         TransactionEvent,
+        ManualBookPageTracking,
+        ChequeBookPageTracking,
       ],
       "database2",
     ),

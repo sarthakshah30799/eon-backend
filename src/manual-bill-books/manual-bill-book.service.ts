@@ -538,16 +538,14 @@ export class ManualBillBookService {
   }
 
   async getSelectablePages(branchId?: string, userId?: string): Promise<any[]> {
-    if (!branchId) {
-      return [];
-    }
-
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.manualBook", "book")
       .where("pt.isVoided = :isVoided", { isVoided: false });
 
-    query.andWhere("book.branchId = :branchId", { branchId });
+    if (branchId) {
+      query.andWhere("book.branchId = :branchId", { branchId });
+    }
 
     if (userId) {
       query.andWhere("pt.userId = :userId", {

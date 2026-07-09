@@ -29,12 +29,13 @@ export class UserController {
       activeBranchId: session?.activeBranchId ?? null,
       activeCounterId: session?.activeCounterId ?? null,
     });
+    const effectiveBranchId = user.isAdmin ? branchId : session.activeBranchId;
     if (user.isAdmin) {
       return this.userService.findAll(
         session.userId,
         activeOnly !== 'false',
         search,
-        branchId,
+        effectiveBranchId,
         roleCode,
       );
     }
@@ -49,7 +50,7 @@ export class UserController {
       session.userId,
       activeOnly !== 'false',
       search,
-      branchId,
+      effectiveBranchId,
       roleCode,
     );
   }

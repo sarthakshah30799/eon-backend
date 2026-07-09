@@ -50,7 +50,7 @@ export class TransactionItem extends BaseEntity {
   })
   productCurrencyRateId: string | null;
 
-  @Column({ type: "numeric", name: "quantity", precision: 18, scale: 4 })
+  @Column({ type: "numeric", name: "quantity", precision: 18, scale: 7 })
   quantity: string;
 
   @Column({ type: "numeric", name: "per", nullable: true })

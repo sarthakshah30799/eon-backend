@@ -42,7 +42,7 @@ export class ChequeBookController {
     @Query('toDate') toDate?: string,
   ) {
     let effectiveBranchId = branchId;
-    if (!session.isAdmin) {
+    if (!session.isAdmin && !session.isHoStaff) {
       effectiveBranchId = session.activeBranchId;
     }
     return this.service.findAll(effectiveBranchId, status, bankAccountCode, fromDate, toDate);
@@ -55,7 +55,7 @@ export class ChequeBookController {
     @Query('branchId') branchId: string,
   ) {
     let effectiveBranchId = branchId;
-    if (!session.isAdmin) {
+    if (!session.isAdmin && !session.isHoStaff) {
       effectiveBranchId = session.activeBranchId;
     }
     this.logger.log(
@@ -156,7 +156,7 @@ export class ChequeBookController {
     @Query('pageNo') pageNoStr: string,
   ) {
     const pageNo = parseInt(pageNoStr, 10);
-    return this.service.searchPage(pageNo, session.activeBranchId);
+    return this.service.searchPage(pageNo, session.isAdmin ? undefined : session.activeBranchId);
   }
 
   @Get('pages/selectable')
@@ -168,7 +168,7 @@ export class ChequeBookController {
     @Query('accountId') accountId?: string,
     @Query('userId') userId?: string,
   ) {
-    const effectiveBranchId = session.activeBranchId;
+    const effectiveBranchId = session.isAdmin ? branchId : session.activeBranchId;
     const effectiveUserId = userId || session.userId;
     return this.service.getSelectablePages(
       effectiveBranchId,
@@ -189,7 +189,7 @@ export class ChequeBookController {
     const bookNo = parseInt(bookNoStr, 10);
     const chequeNoFrom = parseInt(chequeNoFromStr, 10);
     const chequeNoTo = parseInt(chequeNoToStr, 10);
-    const branchId = session.activeBranchId;
+    const branchId = session.isAdmin ? undefined : session.activeBranchId;
     const currentUserId = session.userId;
     return this.service.searchCashierReturn({
       branchId,

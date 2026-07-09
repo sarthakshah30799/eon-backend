@@ -12,6 +12,7 @@ import { CompanyResponseDto } from './dto/company-response.dto';
 import { CompanyListQueryDto } from './dto/company-list-query.dto';
 
 import { uppercaseFields } from '../utils/uppercase.util';
+import { buildEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 
 @Injectable()
 export class CompanyService {
@@ -19,6 +20,47 @@ export class CompanyService {
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
   ) {}
+
+  private normalizeDateValue(value?: string | null) {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  async getCurrentCompany(
+    referenceDate = new Date(),
+    excludeCompanyId?: string,
+  ): Promise<Company | null> {
+    const qb = this.companyRepository
+      .createQueryBuilder('company')
+      .where('(company.fromDate IS NULL OR company.fromDate <= :referenceDate)', {
+        referenceDate,
+      })
+      .andWhere('(company.toDate IS NULL OR company.toDate > :referenceDate)', {
+        referenceDate,
+      })
+      .orderBy('company.fromDate', 'DESC', 'NULLS LAST')
+      .addOrderBy('company.createdAt', 'DESC');
+
+    if (excludeCompanyId) {
+      qb.andWhere('company.id <> :excludeCompanyId', { excludeCompanyId });
+    }
+
+    return qb.getOne();
+  }
+
+  async getCurrentCompanySnapshot(
+    referenceDate = new Date(),
+    excludeCompanyId?: string,
+  ) {
+    const company = await this.getCurrentCompany(referenceDate, excludeCompanyId);
+    return company
+      ? buildEntitySnapshot(company, this.companyRepository)
+      : null;
+  }
 
   async findAll(query?: CompanyListQueryDto): Promise<CompanyResponseDto[]> {
     const qb = this.companyRepository
@@ -51,39 +93,113 @@ export class CompanyService {
   }
 
   async create(dto: CreateCompanyDto, userId: string): Promise<CompanyResponseDto> {
-    const company = this.companyRepository.create({
-      ...uppercaseFields(dto),
-      createdBy: userId,
-      updatedBy: userId,
-    });
-    const existingPan = await this.companyRepository.findOne({
-      where: { panNo: company.panNo },
-    });
-    if (existingPan) {
-      throw new ConflictException('Company with this PAN already exists');
-    }
-    const saved = await this.companyRepository.save(company);
-    return CompanyResponseDto.fromEntity(saved);
-  }
+    const normalized = uppercaseFields(dto);
+    const fromDate = this.normalizeDateValue(normalized.fromDate);
+    const toDate = this.normalizeDateValue(normalized.toDate);
 
-  async update(id: string, dto: UpdateCompanyDto, userId: string): Promise<CompanyResponseDto> {
-    const company = await this.companyRepository.findOne({ where: { id } });
-    if (!company) {
-      throw new NotFoundException(`Company with id ${id} not found`);
-    }
-    const uppercased = uppercaseFields(dto);
-    if (uppercased.panNo && uppercased.panNo !== company.panNo) {
-      const existingPan = await this.companyRepository.findOne({
-        where: { panNo: uppercased.panNo },
+    return this.companyRepository.manager.transaction(async manager => {
+      const companyRepository = manager.getRepository(Company);
+      const company = companyRepository.create({
+        ...normalized,
+        fromDate,
+        toDate,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+
+      const existingPan = await companyRepository.findOne({
+        where: { panNo: company.panNo },
       });
       if (existingPan) {
         throw new ConflictException('Company with this PAN already exists');
       }
-    }
-    Object.assign(company, uppercased);
-    company.updatedBy = userId;
-    const saved = await this.companyRepository.save(company);
-    return CompanyResponseDto.fromEntity(saved);
+
+      if (fromDate) {
+        const previousCompany = await companyRepository
+          .createQueryBuilder('company')
+          .setLock('pessimistic_write')
+          .where('(company.fromDate IS NULL OR company.fromDate < :fromDate)', {
+            fromDate,
+          })
+          .orderBy('company.fromDate', 'DESC', 'NULLS LAST')
+          .addOrderBy('company.createdAt', 'DESC')
+          .getOne();
+
+        if (previousCompany) {
+          previousCompany.toDate = fromDate;
+          previousCompany.updatedBy = userId;
+          await companyRepository.save(previousCompany);
+        }
+      }
+
+      const saved = await companyRepository.save(company);
+      return CompanyResponseDto.fromEntity(saved);
+    });
+  }
+
+  async update(id: string, dto: UpdateCompanyDto, userId: string): Promise<CompanyResponseDto> {
+    const normalized = uppercaseFields(dto);
+    const fromDate =
+      normalized.fromDate !== undefined
+        ? this.normalizeDateValue(normalized.fromDate)
+        : undefined;
+    const toDate =
+      normalized.toDate !== undefined
+        ? this.normalizeDateValue(normalized.toDate)
+        : undefined;
+
+    return this.companyRepository.manager.transaction(async manager => {
+      const companyRepository = manager.getRepository(Company);
+      const company = await companyRepository.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!company) {
+        throw new NotFoundException(`Company with id ${id} not found`);
+      }
+
+      if (normalized.panNo && normalized.panNo !== company.panNo) {
+        const existingPan = await companyRepository.findOne({
+          where: { panNo: normalized.panNo },
+        });
+        if (existingPan) {
+          throw new ConflictException('Company with this PAN already exists');
+        }
+      }
+
+      const previousFromDate = company.fromDate ? new Date(company.fromDate) : null;
+      Object.assign(company, {
+        ...normalized,
+        fromDate: fromDate !== undefined ? fromDate : company.fromDate,
+        toDate: toDate !== undefined ? toDate : company.toDate,
+      });
+      company.updatedBy = userId;
+
+      if (
+        fromDate &&
+        (!previousFromDate || previousFromDate.getTime() !== fromDate.getTime())
+      ) {
+        const previousCompany = await companyRepository
+          .createQueryBuilder('company')
+          .setLock('pessimistic_write')
+          .where('company.id <> :id', { id })
+          .andWhere('(company.fromDate IS NULL OR company.fromDate < :fromDate)', {
+            fromDate,
+          })
+          .orderBy('company.fromDate', 'DESC', 'NULLS LAST')
+          .addOrderBy('company.createdAt', 'DESC')
+          .getOne();
+
+        if (previousCompany) {
+          previousCompany.toDate = fromDate;
+          previousCompany.updatedBy = userId;
+          await companyRepository.save(previousCompany);
+        }
+      }
+
+      const saved = await companyRepository.save(company);
+      return CompanyResponseDto.fromEntity(saved);
+    });
   }
 
   async delete(id: string): Promise<{ message: string }> {

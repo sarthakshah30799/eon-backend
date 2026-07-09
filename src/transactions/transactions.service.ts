@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { TransactionLog } from './entities/transaction-log.entity';
 import { Transaction } from './entities/transaction.entity';
@@ -17,6 +17,13 @@ import { StorageService } from '../storage/storage.service';
 import { TransactionReferenceSnapshotValue } from './types/transaction-snapshot.types';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
+import { CompanyService } from '../company/company.service';
+import { Branch } from '../branches/branch.entity';
+import { User } from '../users/user.entity';
+import { ManualBookPageTracking } from '../manual-bill-books/entities/manual-book-page-tracking.entity';
+import { ChequeBookPageTracking } from '../chequebooks/entities/cheque-book-page-tracking.entity';
+import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
+import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -51,6 +58,16 @@ export class TransactionsService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
+    @InjectRepository(Branch)
+    private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(ManualBookPageTracking, 'database2')
+    private readonly manualBookPageTrackingRepository: Repository<ManualBookPageTracking>,
+    @InjectRepository(ChequeBookPageTracking, 'database2')
+    private readonly chequeBookPageTrackingRepository: Repository<ChequeBookPageTracking>,
+    private readonly companyService: CompanyService,
+    private readonly additionalSettingService: AdditionalSettingService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
   ) {}
@@ -76,18 +93,105 @@ export class TransactionsService {
     return match ? Number(match[1]) : -1;
   }
 
-  private toReferenceSnapshot(
-    entity: { id: string; code?: string | null; name?: string | null },
-  ): TransactionReferenceSnapshotValue {
-    return {
-      id: entity.id,
-      code: entity.code ?? null,
-      name: entity.name ?? null,
-      label:
-        entity.code && entity.name
-          ? `${entity.code} - ${entity.name}`
-          : entity.name ?? entity.code ?? entity.id,
-    };
+  private getSnapshotString(
+    snapshot: Record<string, unknown> | null | undefined,
+    key: string,
+  ): string | null {
+    const value = snapshot?.[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private async isRequesterAdmin(userId: string | null | undefined): Promise<boolean> {
+    if (!userId) {
+      return false;
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: { id: true, isAdmin: true },
+    });
+
+    return user?.isAdmin === true;
+  }
+
+  private async canAccessTransaction(
+    transaction: Transaction,
+    userId: string | null | undefined,
+    activeBranchId: string | null | undefined,
+  ): Promise<boolean> {
+    if (await this.isRequesterAdmin(userId)) {
+      return true;
+    }
+
+    if (!activeBranchId) {
+      return false;
+    }
+
+    return transaction.branchId === activeBranchId;
+  }
+
+  private async generateTransactionNumber(
+    companyId: string | null,
+    slug: string | null,
+    branchSnapshot: Record<string, unknown> | null | undefined,
+  ): Promise<string> {
+    if (!companyId) {
+      throw new BadRequestException('Company is required to generate transaction number');
+    }
+
+    if (!slug) {
+      throw new BadRequestException('Transaction slug is required to generate transaction number');
+    }
+
+    const branchCode =
+      this.getSnapshotString(branchSnapshot, 'code') ??
+      this.getSnapshotString(branchSnapshot, 'branchCode');
+
+    if (!branchCode) {
+      throw new BadRequestException('Branch code is required to generate transaction number');
+    }
+
+    return this.additionalSettingService.reserveTransactionNumber(
+      companyId,
+      slug,
+      branchCode,
+      new Date(),
+    );
+  }
+
+  async getNextTransactionNumber(
+    slug: string,
+    branchId: string,
+  ): Promise<{ nextNumber: string }> {
+    if (!branchId) {
+      throw new BadRequestException('Branch is required to generate transaction number');
+    }
+
+    if (!slug) {
+      throw new BadRequestException('Transaction slug is required to generate transaction number');
+    }
+
+    const branchSnapshot = await loadEntitySnapshot(
+      this.branchRepository,
+      branchId,
+    );
+    if (!branchSnapshot) {
+      throw new NotFoundException(`Branch with id ${branchId} not found`);
+    }
+
+    const branchCode =
+      this.getSnapshotString(branchSnapshot, 'code') ??
+      this.getSnapshotString(branchSnapshot, 'branchCode');
+
+    if (!branchCode) {
+      throw new BadRequestException('Branch code is required to generate transaction number');
+    }
+
+    return this.additionalSettingService.getTransactionNumberPreview(
+      slug,
+      branchCode,
+      new Date(),
+    );
   }
 
   private async hydratePartyProfileSnapshot(
@@ -97,80 +201,20 @@ export class TransactionsService {
       return transaction;
     }
 
-    if (
-      transaction.partyProfileSnapshot &&
-      (transaction.partyProfileSnapshot.address1 ||
-        transaction.partyProfileSnapshot.phoneNo ||
-        transaction.partyProfileSnapshot.email ||
-        transaction.partyProfileSnapshot.gstNo)
-    ) {
+    if (transaction.partyProfileSnapshot) {
       return transaction;
     }
 
-    const partyProfile = await this.partyProfileRepository.findOne({
-      where: { id: transaction.partyProfileId },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        email: true,
-        phoneNo: true,
-        address1: true,
-        address2: true,
-        address3: true,
-        city: true,
-        pinCode: true,
-        panNo: true,
-        gstNo: true,
-        gstStateId: true,
-        stateId: true,
-        contactName: true,
-        applyTax: true,
-        gstState: {
-          id: true,
-          name: true,
-          code: true,
-          gstStateCode: true,
-        },
-        state: {
-          id: true,
-          name: true,
-          code: true,
-          gstStateCode: true,
-        },
-      },
-      relations: {
-        gstState: true,
-        state: true,
-      },
-    });
+    const partyProfileSnapshot = await loadEntitySnapshot(
+      this.partyProfileRepository,
+      transaction.partyProfileId,
+    );
 
-    if (!partyProfile) {
+    if (!partyProfileSnapshot) {
       return transaction;
     }
 
-    transaction.partyProfileSnapshot = {
-      ...this.toReferenceSnapshot({
-        id: partyProfile.id,
-        code: partyProfile.code,
-        name: partyProfile.name,
-      }),
-      email: partyProfile.email ?? null,
-      phoneNo: partyProfile.phoneNo ?? null,
-      address1: partyProfile.address1 ?? null,
-      address2: partyProfile.address2 ?? null,
-      address3: partyProfile.address3 ?? null,
-      city: partyProfile.city ?? null,
-      pinCode: partyProfile.pinCode ?? null,
-      panNo: partyProfile.panNo ?? null,
-      gstNo: partyProfile.gstNo ?? null,
-      gstStateId: partyProfile.gstStateId ?? null,
-      gstStateName: partyProfile.gstState?.name ?? null,
-      stateId: partyProfile.stateId ?? null,
-      stateName: partyProfile.state?.name ?? null,
-      contactName: partyProfile.contactName ?? null,
-      applyTax: Boolean(partyProfile.applyTax),
-    } as TransactionReferenceSnapshotValue;
+    transaction.partyProfileSnapshot = partyProfileSnapshot as TransactionReferenceSnapshotValue;
 
     return transaction;
   }
@@ -182,32 +226,20 @@ export class TransactionsService {
       return transaction;
     }
 
-    if (
-      transaction.agentProfileSnapshot &&
-      (transaction.agentProfileSnapshot.code ||
-        transaction.agentProfileSnapshot.name)
-    ) {
+    if (transaction.agentProfileSnapshot) {
       return transaction;
     }
 
-    const agentProfile = await this.partyProfileRepository.findOne({
-      where: { id: transaction.agentProfileId },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-      },
-    });
+    const agentProfileSnapshot = await loadEntitySnapshot(
+      this.partyProfileRepository,
+      transaction.agentProfileId,
+    );
 
-    if (!agentProfile) {
+    if (!agentProfileSnapshot) {
       return transaction;
     }
 
-    transaction.agentProfileSnapshot = this.toReferenceSnapshot({
-      id: agentProfile.id,
-      code: agentProfile.code,
-      name: agentProfile.name,
-    });
+    transaction.agentProfileSnapshot = agentProfileSnapshot as TransactionReferenceSnapshotValue;
 
     return transaction;
   }
@@ -255,34 +287,10 @@ export class TransactionsService {
       return transactions;
     }
 
-    const partyProfiles = await this.partyProfileRepository.find({
-      where: { id: In(partyProfileIds) },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        email: true,
-        phoneNo: true,
-        address1: true,
-        address2: true,
-        address3: true,
-        city: true,
-        pinCode: true,
-        panNo: true,
-        gstNo: true,
-        gstStateId: true,
-        stateId: true,
-        contactName: true,
-        applyTax: true,
-      },
-      relations: {
-        gstState: true,
-        state: true,
-      },
-    });
-    const partyProfileById = new Map(
-      partyProfiles.map(profile => [profile.id, profile]),
+    const partyProfiles = await Promise.all(
+      partyProfileIds.map(async id => [id, await loadEntitySnapshot(this.partyProfileRepository, id)] as const),
     );
+    const partyProfileById = new Map(partyProfiles);
 
     return transactions.map(transaction => {
       if (transaction.partyProfileSnapshot) {
@@ -296,30 +304,9 @@ export class TransactionsService {
 
       return {
         ...transaction,
-        partyProfileSnapshot: {
-          ...this.toReferenceSnapshot({
-            id: partyProfile.id,
-            code: partyProfile.code,
-            name: partyProfile.name,
-          }),
-          email: partyProfile.email ?? null,
-          phoneNo: partyProfile.phoneNo ?? null,
-          address1: partyProfile.address1 ?? null,
-          address2: partyProfile.address2 ?? null,
-          address3: partyProfile.address3 ?? null,
-          city: partyProfile.city ?? null,
-          pinCode: partyProfile.pinCode ?? null,
-          panNo: partyProfile.panNo ?? null,
-          gstNo: partyProfile.gstNo ?? null,
-          gstStateId: partyProfile.gstStateId ?? null,
-          gstStateName: partyProfile.gstState?.name ?? null,
-          stateId: partyProfile.stateId ?? null,
-          stateName: partyProfile.state?.name ?? null,
-          contactName: partyProfile.contactName ?? null,
-          applyTax: Boolean(partyProfile.applyTax),
-        },
-      };
-    });
+        partyProfileSnapshot: partyProfile,
+      } as Transaction;
+    }) as Transaction[];
   }
 
   async createDraft(
@@ -339,8 +326,8 @@ export class TransactionsService {
       Array<{ documentProfileId: string; fileName?: string }>
     >(body.attachments, []);
 
-    if (!transactionPayload.number || !transactionPayload.branchId || !transactionPayload.partyProfileId) {
-      throw new BadRequestException('Transaction number, branch, and party profile are required');
+    if (!transactionPayload.branchId || !transactionPayload.partyProfileId) {
+      throw new BadRequestException('Branch and party profile are required');
     }
 
     const filesByIndex = new Map<number, UploadedDraftFile>();
@@ -356,21 +343,84 @@ export class TransactionsService {
       ? TransactionStatus.DRAFT
       : TransactionStatus.APPROVED;
     const now = new Date();
+    const currentCompany = await this.companyService.getCurrentCompany(now);
+    if (!currentCompany) {
+      throw new BadRequestException('Current company not found');
+    }
+
+    const currentCompanySnapshot = await this.companyService.getCurrentCompanySnapshot(now);
+    if (!currentCompanySnapshot) {
+      throw new BadRequestException('Current company snapshot not found');
+    }
+
+    const branchSnapshot = await loadEntitySnapshot(
+      this.branchRepository,
+      String(transactionPayload.branchId),
+    );
+    if (!branchSnapshot) {
+      throw new NotFoundException(
+        `Branch with id ${transactionPayload.branchId} not found`,
+      );
+    }
+
+    const generatedNumber = shouldRequireApproval
+      ? null
+      : await this.generateTransactionNumber(
+          currentCompany.id,
+          String(transactionPayload.slug ?? ''),
+          branchSnapshot,
+        );
+
+    const partyProfileSnapshot = await loadEntitySnapshot(
+      this.partyProfileRepository,
+      String(transactionPayload.partyProfileId),
+    );
+    if (!partyProfileSnapshot) {
+      throw new NotFoundException(
+        `Party profile with id ${transactionPayload.partyProfileId} not found`,
+      );
+    }
+
+    const agentProfileSnapshot = transactionPayload.agentProfileId
+      ? await loadEntitySnapshot(
+          this.partyProfileRepository,
+          String(transactionPayload.agentProfileId),
+        )
+      : null;
+    if (transactionPayload.agentProfileId && !agentProfileSnapshot) {
+      throw new NotFoundException(
+        `Agent profile with id ${transactionPayload.agentProfileId} not found`,
+      );
+    }
+
+    const manualBookPageSnapshot = transactionPayload.manualBookPageId
+      ? await loadEntitySnapshot(
+          this.manualBookPageTrackingRepository,
+          String(transactionPayload.manualBookPageId),
+        )
+      : null;
+    if (transactionPayload.manualBookPageId && !manualBookPageSnapshot) {
+      throw new NotFoundException(
+        `Manual book page with id ${transactionPayload.manualBookPageId} not found`,
+      );
+    }
 
     const transaction = await this.transactionRepository.save(
       this.transactionRepository.create({
         rootTransactionId: transactionPayload.rootTransactionId ?? null,
         revisionNo: Number(transactionPayload.revisionNo ?? 1) || 1,
-        number: String(transactionPayload.number),
+        number: generatedNumber,
         slug: transactionPayload.slug ?? null,
         branchId: String(transactionPayload.branchId),
-        branchSnapshot: transactionPayload.branchSnapshot ?? null,
+        branchSnapshot,
+        companyId: currentCompany.id,
+        companySnapshot: currentCompanySnapshot,
         partyProfileId: String(transactionPayload.partyProfileId),
-        partyProfileSnapshot: transactionPayload.partyProfileSnapshot ?? null,
+        partyProfileSnapshot,
         agentProfileId: transactionPayload.agentProfileId ?? null,
-        agentProfileSnapshot: transactionPayload.agentProfileSnapshot ?? null,
+        agentProfileSnapshot,
         manualBookPageId: transactionPayload.manualBookPageId ?? null,
-        manualBookPageSnapshot: transactionPayload.manualBookPageSnapshot ?? null,
+        manualBookPageSnapshot,
         transactionType: transactionPayload.transactionType,
         tradeMode: transactionPayload.tradeMode,
         status: transactionStatus,
@@ -388,100 +438,60 @@ export class TransactionsService {
       }),
     );
 
-    const partyProfile = await this.partyProfileRepository.findOne({
-      where: { id: transaction.partyProfileId },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-      },
-    });
-
-    if (partyProfile) {
-      transaction.partyProfileSnapshot = this.toReferenceSnapshot(partyProfile);
-      await this.transactionRepository.save(transaction);
-    }
-
-    if (transaction.agentProfileId) {
-      const agentProfile = await this.partyProfileRepository.findOne({
-        where: { id: transaction.agentProfileId },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-        },
-      });
-
-      if (agentProfile) {
-        transaction.agentProfileSnapshot = this.toReferenceSnapshot(agentProfile);
-        await this.transactionRepository.save(transaction);
+    const currencySnapshots = new Map<string, Record<string, unknown>>();
+    const productSnapshots = new Map<string, Record<string, unknown>>();
+    const accountSnapshots = new Map<string, Record<string, unknown>>();
+    const documentProfileSnapshots = new Map<string, Record<string, unknown>>();
+    const resolveSnapshot = async (
+      cache: Map<string, Record<string, unknown>>,
+      repository: Repository<any>,
+      id: string,
+      label: string,
+    ) => {
+      if (!cache.has(id)) {
+        const snapshot = await loadEntitySnapshot(repository, id);
+        if (!snapshot) {
+          throw new NotFoundException(`${label} with id ${id} not found`);
+        }
+        cache.set(id, snapshot);
       }
-    }
-
-    const currencyCodes = new Map<string, { id: string; currencyCode: string; currencyName: string | null }>();
-    const productCodes = new Map<string, { id: string; productCode: string; productDescription: string | null }>();
-    const accountIds = new Map<string, { id: string; code?: string | null; name?: string | null }>();
-    const documentProfiles = new Map<string, { id: string; description?: string | null }>();
+      return cache.get(id)!;
+    };
 
     const resolveCurrency = async (currencyId: string) => {
-      if (!currencyCodes.has(currencyId)) {
-        const currency = await this.currencyRepository.findOne({ where: { id: currencyId } });
-        if (!currency) {
-          throw new NotFoundException(`Currency with id ${currencyId} not found`);
-        }
-        currencyCodes.set(currencyId, {
-          id: currency.id,
-          currencyCode: currency.currencyCode,
-          currencyName: currency.currencyName ?? null,
-        });
-      }
-      return currencyCodes.get(currencyId)!;
+      return resolveSnapshot(
+        currencySnapshots,
+        this.currencyRepository,
+        currencyId,
+        'Currency',
+      );
     };
 
     const resolveProduct = async (productId: string) => {
-      if (!productCodes.has(productId)) {
-        const product = await this.productRepository.findOne({ where: { id: productId } });
-        if (!product) {
-          throw new NotFoundException(`Product with id ${productId} not found`);
-        }
-        productCodes.set(productId, {
-          id: product.id,
-          productCode: product.productCode,
-          productDescription: product.productDescription ?? null,
-        });
-      }
-      return productCodes.get(productId)!;
+      return resolveSnapshot(
+        productSnapshots,
+        this.productRepository,
+        productId,
+        'Product',
+      );
     };
 
     const resolveAccount = async (accountId: string) => {
-      if (!accountIds.has(accountId)) {
-        const account = await this.accountProfileRepository.findOne({ where: { id: accountId } });
-        if (!account) {
-          throw new NotFoundException(`Account with id ${accountId} not found`);
-        }
-        accountIds.set(accountId, {
-          id: account.id,
-          code: account.accountCode ?? null,
-          name: account.accountName ?? null,
-        });
-      }
-      return accountIds.get(accountId)!;
+      return resolveSnapshot(
+        accountSnapshots,
+        this.accountProfileRepository,
+        accountId,
+        'Account',
+      );
     };
 
     const resolveDocumentProfile = async (documentProfileId: string) => {
-      if (!documentProfiles.has(documentProfileId)) {
-        const documentProfile = await this.documentProfileRepository.findOne({
-          where: { id: documentProfileId },
-        });
-        if (!documentProfile) {
-          throw new NotFoundException(`Document profile with id ${documentProfileId} not found`);
-        }
-        documentProfiles.set(documentProfileId, {
-          id: documentProfile.id,
-          description: documentProfile.documentDescription ?? null,
-        });
-      }
-      return documentProfiles.get(documentProfileId)!;
+      return resolveSnapshot(
+        documentProfileSnapshots,
+        this.documentProfileRepository,
+        documentProfileId,
+        'Document profile',
+      );
     };
 
     const itemRows = Array.isArray(transactionPayload.items)
@@ -496,26 +506,16 @@ export class TransactionsService {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          currencyId: currency.id,
-          productId: product.id,
+          currencyId: String(currency.id),
+          productId: String(product.id),
           currencyRateId: row.currencyRateId ?? null,
           productCurrencyRateId: row.productCurrencyRateId ?? null,
           quantity: String(row.quantity),
           per: row.per ?? null,
           rate: String(row.rate),
           commission: row.commission ?? null,
-          currencySnapshot: {
-            id: currency.id,
-            code: currency.currencyCode,
-            name: currency.currencyName,
-            label: currency.currencyName ? `${currency.currencyCode} - ${currency.currencyName}` : currency.currencyCode,
-          },
-          productSnapshot: {
-            id: product.id,
-            code: product.productCode,
-            name: product.productDescription,
-            label: product.productDescription ? `${product.productCode} - ${product.productDescription}` : product.productCode,
-          },
+          currencySnapshot: currency as TransactionReferenceSnapshotValue,
+          productSnapshot: product as TransactionReferenceSnapshotValue,
           currencyRateSnapshot: row.currencyRateSnapshot ?? null,
           productCurrencyRateSnapshot: row.productCurrencyRateSnapshot ?? null,
           pricingRuleSnapshot: row.pricingRuleSnapshot ?? null,
@@ -570,11 +570,8 @@ export class TransactionsService {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          documentProfileId: documentProfile.id,
-          documentProfileSnapshot: {
-            id: documentProfile.id,
-            name: documentProfile.description ?? null,
-          } as TransactionReferenceSnapshotValue,
+          documentProfileId: String(documentProfile.id),
+          documentProfileSnapshot: documentProfile as TransactionReferenceSnapshotValue,
           status: row.status ?? TransactionDocumentStatus.ATTACHED,
           fileName,
           originalFileName,
@@ -602,13 +599,8 @@ export class TransactionsService {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          accountId: account.id,
-          accountSnapshot: {
-            id: account.id,
-            code: account.code ?? null,
-            name: account.name ?? null,
-            label: account.name ?? account.code ?? account.id,
-          },
+          accountId: String(account.id),
+          accountSnapshot: account as TransactionReferenceSnapshotValue,
           amount: String(row.amount),
           gstRate: row.gstRate ?? null,
           gstAmount: row.gstAmount ?? null,
@@ -625,20 +617,28 @@ export class TransactionsService {
     for (let index = 0; index < paymentRows.length; index += 1) {
       const row = paymentRows[index];
       const account = await resolveAccount(String(row.accountId));
+      const chequePageSnapshot = row.chequePageId
+        ? ((await loadEntitySnapshot(
+            this.chequeBookPageTrackingRepository,
+            String(row.chequePageId),
+          )) as TransactionReferenceSnapshotValue)
+        : null;
+
+      if (row.chequePageId && !chequePageSnapshot) {
+        throw new NotFoundException(
+          `Cheque page with id ${row.chequePageId} not found`,
+        );
+      }
+
       await this.transactionPaymentRepository.save(
         this.transactionPaymentRepository.create({
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          accountId: account.id,
-          accountSnapshot: {
-            id: account.id,
-            code: account.code ?? null,
-            name: account.name ?? null,
-            label: account.name ?? account.code ?? account.id,
-          },
+          accountId: String(account.id),
+          accountSnapshot: account as TransactionReferenceSnapshotValue,
           chequePageId: row.chequePageId ?? null,
-          chequePageSnapshot: row.chequePageSnapshot ?? null,
+          chequePageSnapshot,
           paymentMethod: row.paymentMethod,
           referenceNumber: row.referenceNumber ?? null,
           referenceDate: row.referenceDate ?? null,
@@ -681,13 +681,14 @@ export class TransactionsService {
 
     if (partyProfileForEmail?.email) {
       try {
+        const transactionLabel = transaction.number || 'Transaction';
         await this.mailService.sendEmail({
           to: partyProfileForEmail.email,
-          subject: `${transaction.number} - Transaction Created`,
-          text: `Your transaction ${transaction.number} has been created successfully. You can print the original copy from the transaction documents screen.`,
+          subject: `${transactionLabel} - Transaction Created`,
+          text: `Your transaction ${transactionLabel} has been created successfully. You can print the original copy from the transaction documents screen.`,
           html: `
             <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-              <p>Your transaction <strong>${transaction.number}</strong> has been created successfully.</p>
+              <p>Your transaction <strong>${transactionLabel}</strong> has been created successfully.</p>
               <p>You can print the original copy from the transaction documents screen.</p>
             </div>
           `,
@@ -728,6 +729,14 @@ export class TransactionsService {
       throw new BadRequestException('Only draft transactions can be approved');
     }
 
+    if (!transaction.number) {
+      transaction.number = await this.generateTransactionNumber(
+        transaction.companyId,
+        transaction.slug,
+        transaction.branchSnapshot as Record<string, unknown> | null | undefined,
+      );
+    }
+
     transaction.status = TransactionStatus.APPROVED;
     transaction.submittedAt = transaction.submittedAt ?? new Date();
     transaction.approvedAt = new Date();
@@ -757,7 +766,11 @@ export class TransactionsService {
     }) as Promise<Transaction>;
   }
 
-  async getTransactionById(id: string): Promise<Transaction | null> {
+  async getTransactionById(
+    id: string,
+    userId?: string | null,
+    activeBranchId?: string | null,
+  ): Promise<Transaction | null> {
     const transaction = await this.transactionRepository.findOne({
       where: { id },
       relations: {
@@ -765,11 +778,16 @@ export class TransactionsService {
         documents: true,
         additionalCharges: true,
         payments: true,
+        logs: true,
       },
     });
 
     if (!transaction) {
       return null;
+    }
+
+    if (!(await this.canAccessTransaction(transaction, userId ?? null, activeBranchId ?? null))) {
+      throw new NotFoundException('Transaction not found');
     }
 
     await this.hydratePartyProfileSnapshot(transaction);
@@ -780,10 +798,21 @@ export class TransactionsService {
   async downloadDocument(
     transactionId: string,
     documentId: string,
+    userId?: string | null,
+    activeBranchId?: string | null,
   ): Promise<
     | { redirectUrl: string; fileName: string; mimeType: string }
     | { file: StreamableFile; fileName: string; mimeType: string }
   > {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+      select: { id: true, branchId: true },
+    });
+
+    if (!transaction || !(await this.canAccessTransaction(transaction as Transaction, userId ?? null, activeBranchId ?? null))) {
+      throw new NotFoundException('Transaction not found');
+    }
+
     const document = await this.transactionDocumentRepository.findOne({
       where: {
         id: documentId,
@@ -822,7 +851,17 @@ export class TransactionsService {
     transactionId: string,
     dto: RecordTransactionPrintDto,
     performedById: string | null,
+    activeBranchId?: string | null,
   ): Promise<{ message: string; messageId?: string }> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+      select: { id: true, branchId: true },
+    });
+
+    if (!transaction || !(await this.canAccessTransaction(transaction as Transaction, performedById, activeBranchId ?? null))) {
+      throw new NotFoundException('Transaction not found');
+    }
+
     const existingPrintCount = await this.transactionLogRepository.count({
       where: {
         transactionId,

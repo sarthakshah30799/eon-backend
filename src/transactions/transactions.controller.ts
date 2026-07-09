@@ -47,8 +47,7 @@ export class TransactionsController {
     @Query('search') search?: string,
     @Query('status') status?: string,
   ): Promise<Transaction[]> {
-    const effectiveBranchId =
-      session?.isAdmin || session?.isHoStaff ? branchId || session?.activeBranchId : session?.activeBranchId;
+    const effectiveBranchId = session?.isAdmin ? branchId : session?.activeBranchId;
     return this.transactionsService.getTransactions(
       slug,
       effectiveBranchId,
@@ -67,6 +66,15 @@ export class TransactionsController {
     @Session() session: any,
   ): Promise<Transaction> {
     return this.transactionsService.createDraft(body, files, session?.userId ?? null);
+  }
+
+  @Get('next-number')
+  @ApiOperation({ summary: 'Get next transaction number preview' })
+  async getNextNumber(
+    @Query('slug') slug: string,
+    @Query('branchId') branchId: string,
+  ): Promise<{ nextNumber: string }> {
+    return this.transactionsService.getNextTransactionNumber(slug, branchId);
   }
 
   @Post(':id/approve')
@@ -91,8 +99,15 @@ export class TransactionsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get transaction by ID' })
   @ApiResponse({ status: 200, description: 'Transaction details', type: Transaction })
-  async getTransactionById(@Param('id') id: string): Promise<Transaction | null> {
-    return this.transactionsService.getTransactionById(id);
+  async getTransactionById(
+    @Param('id') id: string,
+    @Session() session: any,
+  ): Promise<Transaction | null> {
+    return this.transactionsService.getTransactionById(
+      id,
+      session?.userId ?? null,
+      session?.activeBranchId ?? null,
+    );
   }
 
   @Get(':id/documents/:documentId/download')
@@ -100,9 +115,15 @@ export class TransactionsController {
   async downloadDocument(
     @Param('id', ParseUUIDPipe) transactionId: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Session() session: any,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const payload = await this.transactionsService.downloadDocument(transactionId, documentId);
+    const payload = await this.transactionsService.downloadDocument(
+      transactionId,
+      documentId,
+      session?.userId ?? null,
+      session?.activeBranchId ?? null,
+    );
 
     if ('redirectUrl' in payload) {
       return res.redirect(payload.redirectUrl);
@@ -122,6 +143,11 @@ export class TransactionsController {
     @Body() dto: RecordTransactionPrintDto,
     @Session() session: any,
   ): Promise<{ message: string; messageId?: string }> {
-    return this.transactionsService.recordPrint(transactionId, dto, session?.userId ?? null);
+    return this.transactionsService.recordPrint(
+      transactionId,
+      dto,
+      session?.userId ?? null,
+      session?.activeBranchId ?? null,
+    );
   }
 }

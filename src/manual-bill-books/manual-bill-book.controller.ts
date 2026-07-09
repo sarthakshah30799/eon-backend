@@ -67,7 +67,7 @@ export class ManualBillBookController {
     @Query("toDate") toDate?: string,
   ) {
     let effectiveBranchId = branchId;
-    if (!session.isAdmin) {
+    if (!session.isAdmin && !session.isHoStaff) {
       effectiveBranchId = session.activeBranchId;
     }
     return this.service.findAll(
@@ -88,9 +88,11 @@ export class ManualBillBookController {
     @Query("branchId") branchId?: string,
   ) {
     const effectiveBranchId =
-      session.isAdmin || session.isHoStaff
-        ? branchId || session.activeBranchId
-        : session.activeBranchId;
+      session.isAdmin
+        ? branchId
+        : session.isHoStaff
+          ? branchId || session.activeBranchId
+          : session.activeBranchId;
     console.log(
       `[DEBUG] users request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
     );
@@ -195,7 +197,7 @@ export class ManualBillBookController {
     @Query("pageNo") pageNoStr: string,
   ) {
     const pageNo = parseInt(pageNoStr, 10);
-    return this.service.searchPage(pageNo, session.activeBranchId);
+    return this.service.searchPage(pageNo, session.isAdmin ? undefined : session.activeBranchId);
   }
 
   @Get("pages/selectable")
@@ -209,7 +211,7 @@ export class ManualBillBookController {
     @Query("branchId") branchId?: string,
     @Query("userId") userId?: string,
   ) {
-    const effectiveBranchId = session.activeBranchId;
+    const effectiveBranchId = session.isAdmin ? branchId : session.activeBranchId;
     const effectiveUserId = userId?.trim() || session.userId;
     this.logger.log(
       `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"}`

@@ -42,14 +42,12 @@ export class ConfigService {
     return p ? parseInt(p, 10) : 3000;
   }
 
-  get nodeEnv(): string {
-    return this.get('NODE_ENV');
+  get nodeEnv(): string | undefined {
+    return this.getOptional('NODE_ENV');
   }
 
   get isProduction(): boolean {
-    const nodeEnv = this.nodeEnv;
-    console.log(`NODE_ENV: ${nodeEnv}`);
-    return nodeEnv === 'production';
+    return this.nodeEnv === 'production';
   }
 
   get secretSessionKey(): string {

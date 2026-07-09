@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -76,6 +77,8 @@ type PartyProfileCommissionRuleInput = {
 
 @Injectable()
 export class PartyProfileService {
+  private readonly logger = new Logger(PartyProfileService.name);
+
   constructor(
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
@@ -107,6 +110,31 @@ export class PartyProfileService {
         "userRoles.branch",
       ],
     });
+  }
+
+  private isPartyProfileVisibleToUser(
+    client: PartyProfile,
+    userId: string | undefined,
+    activeBranchId: string | undefined,
+    isAdmin: boolean,
+  ) {
+    if (isAdmin) {
+      return true;
+    }
+
+    if (!userId || !activeBranchId) {
+      return false;
+    }
+
+    if (client.branchId !== activeBranchId) {
+      return false;
+    }
+
+    if (client.active === false) {
+      return client.createdBy === userId;
+    }
+
+    return true;
   }
 
   private normalizePartyProfilePath(type?: string) {
@@ -650,7 +678,7 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "view");
-      if (!user.isAdmin && (!activeBranchId || client.branchId !== activeBranchId)) {
+      if (!this.isPartyProfileVisibleToUser(client, userId, activeBranchId, user.isAdmin)) {
         throw new NotFoundException(`Party Profile with id ${id} not found`);
       }
     }
@@ -658,7 +686,11 @@ export class PartyProfileService {
     return PartyProfileResponseDto.fromEntity(client);
   }
 
-  async getCommissionTemplate(id: string, userId?: string): Promise<string> {
+  async getCommissionTemplate(
+    id: string,
+    userId?: string,
+    activeBranchId?: string,
+  ): Promise<string> {
     const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({
       where: { id },
@@ -670,6 +702,9 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "view");
+      if (!this.isPartyProfileVisibleToUser(client, userId, activeBranchId, user.isAdmin)) {
+        throw new NotFoundException(`Party Profile with id ${id} not found`);
+      }
     }
 
     const commissionRules = await this.partyProfileCommissionRuleRepository.find({
@@ -693,6 +728,7 @@ export class PartyProfileService {
     id: string,
     csvContent: string,
     userId: string,
+    activeBranchId?: string,
   ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
     const client = await this.partyProfileRepository.findOne({
@@ -704,6 +740,9 @@ export class PartyProfileService {
     }
 
     this.assertPartyProfileAccess(user, client.type, "modify");
+    if (!this.isPartyProfileVisibleToUser(client, userId, activeBranchId, user.isAdmin)) {
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
+    }
 
     if (client.type !== ClientType.AGENT) {
       throw new BadRequestException(
@@ -821,6 +860,17 @@ export class PartyProfileService {
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
 
+    this.logger.debug(
+      `findAll called with query=${JSON.stringify({
+        ...query,
+        userId,
+        activeBranchId,
+      })}`,
+    );
+    this.logger.debug(
+      `findAll resolved paging page=${page}, limit=${limit}, skip=${skip}`,
+    );
+
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
@@ -835,7 +885,10 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
-    if (!activeBranchId) {
+    if (!user?.isAdmin && !activeBranchId) {
+      this.logger.debug(
+        "findAll returning empty list because activeBranchId is missing for a non-admin user",
+      );
       return {
         data: [],
         page,
@@ -845,7 +898,22 @@ export class PartyProfileService {
       };
     }
 
-    qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
+    if (!user?.isAdmin && activeBranchId) {
+      qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
+      this.logger.debug(
+        `findAll applied branch filter branchId=${activeBranchId} for non-admin user`,
+      );
+    } else {
+      this.logger.debug("findAll skipped branch filter because user is admin");
+    }
+
+    if (query.sale !== undefined) {
+      qb.andWhere("pp.sale = :sale", { sale: query.sale });
+    }
+
+    if (query.purchase !== undefined) {
+      qb.andWhere("pp.purchase = :purchase", { purchase: query.purchase });
+    }
 
     const requestedTypes = (query.type?.length
       ? query.type
@@ -854,7 +922,12 @@ export class PartyProfileService {
       ? requestedTypes.filter(type => this.canAccessPartyProfileType(user, type, "view"))
       : requestedTypes;
 
+    this.logger.debug(
+      `findAll requestedTypes=${JSON.stringify(requestedTypes)}, accessibleTypes=${JSON.stringify(accessibleTypes)}`,
+    );
+
     if (accessibleTypes.length === 0) {
+      this.logger.debug("findAll returning empty list because accessibleTypes is empty");
       return {
         data: [],
         page,
@@ -887,13 +960,39 @@ export class PartyProfileService {
       qb.andWhere("pp.name ILIKE :name", { name: `%${query.name}%` });
     }
 
+    const restrictToOwnInactiveRecords =
+      !user?.isAdmin &&
+      Boolean(userId) &&
+      (query.activeOnly === false || query.active === false);
+
+    if (restrictToOwnInactiveRecords) {
+      qb.andWhere("pp.createdBy = :createdBy", { createdBy: userId });
+      this.logger.debug(
+        `findAll restricted to createdBy=${userId} for non-admin inactive fetch`,
+      );
+    }
+
     if (query.active !== undefined) {
       qb.andWhere("pp.active = :active", { active: query.active });
+      this.logger.debug(`findAll applied active filter from active=${query.active}`);
+    } else if (!restrictToOwnInactiveRecords) {
+      qb.andWhere("pp.active = true");
+      this.logger.debug("findAll applied default active=true filter");
+    } else {
+      this.logger.debug("findAll skipped active filter because inactive fetch is restricted to creator");
     }
+
+    this.logger.debug(`findAll sql=${qb.getSql()}`);
 
     qb.orderBy("pp.createdAt", "DESC").skip(skip).take(limit);
 
     const [data, totalItems] = await qb.getManyAndCount();
+
+    this.logger.debug(
+      `findAll result count=${data.length}, totalItems=${totalItems}, activeStatuses=${JSON.stringify(
+        data.map(client => ({ id: client.id, active: client.active, type: client.type })),
+      )}`,
+    );
 
     return {
       data: data.map(client => PartyProfileResponseDto.fromEntity(client)),

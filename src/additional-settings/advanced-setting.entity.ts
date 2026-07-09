@@ -1,4 +1,4 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from "typeorm";
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { Company } from "../company/company.entity";
 
@@ -20,6 +20,18 @@ export enum ValueType {
 @Index(["companyId", "code"], { unique: true })
 @Index(["companyId", "parentId", "sortOrder"])
 @Index(["companyId", "nodeType", "isActive"])
+@Check(
+  "CHK_advanced_settings_transaction_number_series_length",
+  `UPPER("code") NOT IN (
+    'PURCHASE_FFMC',
+    'SALE_FFMC',
+    'PURCHASE_RMC',
+    'PURCHASE_FOREX',
+    'PURCHASE_FOREIGN',
+    'PURCHASE_MISC',
+    'PURCHASE_FRANCHISE'
+  ) OR "value_number" IS NULL OR "value_number" BETWEEN 0 AND 999999999`
+)
 @Entity("advanced_settings")
 export class AdvancedSetting extends BaseEntity {
   @ManyToOne(() => Company, {

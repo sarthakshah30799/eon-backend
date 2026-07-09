@@ -172,6 +172,10 @@ export class UserService {
       query.andWhere('user.isAdmin = :isAdmin', { isAdmin: false });
     }
 
+    if (!requesterIsAdmin && !activeOnly && currentUserId) {
+      query.andWhere('user.createdBy = :currentUserId', { currentUserId });
+    }
+
     if (trimmedSearch) {
       query.andWhere(
         new Brackets(subQuery => {
@@ -380,6 +384,25 @@ export class UserService {
 
     if (user.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
       throw new NotFoundException(`User with id ${id} not found`);
+    }
+
+    if (!(await this.isRequesterAdmin(currentUserId))) {
+      if (currentUserId === id) {
+        return UserResponseDto.fromEntity(user, workplace);
+      }
+
+      const activeBranchId = workplace?.activeBranchId ?? null;
+      const isInCurrentBranch =
+        Boolean(activeBranchId) &&
+        user.userRoles?.some(userRole => userRole.branch?.id === activeBranchId);
+
+      if (!isInCurrentBranch) {
+        throw new NotFoundException(`User with id ${id} not found`);
+      }
+
+      if (user.isActive === false && user.createdBy !== currentUserId) {
+        throw new NotFoundException(`User with id ${id} not found`);
+      }
     }
 
     return UserResponseDto.fromEntity(user, workplace);

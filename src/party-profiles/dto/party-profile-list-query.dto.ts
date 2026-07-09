@@ -1,7 +1,41 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform, Type } from "class-transformer";
+import { Transform } from "class-transformer";
 import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 import { ClientType } from "../party-profile.entity";
+
+const parseBooleanQuery = ({ value }: { value: unknown }) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+
+  if (normalized === "false") {
+    return false;
+  }
+
+  return undefined;
+};
+
+const parseNumberQuery = ({ value }: { value: unknown }) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
 
 export class PartyProfileListQueryDto {
   @ApiPropertyOptional({ description: "Search query by code, name, or city" })
@@ -22,8 +56,14 @@ export class PartyProfileListQueryDto {
   @ApiPropertyOptional({ description: "Filter by Active status" })
   @IsBoolean()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(parseBooleanQuery)
   active?: boolean;
+
+  @ApiPropertyOptional({ description: "When false, include inactive party profiles" })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(parseBooleanQuery)
+  activeOnly?: boolean;
 
   @ApiPropertyOptional({ description: "Filter by one or more Party Profile types", enum: ClientType, isArray: true })
   @Transform(({ value }) => {
@@ -41,15 +81,27 @@ export class PartyProfileListQueryDto {
   @IsOptional()
   type?: ClientType[];
 
+  @ApiPropertyOptional({ description: "Filter by sale-enabled party profiles" })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(parseBooleanQuery)
+  sale?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by purchase-enabled party profiles" })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(parseBooleanQuery)
+  purchase?: boolean;
+
   @ApiPropertyOptional({ description: "Page number", default: 1 })
   @IsInt()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(parseNumberQuery)
   page?: number;
 
   @ApiPropertyOptional({ description: "Items per page", default: 10 })
   @IsInt()
   @IsOptional()
-  @Type(() => Number)
+  @Transform(parseNumberQuery)
   limit?: number;
 }

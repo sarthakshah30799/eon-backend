@@ -521,16 +521,14 @@ export class ChequeBookService {
     accountId?: string,
     userId?: string,
   ): Promise<any[]> {
-    if (!branchId) {
-      return [];
-    }
-
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.checkBook", "book")
       .where("pt.isVoided = :isVoided", { isVoided: false });
 
-    query.andWhere("book.branchId = :branchId", { branchId });
+    if (branchId) {
+      query.andWhere("book.branchId = :branchId", { branchId });
+    }
 
     if (accountId) {
       query.andWhere("book.bankAccountCode = :accountId", { accountId });
@@ -578,7 +576,7 @@ export class ChequeBookService {
   }
 
   async searchCashierReturn(params: {
-    branchId: string;
+    branchId?: string;
     currentUserId: string;
     bankAccountCode: string;
     bookNo: number;
@@ -596,7 +594,7 @@ export class ChequeBookService {
 
     const queryBooks = await this.checkBookRepository
       .createQueryBuilder("cb")
-      .where("cb.branchId = :branchId", { branchId })
+      .where(branchId ? "cb.branchId = :branchId" : "1=1", branchId ? { branchId } : {})
       .andWhere("cb.status = :status", { status: "Approved" })
       .andWhere("cb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("cb.bookNoTo >= :bookNo", { bookNo })

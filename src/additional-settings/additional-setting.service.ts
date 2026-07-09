@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdvancedSetting, NodeType, ValueType } from './advanced-setting.entity';
@@ -33,6 +33,15 @@ type PolicyHandler = {
 };
 
 const normalizeCode = (code?: string | null) => String(code ?? '').trim().toUpperCase();
+const TRANSACTION_NUMBERING_CODES = new Set([
+  'PURCHASE_FFMC',
+  'SALE_FFMC',
+  'PURCHASE_RMC',
+  'PURCHASE_FOREX',
+  'PURCHASE_FOREIGN',
+  'PURCHASE_MISC',
+  'PURCHASE_FRANCHISE',
+]);
 
 @Injectable()
 export class AdditionalSettingService {
@@ -84,6 +93,38 @@ export class AdditionalSettingService {
       default:
         setting.valueText = cleanVal;
         break;
+    }
+  }
+
+  private validateTransactionNumberingValue(
+    categoryCode: string,
+    subcategoryCode: string,
+    value: string,
+  ) {
+    if (normalizeCode(categoryCode) !== 'TRANSACTION_NUMBERING') {
+      return;
+    }
+
+    const normalizedSubcategoryCode = normalizeCode(subcategoryCode);
+    if (!TRANSACTION_NUMBERING_CODES.has(normalizedSubcategoryCode)) {
+      return;
+    }
+
+    const cleanValue = String(value ?? '').trim();
+    if (!cleanValue) {
+      return;
+    }
+
+    if (!/^\d+$/.test(cleanValue)) {
+      throw new BadRequestException(
+        'Transaction numbering value must contain digits only',
+      );
+    }
+
+    if (cleanValue.length !== 9) {
+      throw new BadRequestException(
+        'Transaction numbering series must be exactly 9 digits',
+      );
     }
   }
 
@@ -272,6 +313,211 @@ export class AdditionalSettingService {
     return this.getPolicyHandlers()[normalizeCode(categoryCode)] ?? null;
   }
 
+  private getFinancialYearSuffix(referenceDate: Date): string {
+    const year = referenceDate.getFullYear();
+    const fiscalYear = referenceDate.getMonth() >= 3 ? year : year - 1;
+    return String(fiscalYear % 100).padStart(2, '0');
+  }
+
+  private normalizeReferenceSegment(value: string): string {
+    return String(value ?? '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  }
+
+  private buildTransactionNumber(
+    branchCode: string,
+    currentSeries: number,
+    referenceDate: Date,
+  ): string {
+    const series = String(Math.trunc(currentSeries)).padStart(9, '0');
+    return `${branchCode}${this.getFinancialYearSuffix(referenceDate)}${series}`;
+  }
+
+  async reserveTransactionNumber(
+    companyId: string,
+    seriesCode: string,
+    branchCode: string,
+    referenceDate = new Date(),
+  ): Promise<string> {
+    const normalizedSeriesCode = normalizeCode(seriesCode);
+    const normalizedBranchCode = this.normalizeReferenceSegment(branchCode);
+
+    if (!normalizedBranchCode) {
+      throw new NotFoundException('Branch code is required to generate transaction number');
+    }
+
+    if (!normalizedSeriesCode) {
+      throw new NotFoundException('Transaction series code is required');
+    }
+
+    return this.settingRepository.manager.transaction(async manager => {
+      const settingRepository = manager.getRepository(AdvancedSetting);
+      const category = await settingRepository.findOne({
+        where: {
+          code: 'TRANSACTION_NUMBERING',
+          nodeType: NodeType.Category,
+        },
+      });
+
+      if (!category) {
+        throw new NotFoundException(
+          'Transaction numbering settings are not configured',
+        );
+      }
+
+      const seriesSetting = await settingRepository.findOne({
+        where: {
+          parentId: category.id,
+          code: normalizedSeriesCode,
+          nodeType: NodeType.Setting,
+        },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!seriesSetting) {
+        throw new NotFoundException(
+          `Transaction number series setting for ${normalizedSeriesCode} is not configured`,
+        );
+      }
+
+      const currentSeries =
+        seriesSetting.valueNumber ?? Number(seriesSetting.valueText ?? NaN);
+      if (!Number.isFinite(currentSeries) || currentSeries < 0) {
+        throw new NotFoundException(
+          `Transaction number series for ${normalizedSeriesCode} is invalid`,
+        );
+      }
+
+      const generated = this.buildTransactionNumber(
+        normalizedBranchCode,
+        currentSeries,
+        referenceDate,
+      );
+      if (generated.length > 15) {
+        throw new NotFoundException(
+          'Generated transaction number exceeds the maximum allowed length',
+        );
+      }
+
+      seriesSetting.valueNumber = Math.trunc(currentSeries) + 1;
+      seriesSetting.valueText = null;
+      seriesSetting.valueDate = null;
+      seriesSetting.valueJson = null;
+      seriesSetting.valueBoolean = null;
+      await settingRepository.save(seriesSetting);
+
+      return generated;
+    });
+  }
+
+  async getTransactionNumberPreview(
+    seriesCode: string,
+    branchCode: string,
+    referenceDate = new Date(),
+  ): Promise<{ nextNumber: string }> {
+    const normalizedSeriesCode = normalizeCode(seriesCode);
+    const normalizedBranchCode = this.normalizeReferenceSegment(branchCode);
+
+    if (!normalizedBranchCode) {
+      throw new NotFoundException('Branch code is required to generate transaction number');
+    }
+
+    if (!normalizedSeriesCode) {
+      throw new NotFoundException('Transaction series code is required');
+    }
+
+    const category = await this.settingRepository.findOne({
+      where: {
+        code: 'TRANSACTION_NUMBERING',
+        nodeType: NodeType.Category,
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException(
+        'Transaction numbering settings are not configured',
+      );
+    }
+
+    const seriesSetting = await this.settingRepository.findOne({
+      where: {
+        parentId: category.id,
+        code: normalizedSeriesCode,
+        nodeType: NodeType.Setting,
+      },
+    });
+
+    if (!seriesSetting) {
+      throw new NotFoundException(
+        `Transaction number series setting for ${normalizedSeriesCode} is not configured`,
+      );
+    }
+
+    const currentSeries =
+      seriesSetting.valueNumber ?? Number(seriesSetting.valueText ?? NaN);
+    if (!Number.isFinite(currentSeries) || currentSeries < 0) {
+      throw new NotFoundException(
+        `Transaction number series for ${normalizedSeriesCode} is invalid`,
+      );
+    }
+
+    const nextNumber = this.buildTransactionNumber(
+      normalizedBranchCode,
+      currentSeries,
+      referenceDate,
+    );
+
+    if (nextNumber.length > 15) {
+      throw new NotFoundException(
+        'Generated transaction number exceeds the maximum allowed length',
+      );
+    }
+
+    return { nextNumber };
+  }
+
+  async getSettingTextValue(
+    companyId: string,
+    categoryCode: string,
+    subcategoryCode: string,
+  ): Promise<string | null> {
+    const setting = await this.settingRepository.findOne({
+      where: {
+        companyId,
+        code: normalizeCode(subcategoryCode),
+        nodeType: NodeType.Setting,
+      },
+    });
+
+    if (!setting) {
+      return null;
+    }
+
+    const parent = setting.parentId
+      ? await this.settingRepository.findOne({
+          where: {
+            id: setting.parentId,
+            companyId,
+            code: normalizeCode(categoryCode),
+            nodeType: NodeType.Category,
+          },
+        })
+      : null;
+
+    if (!parent) {
+      return null;
+    }
+
+    return (
+      setting.valueText?.trim() ||
+      setting.valueDecimal?.toString() ||
+      setting.valueNumber?.toString() ||
+      null
+    );
+  }
+
   async findAll(): Promise<AdvancedSetting[]> {
     return this.settingRepository.find({
       where: { nodeType: NodeType.Category },
@@ -335,6 +581,7 @@ export class AdditionalSettingService {
             createdBy: userId,
             updatedBy: userId,
           });
+          this.validateTransactionNumberingValue(savedCategory.code, sub.code, sub.value);
           this.parseAndSetValue(child, sub.value, sub.valueType);
           await this.settingRepository.save(child);
         }
@@ -436,6 +683,7 @@ export class AdditionalSettingService {
             this.parseAndSetValue(child, sub.value, sub.valueType);
           }
         } else {
+          this.validateTransactionNumberingValue(category.code, code, sub.value);
           this.parseAndSetValue(child, sub.value, sub.valueType);
         }
 
@@ -498,6 +746,7 @@ export class AdditionalSettingService {
         userId,
       });
     } else {
+      this.validateTransactionNumberingValue(category?.code ?? '', setting.code, dto.value);
       setting.description = dto.description.trim();
       setting.updatedBy = userId;
       this.parseAndSetValue(setting, dto.value, setting.valueType);
