@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import * as XLSX from "xlsx";
 import {
   PartyProfileCommissionTypeEnum,
   type PartyProfileCommissionRuleValue,
@@ -48,14 +49,57 @@ const parseCsvLine = (line: string) => {
   return cells;
 };
 
+const normalizeCommissionRows = (
+  rows: Record<string, unknown>[],
+): PartyProfileCommissionRuleValue[] => {
+  if (!rows.length) {
+    return [];
+  }
+
+  const normalizeRecord = (row: Record<string, unknown>) =>
+    Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [
+        normalizeHeader(key),
+        String(value ?? "").trim(),
+      ]),
+    );
+
+  return rows.map(row => {
+    const normalizedRow = normalizeRecord(row);
+    const rawType = String(
+      normalizedRow.commissiontype ?? normalizedRow.rate ?? "",
+    )
+      .trim()
+      .toUpperCase();
+
+    const commissionType =
+      rawType === "PERCENT" || rawType === "PERCENTAGE"
+        ? PartyProfileCommissionTypeEnum.PERCENTAGE
+        : rawType === "RATE" || rawType === "PAISA"
+          ? PartyProfileCommissionTypeEnum.PAISA
+          : null;
+
+    if (!commissionType) {
+      throw new BadRequestException(
+        `Unsupported commission type "${normalizedRow.commissiontype ?? normalizedRow.rate ?? ""}"`,
+      );
+    }
+
+    return {
+      currencyCode: String(normalizedRow.currencycode ?? "").trim().toUpperCase(),
+      productCode: String(normalizedRow.productcode ?? "").trim().toUpperCase(),
+      commissionType,
+      commissionValue: String(normalizedRow.commissionvalue ?? "").trim(),
+    } satisfies PartyProfileCommissionRuleValue;
+  });
+};
+
 export const serializeCommissionRulesToCsv = (
   rules: PartyProfileCommissionRuleValue[],
 ) => {
   const header = [
     'currencyCode',
-    'currencyName',
     'productCode',
-    'productDescription',
     'commissionType',
     'commissionValue',
   ];
@@ -63,9 +107,7 @@ export const serializeCommissionRulesToCsv = (
   const rows = rules.map(rule =>
     [
       rule.currencyCode,
-      rule.currencyName ?? '',
       rule.productCode,
-      rule.productDescription ?? '',
       rule.commissionType,
       rule.commissionValue,
     ]
@@ -95,9 +137,7 @@ export const parseCommissionRulesCsv = (content: string) => {
   const headers = parseCsvLine(lines[0]).map(normalizeHeader);
   const columnIndex = {
     currencyCode: headers.indexOf('currencycode'),
-    currencyName: headers.indexOf('currencyname'),
     productCode: headers.indexOf('productcode'),
-    productDescription: headers.indexOf('productdescription'),
     commissionType:
       headers.indexOf('commissiontype') >= 0
         ? headers.indexOf('commissiontype')
@@ -125,12 +165,34 @@ export const parseCommissionRulesCsv = (content: string) => {
 
     return {
       currencyCode: String(values[columnIndex.currencyCode] ?? '').trim().toUpperCase(),
-      currencyName: String(values[columnIndex.currencyName] ?? '').trim() || null,
       productCode: String(values[columnIndex.productCode] ?? '').trim().toUpperCase(),
-      productDescription:
-        String(values[columnIndex.productDescription] ?? '').trim() || null,
       commissionType,
       commissionValue: String(values[columnIndex.commissionValue] ?? '').trim(),
     } satisfies PartyProfileCommissionRuleValue;
   });
+};
+
+export const parseCommissionRulesWorkbook = (buffer: Buffer) => {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const firstSheetName = workbook.SheetNames[0];
+
+  if (!firstSheetName) {
+    return [] as PartyProfileCommissionRuleValue[];
+  }
+
+  const sheet = workbook.Sheets[firstSheetName];
+  if (!sheet) {
+    return [] as PartyProfileCommissionRuleValue[];
+  }
+
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: "",
+    blankrows: false,
+  });
+
+  if (!rows.length) {
+    return [] as PartyProfileCommissionRuleValue[];
+  }
+
+  return normalizeCommissionRows(rows);
 };

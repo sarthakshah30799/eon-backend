@@ -12,6 +12,7 @@ import { PartyProfileCommissionRule } from "./entities/party-profile-commission-
 import { PartyProfileController } from "./party-profile.controller";
 import { PartyProfileService } from "./party-profile.service";
 import { UserModule } from "../users/user.module";
+import { MailModule } from "../mail/mail.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { UserModule } from "../users/user.module";
       PartyProfileCommissionRule,
     ]),
     UserModule,
+    MailModule,
   ],
   controllers: [PartyProfileController],
   providers: [PartyProfileService],

@@ -177,7 +177,7 @@ export class PartyProfileController {
 
     return this.partyProfileService.uploadCommissionTemplate(
       id,
-      file.buffer.toString("utf8"),
+      file,
       session.userId,
       session.activeBranchId,
     );

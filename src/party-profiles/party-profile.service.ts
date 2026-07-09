@@ -12,6 +12,8 @@ import { PartyProfileStatusChangeLog } from "./party-profile-status-change-log.e
 import { Branch } from "../branches/branch.entity";
 import { State } from "../state/state.entity";
 import { User } from "../users/user.entity";
+import { ConfigService } from "../config/config.service";
+import { MailService } from "../mail/mail.service";
 import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
@@ -28,6 +30,7 @@ import {
 } from "./types/party-profile-commission-rule.types";
 import {
   parseCommissionRulesCsv,
+  parseCommissionRulesWorkbook,
   serializeCommissionRulesToCsv,
 } from "./party-profile-commission-csv.util";
 
@@ -87,6 +90,8 @@ export class PartyProfileService {
     private readonly stateRepository: Repository<State>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly configService: ConfigService,
+    private readonly mailService: MailService,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
@@ -254,6 +259,70 @@ export class PartyProfileService {
       where: { id: createdById },
       select: { id: true, name: true },
     });
+  }
+
+  private async getProfileReviewRecipients(excludeUserId?: string) {
+    const qb = this.userRepository
+      .createQueryBuilder("user")
+      .leftJoin("user.userRoles", "userRole")
+      .leftJoin("userRole.role", "role")
+      .select(["user.id", "user.name", "user.email"])
+      .where("user.isActive = true")
+      .andWhere("(user.isAdmin = true OR role.isHoStaff = true)");
+
+    if (excludeUserId) {
+      qb.andWhere("user.id <> :excludeUserId", { excludeUserId });
+    }
+
+    const users = await qb.distinct(true).getMany();
+    return users.filter(user => Boolean(user.email));
+  }
+
+  private async notifyPartyProfileReviewers(client: PartyProfile, actor: User | null | undefined) {
+    const recipients = await this.getProfileReviewRecipients(actor?.id);
+    if (!recipients.length) {
+      return;
+    }
+
+    const frontendBaseUrl =
+      this.configService.getOptional("FRONTEND_URL") || "http://localhost:5173";
+    const reviewUrl = `${frontendBaseUrl}/party-profiles/${client.type
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, "-")}/edit/${client.id}?review=1`;
+
+    const recipientEmails = recipients.map(user => user.email).filter(Boolean).join(",");
+    const recipientNames = recipients.map(user => user.name).filter(Boolean).join(", ");
+
+    try {
+      await this.mailService.sendEmail({
+        to: recipientEmails,
+        subject: `Party profile pending review: ${client.code}`,
+        text: `A party profile was edited and is pending review.\n\nName: ${client.name}\nCode: ${client.code}\nType: ${client.type}\nReview: ${reviewUrl}`,
+        html: `
+          <div style="font-family: sans-serif; color: #1f2937; line-height: 1.6;">
+            <h2 style="margin: 0 0 12px;">Party profile pending review</h2>
+            <p style="margin: 0 0 12px;">The following party profile was edited and is waiting for approval.</p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
+              <div><strong>Name:</strong> ${client.name}</div>
+              <div><strong>Code:</strong> ${client.code}</div>
+              <div><strong>Type:</strong> ${client.type}</div>
+              <div><strong>Edited by:</strong> ${actor?.name ?? actor?.email ?? "Unknown"}</div>
+            </div>
+            <p style="margin: 0 0 16px;">Open the review screen below:</p>
+            <p style="margin: 0 0 16px;">
+              <a href="${reviewUrl}" style="display: inline-block; background: #0b8db4; color: white; text-decoration: none; padding: 10px 16px; border-radius: 6px;">Review party profile</a>
+            </p>
+            <p style="font-size: 12px; color: #6b7280; margin: 0;">Recipients: ${recipientNames || "Review team"}</p>
+          </div>
+        `,
+      });
+    } catch (error) {
+      console.warn(
+        `Failed to send party profile review notification for ${client.id}:`,
+        error,
+      );
+    }
   }
 
   private assertPartyProfileEditableByUser(
@@ -532,17 +601,6 @@ export class PartyProfileService {
       }
     }
 
-    if (normalized.code && normalized.code !== client.code) {
-      const existingCode = await this.partyProfileRepository.findOne({
-        where: { code: normalized.code },
-      });
-      if (existingCode) {
-        throw new ConflictException(
-          `Party Profile Code "${normalized.code}" already exists`,
-        );
-      }
-    }
-
     if (dto.branchId && dto.branchId !== client.branchId) {
       const branch = await this.branchRepository.findOne({ where: { id: dto.branchId } });
       if (!branch) {
@@ -565,6 +623,7 @@ export class PartyProfileService {
     }
 
     const {
+      code: _code,
       location,
       kycRiskCategory,
       defaultAgent,
@@ -631,8 +690,19 @@ export class PartyProfileService {
     }
     client.updatedBy = userId;
 
+    const requesterIsAdmin = user?.isAdmin === true;
+    if (!requesterIsAdmin) {
+      client.active = false;
+      client.status = WorkflowStatus.PENDING;
+      client.statusUpdatedById = null;
+      client.statusUpdatedAt = null;
+    }
+
     await this.partyProfileRepository.save(client);
     await this.syncCommissionRules(client, commissionRules, userId);
+    if (!requesterIsAdmin) {
+      await this.notifyPartyProfileReviewers(client, user);
+    }
     return this.findById(id);
   }
 
@@ -813,9 +883,7 @@ export class PartyProfileService {
     return serializeCommissionRulesToCsv(
       commissionRules.map(rule => ({
         currencyCode: rule.currencyCode,
-        currencyName: rule.currencyName,
         productCode: rule.productCode,
-        productDescription: rule.productDescription,
         commissionType: rule.commissionType,
         commissionValue: rule.commissionValue,
       })),
@@ -824,7 +892,11 @@ export class PartyProfileService {
 
   async uploadCommissionTemplate(
     id: string,
-    csvContent: string,
+    file: {
+      buffer: Buffer;
+      originalname?: string;
+      mimetype?: string;
+    },
     userId: string,
     activeBranchId?: string,
   ): Promise<PartyProfileResponseDto> {
@@ -856,7 +928,14 @@ export class PartyProfileService {
       );
     }
 
-    const parsedRules = parseCommissionRulesCsv(csvContent);
+    const fileName = String(file.originalname ?? "").toLowerCase();
+    const isExcelFile =
+      file.mimetype ===
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      fileName.endsWith(".xlsx");
+    const parsedRules = isExcelFile
+      ? parseCommissionRulesWorkbook(file.buffer)
+      : parseCommissionRulesCsv(file.buffer.toString("utf8"));
     const existingRules = await this.partyProfileCommissionRuleRepository.find({
       where: { partyProfileId: client.id },
     });

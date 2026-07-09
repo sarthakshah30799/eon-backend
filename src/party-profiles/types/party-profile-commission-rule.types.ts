@@ -8,10 +8,7 @@ export type PartyProfileCommissionType =
 
 export interface PartyProfileCommissionRuleValue {
   currencyCode: string;
-  currencyName?: string | null;
   productCode: string;
-  productDescription?: string | null;
   commissionType: PartyProfileCommissionType;
   commissionValue: string;
 }
-
