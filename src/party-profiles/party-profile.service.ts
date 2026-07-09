@@ -3,11 +3,10 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import { PartyProfile, ClientType } from "./party-profile.entity";
 import { PartyProfileStatusChangeLog } from "./party-profile-status-change-log.entity";
 import { Branch } from "../branches/branch.entity";
@@ -77,8 +76,6 @@ type PartyProfileCommissionRuleInput = {
 
 @Injectable()
 export class PartyProfileService {
-  private readonly logger = new Logger(PartyProfileService.name);
-
   constructor(
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
@@ -112,11 +109,37 @@ export class PartyProfileService {
     });
   }
 
+  private async resolveCreatedByUsers(
+    partyProfiles: PartyProfile[],
+  ): Promise<Map<string, Pick<User, "id" | "name">>> {
+    const createdByIds = [
+      ...new Set(
+        partyProfiles
+          .map(profile => profile.createdBy)
+          .filter((createdBy): createdBy is string => Boolean(createdBy)),
+      ),
+    ];
+
+    if (!createdByIds.length) {
+      return new Map();
+    }
+
+    const users = await this.userRepository.find({
+      where: { id: In(createdByIds) },
+      select: { id: true, name: true },
+    });
+
+    return new Map(
+      users.map(user => [user.id, { id: user.id, name: user.name }]),
+    );
+  }
+
   private isPartyProfileVisibleToUser(
     client: PartyProfile,
     userId: string | undefined,
     activeBranchId: string | undefined,
     isAdmin: boolean,
+    isBranchManager: boolean,
   ) {
     if (isAdmin) {
       return true;
@@ -128,6 +151,10 @@ export class PartyProfileService {
 
     if (client.branchId !== activeBranchId) {
       return false;
+    }
+
+    if (isBranchManager) {
+      return true;
     }
 
     if (client.active === false) {
@@ -206,6 +233,42 @@ export class PartyProfileService {
     }
 
     return user.userRoles?.some(userRole => userRole.role?.isHoStaff) || false;
+  }
+
+  private isBranchManager(user: User | null | undefined) {
+    if (!user) {
+      return false;
+    }
+
+    if (user.isAdmin) {
+      return true;
+    }
+
+    return user.userRoles?.some(userRole => userRole.role?.isBrnMgr) || false;
+  }
+
+  private async resolveCreatedByUser(
+    createdById: string,
+  ): Promise<Pick<User, "id" | "name"> | null> {
+    return this.userRepository.findOne({
+      where: { id: createdById },
+      select: { id: true, name: true },
+    });
+  }
+
+  private assertPartyProfileEditableByUser(
+    client: PartyProfile,
+    user: User | null | undefined,
+  ) {
+    if (!user || user.isAdmin) {
+      return;
+    }
+
+    if (client.createdBy !== user.id) {
+      throw new ForbiddenException(
+        "You are not allowed to modify this party profile",
+      );
+    }
   }
 
   private getReviewerBranchIds(user: User | null | undefined) {
@@ -458,6 +521,7 @@ export class PartyProfileService {
     const normalized = normalizeDto(dto);
     const commissionRules = this.normalizeCommissionRules(dto.commissionRules);
     this.assertPartyProfileAccess(user, normalized.type ?? client.type, "modify");
+    this.assertPartyProfileEditableByUser(client, user);
 
     if (normalized.name && normalized.name !== client.name) {
       const existingName = await this.partyProfileRepository.findOne({
@@ -465,6 +529,17 @@ export class PartyProfileService {
       });
       if (existingName) {
         throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
+      }
+    }
+
+    if (normalized.code && normalized.code !== client.code) {
+      const existingCode = await this.partyProfileRepository.findOne({
+        where: { code: normalized.code },
+      });
+      if (existingCode) {
+        throw new ConflictException(
+          `Party Profile Code "${normalized.code}" already exists`,
+        );
       }
     }
 
@@ -490,7 +565,6 @@ export class PartyProfileService {
     }
 
     const {
-      code: _code,
       location,
       kycRiskCategory,
       defaultAgent,
@@ -640,7 +714,13 @@ export class PartyProfileService {
     qb.orderBy("pp.createdAt", "ASC");
 
     const pending = await qb.getMany();
-    return pending.map(client => PartyProfileResponseDto.fromEntity(client));
+    const createdByUsers = await this.resolveCreatedByUsers(pending);
+    return pending.map(client =>
+      PartyProfileResponseDto.fromEntity(
+        client,
+        createdByUsers.get(client.createdBy),
+      ),
+    );
   }
 
   async findById(id: string): Promise<PartyProfileResponseDto> {
@@ -653,6 +733,7 @@ export class PartyProfileService {
     activeBranchId?: string,
   ): Promise<PartyProfileResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
+    const requesterIsBranchManager = this.isBranchManager(user);
     const client = await this.partyProfileRepository.findOne({
       where: { id },
       relations: [
@@ -678,12 +759,21 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "view");
-      if (!this.isPartyProfileVisibleToUser(client, userId, activeBranchId, user.isAdmin)) {
+      if (
+        !this.isPartyProfileVisibleToUser(
+          client,
+          userId,
+          activeBranchId,
+          user.isAdmin,
+          requesterIsBranchManager,
+        )
+      ) {
         throw new NotFoundException(`Party Profile with id ${id} not found`);
       }
     }
 
-    return PartyProfileResponseDto.fromEntity(client);
+    const createdByUser = await this.resolveCreatedByUser(client.createdBy);
+    return PartyProfileResponseDto.fromEntity(client, createdByUser);
   }
 
   async getCommissionTemplate(
@@ -702,7 +792,15 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "view");
-      if (!this.isPartyProfileVisibleToUser(client, userId, activeBranchId, user.isAdmin)) {
+      if (
+        !this.isPartyProfileVisibleToUser(
+          client,
+          userId,
+          activeBranchId,
+          user.isAdmin,
+          this.isBranchManager(user),
+        )
+      ) {
         throw new NotFoundException(`Party Profile with id ${id} not found`);
       }
     }
@@ -740,7 +838,15 @@ export class PartyProfileService {
     }
 
     this.assertPartyProfileAccess(user, client.type, "modify");
-    if (!this.isPartyProfileVisibleToUser(client, userId, activeBranchId, user.isAdmin)) {
+    if (
+      !this.isPartyProfileVisibleToUser(
+        client,
+        userId,
+        activeBranchId,
+        user.isAdmin,
+        this.isBranchManager(user),
+      )
+    ) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
@@ -844,6 +950,7 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "delete");
+      this.assertPartyProfileEditableByUser(client, user);
     }
 
     await this.partyProfileRepository.remove(client);
@@ -856,20 +963,10 @@ export class PartyProfileService {
     activeBranchId?: string,
   ): Promise<PartyProfileListResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
+    const requesterIsBranchManager = this.isBranchManager(user);
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
-
-    this.logger.debug(
-      `findAll called with query=${JSON.stringify({
-        ...query,
-        userId,
-        activeBranchId,
-      })}`,
-    );
-    this.logger.debug(
-      `findAll resolved paging page=${page}, limit=${limit}, skip=${skip}`,
-    );
 
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
@@ -886,9 +983,6 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
     if (!user?.isAdmin && !activeBranchId) {
-      this.logger.debug(
-        "findAll returning empty list because activeBranchId is missing for a non-admin user",
-      );
       return {
         data: [],
         page,
@@ -900,11 +994,6 @@ export class PartyProfileService {
 
     if (!user?.isAdmin && activeBranchId) {
       qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
-      this.logger.debug(
-        `findAll applied branch filter branchId=${activeBranchId} for non-admin user`,
-      );
-    } else {
-      this.logger.debug("findAll skipped branch filter because user is admin");
     }
 
     if (query.sale !== undefined) {
@@ -922,12 +1011,7 @@ export class PartyProfileService {
       ? requestedTypes.filter(type => this.canAccessPartyProfileType(user, type, "view"))
       : requestedTypes;
 
-    this.logger.debug(
-      `findAll requestedTypes=${JSON.stringify(requestedTypes)}, accessibleTypes=${JSON.stringify(accessibleTypes)}`,
-    );
-
     if (accessibleTypes.length === 0) {
-      this.logger.debug("findAll returning empty list because accessibleTypes is empty");
       return {
         data: [],
         page,
@@ -960,42 +1044,50 @@ export class PartyProfileService {
       qb.andWhere("pp.name ILIKE :name", { name: `%${query.name}%` });
     }
 
+    const inactiveViewRequested =
+      query.activeOnly === false || query.active === false;
     const restrictToOwnInactiveRecords =
       !user?.isAdmin &&
+      !requesterIsBranchManager &&
       Boolean(userId) &&
-      (query.activeOnly === false || query.active === false);
+      inactiveViewRequested;
 
     if (restrictToOwnInactiveRecords) {
-      qb.andWhere("pp.createdBy = :createdBy", { createdBy: userId });
-      this.logger.debug(
-        `findAll restricted to createdBy=${userId} for non-admin inactive fetch`,
+      qb.andWhere(
+        new Brackets((statusQb) => {
+          statusQb
+            .where("pp.active = true")
+            .orWhere(
+              new Brackets((inactiveQb) => {
+                inactiveQb
+                  .where("pp.active = false")
+                  .andWhere("pp.createdBy = :createdBy");
+              }),
+            );
+        }),
+        { createdBy: userId },
       );
-    }
-
-    if (query.active !== undefined) {
+    } else if (inactiveViewRequested && requesterIsBranchManager) {
+      // BM can view both active and inactive records for the current branch.
+    } else if (query.active !== undefined) {
       qb.andWhere("pp.active = :active", { active: query.active });
-      this.logger.debug(`findAll applied active filter from active=${query.active}`);
-    } else if (!restrictToOwnInactiveRecords) {
-      qb.andWhere("pp.active = true");
-      this.logger.debug("findAll applied default active=true filter");
     } else {
-      this.logger.debug("findAll skipped active filter because inactive fetch is restricted to creator");
+      qb.andWhere("pp.active = true");
     }
-
-    this.logger.debug(`findAll sql=${qb.getSql()}`);
 
     qb.orderBy("pp.createdAt", "DESC").skip(skip).take(limit);
 
     const [data, totalItems] = await qb.getManyAndCount();
 
-    this.logger.debug(
-      `findAll result count=${data.length}, totalItems=${totalItems}, activeStatuses=${JSON.stringify(
-        data.map(client => ({ id: client.id, active: client.active, type: client.type })),
-      )}`,
-    );
+    const createdByUsers = await this.resolveCreatedByUsers(data);
 
     return {
-      data: data.map(client => PartyProfileResponseDto.fromEntity(client)),
+      data: data.map(client =>
+        PartyProfileResponseDto.fromEntity(
+          client,
+          createdByUsers.get(client.createdBy),
+        ),
+      ),
       page,
       limit,
       totalItems,

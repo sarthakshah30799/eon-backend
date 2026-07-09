@@ -4,10 +4,19 @@ import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 import { PartyProfileCommissionRuleResponseDto } from "./party-profile-commission-rule-response.dto";
 import { BranchResponseDto } from "../../branches/dto/branch-response.dto";
+import { User } from "../../users/user.entity";
+
+export type PartyProfileCreatedByReference = {
+  id: string;
+  name: string;
+};
 
 export class PartyProfileResponseDto {
   @ApiProperty({ description: "UUID of the party profile" })
   id: string;
+
+  @ApiProperty({ description: "Created by user reference", type: Object })
+  createdBy: PartyProfileCreatedByReference;
 
   @ApiProperty({ description: "Date of introduction" })
   dateOfIntro: Date;
@@ -225,9 +234,16 @@ export class PartyProfileResponseDto {
   @ApiProperty({ description: "Updated at timestamp" })
   updatedAt: Date;
 
-  static fromEntity(entity: PartyProfile): PartyProfileResponseDto {
+  static fromEntity(
+    entity: PartyProfile,
+    createdByUser?: Pick<User, "id" | "name"> | null,
+  ): PartyProfileResponseDto {
     const dto = new PartyProfileResponseDto();
     dto.id = entity.id;
+    dto.createdBy = {
+      id: createdByUser?.id ?? entity.createdBy,
+      name: createdByUser?.name ?? entity.createdBy,
+    };
     dto.dateOfIntro = entity.dateOfIntro;
     dto.code = entity.code;
     dto.name = entity.name;

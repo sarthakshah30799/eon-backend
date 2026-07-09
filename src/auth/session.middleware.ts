@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware, Logger } from "@nestjs/common";
+import { Injectable, NestMiddleware } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -9,18 +9,12 @@ const PgSession = connectPgSimple(session);
 
 @Injectable()
 export class SessionMiddleware implements NestMiddleware {
-  private readonly logger = new Logger(SessionMiddleware.name);
-
   constructor(
     private readonly configService: ConfigService,
     private readonly sessionPolicyService: SessionPolicyService,
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
-    this.logger.log(
-      `[DEBUG] incoming request method=${req.method} path=${req.originalUrl ?? req.url} cookieSession=${Boolean((req as any).cookies?.sessionId)} && ${this.configService.isProduction}`,
-    );
-
     const ssl = this.configService.database.ssl;
 
     const sessionMiddleware = session({
@@ -52,10 +46,6 @@ export class SessionMiddleware implements NestMiddleware {
 
     sessionMiddleware(req, res, async (error) => {
       if (error) {
-        this.logger.error(
-          `[DEBUG] session middleware error method=${req.method} path=${req.originalUrl ?? req.url} message=${error.message}`,
-          error.stack,
-        );
         next(error);
         return;
       }
@@ -66,19 +56,12 @@ export class SessionMiddleware implements NestMiddleware {
           | (typeof req.session & { userId?: string })
           | undefined;
 
-        this.logger.log(
-          `[DEBUG] session attached method=${req.method} path=${req.originalUrl ?? req.url} userId=${sessionData?.userId ?? "null"} activeBranchId=${sessionData?.activeBranchId ?? "null"} activeCounterId=${sessionData?.activeCounterId ?? "null"} sessionExpired=${Boolean((req as any).sessionExpired)}`,
-        );
-
         if (sessionData?.userId) {
           if (policy.idleTimeoutSeconds > 0) {
             if (
               this.sessionPolicyService.isSessionExpired(sessionData, policy)
             ) {
               (req as any).sessionExpired = true;
-              this.logger.log(
-                `[DEBUG] session expired method=${req.method} path=${req.originalUrl ?? req.url} userId=${sessionData.userId}`,
-              );
               res.clearCookie("sessionId");
               sessionData.destroy(() => {
                 next();
@@ -91,17 +74,10 @@ export class SessionMiddleware implements NestMiddleware {
           }
         }
       } catch (policyError) {
-        this.logger.error(
-          `[DEBUG] session policy error method=${req.method} path=${req.originalUrl ?? req.url} message=${(policyError as Error).message}`,
-          (policyError as Error).stack,
-        );
         next(policyError as Error);
         return;
       }
 
-      this.logger.log(
-        `[DEBUG] request continuing method=${req.method} path=${req.originalUrl ?? req.url}`,
-      );
       next();
     });
   }

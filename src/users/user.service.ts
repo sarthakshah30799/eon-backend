@@ -55,6 +55,19 @@ export class UserService {
     return user?.isAdmin === true;
   }
 
+  private async isRequesterBranchManager(userId?: string): Promise<boolean> {
+    if (!userId) {
+      return false;
+    }
+
+    const user = await this.findEntityById(userId);
+    if (!user) {
+      return false;
+    }
+
+    return user.userRoles?.some(userRole => userRole.role?.isBrnMgr) || false;
+  }
+
   private normalizeAssignments(
     dto: Partial<CreateUserDto> & { assignments?: UserAssignmentDto[] }
   ): UserAssignmentDto[] {
@@ -150,6 +163,7 @@ export class UserService {
     roleCode?: string,
   ): Promise<UserResponseDto[]> {
     const requesterIsAdmin = await this.isRequesterAdmin(currentUserId);
+    const requesterIsBranchManager = await this.isRequesterBranchManager(currentUserId);
     const trimmedSearch = search?.trim();
 
     const query = this.userRepository
@@ -172,7 +186,7 @@ export class UserService {
       query.andWhere('user.isAdmin = :isAdmin', { isAdmin: false });
     }
 
-    if (!requesterIsAdmin && !activeOnly && currentUserId) {
+    if (!requesterIsAdmin && !requesterIsBranchManager && !activeOnly && currentUserId) {
       query.andWhere('user.createdBy = :currentUserId', { currentUserId });
     }
 
@@ -386,6 +400,8 @@ export class UserService {
       throw new NotFoundException(`User with id ${id} not found`);
     }
 
+    const requesterIsBranchManager = await this.isRequesterBranchManager(currentUserId);
+
     if (!(await this.isRequesterAdmin(currentUserId))) {
       if (currentUserId === id) {
         return UserResponseDto.fromEntity(user, workplace);
@@ -400,7 +416,11 @@ export class UserService {
         throw new NotFoundException(`User with id ${id} not found`);
       }
 
-      if (user.isActive === false && user.createdBy !== currentUserId) {
+      if (
+        user.isActive === false &&
+        !requesterIsBranchManager &&
+        user.createdBy !== currentUserId
+      ) {
         throw new NotFoundException(`User with id ${id} not found`);
       }
     }
