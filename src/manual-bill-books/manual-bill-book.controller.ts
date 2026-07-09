@@ -46,6 +46,35 @@ export class ManualBillBookController {
     return this.service.create(dto, session.userId);
   }
 
+  @Get("validate-book-range")
+  @ApiOperation({ summary: "Validate if book number range overlaps" })
+  async validateBookRange(
+    @Query("branchId") branchId: string,
+    @Query("bookNoFrom") bookNoFromStr: string,
+    @Query("bookNoTo") bookNoToStr: string,
+  ) {
+    const bookNoFrom = parseInt(bookNoFromStr, 10);
+    const bookNoTo = parseInt(bookNoToStr, 10);
+    if (!branchId || isNaN(bookNoFrom) || isNaN(bookNoTo)) {
+      return { valid: true };
+    }
+    return this.service.validateBookRange(branchId, bookNoFrom, bookNoTo);
+  }
+
+  @Get("validate-page-range")
+  @ApiOperation({ summary: "Validate if page number range overlaps" })
+  async validatePageRange(
+    @Query("mvNoFrom") mvNoFromStr: string,
+    @Query("mvNoTo") mvNoToStr: string,
+  ) {
+    const mvNoFrom = parseInt(mvNoFromStr, 10);
+    const mvNoTo = parseInt(mvNoToStr, 10);
+    if (isNaN(mvNoFrom) || isNaN(mvNoTo)) {
+      return { valid: true };
+    }
+    return this.service.validatePageRange(mvNoFrom, mvNoTo);
+  }
+
   @Get("next-number")
   @ApiOperation({ summary: "Get next sequence number for branch and date" })
   async getNextNumber(
