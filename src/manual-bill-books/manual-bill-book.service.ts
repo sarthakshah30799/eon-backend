@@ -260,8 +260,6 @@ export class ManualBillBookService {
 
     book.status = dto.status;
     book.approvalRemarks = dto.approvalRemarks;
-    if (dto.fromDate) book.fromDate = dto.fromDate;
-    if (dto.toDate) book.toDate = dto.toDate;
     book.approvedAt = new Date();
     book.approvedBy = userId;
     book.updatedBy = userId;

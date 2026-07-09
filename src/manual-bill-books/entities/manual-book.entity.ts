@@ -42,11 +42,6 @@ export class ManualBook {
   @Column({ type: 'varchar', length: 50, default: 'Pending' })
   status: string; // 'Pending' | 'Approved' | 'Rejected'
 
-  @Column({ name: 'from_date', type: 'date', nullable: true })
-  fromDate?: string;
-
-  @Column({ name: 'to_date', type: 'date', nullable: true })
-  toDate?: string;
 
   @Column({ name: 'approval_remarks', type: 'text', nullable: true })
   approvalRemarks?: string;

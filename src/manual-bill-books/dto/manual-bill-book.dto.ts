@@ -71,16 +71,6 @@ export class ApproveRejectManualBookDto {
   @IsString()
   @IsOptional()
   approvalRemarks?: string;
-
-  @ApiProperty({ description: 'From Date Filter', required: false, example: '2026-06-25' })
-  @IsDateString()
-  @IsOptional()
-  fromDate?: string;
-
-  @ApiProperty({ description: 'To Date Filter', required: false, example: '2026-06-30' })
-  @IsDateString()
-  @IsOptional()
-  toDate?: string;
 }
 
 export class BulkReviewItemDto {
