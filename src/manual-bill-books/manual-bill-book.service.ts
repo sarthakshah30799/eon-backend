@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -42,7 +43,7 @@ export class ManualBillBookService {
 
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
-  ) {}
+  ) { }
 
   async create(dto: CreateManualBookDto, userId: string): Promise<ManualBook> {
     const {
@@ -68,6 +69,37 @@ export class ManualBillBookService {
     // Auto-calculate mvNoTo: mvNoFrom + (numBooks * vouchersPerBook) - 1
     const numBooks = bookNoTo - bookNoFrom + 1;
     const mvNoTo = mvNoFrom + numBooks * vouchersPerBook - 1;
+
+    // Check for overlapping book number ranges (branch-specific)
+    const overlappingBookNo = await this.manualBookRepository
+      .createQueryBuilder('book')
+      .where('book.branchId = :branchId', { branchId })
+      .andWhere('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+        bookNoFrom,
+        bookNoTo,
+      })
+      .getOne();
+
+    if (overlappingBookNo) {
+      throw new BadRequestException(
+        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}] for this branch`
+      );
+    }
+
+    // Check for overlapping page number ranges
+    const overlapping = await this.manualBookRepository
+      .createQueryBuilder('book')
+      .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
+        mvNoFrom,
+        mvNoTo,
+      })
+      .getOne();
+
+    if (overlapping) {
+      throw new BadRequestException(
+        `Page number range [${mvNoFrom} - ${mvNoTo}] overlaps with existing book [${overlapping.no}] with range [${overlapping.mvNoFrom} - ${overlapping.mvNoTo}]`
+      );
+    }
 
     // Auto-generate branch-specific sequence number (no) e.g., MBYY00001
     const year = new Date(dispatchDate).getFullYear().toString().slice(-2); // e.g. "26"
@@ -576,16 +608,16 @@ export class ManualBillBookService {
       remarks: page.remarks ?? null,
       manualBook: page.manualBook
         ? {
-            id: page.manualBook.id,
-            no: page.manualBook.no,
-            bookNoFrom: page.manualBook.bookNoFrom,
-            bookNoTo: page.manualBook.bookNoTo,
-            vouchersPerBook: page.manualBook.vouchersPerBook,
-            mvNoFrom: page.manualBook.mvNoFrom,
-            mvNoTo: page.manualBook.mvNoTo,
-            branchId: page.manualBook.branchId,
-            transactionType: page.manualBook.transactionType,
-          }
+          id: page.manualBook.id,
+          no: page.manualBook.no,
+          bookNoFrom: page.manualBook.bookNoFrom,
+          bookNoTo: page.manualBook.bookNoTo,
+          vouchersPerBook: page.manualBook.vouchersPerBook,
+          mvNoFrom: page.manualBook.mvNoFrom,
+          mvNoTo: page.manualBook.mvNoTo,
+          branchId: page.manualBook.branchId,
+          transactionType: page.manualBook.transactionType,
+        }
         : null,
     }));
   }
@@ -818,10 +850,54 @@ export class ManualBillBookService {
       JOIN user_roles ur ON ur.user_id = u.id
       JOIN roles r ON ur.role_id = r.id
       WHERE ur.branch_id = $1 
-        AND u.is_active = true 
-        AND r.is_delivery_boy = true
+         AND u.is_active = true 
+         AND r.is_delivery_boy = true
     `,
       [branchId],
     );
+  }
+
+  async validateBookRange(
+    branchId: string,
+    bookNoFrom: number,
+    bookNoTo: number,
+  ): Promise<{ valid: boolean; error?: string }> {
+    const overlappingBookNo = await this.manualBookRepository
+      .createQueryBuilder('book')
+      .where('book.branchId = :branchId', { branchId })
+      .andWhere('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+        bookNoFrom,
+        bookNoTo,
+      })
+      .getOne();
+
+    if (overlappingBookNo) {
+      return {
+        valid: false,
+        error: `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}] for this branch`,
+      };
+    }
+    return { valid: true };
+  }
+
+  async validatePageRange(
+    mvNoFrom: number,
+    mvNoTo: number,
+  ): Promise<{ valid: boolean; error?: string }> {
+    const overlapping = await this.manualBookRepository
+      .createQueryBuilder('book')
+      .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
+        mvNoFrom,
+        mvNoTo,
+      })
+      .getOne();
+
+    if (overlapping) {
+      return {
+        valid: false,
+        error: `Page number range [${mvNoFrom} - ${mvNoTo}] overlaps with existing book [${overlapping.no}] with range [${overlapping.mvNoFrom} - ${overlapping.mvNoTo}]`,
+      };
+    }
+    return { valid: true };
   }
 }
