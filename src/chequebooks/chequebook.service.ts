@@ -66,11 +66,10 @@ export class ChequeBookService {
     const numBooks = bookNoTo - bookNoFrom + 1;
     const mvNoTo = mvNoFrom + numBooks * vouchersPerBook - 1;
 
-    // Check for overlapping book number ranges (branch-specific)
+    // Check for overlapping book number ranges (global)
     const overlappingBookNo = await this.checkBookRepository
       .createQueryBuilder('book')
-      .where('book.branchId = :branchId', { branchId })
-      .andWhere('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+      .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
         bookNoFrom,
         bookNoTo,
       })
@@ -78,7 +77,7 @@ export class ChequeBookService {
 
     if (overlappingBookNo) {
       throw new BadRequestException(
-        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}] for this branch`
+        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}]`
       );
     }
 
@@ -728,14 +727,12 @@ export class ChequeBookService {
   }
 
   async validateBookRange(
-    branchId: string,
     bookNoFrom: number,
     bookNoTo: number,
   ): Promise<{ valid: boolean; error?: string }> {
     const overlappingBookNo = await this.checkBookRepository
       .createQueryBuilder('book')
-      .where('book.branchId = :branchId', { branchId })
-      .andWhere('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+      .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
         bookNoFrom,
         bookNoTo,
       })
@@ -744,7 +741,7 @@ export class ChequeBookService {
     if (overlappingBookNo) {
       return {
         valid: false,
-        error: `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}] for this branch`,
+        error: `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}]`,
       };
     }
     return { valid: true };

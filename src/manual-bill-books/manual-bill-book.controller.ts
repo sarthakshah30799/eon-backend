@@ -49,16 +49,15 @@ export class ManualBillBookController {
   @Get("validate-book-range")
   @ApiOperation({ summary: "Validate if book number range overlaps" })
   async validateBookRange(
-    @Query("branchId") branchId: string,
     @Query("bookNoFrom") bookNoFromStr: string,
     @Query("bookNoTo") bookNoToStr: string,
   ) {
     const bookNoFrom = parseInt(bookNoFromStr, 10);
     const bookNoTo = parseInt(bookNoToStr, 10);
-    if (!branchId || isNaN(bookNoFrom) || isNaN(bookNoTo)) {
+    if (isNaN(bookNoFrom) || isNaN(bookNoTo)) {
       return { valid: true };
     }
-    return this.service.validateBookRange(branchId, bookNoFrom, bookNoTo);
+    return this.service.validateBookRange(bookNoFrom, bookNoTo);
   }
 
   @Get("validate-page-range")
