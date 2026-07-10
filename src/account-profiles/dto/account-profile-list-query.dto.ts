@@ -39,8 +39,8 @@ export class AccountProfileListQueryDto {
   @IsOptional()
   accountName?: string;
 
-  @ApiPropertyOptional({ description: "Filter by account type ID (UUID)" })
-  @IsUUID()
+  @ApiPropertyOptional({ description: "Filter by account type UUID or label" })
+  @IsString()
   @IsOptional()
   accountType?: string;
 

@@ -29,20 +29,6 @@ export const TransactionTypeProfileEnum = {
 export type TransactionTypeProfile =
   (typeof TransactionTypeProfileEnum)[keyof typeof TransactionTypeProfileEnum];
 
-export const TransactionDocumentContext = {
-  PURCHASE_FFMC: "PURCHASE_FFMC",
-  PURCHASE_AUTHORISED_DEALER: "PURCHASE_AUTHORISED_DEALER",
-  PURCHASE_CORPORATE_CLIENT: "PURCHASE_CORPORATE_CLIENT",
-  PURCHASE_RMC: "PURCHASE_RMC",
-  SALE_FFMC: "SALE_FFMC",
-  SALE_AUTHORISED_DEALER: "SALE_AUTHORISED_DEALER",
-  SALE_CORPORATE_CLIENT: "SALE_CORPORATE_CLIENT",
-  SALE_RMC: "SALE_RMC",
-} as const;
-
-export type TransactionDocumentContext =
-  (typeof TransactionDocumentContext)[keyof typeof TransactionDocumentContext];
-
 export const TradeMode = {
   BULK: "BULK",
   RETAIL: "RETAIL",

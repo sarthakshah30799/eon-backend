@@ -36,6 +36,16 @@ function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> 
   return Object.fromEntries(entries) as Partial<T>;
 }
 
+function normalizeAccountTypeFilter(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
 @Injectable()
 export class AccountProfileService {
   constructor(
@@ -296,7 +306,16 @@ export class AccountProfileService {
     }
 
     if (query.accountType) {
-      qb.andWhere("accountType.id = :accountType", { accountType: query.accountType });
+      const normalizedAccountType = normalizeAccountTypeFilter(query.accountType);
+      if (isUuidLike(query.accountType)) {
+        qb.andWhere("accountType.id = :accountTypeId", {
+          accountTypeId: query.accountType,
+        });
+      } else {
+        qb.andWhere("UPPER(accountType.label) = :accountTypeLabel", {
+          accountTypeLabel: normalizedAccountType,
+        });
+      }
     }
 
     if (query.financialCodeId) {
