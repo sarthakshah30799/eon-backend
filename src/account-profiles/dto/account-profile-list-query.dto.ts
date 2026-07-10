@@ -39,6 +39,11 @@ export class AccountProfileListQueryDto {
   @IsOptional()
   accountName?: string;
 
+  @ApiPropertyOptional({ description: "Filter by account type ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  accountType?: string;
+
   @ApiPropertyOptional({ description: "Filter by financial code ID (UUID)" })
   @IsUUID()
   @IsOptional()
@@ -60,4 +65,10 @@ export class AccountProfileListQueryDto {
   @IsBoolean()
   @IsOptional()
   bulkPurchase?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by bulk sale support" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  bulkSale?: boolean;
 }

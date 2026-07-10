@@ -295,6 +295,10 @@ export class AccountProfileService {
       qb.andWhere("ap.accountName ILIKE :accountName", { accountName: `%${query.accountName}%` });
     }
 
+    if (query.accountType) {
+      qb.andWhere("accountType.id = :accountType", { accountType: query.accountType });
+    }
+
     if (query.financialCodeId) {
       qb.andWhere("ap.financialCodeId = :financialCodeId", { financialCodeId: query.financialCodeId });
     }
@@ -309,6 +313,10 @@ export class AccountProfileService {
 
     if (query.bulkPurchase !== undefined) {
       qb.andWhere("ap.bulkPurchase = :bulkPurchase", { bulkPurchase: query.bulkPurchase });
+    }
+
+    if (query.bulkSale !== undefined) {
+      qb.andWhere("ap.bulkSale = :bulkSale", { bulkSale: query.bulkSale });
     }
 
     qb.orderBy("ap.createdAt", "DESC").skip(skip).take(limit);
