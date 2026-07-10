@@ -1,71 +1,83 @@
-import { Entity, Column, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  Index,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from "typeorm";
+import { TransactionTypeProfileEnum, type TransactionTypeProfile } from "../../transactions/transactions.enums";
 
-@Entity('manual_books')
+@Entity("manual_books")
 export class ManualBook {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: 'dispatch_date', type: 'date' })
+  @Column({ name: "dispatch_date", type: "date" })
   dispatchDate: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: "varchar", length: 50 })
   no: string;
 
-  @Column({ name: 'branch_id', type: 'uuid' })
-  @Index('IDX_manual_books_branch_id')
+  @Column({ name: "branch_id", type: "uuid" })
+  @Index("IDX_manual_books_branch_id")
   branchId: string;
 
-  @Column({ name: 'transaction_type', type: 'varchar', length: 100 })
-  transactionType: string;
+  @Column({
+    name: "transaction_type",
+    type: "enum",
+    enum: TransactionTypeProfileEnum,
+  })
+  transactionType: TransactionTypeProfile;
 
-  @Column({ name: 'book_no_from', type: 'integer' })
+  @Column({ name: "book_no_from", type: "integer" })
   bookNoFrom: number;
 
-  @Column({ name: 'book_no_to', type: 'integer' })
+  @Column({ name: "book_no_to", type: "integer" })
   bookNoTo: number;
 
-  @Column({ name: 'vouchers_per_book', type: 'integer' })
+  @Column({ name: "vouchers_per_book", type: "integer" })
   vouchersPerBook: number;
 
-  @Column({ name: 'mv_no_from', type: 'integer' })
+  @Column({ name: "mv_no_from", type: "integer" })
   mvNoFrom: number;
 
-  @Column({ name: 'mv_no_to', type: 'integer' })
+  @Column({ name: "mv_no_to", type: "integer" })
   mvNoTo: number;
 
-  @Column({ name: 'assigned_to', type: 'varchar', length: 100 })
+  @Column({ name: "assigned_to", type: "varchar", length: 100 })
   assignedTo: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   remarks?: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'Pending' })
+  @Column({ type: "varchar", length: 50, default: "Pending" })
   status: string; // 'Pending' | 'Approved' | 'Rejected'
 
-  @Column({ name: 'from_date', type: 'date', nullable: true })
+  @Column({ name: "from_date", type: "date", nullable: true })
   fromDate?: string;
 
-  @Column({ name: 'to_date', type: 'date', nullable: true })
+  @Column({ name: "to_date", type: "date", nullable: true })
   toDate?: string;
 
-  @Column({ name: 'approval_remarks', type: 'text', nullable: true })
+  @Column({ name: "approval_remarks", type: "text", nullable: true })
   approvalRemarks?: string;
 
-  @Column({ name: 'approved_at', type: 'timestamp', nullable: true })
+  @Column({ name: "approved_at", type: "timestamp", nullable: true })
   approvedAt?: Date;
 
-  @Column({ name: 'approved_by', type: 'uuid', nullable: true })
+  @Column({ name: "approved_by", type: "uuid", nullable: true })
   approvedBy?: string;
 
-  @Column({ name: 'created_by', type: 'uuid' })
+  @Column({ name: "created_by", type: "uuid" })
   createdBy: string;
 
-  @Column({ name: 'updated_by', type: 'uuid' })
+  @Column({ name: "updated_by", type: "uuid" })
   updatedBy: string;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
+  @CreateDateColumn({ name: "created_at", type: "timestamp" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  @UpdateDateColumn({ name: "updated_at", type: "timestamp" })
   updatedAt: Date;
 }

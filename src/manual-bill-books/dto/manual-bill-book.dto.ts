@@ -1,6 +1,7 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { TransactionTypeProfileEnum, type TransactionTypeProfile } from '../../transactions/transactions.enums';
 
 export class CreateManualBookDto {
   @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25' })
@@ -14,9 +15,9 @@ export class CreateManualBookDto {
   branchId: string;
 
   @ApiProperty({ description: 'Transaction Type', example: 'PB-RETAIL PURCHASE' })
-  @IsString()
+  @IsEnum(TransactionTypeProfileEnum)
   @IsNotEmpty()
-  transactionType: string;
+  transactionType: TransactionTypeProfile;
 
   @ApiProperty({ description: 'Book No. From', example: 101 })
   @IsNumber()

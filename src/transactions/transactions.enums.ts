@@ -16,6 +16,19 @@ export const TransactionType = {
 export type TransactionType =
   (typeof TransactionType)[keyof typeof TransactionType];
 
+export const TransactionTypeProfileEnum = {
+  PURCHASE_FFMC: "PURCHASE_FFMC",
+  SALE_FFMC: "SALE_FFMC",
+  PURCHASE_RMC: "PURCHASE_RMC",
+  PURCHASE_FOREX: "PURCHASE_FOREX",
+  PURCHASE_FOREIGN: "PURCHASE_FOREIGN",
+  PURCHASE_MISC: "PURCHASE_MISC",
+  PURCHASE_FRANCHISE: "PURCHASE_FRANCHISE",
+} as const;
+
+export type TransactionTypeProfile =
+  (typeof TransactionTypeProfileEnum)[keyof typeof TransactionTypeProfileEnum];
+
 export const TransactionDocumentContext = {
   PURCHASE_FFMC: "PURCHASE_FFMC",
   PURCHASE_AUTHORISED_DEALER: "PURCHASE_AUTHORISED_DEALER",

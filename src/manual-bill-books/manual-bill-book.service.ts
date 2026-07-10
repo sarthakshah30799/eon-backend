@@ -12,6 +12,7 @@ import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.ent
 import { Branch } from "../branches/branch.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { User } from "../users/user.entity";
+import { TransactionTypeProfileEnum, type TransactionTypeProfile } from "../transactions/transactions.enums";
 import {
   CreateManualBookDto,
   ApproveRejectManualBookDto,
@@ -28,6 +29,26 @@ const isUuid = (val: string) =>
 type UserLookup = {
   id: string;
   name: string;
+};
+
+const TRANSACTION_TYPE_PROFILE_ALIASES: Record<string, TransactionTypeProfile> = {
+  PURCHASE: TransactionTypeProfileEnum.PURCHASE_FFMC,
+  SALE: TransactionTypeProfileEnum.SALE_FFMC,
+};
+
+const normalizeTransactionTypeProfile = (
+  value?: string,
+): TransactionTypeProfile | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  return (
+    TRANSACTION_TYPE_PROFILE_ALIASES[value.trim().toUpperCase()] ??
+    (Object.values(TransactionTypeProfileEnum).includes(value as TransactionTypeProfile)
+      ? (value as TransactionTypeProfile)
+      : undefined)
+  );
 };
 
 @Injectable()
@@ -568,7 +589,12 @@ export class ManualBillBookService {
     };
   }
 
-  async getSelectablePages(branchId?: string, userId?: string): Promise<any[]> {
+  async getSelectablePages(
+    branchId?: string,
+    userId?: string,
+    transactionType?: string,
+  ): Promise<any[]> {
+    const normalizedTransactionType = normalizeTransactionTypeProfile(transactionType);
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.manualBook", "book")
@@ -581,6 +607,12 @@ export class ManualBillBookService {
     if (userId) {
       query.andWhere("pt.userId = :userId", {
         userId,
+      });
+    }
+
+    if (transactionType?.trim().toUpperCase() !== "ALL" && normalizedTransactionType) {
+      query.andWhere("book.transactionType = :transactionType", {
+        transactionType: normalizedTransactionType,
       });
     }
 
@@ -660,6 +692,8 @@ export class ManualBillBookService {
     }
 
     // Find all manual books matching branch, transactionType (if not ALL), and book range containing bookNo
+    const normalizedTransactionType = normalizeTransactionTypeProfile(transactionType);
+
     const queryBooks = await this.manualBookRepository
       .createQueryBuilder("mb")
       .where("mb.branchId = :branchId", { branchId })
@@ -667,10 +701,10 @@ export class ManualBillBookService {
       .andWhere("mb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("mb.bookNoTo >= :bookNo", { bookNo })
       .andWhere(
-        transactionType === "ALL"
+        transactionType?.trim().toUpperCase() === "ALL" || normalizedTransactionType === undefined
           ? "1=1"
           : "mb.transactionType = :transactionType",
-        { transactionType },
+        { transactionType: normalizedTransactionType ?? transactionType },
       )
       .getMany();
 

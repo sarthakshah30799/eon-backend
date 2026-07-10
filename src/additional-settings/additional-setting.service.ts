@@ -11,6 +11,10 @@ import { PASSWORD_POLICY_CHILDREN, PasswordPolicyConfig } from '../password-poli
 import { SessionPolicyService } from '../session-policy/session-policy.service';
 import { SessionPolicyCodeEnum } from '../session-policy/session-policy.enum';
 import { SESSION_POLICY_CHILDREN, SessionPolicyConfig } from '../session-policy/session-policy.dto';
+import {
+  TransactionTypeProfileEnum,
+  type TransactionTypeProfile,
+} from '../transactions/transactions.enums';
 
 type PolicyCreateContext = {
   dto: CreateCategoryDto;
@@ -33,15 +37,17 @@ type PolicyHandler = {
 };
 
 const normalizeCode = (code?: string | null) => String(code ?? '').trim().toUpperCase();
-const TRANSACTION_NUMBERING_CODES = new Set([
-  'PURCHASE_FFMC',
-  'SALE_FFMC',
-  'PURCHASE_RMC',
-  'PURCHASE_FOREX',
-  'PURCHASE_FOREIGN',
-  'PURCHASE_MISC',
-  'PURCHASE_FRANCHISE',
-]);
+const TRANSACTION_NUMBERING_CODE_LIST = Object.values(
+  TransactionTypeProfileEnum
+) as TransactionTypeProfile[];
+const TRANSACTION_NUMBERING_CODES = new Set<TransactionTypeProfile>(
+  TRANSACTION_NUMBERING_CODE_LIST
+);
+
+const isTransactionTypeProfile = (
+  code: string
+): code is TransactionTypeProfile =>
+  TRANSACTION_NUMBERING_CODES.has(code as TransactionTypeProfile);
 
 @Injectable()
 export class AdditionalSettingService {
@@ -106,7 +112,7 @@ export class AdditionalSettingService {
     }
 
     const normalizedSubcategoryCode = normalizeCode(subcategoryCode);
-    if (!TRANSACTION_NUMBERING_CODES.has(normalizedSubcategoryCode)) {
+    if (!isTransactionTypeProfile(normalizedSubcategoryCode)) {
       return;
     }
 

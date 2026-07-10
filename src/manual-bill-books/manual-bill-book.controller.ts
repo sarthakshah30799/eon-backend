@@ -238,13 +238,18 @@ export class ManualBillBookController {
     @Session() session: any,
     @Query("branchId") branchId?: string,
     @Query("userId") userId?: string,
+    @Query("transactionType") transactionType?: string,
   ) {
     const effectiveBranchId = session.isAdmin ? branchId : session.activeBranchId;
     const effectiveUserId = userId?.trim() || session.userId;
     this.logger.log(
-      `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"}`
+      `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"} transactionType=${transactionType ?? "null"}`
     );
-    return this.service.getSelectablePages(effectiveBranchId, effectiveUserId);
+    return this.service.getSelectablePages(
+      effectiveBranchId,
+      effectiveUserId,
+      transactionType?.trim() || undefined,
+    );
   }
 
   @Get("dp-mapping/search")
