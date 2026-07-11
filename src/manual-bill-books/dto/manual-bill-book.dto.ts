@@ -1,7 +1,7 @@
 import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ManualBookStatus } from '../entities/manual-book.entity';
+import { WorkflowStatus } from '../../common/enums/workflow-status.enum';
 
 export class CreateManualBookDto {
   @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25' })
@@ -63,10 +63,10 @@ export class CreateManualBookDto {
 }
 
 export class ApproveRejectManualBookDto {
-  @ApiProperty({ description: 'Status', enum: ManualBookStatus, example: ManualBookStatus.APPROVED })
-  @IsEnum(ManualBookStatus)
+  @ApiProperty({ description: 'Status', enum: WorkflowStatus, example: WorkflowStatus.APPROVE })
+  @IsEnum(WorkflowStatus)
   @IsNotEmpty()
-  status: ManualBookStatus.APPROVED | ManualBookStatus.REJECTED;
+  status: WorkflowStatus.APPROVE | WorkflowStatus.REJECT;
 
   @ApiProperty({ description: 'Approval Remarks', required: false })
   @IsString()
@@ -80,10 +80,10 @@ export class BulkReviewItemDto {
   @IsNotEmpty()
   id: string;
 
-  @ApiProperty({ description: 'Status', enum: ManualBookStatus, example: ManualBookStatus.APPROVED })
-  @IsEnum(ManualBookStatus)
+  @ApiProperty({ description: 'Status', enum: WorkflowStatus, example: WorkflowStatus.APPROVE })
+  @IsEnum(WorkflowStatus)
   @IsNotEmpty()
-  status: ManualBookStatus.APPROVED | ManualBookStatus.REJECTED;
+  status: WorkflowStatus.APPROVE | WorkflowStatus.REJECT;
 
   @ApiProperty({ description: 'Approval Remarks', required: false })
   @IsString()

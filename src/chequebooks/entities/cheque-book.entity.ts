@@ -1,4 +1,5 @@
 import { Entity, Column, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { WorkflowStatus } from '../../common/enums/workflow-status.enum';
 
 @Entity('cheque_books')
 export class ChequeBook {
@@ -33,20 +34,19 @@ export class ChequeBook {
   @Column({ name: 'mv_no_to', type: 'integer' })
   mvNoTo: number;
 
-  @Column({ name: 'assigned_to', type: 'varchar', length: 100 })
+  @Column({ name: 'assigned_to', type: 'uuid' })
   assignedTo: string;
 
   @Column({ type: 'text', nullable: true })
   remarks?: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'Pending' })
-  status: string; // 'Pending' | 'Approved' | 'Rejected'
-
-  @Column({ name: 'from_date', type: 'date', nullable: true })
-  fromDate?: string;
-
-  @Column({ name: 'to_date', type: 'date', nullable: true })
-  toDate?: string;
+  @Column({
+    type: 'enum',
+    enum: WorkflowStatus,
+    enumName: 'cheque_books_status_enum',
+    default: WorkflowStatus.PENDING,
+  })
+  status: WorkflowStatus;
 
   @Column({ name: 'approval_remarks', type: 'text', nullable: true })
   approvalRemarks?: string;

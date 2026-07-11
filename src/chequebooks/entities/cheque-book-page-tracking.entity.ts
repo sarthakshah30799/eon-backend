@@ -18,13 +18,14 @@ export class ChequeBookPageTracking {
   @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
 
+  @Column({ name: 'assigned_by', type: 'uuid', nullable: true })
+  assignedBy?: string;
+
   @Column({ name: 'page_no', type: 'integer' })
   pageNo: number;
 
   @Column({ name: 'is_voided', type: 'boolean', default: false })
   isVoided: boolean;
-
-
 
   @Column({ type: 'text', nullable: true })
   remarks?: string;

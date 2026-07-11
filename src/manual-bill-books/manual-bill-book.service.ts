@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, In, Between } from "typeorm";
 import { ManualBook } from "./entities/manual-book.entity";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.entity";
 import { Branch } from "../branches/branch.entity";
 import { SelectOption } from "../category-options/category-option.entity";
@@ -21,7 +22,6 @@ import {
   UpdatePageStatusDto,
   ReturnPagesDto,
 } from "./dto/manual-bill-book.dto";
-import { ManualBookStatus } from "./entities/manual-book.entity";
 
 const isUuid = (val: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
@@ -135,7 +135,7 @@ export class ManualBillBookService {
       mvNoTo,
       assignedTo,
       remarks,
-      status: ManualBookStatus.PENDING,
+      status: WorkflowStatus.PENDING,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -178,17 +178,14 @@ export class ManualBillBookService {
     branchId?: string,
     status?: string,
     transactionType?: string,
-    fromDate?: string,
-    toDate?: string,
+    assignedTo?: string,
   ): Promise<any[]> {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
     if (transactionType && transactionType !== "ALL")
       where.transactionType = transactionType;
-    if (fromDate && toDate) {
-      where.dispatchDate = Between(fromDate, toDate);
-    }
+    if (assignedTo) where.assignedTo = assignedTo;
 
     const books = await this.manualBookRepository.find({
       where,
@@ -316,7 +313,7 @@ export class ManualBillBookService {
     if (!book) {
       throw new NotFoundException(`Manual Book entry with ID ${id} not found`);
     }
-    if (book.status !== ManualBookStatus.REJECTED) {
+    if (book.status !== WorkflowStatus.REJECT) {
       throw new BadRequestException('Only REJECTED dispatches can be reassigned');
     }
 
@@ -329,7 +326,7 @@ export class ManualBillBookService {
     if (dto.vouchersPerBook !== undefined) book.vouchersPerBook = dto.vouchersPerBook;
     if (dto.mvNoFrom !== undefined) book.mvNoFrom = dto.mvNoFrom;
     if (dto.mvNoTo !== undefined) book.mvNoTo = dto.mvNoTo;
-    book.status = ManualBookStatus.PENDING;
+    book.status = WorkflowStatus.PENDING;
     book.approvalRemarks = undefined;
     book.approvedAt = undefined;
     book.approvedBy = undefined;
@@ -751,7 +748,7 @@ export class ManualBillBookService {
     const queryBooks = await this.manualBookRepository
       .createQueryBuilder("mb")
       .where("mb.branchId = :branchId", { branchId })
-      .andWhere("mb.status = :status", { status: ManualBookStatus.APPROVED })
+      .andWhere("mb.status = :status", { status: WorkflowStatus.APPROVE })
       .andWhere("mb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("mb.bookNoTo >= :bookNo", { bookNo })
       .andWhere(
@@ -1221,7 +1218,7 @@ export class ManualBillBookService {
         bookNoFrom,
         bookNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: ManualBookStatus.REJECTED })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
@@ -1243,7 +1240,7 @@ export class ManualBillBookService {
         mvNoFrom,
         mvNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: ManualBookStatus.REJECTED })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {

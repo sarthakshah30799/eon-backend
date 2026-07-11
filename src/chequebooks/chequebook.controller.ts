@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
 import { ChequeBookService } from './chequebook.service';
-import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAssignmentsDto, UpdatePageStatusDto, ReturnPagesDto } from './dto/chequebook.dto';
+import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAssignmentsDto, UpdatePageStatusDto, ReturnPagesDto, ReassignChequeBookDto, AuthorizedUserRole } from './dto/chequebook.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
@@ -66,14 +66,14 @@ export class ChequeBookController {
     @Query('branchId') branchId?: string,
     @Query('status') status?: string,
     @Query('bankAccountCode') bankAccountCode?: string,
-    @Query('fromDate') fromDate?: string,
-    @Query('toDate') toDate?: string,
   ) {
     let effectiveBranchId = branchId;
-    if (!session.isAdmin) {
+    let assignedToFilter: string | undefined;
+    if (!session.isAdmin && !session.isHoStaff) {
       effectiveBranchId = session.activeBranchId;
+      assignedToFilter = session.userId;
     }
-    return this.service.findAll(effectiveBranchId, status, bankAccountCode, fromDate, toDate);
+    return this.service.findAll(effectiveBranchId, status, bankAccountCode, assignedToFilter);
   }
 
   @Get('users')
@@ -81,15 +81,16 @@ export class ChequeBookController {
   async getAuthorizedUsers(
     @Session() session: any,
     @Query('branchId') branchId: string,
+    @Query('role') role?: AuthorizedUserRole,
   ) {
     let effectiveBranchId = branchId;
     if (!session.isAdmin) {
       effectiveBranchId = session.activeBranchId;
     }
     this.logger.log(
-      `[DEBUG] users request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? 'null'} activeBranchId=${session?.activeBranchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'}`
+      `[DEBUG] users request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? 'null'} activeBranchId=${session?.activeBranchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'} role=${role ?? 'all'}`
     );
-    return this.service.getAuthorizedUsers(effectiveBranchId);
+    return this.service.getAuthorizedUsers(effectiveBranchId, role);
   }
 
   @Get('branch-managers')
@@ -106,6 +107,26 @@ export class ChequeBookController {
       `[DEBUG] branch-managers request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'}`
     );
     return this.service.getBranchManagers(effectiveBranchId);
+  }
+
+  @Get('dispatches/:id')
+  @ApiOperation({ summary: 'Get a single check book dispatch by ID' })
+  @ApiParam({ name: 'id', description: 'Dispatch UUID' })
+  @ApiResponse({ status: 200, description: 'Dispatch record' })
+  async findOne(@Param('id') id: string) {
+    return this.service.findOne(id);
+  }
+
+  @Put('dispatches/:id/reassign')
+  @ApiOperation({ summary: 'Reassign a rejected check book dispatch (resets to PENDING)' })
+  @ApiParam({ name: 'id', description: 'Dispatch UUID' })
+  @ApiResponse({ status: 200, description: 'Dispatch reassigned successfully' })
+  async reassignDispatch(
+    @Param('id') id: string,
+    @Body() dto: ReassignChequeBookDto,
+    @Session() session: any,
+  ) {
+    return this.service.reassignDispatch(id, dto, session.userId);
   }
 
   @Put('dispatches/bulk-review')

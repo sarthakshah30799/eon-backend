@@ -93,19 +93,18 @@ export class ManualBillBookController {
     @Query("branchId") branchId?: string,
     @Query("status") status?: string,
     @Query("transactionType") transactionType?: string,
-    @Query("fromDate") fromDate?: string,
-    @Query("toDate") toDate?: string,
   ) {
     let effectiveBranchId = branchId;
-    if (!session.isAdmin) {
+    let assignedToFilter: string | undefined;
+    if (!session.isAdmin && !session.isHoStaff) {
       effectiveBranchId = session.activeBranchId;
+      assignedToFilter = session.userId;
     }
     return this.service.findAll(
       effectiveBranchId,
       status,
       transactionType,
-      fromDate,
-      toDate,
+      assignedToFilter,
     );
   }
 

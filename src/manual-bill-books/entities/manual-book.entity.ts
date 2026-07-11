@@ -1,10 +1,5 @@
 import { Entity, Column, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-
-export enum ManualBookStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-}
+import { WorkflowStatus } from '../../common/enums/workflow-status.enum';
 
 @Entity('manual_books')
 export class ManualBook {
@@ -47,11 +42,11 @@ export class ManualBook {
 
   @Column({
     type: 'enum',
-    enum: ManualBookStatus,
+    enum: WorkflowStatus,
     enumName: 'manual_books_status_enum',
-    default: ManualBookStatus.PENDING,
+    default: WorkflowStatus.PENDING,
   })
-  status: ManualBookStatus;
+  status: WorkflowStatus;
 
   @Column({ name: 'approval_remarks', type: 'text', nullable: true })
   approvalRemarks?: string;
