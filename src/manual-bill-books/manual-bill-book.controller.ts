@@ -26,6 +26,8 @@ import {
   TransferPagesDto,
   UpdatePageStatusDto,
   ReturnPagesDto,
+  ManageDeliveryPersonDto,
+  ReassignManualBookDto,
 } from "./dto/manual-bill-book.dto";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -153,6 +155,14 @@ export class ManualBillBookController {
     return this.service.bulkReview(dto, session.userId);
   }
 
+  @Get("dispatches/:id")
+  @ApiOperation({ summary: "Get a single manual bill book dispatch by ID" })
+  @ApiParam({ name: "id", description: "Dispatch UUID" })
+  @ApiResponse({ status: 200, description: "Dispatch details" })
+  async findOne(@Param("id") id: string) {
+    return this.service.findOne(id);
+  }
+
   @Put("dispatches/:id/approve")
   @ApiOperation({ summary: "Approve or Reject manual bill book dispatch" })
   @ApiParam({ name: "id", description: "Dispatch UUID" })
@@ -163,6 +173,18 @@ export class ManualBillBookController {
     @Session() session: any,
   ) {
     return this.service.approveOrReject(id, dto, session.userId);
+  }
+
+  @Put("dispatches/:id/reassign")
+  @ApiOperation({ summary: "Reassign a REJECTED dispatch to a new user (HO only)" })
+  @ApiParam({ name: "id", description: "Dispatch UUID" })
+  @ApiResponse({ status: 200, description: "Dispatch reassigned and reset to PENDING" })
+  async reassignDispatch(
+    @Param("id") id: string,
+    @Body() dto: ReassignManualBookDto,
+    @Session() session: any,
+  ) {
+    return this.service.reassignDispatch(id, dto, session.userId);
   }
 
   @Post("assignments")
@@ -306,5 +328,51 @@ export class ManualBillBookController {
   async getDeliveryPersons(@Session() session: any) {
     const branchId = session.activeBranchId;
     return this.service.getDeliveryPersons(branchId);
+  }
+
+  @Get("dp-management/users")
+  @ApiOperation({ summary: "Get all active branch users with their delivery person status" })
+  async getBranchUsersForDP(@Session() session: any) {
+    return this.service.getBranchUsersForDP(session.activeBranchId);
+  }
+
+  @Post("dp-management/add")
+  @ApiOperation({ summary: "Assign delivery person role to a branch user" })
+  async addDeliveryPerson(
+    @Session() session: any,
+    @Body() dto: ManageDeliveryPersonDto,
+  ) {
+    return this.service.addDeliveryPerson(session.activeBranchId, dto.userId, session.userId);
+  }
+
+  @Post("dp-management/remove")
+  @ApiOperation({ summary: "Remove delivery person role from a branch user" })
+  async removeDeliveryPerson(
+    @Session() session: any,
+    @Body() dto: ManageDeliveryPersonDto,
+  ) {
+    return this.service.removeDeliveryPerson(session.activeBranchId, dto.userId);
+  }
+
+  @Get("dp-unmap/pages")
+  @ApiOperation({ summary: "Get all pages currently assigned to delivery persons in the branch" })
+  async getDPAllocatedPages(@Session() session: any) {
+    return this.service.getDPAllocatedPages(session.activeBranchId);
+  }
+
+  @Post("dp-unmap/execute")
+  @ApiOperation({ summary: "Unmap pages from a delivery person back to cashier or release to BM pool" })
+  async unmapFromDP(
+    @Session() session: any,
+    @Body() body: { dpUserId: string; manualBookId: string; mvFrom: number; mvTo: number; remarks?: string },
+  ) {
+    return this.service.unmapFromDP({
+      dpUserId: body.dpUserId,
+      manualBookId: body.manualBookId,
+      mvFrom: body.mvFrom,
+      mvTo: body.mvTo,
+      remarks: body.remarks,
+      executorId: session.userId,
+    });
   }
 }

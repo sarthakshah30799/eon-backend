@@ -1,6 +1,7 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { ManualBookStatus } from '../entities/manual-book.entity';
 
 export class CreateManualBookDto {
   @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25' })
@@ -62,10 +63,10 @@ export class CreateManualBookDto {
 }
 
 export class ApproveRejectManualBookDto {
-  @ApiProperty({ description: 'Status', example: 'Approved' })
-  @IsString()
+  @ApiProperty({ description: 'Status', enum: ManualBookStatus, example: ManualBookStatus.APPROVED })
+  @IsEnum(ManualBookStatus)
   @IsNotEmpty()
-  status: string;
+  status: ManualBookStatus.APPROVED | ManualBookStatus.REJECTED;
 
   @ApiProperty({ description: 'Approval Remarks', required: false })
   @IsString()
@@ -79,10 +80,10 @@ export class BulkReviewItemDto {
   @IsNotEmpty()
   id: string;
 
-  @ApiProperty({ description: 'Status', example: 'Approved' })
-  @IsString()
+  @ApiProperty({ description: 'Status', enum: ManualBookStatus, example: ManualBookStatus.APPROVED })
+  @IsEnum(ManualBookStatus)
   @IsNotEmpty()
-  status: string;
+  status: ManualBookStatus.APPROVED | ManualBookStatus.REJECTED;
 
   @ApiProperty({ description: 'Approval Remarks', required: false })
   @IsString()
@@ -162,4 +163,58 @@ export class ReturnPagesDto {
   @IsArray()
   @IsNumber({}, { each: true })
   pageNos: number[];
+}
+
+export class ManageDeliveryPersonDto {
+  @ApiProperty({ description: 'User ID (UUID) to add/remove as delivery person' })
+  @IsUUID()
+  @IsNotEmpty()
+  userId: string;
+}
+
+export class ReassignManualBookDto {
+  @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25', required: false })
+  @IsDateString()
+  @IsOptional()
+  dispatchDate?: string;
+
+  @ApiProperty({ description: 'Transaction Type', required: false })
+  @IsString()
+  @IsOptional()
+  transactionType?: string;
+
+  @ApiProperty({ description: 'Book No. From', required: false })
+  @IsNumber()
+  @IsOptional()
+  bookNoFrom?: number;
+
+  @ApiProperty({ description: 'Book No. To', required: false })
+  @IsNumber()
+  @IsOptional()
+  bookNoTo?: number;
+
+  @ApiProperty({ description: 'Vouchers Per Book', required: false })
+  @IsNumber()
+  @IsOptional()
+  vouchersPerBook?: number;
+
+  @ApiProperty({ description: 'MV No. From', required: false })
+  @IsNumber()
+  @IsOptional()
+  mvNoFrom?: number;
+
+  @ApiProperty({ description: 'MV No. To', required: false })
+  @IsNumber()
+  @IsOptional()
+  mvNoTo?: number;
+
+  @ApiProperty({ description: 'New assignee User ID (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  assignedTo: string;
+
+  @ApiProperty({ description: 'Remarks', required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
 }

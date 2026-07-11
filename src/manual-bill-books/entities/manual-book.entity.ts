@@ -1,5 +1,11 @@
 import { Entity, Column, Index, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
+export enum ManualBookStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
 @Entity('manual_books')
 export class ManualBook {
   @PrimaryGeneratedColumn('uuid')
@@ -39,9 +45,13 @@ export class ManualBook {
   @Column({ type: 'text', nullable: true })
   remarks?: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'Pending' })
-  status: string; // 'Pending' | 'Approved' | 'Rejected'
-
+  @Column({
+    type: 'enum',
+    enum: ManualBookStatus,
+    enumName: 'manual_books_status_enum',
+    default: ManualBookStatus.PENDING,
+  })
+  status: ManualBookStatus;
 
   @Column({ name: 'approval_remarks', type: 'text', nullable: true })
   approvalRemarks?: string;
