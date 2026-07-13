@@ -141,32 +141,22 @@ export class PartyProfileService {
 
   private isPartyProfileVisibleToUser(
     client: PartyProfile,
-    userId: string | undefined,
+    user: User | null | undefined,
     activeBranchId: string | undefined,
-    isAdmin: boolean,
-    isBranchManager: boolean,
   ) {
-    if (isAdmin) {
-      return true;
-    }
-
-    if (!userId || !activeBranchId) {
+    if (!user) {
       return false;
     }
 
-    if (client.branchId !== activeBranchId) {
-      return false;
-    }
-
-    if (isBranchManager) {
+    if (user.isAdmin || this.isReviewer(user)) {
       return true;
     }
 
-    if (client.active === false) {
-      return client.createdBy === userId;
+    if (!activeBranchId) {
+      return false;
     }
 
-    return true;
+    return client.branchId === activeBranchId;
   }
 
   private normalizePartyProfilePath(type?: string) {
@@ -803,7 +793,6 @@ export class PartyProfileService {
     activeBranchId?: string,
   ): Promise<PartyProfileResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
-    const requesterIsBranchManager = this.isBranchManager(user);
     const client = await this.partyProfileRepository.findOne({
       where: { id },
       relations: [
@@ -828,15 +817,16 @@ export class PartyProfileService {
     }
 
     if (user) {
-      this.assertPartyProfileAccess(user, client.type, "view");
+      if (!this.canAccessPartyProfileType(user, client.type, "view")) {
+        throw new NotFoundException(`Party profile type ${client.type} not found`);
+      }
+
       if (
         !this.isPartyProfileVisibleToUser(
-          client,
-          userId,
-          activeBranchId,
-          user.isAdmin,
-          requesterIsBranchManager,
-        )
+        client,
+        user,
+        activeBranchId,
+      )
       ) {
         throw new NotFoundException(`Party Profile with id ${id} not found`);
       }
@@ -865,10 +855,8 @@ export class PartyProfileService {
       if (
         !this.isPartyProfileVisibleToUser(
           client,
-          userId,
+          user,
           activeBranchId,
-          user.isAdmin,
-          this.isBranchManager(user),
         )
       ) {
         throw new NotFoundException(`Party Profile with id ${id} not found`);
@@ -913,10 +901,8 @@ export class PartyProfileService {
     if (
       !this.isPartyProfileVisibleToUser(
         client,
-        userId,
+        user,
         activeBranchId,
-        user.isAdmin,
-        this.isBranchManager(user),
       )
     ) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
@@ -1042,7 +1028,7 @@ export class PartyProfileService {
     activeBranchId?: string,
   ): Promise<PartyProfileListResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
-    const requesterIsBranchManager = this.isBranchManager(user);
+    const userCanSeeAllBranches = Boolean(user?.isAdmin || this.isReviewer(user));
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -1060,28 +1046,6 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
-
-    if (!user?.isAdmin && !activeBranchId) {
-      return {
-        data: [],
-        page,
-        limit,
-        totalItems: 0,
-        totalPages: 0,
-      };
-    }
-
-    if (!user?.isAdmin && activeBranchId) {
-      qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
-    }
-
-    if (query.sale !== undefined) {
-      qb.andWhere("pp.sale = :sale", { sale: query.sale });
-    }
-
-    if (query.purchase !== undefined) {
-      qb.andWhere("pp.purchase = :purchase", { purchase: query.purchase });
-    }
 
     const requestedTypes = (query.type?.length
       ? query.type
@@ -1101,6 +1065,28 @@ export class PartyProfileService {
     }
 
     qb.where("pp.type::text IN (:...types)", { types: accessibleTypes });
+
+    if (!userCanSeeAllBranches && !activeBranchId) {
+      return {
+        data: [],
+        page,
+        limit,
+        totalItems: 0,
+        totalPages: 0,
+      };
+    }
+
+    if (!userCanSeeAllBranches && activeBranchId) {
+      qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
+    }
+
+    if (query.sale !== undefined) {
+      qb.andWhere("pp.sale = :sale", { sale: query.sale });
+    }
+
+    if (query.purchase !== undefined) {
+      qb.andWhere("pp.purchase = :purchase", { purchase: query.purchase });
+    }
 
     if (query.search) {
       qb.andWhere(
@@ -1125,33 +1111,15 @@ export class PartyProfileService {
 
     const inactiveViewRequested =
       query.activeOnly === false || query.active === false;
-    const restrictToOwnInactiveRecords =
-      !user?.isAdmin &&
-      !requesterIsBranchManager &&
-      Boolean(userId) &&
-      inactiveViewRequested;
 
-    if (restrictToOwnInactiveRecords) {
-      qb.andWhere(
-        new Brackets((statusQb) => {
-          statusQb
-            .where("pp.active = true")
-            .orWhere(
-              new Brackets((inactiveQb) => {
-                inactiveQb
-                  .where("pp.active = false")
-                  .andWhere("pp.createdBy = :createdBy");
-              }),
-            );
-        }),
-        { createdBy: userId },
-      );
-    } else if (inactiveViewRequested && requesterIsBranchManager) {
-      // BM can view both active and inactive records for the current branch.
-    } else if (query.active !== undefined) {
+    if (query.active !== undefined) {
       qb.andWhere("pp.active = :active", { active: query.active });
-    } else {
+    } else if (query.activeOnly === true) {
       qb.andWhere("pp.active = true");
+    } else if (!inactiveViewRequested) {
+      qb.andWhere("pp.active = true");
+    } else {
+      // activeOnly=false means include both active and inactive records.
     }
 
     qb.orderBy("pp.createdAt", "DESC").skip(skip).take(limit);

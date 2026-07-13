@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { StreamableFile } from '@nestjs/common';
@@ -263,17 +267,18 @@ export class PartyProfileDocumentsService {
       entitySelection,
     });
 
-    return queryBuilder
+    const profiles = await queryBuilder
       .orderBy('documentProfile.sortOrder', 'ASC')
       .addOrderBy('documentProfile.documentCode', 'ASC')
       .getMany();
+
+    return profiles;
   }
 
   private async resolveDocumentGroupSelection(partyGroup?: SelectOption | null) {
     if (!partyGroup?.value) {
       return null;
     }
-
     const documentGroup = await this.selectOptionRepository.findOne({
       where: {
         code: CategoryOptionCodeEnum.DocumentGroup,
