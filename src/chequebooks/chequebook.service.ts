@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from "@nes
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, In, Between } from "typeorm";
 import { ChequeBook } from "./entities/cheque-book.entity";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { ChequeBookPageTracking } from "./entities/cheque-book-page-tracking.entity";
 import { Branch } from "../branches/branch.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
@@ -13,6 +14,8 @@ import {
   SaveChequeBookAssignmentsDto,
   UpdatePageStatusDto,
   ReturnPagesDto,
+  ReassignChequeBookDto,
+  AuthorizedUserRole,
 } from "./dto/chequebook.dto";
 
 const isUuid = (val: string) =>
@@ -66,13 +69,14 @@ export class ChequeBookService {
     const numBooks = bookNoTo - bookNoFrom + 1;
     const mvNoTo = mvNoFrom + numBooks * vouchersPerBook - 1;
 
-    // Check for overlapping book number ranges (global)
+    // Check for overlapping book number ranges (global, exclude REJECTED books)
     const overlappingBookNo = await this.checkBookRepository
       .createQueryBuilder('book')
       .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
         bookNoFrom,
         bookNoTo,
       })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
@@ -81,13 +85,14 @@ export class ChequeBookService {
       );
     }
 
-    // Check for overlapping page number ranges
+    // Check for overlapping page number ranges (exclude REJECTED books)
     const overlapping = await this.checkBookRepository
       .createQueryBuilder('book')
       .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
         mvNoFrom,
         mvNoTo,
       })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {
@@ -131,7 +136,7 @@ export class ChequeBookService {
       mvNoTo,
       assignedTo,
       remarks,
-      status: "Pending",
+      status: WorkflowStatus.PENDING,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -174,17 +179,14 @@ export class ChequeBookService {
     branchId?: string,
     status?: string,
     bankAccountCode?: string,
-    fromDate?: string,
-    toDate?: string,
+    assignedTo?: string,
   ): Promise<any[]> {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
     if (bankAccountCode && bankAccountCode !== "ALL")
       where.bankAccountCode = bankAccountCode;
-    if (fromDate && toDate) {
-      where.dispatchDate = Between(fromDate, toDate);
-    }
+    if (assignedTo) where.assignedTo = assignedTo;
 
     const books = await this.checkBookRepository.find({
       where,
@@ -258,8 +260,6 @@ export class ChequeBookService {
 
     book.status = dto.status;
     book.approvalRemarks = dto.approvalRemarks;
-    if (dto.fromDate) book.fromDate = dto.fromDate;
-    if (dto.toDate) book.toDate = dto.toDate;
     book.approvedAt = new Date();
     book.approvedBy = userId;
     book.updatedBy = userId;
@@ -288,45 +288,24 @@ export class ChequeBookService {
     return results;
   }
 
-  async getAuthorizedUsers(branchId: string): Promise<any[]> {
-    this.logger.log(`[DEBUG] getAuthorizedUsers called with branchId=${branchId ?? 'null'}`);
-    const diagnostics = await this.branchRepository.manager.query(
-      `
-      SELECT
-        COUNT(*)::int AS role_rows,
-        COUNT(DISTINCT ur.user_id)::int AS distinct_users,
-        COUNT(*) FILTER (WHERE u.is_active = true)::int AS active_user_rows,
-        COUNT(*) FILTER (WHERE r.is_brn_mgr = true)::int AS branch_manager_rows,
-        COUNT(*) FILTER (WHERE r.is_cashier = true)::int AS cashier_rows,
-        COUNT(*) FILTER (WHERE r.is_delivery_boy = true)::int AS delivery_boy_rows,
-        COUNT(*) FILTER (WHERE r.is_cashier = true OR r.is_delivery_boy = true)::int AS allocation_user_rows,
-        COUNT(*) FILTER (WHERE r.is_admin = true)::int AS admin_rows
-      FROM user_roles ur
-      JOIN users u ON u.id = ur.user_id
-      JOIN roles r ON r.id = ur.role_id
-      WHERE ur.branch_id = $1
-      `,
-      [branchId],
-    );
-    this.logger.log(
-      `[DEBUG] getAuthorizedUsers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
-    );
-    const rows = await this.branchRepository.manager.query(
+  async getAuthorizedUsers(branchId: string, role?: AuthorizedUserRole): Promise<any[]> {
+    const allowedColumns = Object.values(AuthorizedUserRole) as string[];
+    const roleFilter = role && allowedColumns.includes(role)
+      ? `r.${role} = true`
+      : `r.${AuthorizedUserRole.CASHIER} = true`;
+
+    return this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
       JOIN roles r ON r.id = ur.role_id
-      WHERE ur.branch_id = $1 
+      WHERE ur.branch_id = $1
         AND u.is_active = true
-        AND (r.is_cashier = true OR r.is_delivery_boy = true)
+        AND ${roleFilter}
     `,
       [branchId],
     );
-    this.logger.log(
-      `[DEBUG] getAuthorizedUsers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
-    );
-    return rows;
   }
 
   async getBranchManagers(branchId: string): Promise<UserLookup[]> {
@@ -395,6 +374,7 @@ export class ChequeBookService {
           pagesToInsert.push({
             checkBookId: item.checkBookId,
             userId: item.userId,
+            assignedBy: userId,
             pageNo: p,
             isVoided: false,
             remarks: item.remarks,
@@ -404,6 +384,7 @@ export class ChequeBookService {
           const existing = existingPages.find((ep) => ep.pageNo === p);
           if (existing && !existing.isVoided) {
             existing.userId = item.userId;
+            existing.assignedBy = userId;
             existing.remarks = item.remarks;
             existing.updatedBy = userId;
             await this.pageTrackingRepository.save(existing);
@@ -583,10 +564,41 @@ export class ChequeBookService {
       .addOrderBy("pt.pageNo", "ASC")
       .getMany();
 
+    // Resolve assignedBy names
+    const assignedByIds = Array.from(
+      new Set(pages.map((p) => p.assignedBy).filter((id): id is string => !!id && isUuid(id)))
+    );
+    let assignedByUsers: Array<{ id: string; name: string }> = [];
+    if (assignedByIds.length > 0) {
+      assignedByUsers = await this.branchRepository.manager.query(
+        `SELECT id, name FROM users WHERE id = ANY($1)`,
+        [assignedByIds],
+      );
+    }
+    const assignedByMap = new Map(assignedByUsers.map((u) => [u.id, u.name]));
+
+    // Resolve bank account labels
+    const bankAccountIds = Array.from(
+      new Set(
+        pages
+          .map((p) => p.checkBook?.bankAccountCode)
+          .filter((id): id is string => !!id && isUuid(id)),
+      ),
+    );
+    const accounts =
+      bankAccountIds.length > 0
+        ? await this.accountProfileRepository.find({
+            where: { id: In(bankAccountIds) },
+          })
+        : [];
+    const accountMap = new Map(accounts.map((a) => [a.id, a]));
+
     return pages.map((page) => ({
       id: page.id,
       checkBookId: page.checkBookId,
       userId: page.userId,
+      assignedBy: page.assignedBy ?? null,
+      assignedByName: page.assignedBy ? (assignedByMap.get(page.assignedBy) ?? null) : null,
       pageNo: page.pageNo,
       remarks: page.remarks ?? null,
       checkBook: page.checkBook
@@ -600,6 +612,14 @@ export class ChequeBookService {
             mvNoTo: page.checkBook.mvNoTo,
             branchId: page.checkBook.branchId,
             bankAccountCode: page.checkBook.bankAccountCode ?? null,
+            bankAccountCodeLabel: page.checkBook.bankAccountCode
+              ? (() => {
+                  const account = accountMap.get(page.checkBook!.bankAccountCode!);
+                  return account
+                    ? `${account.accountCode} - ${account.accountName}`
+                    : page.checkBook!.bankAccountCode;
+                })()
+              : null,
           }
         : null,
     }));
@@ -624,8 +644,8 @@ export class ChequeBookService {
 
     const queryBooks = await this.checkBookRepository
       .createQueryBuilder("cb")
-      .where(branchId ? "cb.branchId = :branchId" : "1=1", branchId ? { branchId } : {})
-      .andWhere("cb.status = :status", { status: "Approved" })
+      .where("cb.branchId = :branchId", { branchId })
+      .andWhere("cb.status = :status", { status: WorkflowStatus.APPROVE })
       .andWhere("cb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("cb.bookNoTo >= :bookNo", { bookNo })
       .andWhere(
@@ -736,6 +756,7 @@ export class ChequeBookService {
         bookNoFrom,
         bookNoTo,
       })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
@@ -757,6 +778,7 @@ export class ChequeBookService {
         mvNoFrom,
         mvNoTo,
       })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {
@@ -766,5 +788,36 @@ export class ChequeBookService {
       };
     }
     return { valid: true };
+  }
+
+  async findOne(id: string): Promise<ChequeBook> {
+    const book = await this.checkBookRepository.findOne({ where: { id } });
+    if (!book) {
+      throw new NotFoundException(`Check Book entry with ID ${id} not found`);
+    }
+    return book;
+  }
+
+  async reassignDispatch(id: string, dto: ReassignChequeBookDto, userId: string): Promise<ChequeBook> {
+    const book = await this.checkBookRepository.findOne({ where: { id } });
+    if (!book) {
+      throw new NotFoundException(`Check Book entry with ID ${id} not found`);
+    }
+
+    book.assignedTo = dto.assignedTo;
+    if (dto.dispatchDate !== undefined) book.dispatchDate = dto.dispatchDate;
+    if (dto.bankAccountCode !== undefined) book.bankAccountCode = dto.bankAccountCode;
+    if (dto.bookNoFrom !== undefined) book.bookNoFrom = dto.bookNoFrom;
+    if (dto.bookNoTo !== undefined) book.bookNoTo = dto.bookNoTo;
+    if (dto.vouchersPerBook !== undefined) book.vouchersPerBook = dto.vouchersPerBook;
+    if (dto.mvNoFrom !== undefined) book.mvNoFrom = dto.mvNoFrom;
+    if (dto.mvNoTo !== undefined) book.mvNoTo = dto.mvNoTo;
+    if (dto.remarks !== undefined) book.remarks = dto.remarks;
+
+    // Reset to PENDING for re-approval
+    book.status = WorkflowStatus.PENDING;
+    book.updatedBy = userId;
+
+    return this.checkBookRepository.save(book);
   }
 }

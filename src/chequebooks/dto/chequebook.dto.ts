@@ -1,6 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsNumber, IsDateString, Min, IsArray, ValidateNested, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { WorkflowStatus } from '../../common/enums/workflow-status.enum';
+
+export enum AuthorizedUserRole {
+  CASHIER = 'is_cashier',
+}
 
 export class CreateChequeBookDto {
   @ApiProperty({ description: 'Dispatch Date', example: '2026-06-25' })
@@ -13,7 +18,7 @@ export class CreateChequeBookDto {
   @IsNotEmpty()
   branchId: string;
 
-  @ApiProperty({ description: 'Bank Account Code', example: 'AXISHO' })
+  @ApiProperty({ description: 'Bank Account Code UUID' })
   @IsString()
   @IsNotEmpty()
   bankAccountCode: string;
@@ -41,8 +46,8 @@ export class CreateChequeBookDto {
   @IsNotEmpty()
   mvNoFrom: number;
 
-  @ApiProperty({ description: 'Assigned To', example: 'BRANCH MANAGER' })
-  @IsString()
+  @ApiProperty({ description: 'Assigned To (UUID)' })
+  @IsUUID()
   @IsNotEmpty()
   assignedTo: string;
 
@@ -62,25 +67,15 @@ export class CreateChequeBookDto {
 }
 
 export class ApproveRejectChequeBookDto {
-  @ApiProperty({ description: 'Status', example: 'Approved' })
-  @IsString()
+  @ApiProperty({ description: 'Status', enum: WorkflowStatus, example: WorkflowStatus.APPROVE })
+  @IsEnum(WorkflowStatus)
   @IsNotEmpty()
-  status: string;
+  status: WorkflowStatus.APPROVE | WorkflowStatus.REJECT;
 
   @ApiProperty({ description: 'Approval Remarks', required: false })
   @IsString()
   @IsOptional()
   approvalRemarks?: string;
-
-  @ApiProperty({ description: 'From Date Filter', required: false, example: '2026-06-25' })
-  @IsDateString()
-  @IsOptional()
-  fromDate?: string;
-
-  @ApiProperty({ description: 'To Date Filter', required: false, example: '2026-06-30' })
-  @IsDateString()
-  @IsOptional()
-  toDate?: string;
 }
 
 export class BulkReviewChequeBookItemDto {
@@ -89,10 +84,10 @@ export class BulkReviewChequeBookItemDto {
   @IsNotEmpty()
   id: string;
 
-  @ApiProperty({ description: 'Status', example: 'Approved' })
-  @IsString()
+  @ApiProperty({ description: 'Status', enum: WorkflowStatus, example: WorkflowStatus.APPROVE })
+  @IsEnum(WorkflowStatus)
   @IsNotEmpty()
-  status: string;
+  status: WorkflowStatus.APPROVE | WorkflowStatus.REJECT;
 
   @ApiProperty({ description: 'Approval Remarks', required: false })
   @IsString()
@@ -149,7 +144,7 @@ export class UpdatePageStatusDto {
   @IsNotEmpty()
   status: 'VOID';
 
-  @ApiProperty({ description: 'Optional remarks explaining why', required: false })
+  @ApiProperty({ description: 'Optional remarks', required: false })
   @IsString()
   @IsOptional()
   remarks?: string;
@@ -160,4 +155,50 @@ export class ReturnPagesDto {
   @IsArray()
   @IsNumber({}, { each: true })
   pageNos: number[];
+}
+
+export class ReassignChequeBookDto {
+  @ApiProperty({ description: 'Assigned To (UUID)' })
+  @IsUUID()
+  @IsNotEmpty()
+  assignedTo: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  dispatchDate?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  bankAccountCode?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  bookNoFrom?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  bookNoTo?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  vouchersPerBook?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  mvNoFrom?: number;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  mvNoTo?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  remarks?: string;
 }

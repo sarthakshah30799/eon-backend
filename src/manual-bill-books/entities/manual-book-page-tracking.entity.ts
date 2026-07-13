@@ -27,6 +27,9 @@ export class ManualBookPageTracking {
   @Column({ type: 'text', nullable: true })
   remarks?: string;
 
+  @Column({ name: 'assigned_by', type: 'uuid', nullable: true })
+  assignedBy?: string;
+
   @Column({ name: 'updated_by', type: 'uuid', nullable: true })
   updatedBy?: string;
 

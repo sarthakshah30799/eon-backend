@@ -6,7 +6,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
-import { TransactionTypeProfileEnum, type TransactionTypeProfile } from "../../transactions/transactions.enums";
+import {
+  TransactionTypeProfileEnum,
+  type TransactionTypeProfile,
+} from "../../transactions/transactions.enums";
+import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 
 @Entity("manual_books")
 export class ManualBook {
@@ -51,14 +55,13 @@ export class ManualBook {
   @Column({ type: "text", nullable: true })
   remarks?: string;
 
-  @Column({ type: "varchar", length: 50, default: "Pending" })
-  status: string; // 'Pending' | 'Approved' | 'Rejected'
-
-  @Column({ name: "from_date", type: "date", nullable: true })
-  fromDate?: string;
-
-  @Column({ name: "to_date", type: "date", nullable: true })
-  toDate?: string;
+  @Column({
+    type: "enum",
+    enum: WorkflowStatus,
+    enumName: "manual_books_status_enum",
+    default: WorkflowStatus.PENDING,
+  })
+  status: WorkflowStatus;
 
   @Column({ name: "approval_remarks", type: "text", nullable: true })
   approvalRemarks?: string;

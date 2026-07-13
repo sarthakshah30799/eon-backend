@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, In, Between } from "typeorm";
 import { ManualBook } from "./entities/manual-book.entity";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.entity";
 import { Branch } from "../branches/branch.entity";
 import { SelectOption } from "../category-options/category-option.entity";
@@ -155,7 +156,7 @@ export class ManualBillBookService {
       mvNoTo,
       assignedTo,
       remarks,
-      status: "Pending",
+      status: WorkflowStatus.PENDING,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -198,17 +199,14 @@ export class ManualBillBookService {
     branchId?: string,
     status?: string,
     transactionType?: string,
-    fromDate?: string,
-    toDate?: string,
+    assignedTo?: string,
   ): Promise<any[]> {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
     if (transactionType && transactionType !== "ALL")
       where.transactionType = transactionType;
-    if (fromDate && toDate) {
-      where.dispatchDate = Between(fromDate, toDate);
-    }
+    if (assignedTo) where.assignedTo = assignedTo;
 
     const books = await this.manualBookRepository.find({
       where,
@@ -269,6 +267,14 @@ export class ManualBillBookService {
     });
   }
 
+  async findOne(id: string): Promise<ManualBook> {
+    const book = await this.manualBookRepository.findOne({ where: { id } });
+    if (!book) {
+      throw new NotFoundException(`Manual Book entry with ID ${id} not found`);
+    }
+    return book;
+  }
+
   async approveOrReject(
     id: string,
     dto: ApproveRejectManualBookDto,
@@ -281,8 +287,6 @@ export class ManualBillBookService {
 
     book.status = dto.status;
     book.approvalRemarks = dto.approvalRemarks;
-    if (dto.fromDate) book.fromDate = dto.fromDate;
-    if (dto.toDate) book.toDate = dto.toDate;
     book.approvedAt = new Date();
     book.approvedBy = userId;
     book.updatedBy = userId;
@@ -309,6 +313,47 @@ export class ManualBillBookService {
       results.push(saved);
     }
     return results;
+  }
+
+  async reassignDispatch(
+    id: string,
+    dto: {
+      assignedTo: string;
+      remarks?: string;
+      dispatchDate?: string;
+      transactionType?: string;
+      bookNoFrom?: number;
+      bookNoTo?: number;
+      vouchersPerBook?: number;
+      mvNoFrom?: number;
+      mvNoTo?: number;
+    },
+    userId: string,
+  ): Promise<ManualBook> {
+    const book = await this.manualBookRepository.findOne({ where: { id } });
+    if (!book) {
+      throw new NotFoundException(`Manual Book entry with ID ${id} not found`);
+    }
+    if (book.status !== WorkflowStatus.REJECT) {
+      throw new BadRequestException('Only REJECTED dispatches can be reassigned');
+    }
+
+    book.assignedTo = dto.assignedTo;
+    if (dto.remarks !== undefined) book.remarks = dto.remarks;
+    if (dto.dispatchDate !== undefined) book.dispatchDate = dto.dispatchDate;
+    if (dto.transactionType !== undefined) book.transactionType = dto.transactionType;
+    if (dto.bookNoFrom !== undefined) book.bookNoFrom = dto.bookNoFrom;
+    if (dto.bookNoTo !== undefined) book.bookNoTo = dto.bookNoTo;
+    if (dto.vouchersPerBook !== undefined) book.vouchersPerBook = dto.vouchersPerBook;
+    if (dto.mvNoFrom !== undefined) book.mvNoFrom = dto.mvNoFrom;
+    if (dto.mvNoTo !== undefined) book.mvNoTo = dto.mvNoTo;
+    book.status = WorkflowStatus.PENDING;
+    book.approvalRemarks = undefined;
+    book.approvedAt = undefined;
+    book.approvedBy = undefined;
+    book.updatedBy = userId;
+
+    return this.manualBookRepository.save(book);
   }
 
   async getAuthorizedUsers(branchId: string): Promise<any[]> {
@@ -418,6 +463,7 @@ export class ManualBillBookService {
             pageNo: p,
             isVoided: false,
             remarks: item.remarks,
+            assignedBy: userId,
             updatedBy: userId,
           });
         } else {
@@ -425,6 +471,7 @@ export class ManualBillBookService {
           if (existing && !existing.isVoided) {
             existing.userId = item.userId;
             existing.remarks = item.remarks;
+            existing.assignedBy = userId;
             existing.updatedBy = userId;
             await this.pageTrackingRepository.save(existing);
           }
@@ -460,6 +507,7 @@ export class ManualBillBookService {
         manualBookId: string;
         bookNo: number;
         userId: string;
+        assignedBy?: string;
         pageNos: number[];
         remarks?: string;
       }
@@ -479,6 +527,7 @@ export class ManualBillBookService {
           manualBookId: p.manualBookId,
           bookNo,
           userId: p.userId,
+          assignedBy: p.assignedBy,
           pageNos: [],
           remarks: p.remarks,
         };
@@ -486,10 +535,28 @@ export class ManualBillBookService {
       groups[key].pageNos.push(p.pageNo);
     }
 
+    // Resolve both cashier and assignedBy user names from DB1 in one query
+    const allUserIds = Array.from(
+      new Set([
+        ...Object.values(groups).map((g) => g.userId),
+        ...Object.values(groups).map((g) => g.assignedBy).filter(Boolean) as string[],
+      ]),
+    );
+    let resolvedUsers: User[] = [];
+    if (allUserIds.length > 0) {
+      resolvedUsers = await this.branchRepository.manager.find(User, {
+        where: { id: In(allUserIds) },
+      });
+    }
+    const userNameMap = new Map(resolvedUsers.map((u) => [u.id, u.name]));
+
     return Object.values(groups).map((g) => ({
       manualBookId: g.manualBookId,
       bookNo: g.bookNo,
       cashierId: g.userId,
+      cashierName: userNameMap.get(g.userId) ?? null,
+      assignedBy: g.assignedBy ?? null,
+      assignedByName: g.assignedBy ? (userNameMap.get(g.assignedBy) ?? null) : null,
       remarks: g.remarks,
     }));
   }
@@ -631,11 +698,27 @@ export class ManualBillBookService {
       .addOrderBy("pt.pageNo", "ASC")
       .getMany();
 
+    // Batch-resolve assignedBy user names in a single DB1 query
+    const assignedByIds = Array.from(
+      new Set(pages.map((p) => p.assignedBy).filter(Boolean) as string[])
+    );
+    const userNameMap = new Map<string, string>();
+    if (assignedByIds.length > 0) {
+      const resolvedUsers = await this.branchRepository.manager.find(User, {
+        where: { id: In(assignedByIds) },
+      });
+      for (const u of resolvedUsers) {
+        userNameMap.set(u.id, u.name);
+      }
+    }
+
     return pages.map((page) => ({
       id: page.id,
       manualBookId: page.manualBookId,
       userId: page.userId,
       pageNo: page.pageNo,
+      assignedBy: page.assignedBy ?? null,
+      assignedByName: page.assignedBy ? (userNameMap.get(page.assignedBy) ?? null) : null,
       remarks: page.remarks ?? null,
       manualBook: page.manualBook
         ? {
@@ -697,7 +780,7 @@ export class ManualBillBookService {
     const queryBooks = await this.manualBookRepository
       .createQueryBuilder("mb")
       .where("mb.branchId = :branchId", { branchId })
-      .andWhere("mb.status = :status", { status: "Approved" })
+      .andWhere("mb.status = :status", { status: WorkflowStatus.APPROVE })
       .andWhere("mb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("mb.bookNoTo >= :bookNo", { bookNo })
       .andWhere(
@@ -851,6 +934,7 @@ export class ManualBillBookService {
       { id: In(pageIds) },
       {
         userId: deliveryPersonId,
+        assignedBy: updatedBy,   // Track who put pages with DP (cashier or BM)
         remarks: remarks || null,
         updatedBy,
       },
@@ -890,6 +974,272 @@ export class ManualBillBookService {
     );
   }
 
+  async getBranchUsersForDP(branchId: string): Promise<any[]> {
+    return this.branchRepository.manager.query(
+      `
+      SELECT
+        u.id,
+        u.name,
+        EXISTS (
+          SELECT 1 FROM user_roles ur2
+          JOIN roles r2 ON ur2.role_id = r2.id
+          WHERE ur2.user_id = u.id
+            AND ur2.branch_id = $1
+            AND r2.is_delivery_boy = true
+        ) AS "isDeliveryPerson"
+      FROM users u
+      JOIN user_roles ur ON ur.user_id = u.id
+      WHERE ur.branch_id = $1
+        AND u.is_active = true
+      GROUP BY u.id, u.name
+      ORDER BY u.name
+      `,
+      [branchId],
+    );
+  }
+
+  async addDeliveryPerson(branchId: string, userId: string, actorId: string): Promise<{ success: boolean }> {
+    await this.branchRepository.manager.query(
+      `
+      INSERT INTO user_roles (id, user_id, role_id, branch_id, counter_id, created_by, updated_by, created_at, updated_at)
+      SELECT
+        gen_random_uuid(),
+        $1,
+        r.id,
+        $2,
+        NULL,
+        $3,
+        $3,
+        NOW(),
+        NOW()
+      FROM roles r
+      WHERE r.is_delivery_boy = true
+        AND r.is_active = true
+      ON CONFLICT DO NOTHING
+      `,
+      [userId, branchId, actorId],
+    );
+    return { success: true };
+  }
+
+  async removeDeliveryPerson(branchId: string, userId: string): Promise<{ success: boolean }> {
+    await this.branchRepository.manager.query(
+      `
+      DELETE FROM user_roles ur
+      USING roles r
+      WHERE ur.role_id = r.id
+        AND r.is_delivery_boy = true
+        AND ur.user_id = $1
+        AND ur.branch_id = $2
+      `,
+      [userId, branchId],
+    );
+    return { success: true };
+  }
+
+  async getDPAllocatedPages(branchId: string): Promise<any[]> {
+    // ── Step 1: Get delivery boy IDs + names for this branch (DB1) ──────────
+    const deliveryBoys: Array<{ userId: string; name: string }> =
+      await this.branchRepository.manager.query(
+        `
+        SELECT DISTINCT ur.user_id AS "userId", u.name
+        FROM user_roles ur
+        JOIN roles r   ON r.id  = ur.role_id
+        JOIN users u   ON u.id  = ur.user_id
+        WHERE ur.branch_id      = $1
+          AND r.is_delivery_boy = true
+          AND u.is_active       = true
+        `,
+        [branchId],
+      );
+
+    if (deliveryBoys.length === 0) return [];
+
+    const dpIds = deliveryBoys.map((d) => d.userId);
+    const dpNameMap = new Map(deliveryBoys.map((d) => [d.userId, d.name]));
+
+    // ── Step 2: Get non-voided pages owned by those DPs (DB2) ───────────────
+    const pages = await this.pageTrackingRepository.find({
+      where: { userId: In(dpIds), isVoided: false },
+      order: { userId: 'ASC', manualBookId: 'ASC', pageNo: 'ASC' },
+    });
+
+    if (pages.length === 0) return [];
+
+    // ── Step 3: Fetch manual books for those pages (DB2) ────────────────────
+    const bookIds = [...new Set(pages.map((p) => p.manualBookId))];
+    const books = await this.manualBookRepository.find({ where: { id: In(bookIds) } });
+    const bookMap = new Map(books.map((b) => [b.id, b]));
+
+    // ── Step 4: Determine which assignedBy IDs are cashiers (DB1) ──────────
+    // assignedBy = who put pages with the DP (cashier via Map-to-DP, or BM directly)
+    const assignedByIds = [
+      ...new Set(pages.map((p) => p.assignedBy).filter(Boolean)),
+    ] as string[];
+    const cashierIds = new Set<string>();
+    if (assignedByIds.length > 0) {
+      const cashierRows: Array<{ user_id: string }> =
+        await this.branchRepository.manager.query(
+          `
+          SELECT DISTINCT ur.user_id
+          FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = ANY($1) AND r.is_cashier = true
+          `,
+          [assignedByIds],
+        );
+      cashierRows.forEach((r) => cashierIds.add(r.user_id));
+    }
+
+    // ── Step 5: Resolve assignedBy user names (DB1) ──────────────────────────
+    const userNameMap = new Map<string, string>();
+    if (assignedByIds.length > 0) {
+      const users = await this.branchRepository.manager.find(User, {
+        where: { id: In(assignedByIds) },
+      });
+      users.forEach((u) => userNameMap.set(u.id, u.name));
+    }
+
+    // ── Step 6: Group by DP + book, split into contiguous MV segments ───────
+    const byKey = new Map<string, typeof pages>();
+    for (const page of pages) {
+      const key = `${page.userId}::${page.manualBookId}`;
+      const list = byKey.get(key) ?? [];
+      list.push(page);
+      byKey.set(key, list);
+    }
+
+    const rows: any[] = [];
+    for (const [, segPages] of byKey) {
+      const sorted = [...segPages].sort((a, b) => a.pageNo - b.pageNo);
+      const book = bookMap.get(sorted[0].manualBookId);
+      if (!book) continue;
+
+      let segStart = 0;
+      for (let i = 1; i <= sorted.length; i++) {
+        if (i === sorted.length || sorted[i].pageNo !== sorted[i - 1].pageNo + 1) {
+          const seg = sorted.slice(segStart, i);
+          const mvFrom = seg[0].pageNo;
+          const mvTo = seg[seg.length - 1].pageNo;
+          const bookNoFrom =
+            book.bookNoFrom + Math.floor((mvFrom - book.mvNoFrom) / book.vouchersPerBook);
+          const bookNoTo =
+            book.bookNoFrom + Math.floor((mvTo - book.mvNoFrom) / book.vouchersPerBook);
+
+          const assignedBy = seg[0].assignedBy ?? null;
+          const isCashierAssignment = !!assignedBy && cashierIds.has(assignedBy);
+
+          rows.push({
+            dpUserId: seg[0].userId,
+            dpName: dpNameMap.get(seg[0].userId) ?? seg[0].userId,
+            manualBookId: book.id,
+            dispatchNo: book.no,
+            txnType: book.transactionType,
+            bookNoFrom,
+            bookNoTo,
+            mvFrom,
+            mvTo,
+            pageCount: seg.length,
+            // Who put these pages with the DP (cashier via Map-to-DP, or BM directly)
+            assignedByUserId: assignedBy,
+            assignedByName: assignedBy ? (userNameMap.get(assignedBy) ?? null) : null,
+            returnToUserId: isCashierAssignment ? assignedBy : null,
+            returnToUserName: isCashierAssignment ? (userNameMap.get(assignedBy!) ?? null) : null,
+            pageIds: seg.map((p) => p.id),
+            book: {
+              id: book.id,
+              no: book.no,
+              bookNoFrom: book.bookNoFrom,
+              bookNoTo: book.bookNoTo,
+              vouchersPerBook: book.vouchersPerBook,
+              mvNoFrom: book.mvNoFrom,
+              mvNoTo: book.mvNoTo,
+              branchId: book.branchId,
+              transactionType: book.transactionType,
+            },
+          });
+          segStart = i;
+        }
+      }
+    }
+
+    return rows;
+  }
+
+  async unmapFromDP(params: {
+    dpUserId: string;
+    mvFrom: number;
+    mvTo: number;
+    manualBookId: string;
+    remarks?: string;
+    executorId: string;
+  }): Promise<{ success: boolean }> {
+    // Fetch pages owned by this DP in the given MV range
+    const pages = await this.pageTrackingRepository.find({
+      where: {
+        userId: params.dpUserId,
+        manualBookId: params.manualBookId,
+        pageNo: Between(params.mvFrom, params.mvTo),
+        isVoided: false,
+      },
+    });
+
+    if (pages.length === 0) {
+      throw new BadRequestException(
+        'No pages found for the specified delivery person in the given range.',
+      );
+    }
+
+    // Validate all pages belong to the stated DP (extra safety)
+    const mismatched = pages.filter((p) => p.userId !== params.dpUserId);
+    if (mismatched.length > 0) {
+      throw new BadRequestException(
+        'One or more pages are not currently assigned to the specified delivery person.',
+      );
+    }
+
+    // Determine which assignedBy IDs are cashiers (source-of-truth per spec)
+    const assignedByIds = [...new Set(pages.map((p) => p.assignedBy).filter(Boolean))] as string[];
+    const cashierIds = new Set<string>();
+    if (assignedByIds.length > 0) {
+      const cashierRows: Array<{ user_id: string }> = await this.branchRepository.manager.query(
+        `
+        SELECT DISTINCT ur.user_id
+        FROM user_roles ur
+        JOIN roles r ON ur.role_id = r.id
+        WHERE ur.user_id = ANY($1) AND r.is_cashier = true
+        `,
+        [assignedByIds],
+      );
+      cashierRows.forEach((r) => cashierIds.add(r.user_id));
+    }
+
+    const toReturn: ManualBookPageTracking[] = [];
+    const toDeleteIds: string[] = [];
+
+    for (const page of pages) {
+      if (page.assignedBy && cashierIds.has(page.assignedBy)) {
+        // assignedBy is a Cashier → return pages to that Cashier, keep assignedBy unchanged
+        page.userId = page.assignedBy;
+        page.updatedBy = params.executorId;
+        if (params.remarks) page.remarks = params.remarks;
+        toReturn.push(page);
+      } else {
+        // assignedBy is BM (or null) → delete records, pages released to BM pool
+        toDeleteIds.push(page.id);
+      }
+    }
+
+    if (toReturn.length > 0) {
+      await this.pageTrackingRepository.save(toReturn);
+    }
+    if (toDeleteIds.length > 0) {
+      await this.pageTrackingRepository.delete(toDeleteIds);
+    }
+
+    return { success: true };
+  }
+
   async validateBookRange(
     bookNoFrom: number,
     bookNoTo: number,
@@ -900,6 +1250,7 @@ export class ManualBillBookService {
         bookNoFrom,
         bookNoTo,
       })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
@@ -921,6 +1272,7 @@ export class ManualBillBookService {
         mvNoFrom,
         mvNoTo,
       })
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {
