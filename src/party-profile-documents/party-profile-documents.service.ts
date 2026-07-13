@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { StreamableFile } from '@nestjs/common';
 import type { PartyProfileDocumentUploadFile } from './party-profile-document-upload-file';
 import { SelectOption } from '../category-options/category-option.entity';
@@ -86,11 +86,13 @@ export class PartyProfileDocumentsService {
       throw new NotFoundException(`Party profile with id ${partyProfileId} not found`);
     }
 
+    const documentGroupSelection = await this.resolveDocumentGroupSelection(partyProfile.group);
+
     const profiles = await this.loadMatchingDocumentProfiles(
       partyProfile.type,
-      await this.resolveDocumentGroupSelection(partyProfile.group),
-      partyProfile.entityType?.id ?? null,
+      documentGroupSelection,
     );
+
     const profileIds = profiles.map(profile => profile.id);
     const existingDocuments = profileIds.length
       ? await this.partyProfileDocumentRepository.find({
@@ -148,8 +150,8 @@ export class PartyProfileDocumentsService {
     const allowedProfiles = await this.loadMatchingDocumentProfiles(
       partyProfile.type,
       await this.resolveDocumentGroupSelection(partyProfile.group),
-      partyProfile.entityType?.id ?? null,
     );
+
     const allowedProfile = allowedProfiles.find(profile => profile.id === documentProfileId);
 
     if (!allowedProfile) {
@@ -235,9 +237,8 @@ export class PartyProfileDocumentsService {
   private async loadMatchingDocumentProfiles(
     type?: string | null,
     documentGroupSelection?: string | null,
-    entitySelection?: string | null,
   ) {
-    if (!type || !entitySelection) {
+    if (!type) {
       return [];
     }
 
@@ -245,7 +246,6 @@ export class PartyProfileDocumentsService {
       .createQueryBuilder('documentProfile')
       .leftJoinAndSelect('documentProfile.type', 'type')
       .leftJoinAndSelect('documentProfile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('documentProfile.entitySelection', 'entitySelection')
       .where('1 = 1')
       .andWhere('documentProfile.active = true')
       .andWhere('documentProfile.specificationType = :specificationType', {
@@ -258,14 +258,16 @@ export class PartyProfileDocumentsService {
     );
 
     if (documentGroupSelection) {
-      queryBuilder.andWhere('documentProfile.groupSelection = :groupSelection', {
-        groupSelection: documentGroupSelection,
-      });
+      queryBuilder.andWhere(
+        new Brackets(brackets => {
+          brackets
+            .where('documentProfile.groupSelection = :groupSelection', {
+              groupSelection: documentGroupSelection,
+            })
+            .orWhere('documentProfile.groupSelection IS NULL');
+        }),
+      );
     }
-
-    queryBuilder.andWhere('documentProfile.entitySelection = :entitySelection', {
-      entitySelection,
-    });
 
     const profiles = await queryBuilder
       .orderBy('documentProfile.sortOrder', 'ASC')
@@ -279,6 +281,7 @@ export class PartyProfileDocumentsService {
     if (!partyGroup?.value) {
       return null;
     }
+
     const documentGroup = await this.selectOptionRepository.findOne({
       where: {
         code: CategoryOptionCodeEnum.DocumentGroup,
