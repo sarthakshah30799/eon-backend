@@ -182,7 +182,7 @@ export class ReassignManualBookDto {
   @ApiProperty({ description: 'Transaction Type', required: false })
   @IsString()
   @IsOptional()
-  transactionType?: string;
+  transactionType?: TransactionTypeProfile;
 
   @ApiProperty({ description: 'Book No. From', required: false })
   @IsNumber()

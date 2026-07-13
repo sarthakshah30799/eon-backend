@@ -321,7 +321,7 @@ export class ManualBillBookService {
       assignedTo: string;
       remarks?: string;
       dispatchDate?: string;
-      transactionType?: string;
+      transactionType?: TransactionTypeProfile;
       bookNoFrom?: number;
       bookNoTo?: number;
       vouchersPerBook?: number;
