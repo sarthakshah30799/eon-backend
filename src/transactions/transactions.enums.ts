@@ -86,3 +86,8 @@ export const TransactionLogAction = {
 
 export type TransactionLogAction =
   (typeof TransactionLogAction)[keyof typeof TransactionLogAction];
+
+export enum TransactionProfileType {
+  AD1 = "AD1",
+}
+

@@ -37,6 +37,15 @@ type UploadedDraftFile = {
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
+  @Get('ad1/agents')
+  @ApiOperation({ summary: 'Get agents for AD1 transactions' })
+  async getAd1Agents(
+    @Query('branchId') branchId: string,
+    @Query('search') search?: string,
+  ): Promise<any[]> {
+    return this.transactionsService.getAd1Agents(branchId, search);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get transactions filtered by slug and current branch' })
   @ApiResponse({ status: 200, description: 'List of transactions', type: [Transaction] })

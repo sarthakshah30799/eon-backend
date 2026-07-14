@@ -10,6 +10,7 @@ import { TransactionItem } from './entities/transaction-item.entity';
 import { TransactionDocument } from './entities/transaction-document.entity';
 import { TransactionAdditionalCharge } from './entities/transaction-additional-charge.entity';
 import { TransactionPayment } from './entities/transaction-payment.entity';
+import { TransactionAd1 } from './entities/transaction-ad1.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
@@ -17,6 +18,7 @@ import { StorageService } from '../storage/storage.service';
 import { TransactionReferenceSnapshotValue } from './types/transaction-snapshot.types';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
+import { Branch } from '../branches/branch.entity';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -31,6 +33,8 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction, 'database2')
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(TransactionAd1, 'database2')
+    private readonly transactionAd1Repository: Repository<TransactionAd1>,
     @InjectRepository(TransactionItem, 'database2')
     private readonly transactionItemRepository: Repository<TransactionItem>,
     @InjectRepository(TransactionDocument, 'database2')
@@ -51,9 +55,37 @@ export class TransactionsService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
+    @InjectRepository(Branch)
+    private readonly branchRepository: Repository<Branch>,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
-  ) {}
+  ) { }
+
+  async getAd1Agents(
+    branchId: string,
+    search?: string,
+  ): Promise<any[]> {
+    if (!branchId) {
+      return [];
+    }
+
+    const qb = this.partyProfileRepository
+      .createQueryBuilder("pp")
+      .where("pp.branchId = :branchId", { branchId })
+      .andWhere("pp.type = :type", { type: 'AGENT' })
+      .andWhere("pp.active = :active", { active: true });
+
+    if (search) {
+      qb.andWhere(
+        "(pp.code ILIKE :search OR pp.name ILIKE :search)",
+        { search: `%${search}%` },
+      );
+    }
+
+    qb.orderBy("pp.createdAt", "DESC");
+
+    return qb.getMany();
+  }
 
   private parseJsonField<T>(value: unknown, fallback: T): T {
     if (value === undefined || value === null || value === '') {
@@ -758,6 +790,10 @@ export class TransactionsService {
   }
 
   async getTransactionById(id: string): Promise<Transaction | null> {
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(id)) {
+      return null;
+    }
     const transaction = await this.transactionRepository.findOne({
       where: { id },
       relations: {

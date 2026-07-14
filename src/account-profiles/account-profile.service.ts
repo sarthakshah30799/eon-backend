@@ -311,6 +311,10 @@ export class AccountProfileService {
       qb.andWhere("ap.bulkPurchase = :bulkPurchase", { bulkPurchase: query.bulkPurchase });
     }
 
+    if (query.bulkSale !== undefined) {
+      qb.andWhere("ap.bulkSale = :bulkSale", { bulkSale: query.bulkSale });
+    }
+
     qb.orderBy("ap.createdAt", "DESC").skip(skip).take(limit);
 
     const [data, totalItems] = await qb.getManyAndCount();
