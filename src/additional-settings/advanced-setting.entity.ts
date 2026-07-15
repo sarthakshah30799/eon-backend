@@ -1,6 +1,5 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
-import { Company } from "../company/company.entity";
 import { TransactionTypeProfileEnum } from "../transactions/transactions.enums";
 
 export enum NodeType {
@@ -18,9 +17,9 @@ export enum ValueType {
   Json = "json",
 }
 
-@Index(["companyId", "code"], { unique: true })
-@Index(["companyId", "parentId", "sortOrder"])
-@Index(["companyId", "nodeType", "isActive"])
+@Index(["code"], { unique: true })
+@Index(["parentId", "sortOrder"])
+@Index(["nodeType", "isActive"])
 @Check(
   "CHK_advanced_settings_transaction_number_series_length",
   `UPPER("code") NOT IN (${Object.values(TransactionTypeProfileEnum)
@@ -29,16 +28,6 @@ export enum ValueType {
 )
 @Entity("advanced_settings")
 export class AdvancedSetting extends BaseEntity {
-  @ManyToOne(() => Company, {
-    nullable: false,
-    onDelete: "RESTRICT",
-  })
-  @JoinColumn({ name: "company_id" })
-  company: Company;
-
-  @Column({ name: "company_id", type: "uuid" })
-  companyId: string;
-
   @ManyToOne(() => AdvancedSetting, (setting) => setting.children, {
     nullable: true,
     onDelete: "CASCADE",

@@ -19,7 +19,6 @@ import {
 type PolicyCreateContext = {
   dto: CreateCategoryDto;
   savedCategory: AdvancedSetting;
-  companyId: string;
   userId: string;
 };
 
@@ -137,7 +136,7 @@ export class AdditionalSettingService {
   private getPolicyHandlers(): Record<string, PolicyHandler> {
     return {
       [PasswordPolicyCodeEnum.Policy]: {
-        createChildren: async ({ dto, savedCategory, companyId, userId }) => {
+        createChildren: async ({ dto, savedCategory, userId }) => {
           const createdChildren: AdvancedSetting[] = [];
 
           for (const [index, sub] of (dto.subcategories || []).entries()) {
@@ -161,7 +160,6 @@ export class AdditionalSettingService {
             }
 
             const child = this.settingRepository.create({
-              companyId,
               parentId: savedCategory.id,
               code,
               label: sub.title.trim(),
@@ -217,13 +215,12 @@ export class AdditionalSettingService {
         },
       },
       [SessionPolicyCodeEnum.Policy]: {
-        createChildren: async ({ dto, savedCategory, companyId, userId }) => {
+        createChildren: async ({ dto, savedCategory, userId }) => {
           const createdChildren: AdvancedSetting[] = [];
 
           for (const [index, sub] of (dto.subcategories || []).entries()) {
             const code = normalizeCode(sub.code) as SessionPolicyCodeEnum;
             const child = this.settingRepository.create({
-              companyId,
               parentId: savedCategory.id,
               code,
               label: sub.title.trim(),
@@ -342,7 +339,6 @@ export class AdditionalSettingService {
   }
 
   async reserveTransactionNumber(
-    companyId: string,
     seriesCode: string,
     branchCode: string,
     referenceDate = new Date(),
@@ -485,13 +481,11 @@ export class AdditionalSettingService {
   }
 
   async getSettingTextValue(
-    companyId: string,
     categoryCode: string,
     subcategoryCode: string,
   ): Promise<string | null> {
     const setting = await this.settingRepository.findOne({
       where: {
-        companyId,
         code: normalizeCode(subcategoryCode),
         nodeType: NodeType.Setting,
       },
@@ -505,7 +499,6 @@ export class AdditionalSettingService {
       ? await this.settingRepository.findOne({
           where: {
             id: setting.parentId,
-            companyId,
             code: normalizeCode(categoryCode),
             nodeType: NodeType.Category,
           },
@@ -540,15 +533,9 @@ export class AdditionalSettingService {
   }
 
   async create(dto: CreateCategoryDto, userId: string): Promise<AdvancedSetting> {
-    const company = await this.passwordPolicyService.getCompany();
-    if (!company) {
-      throw new NotFoundException('Company not found');
-    }
-
-    const companyId = company.id;
     const categoryCode = normalizeCode(dto.code);
     const existing = await this.settingRepository.findOne({
-      where: { companyId, code: categoryCode, nodeType: NodeType.Category },
+      where: { code: categoryCode, nodeType: NodeType.Category },
     });
 
     if (existing) {
@@ -556,7 +543,6 @@ export class AdditionalSettingService {
     }
 
     const category = this.settingRepository.create({
-      companyId,
       code: categoryCode,
       label: dto.title.trim(),
       nodeType: NodeType.Category,
@@ -572,13 +558,11 @@ export class AdditionalSettingService {
         await handler.createChildren({
           dto,
           savedCategory,
-          companyId,
           userId,
         });
       } else if (dto.subcategories?.length) {
         for (const sub of dto.subcategories) {
           const child = this.settingRepository.create({
-            companyId,
             parentId: savedCategory.id,
             code: normalizeCode(sub.code),
             label: sub.title.trim(),
@@ -645,7 +629,6 @@ export class AdditionalSettingService {
         let child = currentChildren.find(c => normalizeCode(c.code) === code);
         if (!child) {
           child = this.settingRepository.create({
-            companyId: category.companyId,
             parentId: category.id,
             code,
             nodeType: NodeType.Setting,

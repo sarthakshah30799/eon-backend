@@ -68,6 +68,33 @@ export const TransactionPaymentDirection = {
 export type TransactionPaymentDirection =
   (typeof TransactionPaymentDirection)[keyof typeof TransactionPaymentDirection];
 
+export const TransactionPostingDirection = {
+  DEBIT: "DEBIT",
+  CREDIT: "CREDIT",
+} as const;
+
+export type TransactionPostingDirection =
+  (typeof TransactionPostingDirection)[keyof typeof TransactionPostingDirection];
+
+export const TransactionPostingSourceType = {
+  ITEM: "ITEM",
+  ITEM_PROFIT: "ITEM_PROFIT",
+  ITEM_SALE: "ITEM_SALE",
+  PARTY_CONTROL: "PARTY_CONTROL",
+  ADDITIONAL_CHARGE: "ADDITIONAL_CHARGE",
+  PAYMENT: "PAYMENT",
+} as const;
+
+export type TransactionPostingSourceType =
+  (typeof TransactionPostingSourceType)[keyof typeof TransactionPostingSourceType];
+
+export const TransactionEventType = {
+  ACCOUNT_POSTINGS_REBUILD: "ACCOUNT_POSTINGS_REBUILD",
+} as const;
+
+export type TransactionEventType =
+  (typeof TransactionEventType)[keyof typeof TransactionEventType];
+
 export const TransactionEventStatus = {
   PENDING: "PENDING",
   PROCESSING: "PROCESSING",
@@ -97,4 +124,3 @@ export type TransactionLogAction =
 export enum TransactionProfileType {
   AD1 = "AD1",
 }
-

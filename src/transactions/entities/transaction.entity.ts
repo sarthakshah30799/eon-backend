@@ -17,6 +17,7 @@ import { TransactionItem } from "./transaction-item.entity";
 import { TransactionDocument } from "./transaction-document.entity";
 import { TransactionAdditionalCharge } from "./transaction-additional-charge.entity";
 import { TransactionPayment } from "./transaction-payment.entity";
+import { TransactionAccountPosting } from "./transaction-account-posting.entity";
 import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
 import {
@@ -145,6 +146,21 @@ export class Transaction extends BaseEntity {
   @Column({ type: "boolean", name: "is_latest", default: true })
   isLatest: boolean;
 
+  @Column({ type: "numeric", name: "by_cash", precision: 18, scale: 2, nullable: true })
+  byCash: string | null;
+
+  @Column({ type: "numeric", name: "by_cheque", precision: 18, scale: 2, nullable: true })
+  byCheque: string | null;
+
+  @Column({ type: "numeric", name: "by_card", precision: 18, scale: 2, nullable: true })
+  byCard: string | null;
+
+  @Column({ type: "numeric", name: "by_transfer", precision: 18, scale: 2, nullable: true })
+  byTransfer: string | null;
+
+  @Column({ type: "numeric", name: "by_other", precision: 18, scale: 2, nullable: true })
+  byOther: string | null;
+
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];
 
@@ -159,6 +175,9 @@ export class Transaction extends BaseEntity {
 
   @OneToMany(() => TransactionPayment, (payment) => payment.transaction)
   payments: TransactionPayment[];
+
+  @OneToMany(() => TransactionAccountPosting, (posting) => posting.transaction)
+  postings: TransactionAccountPosting[];
 
   @OneToMany(() => TransactionLog, (log) => log.transaction)
   logs: TransactionLog[];

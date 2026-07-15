@@ -17,6 +17,7 @@ import {
 @Index("IDX_transaction_items_transaction_line", ["transactionId", "lineNo"], {
   unique: true,
 })
+@Index("IDX_transaction_items_account_id", ["accountId"])
 @Entity("transaction_items")
 export class TransactionItem extends BaseEntity {
   @Column({ type: "uuid", name: "transaction_id" })
@@ -40,6 +41,12 @@ export class TransactionItem extends BaseEntity {
   @Column({ type: "uuid", name: "product_id" })
   productId: string;
 
+  @Column({ type: "uuid", name: "account_id", nullable: true })
+  accountId: string | null;
+
+  @Column({ type: "jsonb", name: "account_snapshot", nullable: true })
+  accountSnapshot: TransactionReferenceSnapshotValue;
+
   @Column({ type: "uuid", name: "currency_rate_id", nullable: true })
   currencyRateId: string | null;
 
@@ -61,6 +68,12 @@ export class TransactionItem extends BaseEntity {
 
   @Column({ type: "numeric", name: "commission", precision: 18, scale: 2, nullable: true })
   commission: string | null;
+
+  @Column({ type: "numeric", name: "hold_cost", precision: 18, scale: 7, nullable: true })
+  holdCost: string | null;
+
+  @Column({ type: "numeric", name: "profit", precision: 18, scale: 2, nullable: true })
+  profit: string | null;
 
   @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
   currencySnapshot: TransactionReferenceSnapshotValue;

@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   Res,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ParseUUIDPipe } from '@nestjs/common';
@@ -55,6 +56,8 @@ export class TransactionsController {
     @Query('branchId') branchId?: string,
     @Query('search') search?: string,
     @Query('status') status?: string,
+    @Query('partyProfileId') partyProfileId?: string,
+    @Query('transactionType') transactionType?: string,
   ): Promise<Transaction[]> {
     const effectiveBranchId = session?.isAdmin ? branchId : session?.activeBranchId;
     return this.transactionsService.getTransactions(
@@ -62,6 +65,24 @@ export class TransactionsController {
       effectiveBranchId,
       search,
       status as any,
+      partyProfileId,
+      transactionType as any,
+    );
+  }
+
+  @Post(':id/account-postings/rebuild')
+  @ApiOperation({ summary: 'Queue a manual account posting rebuild for a transaction' })
+  async requestAccountPostingRebuild(
+    @Param('id') transactionId: string,
+    @Session() session: any,
+  ): Promise<{ message: string }> {
+    if (!session?.userId) {
+      throw new BadRequestException('User session not found');
+    }
+
+    return this.transactionsService.requestAccountPostingRebuild(
+      transactionId,
+      session.userId,
     );
   }
 
