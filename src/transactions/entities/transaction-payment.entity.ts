@@ -8,6 +8,7 @@ import {
 import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "./transaction.entity";
 import {
+  TransactionPaymentDirection,
   TransactionPaymentMethod,
 } from "../transactions.enums";
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
@@ -57,6 +58,15 @@ export class TransactionPayment extends BaseEntity {
     default: TransactionPaymentMethod.OTHER,
   })
   paymentMethod: TransactionPaymentMethod;
+
+  @Column({
+    type: "enum",
+    enum: TransactionPaymentDirection,
+    enumName: "transaction_payments_direction_enum",
+    default: TransactionPaymentDirection.PAYMENT,
+  })
+  paymentDirection:
+    (typeof TransactionPaymentDirection)[keyof typeof TransactionPaymentDirection];
 
   @Column({
     type: "varchar",

@@ -60,6 +60,14 @@ export const TransactionPaymentMethod = {
 export type TransactionPaymentMethod =
   (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
 
+export const TransactionPaymentDirection = {
+  PAYMENT: "PAYMENT",
+  RECEIPT: "RECEIPT",
+} as const;
+
+export type TransactionPaymentDirection =
+  (typeof TransactionPaymentDirection)[keyof typeof TransactionPaymentDirection];
+
 export const TransactionEventStatus = {
   PENDING: "PENDING",
   PROCESSING: "PROCESSING",

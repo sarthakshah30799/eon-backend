@@ -4,7 +4,13 @@ import { Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { TransactionLog } from './entities/transaction-log.entity';
 import { Transaction } from './entities/transaction.entity';
-import { TransactionLogAction, TransactionDocumentStatus, TransactionStatus } from './transactions.enums';
+import {
+  TransactionLogAction,
+  TransactionDocumentStatus,
+  TransactionPaymentDirection,
+  TransactionStatus,
+  TransactionType,
+} from './transactions.enums';
 import { RecordTransactionPrintDto } from './dto/record-transaction-print.dto';
 import { TransactionItem } from './entities/transaction-item.entity';
 import { TransactionDocument } from './entities/transaction-document.entity';
@@ -614,6 +620,10 @@ export class TransactionsService {
     const paymentRows = Array.isArray(transactionPayload.payments)
       ? transactionPayload.payments
       : [];
+    const paymentDirection =
+      transactionPayload.transactionType === TransactionType.SALE
+        ? TransactionPaymentDirection.RECEIPT
+        : TransactionPaymentDirection.PAYMENT;
     for (let index = 0; index < paymentRows.length; index += 1) {
       const row = paymentRows[index];
       const account = await resolveAccount(String(row.accountId));
@@ -640,6 +650,7 @@ export class TransactionsService {
           chequePageId: row.chequePageId ?? null,
           chequePageSnapshot,
           paymentMethod: row.paymentMethod,
+          paymentDirection,
           referenceNumber: row.referenceNumber ?? null,
           referenceDate: row.referenceDate ?? null,
           branchName: row.branchName ?? null,
