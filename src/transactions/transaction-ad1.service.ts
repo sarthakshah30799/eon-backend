@@ -4,6 +4,10 @@ import { Repository } from 'typeorm';
 import { TransactionAd1 } from './entities/transaction-ad1.entity';
 import { Branch } from '../branches/branch.entity';
 import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
+import { Currency } from '../currencies/currency.entity';
+import { SelectOption } from '../category-options/category-option.entity';
+import { AccountProfile } from '../account-profiles/account-profile.entity';
+import { Product } from '../products/product.entity';
 import { TransactionProfileType, TransactionType } from './transactions.enums';
 
 @Injectable()
@@ -15,7 +19,76 @@ export class TransactionAd1Service {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
+    @InjectRepository(Currency)
+    private readonly currencyRepository: Repository<Currency>,
+    @InjectRepository(SelectOption)
+    private readonly selectOptionRepository: Repository<SelectOption>,
+    @InjectRepository(AccountProfile)
+    private readonly accountProfileRepository: Repository<AccountProfile>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  private async resolveSnapshots(payload: Record<string, any>): Promise<Partial<TransactionAd1>> {
+    const snapshots: Partial<TransactionAd1> = {};
+
+    if (payload.branchId) {
+      const branch = await this.branchRepository.findOne({
+        where: { id: payload.branchId },
+        relations: ['company'],
+      });
+      snapshots.branchSnapshot = branch ?? null;
+    }
+
+    if (payload.currencyId) {
+      const currency = await this.currencyRepository.findOne({ where: { id: payload.currencyId } });
+      snapshots.currencySnapshot = currency ?? null;
+    }
+
+    if (payload.productId) {
+      const product = await this.productRepository.findOne({ where: { id: payload.productId } });
+      snapshots.productSnapshot = product ?? null;
+    }
+
+    if (payload.agentId) {
+      const agent = await this.partyProfileRepository.findOne({
+        where: { id: payload.agentId },
+        relations: ['commissionRules'],
+      });
+      snapshots.agentSnapshot = agent ?? null;
+    }
+
+    if (payload.bankNameId) {
+      const bank = await this.accountProfileRepository.findOne({ where: { id: payload.bankNameId } });
+      snapshots.bankSnapshot = bank ?? null;
+    }
+
+    if (payload.marketingId) {
+      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.marketingId } });
+      snapshots.marketingSnapshot = opt ?? null;
+    }
+
+    if (payload.segmentId) {
+      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.segmentId } });
+      snapshots.segmentSnapshot = opt ?? null;
+    }
+
+    if (payload.purposeId) {
+      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.purposeId } });
+      snapshots.purposeSnapshot = opt ?? null;
+    }
+
+    if (payload.relationshipId) {
+      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.relationshipId } });
+      snapshots.relationshipSnapshot = opt ?? null;
+    }
+
+    return snapshots;
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
 
   async getAgents(params: { branchId?: string; search?: string }): Promise<{ id: string; code: string; name: string }[]> {
     const query = this.partyProfileRepository.createQueryBuilder('pp')
@@ -47,6 +120,8 @@ export class TransactionAd1Service {
       relations: ['company'],
     });
     const companyId = branch?.company?.id ?? null;
+
+    const snapshots = await this.resolveSnapshots(payload);
 
     const ad1 = await this.repo.save(
       this.repo.create({
@@ -90,9 +165,7 @@ export class TransactionAd1Service {
         settlementRate: payload.settlementRate || null,
         grossRevenue: payload.grossRevenue || null,
         revenueReceivable: payload.revenueReceivable || null,
-        fxRefAgentId: payload.fxRefAgentId || null,
-        commGivenId: payload.commGivenId || null,
-        commPercentOnFe: payload.commPercentOnFe || null,
+        agentId: payload.agentId || payload.fxRefAgentId || null,
         agentComm: payload.agentComm || null,
         tds: payload.tds || null,
         commissionPayable: payload.commissionPayable || null,
@@ -100,6 +173,8 @@ export class TransactionAd1Service {
         bankNameId: payload.bankNameId || null,
         rtgsImpsNeftRefNo: payload.rtgsImpsNeftRefNo || null,
         remarks: payload.remarks || null,
+
+        ...snapshots,
       }),
     );
 
@@ -153,8 +228,8 @@ export class TransactionAd1Service {
       'beneBankName', 'swiftCode', 'relationshipId', 'currencyId', 'fcVolume',
       'saleRate', 'totalInrAmt', 'gst', 'bankCharges', 'tcs', 'otherIncome',
       'finalAmount', 'settlementRate', 'grossRevenue', 'revenueReceivable',
-      'fxRefAgentId', 'commGivenId', 'commPercentOnFe', 'agentComm', 'tds',
-      'commissionPayable', 'netRevenue', 'bankNameId', 'rtgsImpsNeftRefNo', 'remarks',
+      'agentId', 'agentComm', 'tds', 'commissionPayable', 'netRevenue',
+      'bankNameId', 'rtgsImpsNeftRefNo', 'remarks',
     ];
 
     for (const field of fields) {
@@ -162,6 +237,17 @@ export class TransactionAd1Service {
         (ad1 as any)[field] = payload[field] || null;
       }
     }
+
+    // Handle legacy fxRefAgentId field name from frontend
+    if (payload.fxRefAgentId !== undefined && payload.agentId === undefined) {
+      ad1.agentId = payload.fxRefAgentId || null;
+    }
+
+    const snapshots = await this.resolveSnapshots({
+      ...payload,
+      agentId: payload.agentId ?? payload.fxRefAgentId,
+    });
+    Object.assign(ad1, snapshots);
 
     ad1.updatedBy = performedById;
     await this.repo.save(ad1);

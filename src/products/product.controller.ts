@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Session,
 } from '@nestjs/common';
@@ -27,8 +28,14 @@ export class ProductController {
   @Get()
   @ApiOperation({ summary: 'Get all products' })
   @ApiResponse({ status: 200, description: 'List of products', type: [ProductResponseDto] })
-  async findAll(): Promise<ProductResponseDto[]> {
-    return this.productService.findAll();
+  async findAll(
+    @Query('bulkBuying') bulkBuying?: string,
+    @Query('bulkSelling') bulkSelling?: string,
+  ): Promise<ProductResponseDto[]> {
+    return this.productService.findAll({
+      bulkBuying: bulkBuying === 'true',
+      bulkSelling: bulkSelling === 'true',
+    });
   }
 
   @Get(':id')
