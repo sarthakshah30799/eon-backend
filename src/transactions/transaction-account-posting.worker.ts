@@ -380,7 +380,7 @@ export class TransactionAccountPostingWorker
       const rows = await this.database2.query(
         `
           SELECT COALESCE(
-            SUM((ti.quantity::numeric * ti.rate::numeric)) / NULLIF(SUM(ti.quantity::numeric), 0),
+            SUM((ti.quantity::numeric * (ti.rate::numeric / COALESCE(NULLIF(ti.per::numeric, 0), 1)))) / NULLIF(SUM(ti.quantity::numeric), 0),
             0
           ) AS average_cost
           FROM transaction_items ti
@@ -508,7 +508,9 @@ export class TransactionAccountPostingWorker
 
       const quantity = Number(item.quantity);
       const rate = Number(item.rate);
-      const itemTotalAmount = Number(roundMoney(quantity * rate));
+      const per = Number(item.per ?? 1) || 1;
+      const unitRate = rate / per;
+      const itemTotalAmount = Number(roundMoney(quantity * unitRate));
 
       if (!isFinalStandardTransaction) {
         item.holdCost = null;
@@ -518,7 +520,7 @@ export class TransactionAccountPostingWorker
       }
 
       if (transaction.transactionType === TransactionType.PURCHASE) {
-        item.holdCost = roundToScale(rate, 7);
+        item.holdCost = roundToScale(unitRate, 7);
         item.profit = roundToScale(0, 2);
         addPosting(
           {
@@ -545,8 +547,8 @@ export class TransactionAccountPostingWorker
         item.currencyId,
         item.productCurrencyRateId,
       );
-      const holdCost = averageCost > 0 ? averageCost : rate;
-      const profitRate = rate - holdCost;
+      const holdCost = averageCost > 0 ? averageCost : unitRate;
+      const profitRate = unitRate - holdCost;
       const signedProfitAmount = Number(roundMoney(quantity * profitRate));
       const profitAmount = Math.abs(signedProfitAmount);
       const saleAmount = Number(roundMoney(itemTotalAmount - signedProfitAmount));
@@ -635,7 +637,8 @@ export class TransactionAccountPostingWorker
       const itemTotal = sortedItems.reduce((sum, currentItem) => {
         const quantity = Number(currentItem.quantity);
         const rate = Number(currentItem.rate);
-        return sum + Number(roundMoney(quantity * rate));
+        const per = Number(currentItem.per ?? 1) || 1;
+        return sum + Number(roundMoney(quantity * (rate / per)));
       }, 0);
       const chargeTotal = chargeRows.reduce(
         (sum, currentCharge) => sum + Number(roundMoney(Number(currentCharge.amount))),
