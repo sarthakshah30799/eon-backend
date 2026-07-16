@@ -30,8 +30,13 @@ export class TransactionAccountPosting extends BaseEntity {
   @Column({ type: "integer", name: "line_no" })
   lineNo: number;
 
-  @Column({ type: "varchar", length: 50, name: "source_type" })
-  sourceType: TransactionPostingSourceType | string;
+  @Column({
+    type: "enum",
+    enum: TransactionPostingSourceType,
+    enumName: "posting_source_type",
+    name: "source_type",
+  })
+  sourceType: TransactionPostingSourceType;
 
   @Column({ type: "uuid", name: "source_id", nullable: true })
   sourceId: string | null;
@@ -49,8 +54,9 @@ export class TransactionAccountPosting extends BaseEntity {
     type: "enum",
     enum: TransactionPostingDirection,
     enumName: "transaction_account_postings_direction_enum",
+    name: "direction",
   })
-  debitCredit: TransactionPostingDirection;
+  direction: TransactionPostingDirection;
 
   @Column({ type: "numeric", precision: 18, scale: 2 })
   amount: string;

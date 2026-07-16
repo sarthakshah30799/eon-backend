@@ -7,8 +7,8 @@ interface SnapshotTree {
 }
 
 const aliasFieldCandidates = {
-  code: ['code', 'shortCode', 'accountCode', 'currencyCode', 'documentCode', 'branchCode'],
-  name: ['name', 'accountName', 'currencyName', 'documentDescription', 'value', 'label'],
+  code: ['code', 'shortCode', 'accountCode', 'currencyCode', 'documentCode', 'branchCode', 'productCode'],
+  name: ['name', 'accountName', 'currencyName', 'documentDescription', 'value', 'label', 'productDescription'],
 };
 
 const shouldSkipRelation = (

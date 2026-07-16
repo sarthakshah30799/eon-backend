@@ -16,6 +16,7 @@ import {
   TradeMode,
   TransactionPaymentDirection,
   TransactionPostingDirection,
+  TransactionPostingSourceType,
   TransactionEventType,
   TransactionEventStatus,
 } from "./transactions.enums";
@@ -41,12 +42,12 @@ type PostingDraft = {
   transactionId: string;
   createdBy: string;
   updatedBy: string;
-  sourceType: string;
+  sourceType: TransactionPostingSourceType;
   sourceId: string | null;
   accountId: string;
   accountSnapshot: Record<string, unknown> | null;
   profileId: string | null;
-  debitCredit: TransactionPostingDirection;
+  direction: TransactionPostingDirection;
   amount: string;
   remarks: string | null;
 };
@@ -447,7 +448,7 @@ export class TransactionAccountPostingWorker
         posting.sourceType,
         posting.accountId,
         posting.profileId ?? "",
-        posting.debitCredit,
+        posting.direction,
       ].join("|");
 
       const existing = itemPostingGroups.get(key);
@@ -532,7 +533,7 @@ export class TransactionAccountPostingWorker
             accountId: itemAccount.id,
             accountSnapshot,
             profileId: null,
-            debitCredit: TransactionPostingDirection.DEBIT,
+            direction: TransactionPostingDirection.DEBIT,
             amount: roundMoney(itemTotalAmount),
             remarks: `Purchase item ${item.lineNo}`,
           },
@@ -570,7 +571,7 @@ export class TransactionAccountPostingWorker
           accountId: profitAccount.id,
           accountSnapshot: profitAccountSnapshot,
           profileId: null,
-          debitCredit:
+          direction:
             signedProfitAmount >= 0
               ? TransactionPostingDirection.CREDIT
               : TransactionPostingDirection.DEBIT,
@@ -590,7 +591,7 @@ export class TransactionAccountPostingWorker
           accountId: saleAccount.id,
           accountSnapshot: saleAccountSnapshot,
           profileId: null,
-          debitCredit: TransactionPostingDirection.CREDIT,
+          direction: TransactionPostingDirection.CREDIT,
           amount: roundMoney(saleAmount),
           remarks: `Sale amount item ${item.lineNo}`,
         },
@@ -656,7 +657,7 @@ export class TransactionAccountPostingWorker
           accountId: controlAccountId,
           accountSnapshot: controlAccountSnapshot,
           profileId: transaction.partyProfileId,
-          debitCredit: controlDirection,
+          direction: controlDirection,
           amount: roundMoney(controlAmountTotal),
           remarks:
             transaction.transactionType === TransactionType.PURCHASE
@@ -684,7 +685,7 @@ export class TransactionAccountPostingWorker
           accountId: charge.accountId,
           accountSnapshot,
           profileId: null,
-          debitCredit: TransactionPostingDirection.CREDIT,
+          direction: TransactionPostingDirection.CREDIT,
           amount: roundMoney(Number(charge.amount)),
           remarks: charge.remarks ?? null,
         },
@@ -701,7 +702,7 @@ export class TransactionAccountPostingWorker
           accountId: controlAccountId as string,
           accountSnapshot: controlAccountSnapshot,
           profileId: transaction.partyProfileId,
-          debitCredit: TransactionPostingDirection.DEBIT,
+          direction: TransactionPostingDirection.DEBIT,
           amount: roundMoney(Number(charge.amount)),
           remarks: `Additional charge control ${charge.lineNo}`,
         },
@@ -731,7 +732,7 @@ export class TransactionAccountPostingWorker
           accountId: payment.accountId,
           accountSnapshot,
           profileId: null,
-          debitCredit: paymentDirection,
+          direction: paymentDirection,
           amount,
           remarks: payment.remarks ?? null,
         },
@@ -748,7 +749,7 @@ export class TransactionAccountPostingWorker
           accountId: controlAccountId as string,
           accountSnapshot: controlAccountSnapshot,
           profileId: transaction.partyProfileId,
-          debitCredit:
+          direction:
             paymentDirection === TransactionPostingDirection.DEBIT
               ? TransactionPostingDirection.CREDIT
               : TransactionPostingDirection.DEBIT,
@@ -768,7 +769,7 @@ export class TransactionAccountPostingWorker
       accountId: posting.accountId,
       accountSnapshot: posting.accountSnapshot,
       profileId: posting.profileId,
-      debitCredit: posting.debitCredit,
+      direction: posting.direction,
       amount: roundMoney(posting.amountCents / 100),
       remarks: posting.remarks,
     }));
