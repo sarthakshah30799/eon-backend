@@ -101,6 +101,7 @@ export class TransactionsService {
 
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
+      .leftJoinAndSelect("pp.commissionRules", "commissionRules")
       .where("pp.branchId = :branchId", { branchId })
       .andWhere("pp.type = :type", { type: 'AGENT' })
       .andWhere("pp.active = :active", { active: true });

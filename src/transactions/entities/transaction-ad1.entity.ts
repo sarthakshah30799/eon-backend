@@ -133,14 +133,8 @@ export class TransactionAd1 extends BaseEntity {
   @Column({ type: "numeric", name: "revenue_receivable", precision: 18, scale: 2, nullable: true })
   revenueReceivable: string | null;
 
-  @Column({ type: "uuid", name: "fx_ref_agent_id", nullable: true })
-  fxRefAgentId: string | null;
-
-  @Column({ type: "uuid", name: "comm_given_id", nullable: true })
-  commGivenId: string | null;
-
-  @Column({ type: "numeric", name: "comm_percent_on_fe", precision: 18, scale: 4, nullable: true })
-  commPercentOnFe: string | null;
+  @Column({ type: "uuid", name: "agent_id", nullable: true })
+  agentId: string | null;
 
   @Column({ type: "numeric", name: "agent_comm", precision: 18, scale: 2, nullable: true })
   agentComm: string | null;
@@ -162,4 +156,32 @@ export class TransactionAd1 extends BaseEntity {
 
   @Column({ type: "text", name: "remarks", nullable: true })
   remarks: string | null;
+
+  // ── Snapshots (full entity JSON) ──────────────────────────────────────────
+  @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
+  branchSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
+  currencySnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "product_snapshot", nullable: true })
+  productSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "agent_snapshot", nullable: true })
+  agentSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "bank_snapshot", nullable: true })
+  bankSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "marketing_snapshot", nullable: true })
+  marketingSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "segment_snapshot", nullable: true })
+  segmentSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
+  purposeSnapshot: Record<string, any> | null;
+
+  @Column({ type: "jsonb", name: "relationship_snapshot", nullable: true })
+  relationshipSnapshot: Record<string, any> | null;
 }
