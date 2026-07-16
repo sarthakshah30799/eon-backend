@@ -8,9 +8,13 @@ import {
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
 
 @Index("IDX_transaction_account_postings_transaction_id", ["transactionId"])
-@Index("IDX_transaction_account_postings_transaction_line", ["transactionId", "lineNo"], {
-  unique: true,
-})
+@Index(
+  "IDX_transaction_account_postings_transaction_line",
+  ["transactionId", "lineNo"],
+  {
+    unique: true,
+  },
+)
 @Index("IDX_transaction_account_postings_account_id", ["accountId"])
 @Index("IDX_transaction_account_postings_profile_id", ["profileId"])
 @Entity("transaction_account_postings")
@@ -33,7 +37,6 @@ export class TransactionAccountPosting extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionPostingSourceType,
-    enumName: "posting_source_type",
     name: "source_type",
   })
   sourceType: TransactionPostingSourceType;
@@ -53,7 +56,6 @@ export class TransactionAccountPosting extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionPostingDirection,
-    enumName: "transaction_account_postings_direction_enum",
     name: "direction",
   })
   direction: TransactionPostingDirection;

@@ -631,23 +631,25 @@ export class MigrationToolService {
       return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey };
     }
 
-    const company = this.companyRepository.create({
-      name,
-      shortCode: toNullableString(row.vBranchCode),
-      formerlyKnownName: toNullableString(row.VCOMPANYNAME2),
-      cinNo: toNullableString(row.vRBIName),
-      panNo,
-      fxRegNo: toNullableString(row.VRBILICENCENUMBER),
-      fxRegDate: toNullableDate(row.FROMDATE),
-      fromDate: toNullableDate(row.FROMDATE),
-      toDate: toNullableDate(row.TODATE),
-      logo: toNullableString(row.LOGOPATH),
-      aeonLicNo: toNullableString(row.VRBILICENCENUMBER),
-      website: null,
-      email: null,
-      createdBy: context.actorUserId,
-      updatedBy: context.actorUserId,
-    });
+      const company = this.companyRepository.create({
+        name,
+        shortCode: toNullableString(row.vBranchCode),
+        formerlyKnownName: toNullableString(row.VCOMPANYNAME2),
+        cinNo: toNullableString(row.vRBIName),
+        panNo,
+        fxRegNo: toNullableString(row.VRBILICENCENUMBER),
+        fxRegDate: toNullableDate(row.FROMDATE),
+        fromDate: toNullableDate(row.FROMDATE),
+        toDate: toNullableDate(row.TODATE),
+        logo: toNullableString(row.LOGOPATH),
+        aeonLicNo: toNullableString(row.VRBILICENCENUMBER),
+        website: null,
+        email: null,
+        createdBy: context.actorUserId,
+        updatedBy: context.actorUserId,
+        deletedAt: null,
+        deletedBy: null,
+      });
 
     if (context.mode === 'real') {
       const saved = await this.companyRepository.save(company);
@@ -758,6 +760,8 @@ export class MigrationToolService {
       isActive: toBoolean(row.bActive),
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     if (transformedCode.transformed) {
@@ -854,6 +858,8 @@ export class MigrationToolService {
       isCombine: false,
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     if (context.mode === 'real') {
@@ -940,6 +946,8 @@ export class MigrationToolService {
       ...this.roleFlagsFromUserRow(row),
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     if (context.mode === 'real') {
@@ -1023,6 +1031,8 @@ export class MigrationToolService {
       resetPasswordExpires: null,
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
+      deletedAt: null,
+      deletedBy: null,
     });
 
     if (context.mode === 'real') {
@@ -1479,6 +1489,8 @@ export class MigrationToolService {
         counter: { id: counterId } as Counter,
         createdBy: actorId,
         updatedBy: actorId,
+        deletedAt: null,
+        deletedBy: null,
       });
 
       uniqueAssignments.set(key, entity);
@@ -1573,6 +1585,7 @@ export class MigrationToolService {
         connectionMode: context.sourceConnection,
         selectedTables: context.selectedTables.join(', '),
         expandedTables: context.expandedTables.join(', '),
+        sharedAuditColumns: 'createdAt, createdBy, updatedAt, updatedBy, deletedAt, deletedBy',
         tables: context.summary.tables,
         rowsScanned: context.summary.rowsScanned,
         rowsInserted: context.summary.rowsInserted,

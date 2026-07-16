@@ -1,24 +1,24 @@
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-} from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
-import {
-  TransactionDocumentStatus,
-} from "../transactions.enums";
+import { TransactionDocumentStatus } from "../transactions.enums";
 import { Transaction } from "./transaction.entity";
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
 
 @Index("IDX_transaction_documents_transaction_id", ["transactionId"])
-@Index("IDX_transaction_documents_transaction_line", ["transactionId", "lineNo"], {
-  unique: true,
-})
-@Index("IDX_transaction_documents_transaction_document_profile", ["transactionId", "documentProfileId"], {
-  unique: true,
-})
+@Index(
+  "IDX_transaction_documents_transaction_line",
+  ["transactionId", "lineNo"],
+  {
+    unique: true,
+  },
+)
+@Index(
+  "IDX_transaction_documents_transaction_document_profile",
+  ["transactionId", "documentProfileId"],
+  {
+    unique: true,
+  },
+)
 @Entity("transaction_documents")
 export class TransactionDocument extends BaseEntity {
   @Column({ type: "uuid", name: "transaction_id" })
@@ -49,7 +49,6 @@ export class TransactionDocument extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionDocumentStatus,
-    enumName: "transaction_documents_status_enum",
     default: TransactionDocumentStatus.PENDING,
   })
   status: TransactionDocumentStatus;

@@ -1,0 +1,124 @@
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class AddSoftDeleteColumnsToBaseEntities1784220092212 implements MigrationInterface {
+    name = 'AddSoftDeleteColumnsToBaseEntities1784220092212'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "counters" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "counters" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "states" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "states" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "country_groups" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "country_groups" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "countries" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "countries" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "category_options" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "category_options" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "branches" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "branches" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "company" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "company" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "menus" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "menus" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "permissions" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "permissions" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "roles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "roles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "user_roles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "user_roles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "users" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "users" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "tds_profiles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "tds_profiles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "currency_rate_groups" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "currency_rate_groups" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "currencies" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "currencies" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "product_currency_rates" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "product_currency_rates" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "financial_sub_profiles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "financial_sub_profiles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "account_profiles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "account_profiles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "products" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "party_profile_commission_rules" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "party_profile_commission_rules" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "party_profiles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "party_profiles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "document_profiles" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "document_profiles" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "party_profile_document_files" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "party_profile_document_files" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "party_profile_documents" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "party_profile_documents" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "expense_income_booking_masters" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "expense_income_booking_masters" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "currency_rates" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "currency_rates" ADD "deleted_by" uuid`);
+        await queryRunner.query(`ALTER TABLE "advanced_settings" ADD "deleted_at" TIMESTAMP WITH TIME ZONE`);
+        await queryRunner.query(`ALTER TABLE "advanced_settings" ADD "deleted_by" uuid`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`ALTER TABLE "advanced_settings" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "advanced_settings" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "currency_rates" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "currency_rates" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "expense_income_booking_masters" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "expense_income_booking_masters" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "party_profile_documents" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "party_profile_documents" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "party_profile_document_files" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "party_profile_document_files" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "document_profiles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "document_profiles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "party_profiles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "party_profiles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "party_profile_commission_rules" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "party_profile_commission_rules" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "products" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "account_profiles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "account_profiles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "financial_sub_profiles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "financial_sub_profiles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "product_currency_rates" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "product_currency_rates" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "currencies" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "currencies" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "currency_rate_groups" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "currency_rate_groups" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "tds_profiles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "tds_profiles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "user_roles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "user_roles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "roles" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "roles" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "permissions" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "permissions" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "menus" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "menus" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "company" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "company" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "branches" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "branches" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "category_options" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "category_options" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "countries" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "countries" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "country_groups" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "country_groups" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "states" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "states" DROP COLUMN "deleted_at"`);
+        await queryRunner.query(`ALTER TABLE "counters" DROP COLUMN "deleted_by"`);
+        await queryRunner.query(`ALTER TABLE "counters" DROP COLUMN "deleted_at"`);
+    }
+
+}

@@ -1,10 +1,4 @@
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-} from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "./transaction.entity";
 import { TransactionEventStatus } from "../transactions.enums";
@@ -34,7 +28,6 @@ export class TransactionEvent extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionEventStatus,
-    enumName: "transaction_events_status_enum",
     default: TransactionEventStatus.PENDING,
   })
   status: TransactionEventStatus;

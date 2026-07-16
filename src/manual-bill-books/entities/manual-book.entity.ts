@@ -58,7 +58,6 @@ export class ManualBook {
   @Column({
     type: "enum",
     enum: WorkflowStatus,
-    enumName: "manual_books_status_enum",
     default: WorkflowStatus.PENDING,
   })
   status: WorkflowStatus;
