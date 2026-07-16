@@ -25,16 +25,16 @@ export class SalePurchaseReportController {
   @ApiOperation({ summary: "Download sale/purchase report as CSV or Excel" })
   async exportSalePurchaseReport(
     @Query() query: SalePurchaseReportQueryDto,
-    @Query("format") format: "csv" | "xlsx" = "xlsx",
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
     const payload = await this.reportService.buildExport(
       query,
       query.layout ?? "grouped",
-      format,
+      query.format ?? "xlsx",
     );
+    res.status(200);
     res.setHeader("Content-Type", payload.contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${payload.filename}"`);
-    return payload.buffer;
+    return res.send(payload.buffer);
   }
 }

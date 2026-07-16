@@ -14,6 +14,11 @@ export enum SalePurchaseReportLayout {
   FLAT = "flat",
 }
 
+export enum SalePurchaseReportFormat {
+  CSV = "csv",
+  XLSX = "xlsx",
+}
+
 const parseArrayQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
     return undefined;
@@ -104,4 +109,12 @@ export class SalePurchaseReportQueryDto {
   @IsEnum(SalePurchaseReportLayout)
   @IsOptional()
   layout?: SalePurchaseReportLayout;
+
+  @ApiPropertyOptional({
+    description: "Export format",
+    enum: SalePurchaseReportFormat,
+  })
+  @IsEnum(SalePurchaseReportFormat)
+  @IsOptional()
+  format?: SalePurchaseReportFormat;
 }
