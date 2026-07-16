@@ -35,6 +35,7 @@ import { CurrencyRatesModule } from "./currency-rates/currency-rates.module";
 import { ChequeBookModule } from "./chequebooks/chequebook.module";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { MigrationToolModule } from "./migration-tool/migration-tool.module";
+import { ReportsModule } from "./reports/reports.module";
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { MigrationToolModule } from "./migration-tool/migration-tool.module";
     ChequeBookModule,
     TransactionsModule,
     MigrationToolModule,
+    ReportsModule,
     AuditLogModule,
     StorageModule,
   ],

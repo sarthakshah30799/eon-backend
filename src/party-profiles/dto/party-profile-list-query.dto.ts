@@ -81,6 +81,25 @@ export class PartyProfileListQueryDto {
   @IsOptional()
   type?: ClientType[];
 
+  @ApiPropertyOptional({
+    description: "Filter by one or more branch ids",
+    isArray: true,
+  })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+
+    const values = Array.isArray(value) ? value : String(value).split(',');
+    return values
+      .map(item => String(item).trim())
+      .filter(Boolean);
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  branchIds?: string[];
+
   @ApiPropertyOptional({ description: "Filter by sale-enabled party profiles" })
   @IsBoolean()
   @IsOptional()

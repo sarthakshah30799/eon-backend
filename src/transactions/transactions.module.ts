@@ -5,10 +5,15 @@ import { TransactionItem } from "./entities/transaction-item.entity";
 import { TransactionDocument } from "./entities/transaction-document.entity";
 import { TransactionAdditionalCharge } from "./entities/transaction-additional-charge.entity";
 import { TransactionPayment } from "./entities/transaction-payment.entity";
+import { TransactionAccountPosting } from "./entities/transaction-account-posting.entity";
 import { TransactionLog } from "./entities/transaction-log.entity";
 import { TransactionEvent } from "./entities/transaction-event.entity";
+import { TransactionAd1 } from "./entities/transaction-ad1.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
+import { TransactionAd1Service } from "./transaction-ad1.service";
+import { TransactionAd1Controller } from "./transaction-ad1.controller";
+import { TransactionAccountPostingWorker } from "./transaction-account-posting.worker";
 import { MailModule } from "../mail/mail.module";
 import { StorageModule } from "../storage/storage.module";
 import { Currency } from "../currencies/currency.entity";
@@ -23,6 +28,7 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
+import { Counter } from "../counters/counter.entity";
 
 @Module({
   imports: [
@@ -38,15 +44,18 @@ import { AdditionalSettingModule } from "../additional-settings/additional-setti
       AccountProfile,
       PartyProfile,
       Branch,
+      Counter,
       User,
     ]),
     TypeOrmModule.forFeature(
       [
         Transaction,
+        TransactionAd1,
         TransactionItem,
         TransactionDocument,
         TransactionAdditionalCharge,
         TransactionPayment,
+        TransactionAccountPosting,
         TransactionLog,
         TransactionEvent,
         ManualBookPageTracking,
@@ -55,8 +64,8 @@ import { AdditionalSettingModule } from "../additional-settings/additional-setti
       "database2",
     ),
   ],
-  controllers: [TransactionsController],
-  providers: [TransactionsService],
+  controllers: [TransactionAd1Controller, TransactionsController],
+  providers: [TransactionsService, TransactionAd1Service, TransactionAccountPostingWorker],
   exports: [
     TypeOrmModule,
     TransactionsService,

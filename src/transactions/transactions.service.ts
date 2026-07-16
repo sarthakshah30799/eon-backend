@@ -1,15 +1,22 @@
 import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { TransactionLog } from './entities/transaction-log.entity';
 import { Transaction } from './entities/transaction.entity';
-import { TransactionLogAction, TransactionDocumentStatus, TransactionStatus } from './transactions.enums';
+import {
+  TransactionLogAction,
+  TransactionDocumentStatus,
+  TransactionPaymentDirection,
+  TransactionStatus,
+  TransactionType,
+} from './transactions.enums';
 import { RecordTransactionPrintDto } from './dto/record-transaction-print.dto';
 import { TransactionItem } from './entities/transaction-item.entity';
 import { TransactionDocument } from './entities/transaction-document.entity';
 import { TransactionAdditionalCharge } from './entities/transaction-additional-charge.entity';
 import { TransactionPayment } from './entities/transaction-payment.entity';
+import { TransactionAd1 } from './entities/transaction-ad1.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
@@ -19,11 +26,17 @@ import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { CompanyService } from '../company/company.service';
 import { Branch } from '../branches/branch.entity';
+import { Counter } from '../counters/counter.entity';
 import { User } from '../users/user.entity';
 import { ManualBookPageTracking } from '../manual-bill-books/entities/manual-book-page-tracking.entity';
 import { ChequeBookPageTracking } from '../chequebooks/entities/cheque-book-page-tracking.entity';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
+import {
+  resolveProductTransactionAccount,
+} from './transaction-accounting.util';
+import { TransactionEvent } from './entities/transaction-event.entity';
+import { TransactionEventStatus, TransactionEventType } from './transactions.enums';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -38,6 +51,8 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction, 'database2')
     private readonly transactionRepository: Repository<Transaction>,
+    @InjectRepository(TransactionAd1, 'database2')
+    private readonly transactionAd1Repository: Repository<TransactionAd1>,
     @InjectRepository(TransactionItem, 'database2')
     private readonly transactionItemRepository: Repository<TransactionItem>,
     @InjectRepository(TransactionDocument, 'database2')
@@ -48,6 +63,8 @@ export class TransactionsService {
     private readonly transactionPaymentRepository: Repository<TransactionPayment>,
     @InjectRepository(TransactionLog, 'database2')
     private readonly transactionLogRepository: Repository<TransactionLog>,
+    @InjectRepository(TransactionEvent, 'database2')
+    private readonly transactionEventRepository: Repository<TransactionEvent>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
@@ -60,6 +77,8 @@ export class TransactionsService {
     private readonly partyProfileRepository: Repository<PartyProfile>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(Counter)
+    private readonly counterRepository: Repository<Counter>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(ManualBookPageTracking, 'database2')
@@ -70,7 +89,34 @@ export class TransactionsService {
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
-  ) {}
+  ) { }
+
+  async getAd1Agents(
+    branchId: string,
+    search?: string,
+  ): Promise<any[]> {
+    if (!branchId) {
+      return [];
+    }
+
+    const qb = this.partyProfileRepository
+      .createQueryBuilder("pp")
+      .leftJoinAndSelect("pp.commissionRules", "commissionRules")
+      .where("pp.branchId = :branchId", { branchId })
+      .andWhere("pp.type = :type", { type: 'AGENT' })
+      .andWhere("pp.active = :active", { active: true });
+
+    if (search) {
+      qb.andWhere(
+        "(pp.code ILIKE :search OR pp.name ILIKE :search)",
+        { search: `%${search}%` },
+      );
+    }
+
+    qb.orderBy("pp.createdAt", "DESC");
+
+    return qb.getMany();
+  }
 
   private parseJsonField<T>(value: unknown, fallback: T): T {
     if (value === undefined || value === null || value === '') {
@@ -131,14 +177,9 @@ export class TransactionsService {
   }
 
   private async generateTransactionNumber(
-    companyId: string | null,
     slug: string | null,
     branchSnapshot: Record<string, unknown> | null | undefined,
   ): Promise<string> {
-    if (!companyId) {
-      throw new BadRequestException('Company is required to generate transaction number');
-    }
-
     if (!slug) {
       throw new BadRequestException('Transaction slug is required to generate transaction number');
     }
@@ -152,7 +193,6 @@ export class TransactionsService {
     }
 
     return this.additionalSettingService.reserveTransactionNumber(
-      companyId,
       slug,
       branchCode,
       new Date(),
@@ -244,11 +284,38 @@ export class TransactionsService {
     return transaction;
   }
 
+  private async hydrateCounterSnapshot(
+    transaction: Transaction,
+  ): Promise<Transaction> {
+    if (!transaction.counterId) {
+      return transaction;
+    }
+
+    if (transaction.counterSnapshot) {
+      return transaction;
+    }
+
+    const counterSnapshot = await loadEntitySnapshot(
+      this.counterRepository,
+      transaction.counterId,
+    );
+
+    if (!counterSnapshot) {
+      return transaction;
+    }
+
+    transaction.counterSnapshot = counterSnapshot as TransactionReferenceSnapshotValue;
+
+    return transaction;
+  }
+
   async getTransactions(
     slug?: string,
     branchId?: string,
     search?: string,
     status?: TransactionStatus,
+    partyProfileId?: string,
+    transactionType?: TransactionType,
   ): Promise<Transaction[]> {
     const query = this.transactionRepository
       .createQueryBuilder('transaction')
@@ -264,6 +331,14 @@ export class TransactionsService {
 
     if (status) {
       query.andWhere('transaction.status = :status', { status });
+    }
+
+    if (partyProfileId) {
+      query.andWhere('transaction.partyProfileId = :partyProfileId', { partyProfileId });
+    }
+
+    if (transactionType) {
+      query.andWhere('transaction.transactionType = :transactionType', { transactionType });
     }
 
     const trimmedSearch = search?.trim();
@@ -309,10 +384,63 @@ export class TransactionsService {
     }) as Transaction[];
   }
 
+  async requestAccountPostingRebuild(
+    transactionId: string,
+    performedById: string | null,
+  ): Promise<{ message: string }> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId },
+      select: { id: true, createdBy: true, updatedBy: true },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction with id ${transactionId} not found`);
+    }
+
+    const actorId = performedById ?? transaction.updatedBy ?? transaction.createdBy;
+    if (!actorId) {
+      throw new BadRequestException('Unable to determine the actor for rebuild request');
+    }
+
+    await this.transactionEventRepository.manager.transaction(async manager => {
+      await manager.getRepository(TransactionEvent).delete({
+        transactionId,
+        eventType: TransactionEventType.ACCOUNT_POSTINGS_REBUILD,
+        status: In([
+          TransactionEventStatus.PENDING,
+          TransactionEventStatus.PROCESSING,
+        ]),
+      });
+
+      await manager.getRepository(TransactionEvent).save(
+        manager.getRepository(TransactionEvent).create({
+          transactionId,
+          eventType: TransactionEventType.ACCOUNT_POSTINGS_REBUILD,
+          payload: {
+            transactionId,
+            source: 'manual',
+          },
+          status: TransactionEventStatus.PENDING,
+          attemptCount: 0,
+          availableAt: new Date(),
+          processedAt: null,
+          errorMessage: null,
+          lockedAt: null,
+          lockedById: null,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+    });
+
+    return { message: 'Account posting rebuild queued successfully' };
+  }
+
   async createDraft(
     body: Record<string, any>,
     files: UploadedDraftFile[],
     performedById: string | null,
+    activeCounterId: string | null = null,
   ): Promise<Transaction> {
     if (!performedById) {
       throw new BadRequestException('User session not found');
@@ -366,7 +494,6 @@ export class TransactionsService {
     const generatedNumber = shouldRequireApproval
       ? null
       : await this.generateTransactionNumber(
-          currentCompany.id,
           String(transactionPayload.slug ?? ''),
           branchSnapshot,
         );
@@ -405,6 +532,21 @@ export class TransactionsService {
       );
     }
 
+    const resolvedCounterId = activeCounterId ?? transactionPayload.counterId ?? null;
+    if (!resolvedCounterId) {
+      throw new BadRequestException('Counter is required');
+    }
+
+    const counterSnapshot = await loadEntitySnapshot(
+      this.counterRepository,
+      String(resolvedCounterId),
+    );
+    if (!counterSnapshot) {
+      throw new NotFoundException(
+        `Counter with id ${resolvedCounterId} not found`,
+      );
+    }
+
     const transaction = await this.transactionRepository.save(
       this.transactionRepository.create({
         rootTransactionId: transactionPayload.rootTransactionId ?? null,
@@ -413,6 +555,8 @@ export class TransactionsService {
         slug: transactionPayload.slug ?? null,
         branchId: String(transactionPayload.branchId),
         branchSnapshot,
+        counterId: String(resolvedCounterId),
+        counterSnapshot,
         companyId: currentCompany.id,
         companySnapshot: currentCompanySnapshot,
         partyProfileId: String(transactionPayload.partyProfileId),
@@ -476,6 +620,26 @@ export class TransactionsService {
       );
     };
 
+    const resolveProductEntity = async (productId: string) => {
+      const product = await this.productRepository.findOne({
+        where: { id: productId },
+        relations: [
+          'bulkPurAc',
+          'purchaseAc',
+          'bulkSaleAc',
+          'saleAc',
+          'bulkProficAc',
+          'profitAc',
+        ],
+      });
+
+      if (!product) {
+        throw new NotFoundException(`Product with id ${productId} not found`);
+      }
+
+      return product;
+    };
+
     const resolveAccount = async (accountId: string) => {
       return resolveSnapshot(
         accountSnapshots,
@@ -501,6 +665,28 @@ export class TransactionsService {
       const row = itemRows[index];
       const currency = await resolveCurrency(String(row.currencyId));
       const product = await resolveProduct(String(row.productId));
+      const productEntity = await resolveProductEntity(String(row.productId));
+      const itemAccount =
+        resolveProductTransactionAccount(
+          productEntity,
+          transactionPayload.transactionType,
+          transactionPayload.tradeMode,
+          transactionPayload.transactionType === TransactionType.SALE
+            ? 'sale'
+            : 'purchase',
+        );
+
+      if (!itemAccount) {
+        throw new NotFoundException(
+          `Product account is not configured for product ${row.productId}`,
+        );
+      }
+
+      const accountSnapshot = await loadEntitySnapshot(
+        this.accountProfileRepository,
+        itemAccount.id,
+      );
+
       await this.transactionItemRepository.save(
         this.transactionItemRepository.create({
           transactionId: transaction.id,
@@ -508,6 +694,8 @@ export class TransactionsService {
           lineNo: index + 1,
           currencyId: String(currency.id),
           productId: String(product.id),
+          accountId: itemAccount.id,
+          accountSnapshot,
           currencyRateId: row.currencyRateId ?? null,
           productCurrencyRateId: row.productCurrencyRateId ?? null,
           quantity: String(row.quantity),
@@ -614,6 +802,10 @@ export class TransactionsService {
     const paymentRows = Array.isArray(transactionPayload.payments)
       ? transactionPayload.payments
       : [];
+    const paymentDirection =
+      transactionPayload.transactionType === TransactionType.SALE
+        ? TransactionPaymentDirection.RECEIPT
+        : TransactionPaymentDirection.PAYMENT;
     for (let index = 0; index < paymentRows.length; index += 1) {
       const row = paymentRows[index];
       const account = await resolveAccount(String(row.accountId));
@@ -640,6 +832,7 @@ export class TransactionsService {
           chequePageId: row.chequePageId ?? null,
           chequePageSnapshot,
           paymentMethod: row.paymentMethod,
+          paymentDirection,
           referenceNumber: row.referenceNumber ?? null,
           referenceDate: row.referenceDate ?? null,
           branchName: row.branchName ?? null,
@@ -703,15 +896,20 @@ export class TransactionsService {
       }
     }
 
-    return this.transactionRepository.findOne({
+    const savedTransaction = await this.transactionRepository.findOne({
       where: { id: transaction.id },
-    }) as Promise<Transaction>;
+    }) as Transaction;
+
+    await this.hydrateCounterSnapshot(savedTransaction);
+
+    return savedTransaction;
   }
 
   async approveTransaction(
     transactionId: string,
     performedById: string | null,
     approvalRemarks: string | null = null,
+    activeCounterId: string | null = null,
   ): Promise<Transaction> {
     if (!performedById) {
       throw new BadRequestException('User session not found');
@@ -731,10 +929,27 @@ export class TransactionsService {
 
     if (!transaction.number) {
       transaction.number = await this.generateTransactionNumber(
-        transaction.companyId,
         transaction.slug,
         transaction.branchSnapshot as Record<string, unknown> | null | undefined,
       );
+    }
+
+    if (!transaction.counterId) {
+      if (!activeCounterId) {
+        throw new BadRequestException('Counter is required');
+      }
+
+      const counterSnapshot = await loadEntitySnapshot(
+        this.counterRepository,
+        activeCounterId,
+      );
+
+      if (!counterSnapshot) {
+        throw new NotFoundException(`Counter with id ${activeCounterId} not found`);
+      }
+
+      transaction.counterId = activeCounterId;
+      transaction.counterSnapshot = counterSnapshot as TransactionReferenceSnapshotValue;
     }
 
     transaction.status = TransactionStatus.APPROVED;
@@ -761,9 +976,13 @@ export class TransactionsService {
       }),
     );
 
-    return this.transactionRepository.findOne({
+    const approvedTransaction = await this.transactionRepository.findOne({
       where: { id: saved.id },
-    }) as Promise<Transaction>;
+    }) as Transaction;
+
+    await this.hydrateCounterSnapshot(approvedTransaction);
+
+    return approvedTransaction;
   }
 
   async getTransactionById(
@@ -778,6 +997,7 @@ export class TransactionsService {
         documents: true,
         additionalCharges: true,
         payments: true,
+        postings: true,
         logs: true,
       },
     });
@@ -792,6 +1012,7 @@ export class TransactionsService {
 
     await this.hydratePartyProfileSnapshot(transaction);
     await this.hydrateAgentProfileSnapshot(transaction);
+    await this.hydrateCounterSnapshot(transaction);
     return transaction;
   }
 

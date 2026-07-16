@@ -18,4 +18,11 @@ export enum CategoryOptionCodeEnum {
   TdsGroup = "TDSGROUP",
   MasterDocument = "MASTER",
   TransactionDocument = "TRANSACTION",
+  Segment = "SEGMENT",
+  Purpose = "PURPOSE",
+  Relationship = "RELATIONSHIP",
+  CommissionGiven = "COMMISSIONGIVEN",
+  ServicedBy = "SERVICEDBY",
+  Product = "PRODUCT",
+  Marketing = "MARKETING",
 }

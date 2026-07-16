@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   Res,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ParseUUIDPipe } from '@nestjs/common';
@@ -37,6 +38,15 @@ type UploadedDraftFile = {
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
+  @Get('ad1/agents')
+  @ApiOperation({ summary: 'Get agents for AD1 transactions' })
+  async getAd1Agents(
+    @Query('branchId') branchId: string,
+    @Query('search') search?: string,
+  ): Promise<any[]> {
+    return this.transactionsService.getAd1Agents(branchId, search);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get transactions filtered by slug and current branch' })
   @ApiResponse({ status: 200, description: 'List of transactions', type: [Transaction] })
@@ -46,6 +56,8 @@ export class TransactionsController {
     @Query('branchId') branchId?: string,
     @Query('search') search?: string,
     @Query('status') status?: string,
+    @Query('partyProfileId') partyProfileId?: string,
+    @Query('transactionType') transactionType?: string,
   ): Promise<Transaction[]> {
     const effectiveBranchId = session?.isAdmin ? branchId : session?.activeBranchId;
     return this.transactionsService.getTransactions(
@@ -53,6 +65,24 @@ export class TransactionsController {
       effectiveBranchId,
       search,
       status as any,
+      partyProfileId,
+      transactionType as any,
+    );
+  }
+
+  @Post(':id/account-postings/rebuild')
+  @ApiOperation({ summary: 'Queue a manual account posting rebuild for a transaction' })
+  async requestAccountPostingRebuild(
+    @Param('id') transactionId: string,
+    @Session() session: any,
+  ): Promise<{ message: string }> {
+    if (!session?.userId) {
+      throw new BadRequestException('User session not found');
+    }
+
+    return this.transactionsService.requestAccountPostingRebuild(
+      transactionId,
+      session.userId,
     );
   }
 
@@ -65,7 +95,12 @@ export class TransactionsController {
     @UploadedFiles() files: UploadedDraftFile[] = [],
     @Session() session: any,
   ): Promise<Transaction> {
-    return this.transactionsService.createDraft(body, files, session?.userId ?? null);
+    return this.transactionsService.createDraft(
+      body,
+      files,
+      session?.userId ?? null,
+      session?.activeCounterId ?? null,
+    );
   }
 
   @Get('next-number')
@@ -93,6 +128,7 @@ export class TransactionsController {
       transactionId,
       session.userId,
       body?.approvalRemarks ?? null,
+      session?.activeCounterId ?? null,
     );
   }
 

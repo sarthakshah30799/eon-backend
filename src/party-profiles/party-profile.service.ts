@@ -1080,6 +1080,12 @@ export class PartyProfileService {
       qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
     }
 
+    if (Array.isArray(query.branchIds) && query.branchIds.length > 0) {
+      qb.andWhere("pp.branchId IN (:...branchIds)", {
+        branchIds: query.branchIds,
+      });
+    }
+
     if (query.sale !== undefined) {
       qb.andWhere("pp.sale = :sale", { sale: query.sale });
     }
