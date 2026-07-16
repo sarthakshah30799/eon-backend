@@ -20,16 +20,19 @@ import { TransactionPayment } from "./transaction-payment.entity";
 import { TransactionAccountPosting } from "./transaction-account-posting.entity";
 import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
-import {
-  TransactionReferenceSnapshotValue,
-} from "../types/transaction-snapshot.types";
+import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
-@Index("IDX_transactions_root_transaction_revision", ["rootTransactionId", "revisionNo"], {
-  unique: true,
-})
+@Index(
+  "IDX_transactions_root_transaction_revision",
+  ["rootTransactionId", "revisionNo"],
+  {
+    unique: true,
+  },
+)
 @Index("IDX_transactions_root_transaction_id", ["rootTransactionId"])
 @Index("IDX_transactions_branch_id", ["branchId"])
+@Index("IDX_transactions_counter_id", ["counterId"])
 @Index("IDX_transactions_company_id", ["companyId"])
 @Index("IDX_transactions_manual_book_page_id", ["manualBookPageId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
@@ -65,6 +68,12 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
   branchSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "counter_id", nullable: false })
+  counterId: string;
+
+  @Column({ type: "jsonb", name: "counter_snapshot", nullable: true })
+  counterSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: "uuid", name: "company_id", nullable: true })
   companyId: string | null;
@@ -146,19 +155,49 @@ export class Transaction extends BaseEntity {
   @Column({ type: "boolean", name: "is_latest", default: true })
   isLatest: boolean;
 
-  @Column({ type: "numeric", name: "by_cash", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "by_cash",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   byCash: string | null;
 
-  @Column({ type: "numeric", name: "by_cheque", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "by_cheque",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   byCheque: string | null;
 
-  @Column({ type: "numeric", name: "by_card", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "by_card",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   byCard: string | null;
 
-  @Column({ type: "numeric", name: "by_transfer", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "by_transfer",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   byTransfer: string | null;
 
-  @Column({ type: "numeric", name: "by_other", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "by_other",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   byOther: string | null;
 
   @OneToMany(() => TransactionItem, (item) => item.transaction)
@@ -167,10 +206,7 @@ export class Transaction extends BaseEntity {
   @OneToMany(() => TransactionDocument, (document) => document.transaction)
   documents: TransactionDocument[];
 
-  @OneToMany(
-    () => TransactionAdditionalCharge,
-    (charge) => charge.transaction,
-  )
+  @OneToMany(() => TransactionAdditionalCharge, (charge) => charge.transaction)
   additionalCharges: TransactionAdditionalCharge[];
 
   @OneToMany(() => TransactionPayment, (payment) => payment.transaction)

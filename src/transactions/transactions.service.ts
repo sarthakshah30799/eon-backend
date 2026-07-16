@@ -26,6 +26,7 @@ import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { CompanyService } from '../company/company.service';
 import { Branch } from '../branches/branch.entity';
+import { Counter } from '../counters/counter.entity';
 import { User } from '../users/user.entity';
 import { ManualBookPageTracking } from '../manual-bill-books/entities/manual-book-page-tracking.entity';
 import { ChequeBookPageTracking } from '../chequebooks/entities/cheque-book-page-tracking.entity';
@@ -76,6 +77,8 @@ export class TransactionsService {
     private readonly partyProfileRepository: Repository<PartyProfile>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(Counter)
+    private readonly counterRepository: Repository<Counter>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(ManualBookPageTracking, 'database2')
@@ -280,6 +283,31 @@ export class TransactionsService {
     return transaction;
   }
 
+  private async hydrateCounterSnapshot(
+    transaction: Transaction,
+  ): Promise<Transaction> {
+    if (!transaction.counterId) {
+      return transaction;
+    }
+
+    if (transaction.counterSnapshot) {
+      return transaction;
+    }
+
+    const counterSnapshot = await loadEntitySnapshot(
+      this.counterRepository,
+      transaction.counterId,
+    );
+
+    if (!counterSnapshot) {
+      return transaction;
+    }
+
+    transaction.counterSnapshot = counterSnapshot as TransactionReferenceSnapshotValue;
+
+    return transaction;
+  }
+
   async getTransactions(
     slug?: string,
     branchId?: string,
@@ -411,6 +439,7 @@ export class TransactionsService {
     body: Record<string, any>,
     files: UploadedDraftFile[],
     performedById: string | null,
+    activeCounterId: string | null = null,
   ): Promise<Transaction> {
     if (!performedById) {
       throw new BadRequestException('User session not found');
@@ -502,6 +531,21 @@ export class TransactionsService {
       );
     }
 
+    const resolvedCounterId = activeCounterId ?? transactionPayload.counterId ?? null;
+    if (!resolvedCounterId) {
+      throw new BadRequestException('Counter is required');
+    }
+
+    const counterSnapshot = await loadEntitySnapshot(
+      this.counterRepository,
+      String(resolvedCounterId),
+    );
+    if (!counterSnapshot) {
+      throw new NotFoundException(
+        `Counter with id ${resolvedCounterId} not found`,
+      );
+    }
+
     const transaction = await this.transactionRepository.save(
       this.transactionRepository.create({
         rootTransactionId: transactionPayload.rootTransactionId ?? null,
@@ -510,6 +554,8 @@ export class TransactionsService {
         slug: transactionPayload.slug ?? null,
         branchId: String(transactionPayload.branchId),
         branchSnapshot,
+        counterId: String(resolvedCounterId),
+        counterSnapshot,
         companyId: currentCompany.id,
         companySnapshot: currentCompanySnapshot,
         partyProfileId: String(transactionPayload.partyProfileId),
@@ -849,15 +895,20 @@ export class TransactionsService {
       }
     }
 
-    return this.transactionRepository.findOne({
+    const savedTransaction = await this.transactionRepository.findOne({
       where: { id: transaction.id },
-    }) as Promise<Transaction>;
+    }) as Transaction;
+
+    await this.hydrateCounterSnapshot(savedTransaction);
+
+    return savedTransaction;
   }
 
   async approveTransaction(
     transactionId: string,
     performedById: string | null,
     approvalRemarks: string | null = null,
+    activeCounterId: string | null = null,
   ): Promise<Transaction> {
     if (!performedById) {
       throw new BadRequestException('User session not found');
@@ -880,6 +931,24 @@ export class TransactionsService {
         transaction.slug,
         transaction.branchSnapshot as Record<string, unknown> | null | undefined,
       );
+    }
+
+    if (!transaction.counterId) {
+      if (!activeCounterId) {
+        throw new BadRequestException('Counter is required');
+      }
+
+      const counterSnapshot = await loadEntitySnapshot(
+        this.counterRepository,
+        activeCounterId,
+      );
+
+      if (!counterSnapshot) {
+        throw new NotFoundException(`Counter with id ${activeCounterId} not found`);
+      }
+
+      transaction.counterId = activeCounterId;
+      transaction.counterSnapshot = counterSnapshot as TransactionReferenceSnapshotValue;
     }
 
     transaction.status = TransactionStatus.APPROVED;
@@ -906,9 +975,13 @@ export class TransactionsService {
       }),
     );
 
-    return this.transactionRepository.findOne({
+    const approvedTransaction = await this.transactionRepository.findOne({
       where: { id: saved.id },
-    }) as Promise<Transaction>;
+    }) as Transaction;
+
+    await this.hydrateCounterSnapshot(approvedTransaction);
+
+    return approvedTransaction;
   }
 
   async getTransactionById(
@@ -938,6 +1011,7 @@ export class TransactionsService {
 
     await this.hydratePartyProfileSnapshot(transaction);
     await this.hydrateAgentProfileSnapshot(transaction);
+    await this.hydrateCounterSnapshot(transaction);
     return transaction;
   }
 

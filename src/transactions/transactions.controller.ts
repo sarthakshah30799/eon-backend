@@ -95,7 +95,12 @@ export class TransactionsController {
     @UploadedFiles() files: UploadedDraftFile[] = [],
     @Session() session: any,
   ): Promise<Transaction> {
-    return this.transactionsService.createDraft(body, files, session?.userId ?? null);
+    return this.transactionsService.createDraft(
+      body,
+      files,
+      session?.userId ?? null,
+      session?.activeCounterId ?? null,
+    );
   }
 
   @Get('next-number')
@@ -123,6 +128,7 @@ export class TransactionsController {
       transactionId,
       session.userId,
       body?.approvalRemarks ?? null,
+      session?.activeCounterId ?? null,
     );
   }
 

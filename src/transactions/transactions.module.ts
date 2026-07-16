@@ -28,6 +28,7 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
+import { Counter } from "../counters/counter.entity";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AdditionalSettingModule } from "../additional-settings/additional-setti
       AccountProfile,
       PartyProfile,
       Branch,
+      Counter,
       User,
     ]),
     TypeOrmModule.forFeature(
