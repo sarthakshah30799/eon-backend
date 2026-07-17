@@ -368,9 +368,9 @@ async function upsertFinancialCode(client, fc) {
     await client.query(
       `
       UPDATE "financial_codes"
-      SET "financial_type" = $2,
+      SET "financial_type_id" = $2,
           "financial_name" = $3,
-          "default_sign" = $4,
+          "default_sign_id" = $4,
           "priority" = $5,
           "updated_by" = $6,
           "updated_at" = NOW()
@@ -391,7 +391,7 @@ async function upsertFinancialCode(client, fc) {
   const inserted = await client.query(
     `
     INSERT INTO "financial_codes" (
-      "financial_type", "financial_code", "financial_name", "default_sign",
+      "financial_type_id", "financial_code", "financial_name", "default_sign_id",
       "priority", "created_by", "updated_by"
     ) VALUES (
       $1, $2, $3, $4, $5, $6, $7
@@ -523,7 +523,7 @@ async function main() {
     await client.connect();
     console.log("Connected to PostgreSQL successfully.");
 
-    console.log('Ensuring uuid-ossp extension exists...');
+    console.log("Ensuring uuid-ossp extension exists...");
     await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
 
     console.log(`Hashing password for ${adminEmail}...`);
@@ -544,19 +544,55 @@ async function main() {
     });
 
     const adminMenus = [
-      { name: "Company Profile", path: "/admin/company-profile", icon: "building" },
-      { name: "Branch Profile", path: "/admin/branch-profile", icon: "sitemap" },
-      { name: "Counter Profile", path: "/admin/counter-profile", icon: "counter" },
-      { name: "Document Profile", path: "/admin/document-profile", icon: "file-text" },
-      { name: "Miscellaneous Profile", path: "/admin/miscellaneous-profile", icon: "layout-grid" },
-      { name: "Product Profile", path: "/admin/product-profile", icon: "archive" },
-      { name: "Country Profile", path: "/admin/country-profile", icon: "globe" },
+      {
+        name: "Company Profile",
+        path: "/admin/company-profile",
+        icon: "building",
+      },
+      {
+        name: "Branch Profile",
+        path: "/admin/branch-profile",
+        icon: "sitemap",
+      },
+      {
+        name: "Counter Profile",
+        path: "/admin/counter-profile",
+        icon: "counter",
+      },
+      {
+        name: "Document Profile",
+        path: "/admin/document-profile",
+        icon: "file-text",
+      },
+      {
+        name: "Miscellaneous Profile",
+        path: "/admin/miscellaneous-profile",
+        icon: "layout-grid",
+      },
+      {
+        name: "Product Profile",
+        path: "/admin/product-profile",
+        icon: "archive",
+      },
+      {
+        name: "Country Profile",
+        path: "/admin/country-profile",
+        icon: "globe",
+      },
       { name: "State Profile", path: "/admin/state-profile", icon: "map" },
-      { name: "Accounts Profile", path: "/admin/accounts-profile", icon: "book" },
+      {
+        name: "Accounts Profile",
+        path: "/admin/accounts-profile",
+        icon: "book",
+      },
       { name: "User Role", path: "/admin/user-role", icon: "shield" },
       { name: "Tds Profile", path: "/admin/tds-profile", icon: "receipt" },
       { name: "Menu Management", path: "/admin/menu-management", icon: "menu" },
-      { name: "Additional Settings", path: "/admin/additional-settings", icon: "settings" },
+      {
+        name: "Additional Settings",
+        path: "/admin/additional-settings",
+        icon: "settings",
+      },
     ];
 
     for (let index = 0; index < adminMenus.length; index += 1) {
@@ -587,17 +623,53 @@ async function main() {
     });
 
     const partyProfileMenus = [
-      { name: "Corporate Client Profile", path: "/party-profiles/corporate-client", icon: "users" },
-      { name: "Ffmc Profile", path: "/party-profiles/ffmc", icon: "badge-check" },
+      {
+        name: "Corporate Client Profile",
+        path: "/party-profiles/corporate-client",
+        icon: "users",
+      },
+      {
+        name: "Ffmc Profile",
+        path: "/party-profiles/ffmc",
+        icon: "badge-check",
+      },
       { name: "Rf Profile", path: "/party-profiles/rf", icon: "badge-check" },
-      { name: "Authorised Dealer Profile", path: "/party-profiles/authorised-dealer", icon: "badge-check" },
+      {
+        name: "Authorised Dealer Profile",
+        path: "/party-profiles/authorised-dealer",
+        icon: "badge-check",
+      },
       { name: "Rmc Profile", path: "/party-profiles/rmc", icon: "badge-check" },
-      { name: "Franchise Profile", path: "/party-profiles/franchise", icon: "badge-check" },
-      { name: "Agent Profile", path: "/party-profiles/agent", icon: "badge-check" },
-      { name: "Foreign Correspondent Profile", path: "/party-profiles/foreign-correspondent", icon: "badge-check" },
-      { name: "Marketing Executive Profile", path: "/party-profiles/marketing-executive", icon: "badge-check" },
-      { name: "Card Issuer Profile", path: "/party-profiles/card-issuer-profile", icon: "badge-check" },
-      { name: "Misc Profile", path: "/party-profiles/misc-profile", icon: "badge-check" },
+      {
+        name: "Franchise Profile",
+        path: "/party-profiles/franchise",
+        icon: "badge-check",
+      },
+      {
+        name: "Agent Profile",
+        path: "/party-profiles/agent",
+        icon: "badge-check",
+      },
+      {
+        name: "Foreign Correspondent Profile",
+        path: "/party-profiles/foreign-correspondent",
+        icon: "badge-check",
+      },
+      {
+        name: "Marketing Executive Profile",
+        path: "/party-profiles/marketing-executive",
+        icon: "badge-check",
+      },
+      {
+        name: "Card Issuer Profile",
+        path: "/party-profiles/card-issuer-profile",
+        icon: "badge-check",
+      },
+      {
+        name: "Misc Profile",
+        path: "/party-profiles/misc-profile",
+        icon: "badge-check",
+      },
     ];
 
     for (let index = 0; index < partyProfileMenus.length; index += 1) {
@@ -617,10 +689,26 @@ async function main() {
 
     const standaloneMenus = [
       { name: "User Profile", path: "/user-profile", icon: "users" },
-      { name: "Financial Profile", path: "/financial-profile", icon: "dollar-sign" },
-      { name: "Currency Profile", path: "/currency-profile", icon: "dollar-sign" },
-      { name: "Expense Booking Master", path: "/expense-booking", icon: "receipt" },
-      { name: "Income Booking Master", path: "/income-booking", icon: "credit-card" },
+      {
+        name: "Financial Profile",
+        path: "/financial-profile",
+        icon: "dollar-sign",
+      },
+      {
+        name: "Currency Profile",
+        path: "/currency-profile",
+        icon: "dollar-sign",
+      },
+      {
+        name: "Expense Booking Master",
+        path: "/expense-booking",
+        icon: "receipt",
+      },
+      {
+        name: "Income Booking Master",
+        path: "/income-booking",
+        icon: "credit-card",
+      },
     ];
 
     for (let index = 0; index < standaloneMenus.length; index += 1) {
@@ -821,45 +909,6 @@ async function main() {
         updatedBy: systemUserId,
       });
     }
-
-    console.log("Onboarding default financial codes...");
-    const bankBlId = await upsertFinancialCode(client, {
-      financialType: "PROFIT & LOSS",
-      financialCode: "BANKBL",
-      financialName: "BANK BALANCES",
-      defaultSign: "DEBIT",
-      priority: 1,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    const opStokId = await upsertFinancialCode(client, {
-      financialType: "TRADING",
-      financialCode: "OPSTOK",
-      financialName: "OPENING STOCK",
-      defaultSign: "DEBIT",
-      priority: 2,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-
-    console.log("Onboarding default financial sub profiles...");
-    await upsertFinancialSubProfile(client, {
-      financialCodeId: bankBlId,
-      financialSubCode: "HDFCA",
-      financialSubName: "HDFC CURRENT A/C",
-      priority: 1,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
-    await upsertFinancialSubProfile(client, {
-      financialCodeId: opStokId,
-      financialSubCode: "OPSTK_GEN",
-      financialSubName: "GENERAL OPENING STOCK",
-      priority: 1,
-      createdBy: systemUserId,
-      updatedBy: systemUserId,
-    });
 
     console.log("Onboarding default country groups...");
     const defaultCountryGroups = [
