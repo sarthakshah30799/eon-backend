@@ -44,6 +44,7 @@ export class Ad1TransactionInit1784095899088 implements MigrationInterface {
         await queryRunner.query(`CREATE TYPE "public"."transactions_trade_mode_enum" AS ENUM('BULK', 'RETAIL')`);
         await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "trade_mode" TYPE "public"."transactions_trade_mode_enum" USING "trade_mode"::"text"::"public"."transactions_trade_mode_enum"`);
         await queryRunner.query(`DROP TYPE "public"."transactions_trade_mode_enum_old"`);
+        await queryRunner.query(`ALTER TABLE "transactions" DROP CONSTRAINT IF NOT EXISTS "CHK_transactions_number_required_when_approved"`);
         await queryRunner.query(`ALTER TYPE "public"."transactions_status_enum" RENAME TO "transactions_status_enum_old"`);
         await queryRunner.query(`CREATE TYPE "public"."transactions_status_enum" AS ENUM('DRAFT', 'PENDING', 'APPROVED', 'REJECTED')`);
         await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "status" DROP DEFAULT`);
@@ -51,7 +52,7 @@ export class Ad1TransactionInit1784095899088 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "status" SET DEFAULT 'DRAFT'`);
         await queryRunner.query(`DROP TYPE "public"."transactions_status_enum_old"`);
         await queryRunner.query(`CREATE INDEX "IDX_transaction_events_status_available_at" ON "transaction_events" ("status", "available_at") `);
-        await queryRunner.query(`ALTER TABLE "transactions" ADD CONSTRAINT "CHK_transactions_number_required_when_approved" CHECK ("status" <> 'APPROVED' OR "number" IS NOT NULL)`);
+        await queryRunner.query(`ALTER TABLE "transactions" ADD CONSTRAINT "CHK_transactions_number_required_when_approved" CHECK ("status" <> 'APPROVED'::"public"."transactions_status_enum" OR "number" IS NOT NULL)`);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
