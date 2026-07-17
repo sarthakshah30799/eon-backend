@@ -14,7 +14,7 @@ export class FkForMiscProfiles1782333830766 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "tds_group" TO "tds_group_id"`);
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "location" TO "location_id"`);
         await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "financial_type" TO "financial_type_id"`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "default_sign" TO "default_sign_id"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "default_sign" TO "default_sign"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "division_dept" TO "division_dept_id"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "account_type" TO "account_type_id"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "sub_ledger" TO "sub_ledger_id"`);
@@ -31,8 +31,8 @@ export class FkForMiscProfiles1782333830766 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "document_profiles" ADD CONSTRAINT "FK_27461fd0cd923a113c57abe649f" FOREIGN KEY ("type") REFERENCES "category_options"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "document_profiles" ADD CONSTRAINT "FK_bb53e6e5e081c6aa76e7245aa59" FOREIGN KEY ("group_selection") REFERENCES "category_options"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "document_profiles" ADD CONSTRAINT "FK_1318ca8995f27aefbe198636ca3" FOREIGN KEY ("entity_selection") REFERENCES "category_options"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" ADD CONSTRAINT "FK_financial_codes_financialType" FOREIGN KEY ("financialType") REFERENCES "category_options"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" ADD CONSTRAINT "FK_financial_codes_defaultSign" FOREIGN KEY ("defaultSign") REFERENCES "category_options"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" ADD CONSTRAINT "FK_financial_codes_financialType" FOREIGN KEY ("financial_type_id") REFERENCES "category_options"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" ADD CONSTRAINT "FK_financial_codes_defaultSign" FOREIGN KEY ("default_sign") REFERENCES "category_options"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "account_profiles" ADD CONSTRAINT "FK_account_profiles_division_dept" FOREIGN KEY ("division_dept_id") REFERENCES "category_options"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "account_profiles" ADD CONSTRAINT "FK_account_profiles_account_type" FOREIGN KEY ("account_type_id") REFERENCES "category_options"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
         await queryRunner.query(`ALTER TABLE "account_profiles" ADD CONSTRAINT "FK_account_profiles_sub_ledger" FOREIGN KEY ("sub_ledger_id") REFERENCES "category_options"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
@@ -62,8 +62,8 @@ export class FkForMiscProfiles1782333830766 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "sub_ledger_id" TO "sub_ledger"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "account_type_id" TO "account_type"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "division_dept_id" TO "division_dept"`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "defaultSign" TO "default_sign"`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "financialType" TO "financial_type"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "default_sign" TO "default_sign"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "financial_type_id" TO "financial_type"`);
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "location_id" TO "location"`);
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "tds_group_id" TO "tds_group"`);
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "business_nature_id" TO "business_nature"`);
