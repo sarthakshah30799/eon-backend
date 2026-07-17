@@ -109,21 +109,18 @@ export class Transaction extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionType,
-    enumName: "transactions_transaction_type_enum",
   })
   transactionType: TransactionType;
 
   @Column({
     type: "enum",
     enum: TradeMode,
-    enumName: "transactions_trade_mode_enum",
   })
   tradeMode: TradeMode;
 
   @Column({
     type: "enum",
     enum: TransactionStatus,
-    enumName: "transactions_status_enum",
     default: TransactionStatus.DRAFT,
   })
   status: TransactionStatus;

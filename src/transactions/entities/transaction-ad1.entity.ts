@@ -1,12 +1,6 @@
-import {
-  Column,
-  Entity,
-} from "typeorm";
+import { Column, Entity } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
-import {
-  TransactionType,
-  TransactionProfileType,
-} from "../transactions.enums";
+import { TransactionType, TransactionProfileType } from "../transactions.enums";
 
 @Entity("transaction_ad1")
 export class TransactionAd1 extends BaseEntity {
@@ -24,7 +18,6 @@ export class TransactionAd1 extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionType,
-    enumName: "transactions_transaction_type_enum",
   })
   transactionType: TransactionType;
 
@@ -100,52 +93,142 @@ export class TransactionAd1 extends BaseEntity {
   @Column({ type: "uuid", name: "currency_id", nullable: true })
   currencyId: string | null;
 
-  @Column({ type: "numeric", name: "fc_volume", precision: 18, scale: 7, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "fc_volume",
+    precision: 18,
+    scale: 7,
+    nullable: true,
+  })
   fcVolume: string | null;
 
-  @Column({ type: "numeric", name: "sale_rate", precision: 18, scale: 7, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "sale_rate",
+    precision: 18,
+    scale: 7,
+    nullable: true,
+  })
   saleRate: string | null;
 
-  @Column({ type: "numeric", name: "total_inr_amt", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "total_inr_amt",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   totalInrAmt: string | null;
 
-  @Column({ type: "numeric", name: "gst", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "gst",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   gst: string | null;
 
-  @Column({ type: "numeric", name: "bank_charges", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "bank_charges",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   bankCharges: string | null;
 
-  @Column({ type: "numeric", name: "tcs", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "tcs",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   tcs: string | null;
 
-  @Column({ type: "numeric", name: "other_income", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "other_income",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   otherIncome: string | null;
 
-  @Column({ type: "numeric", name: "final_amount", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "final_amount",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   finalAmount: string | null;
 
-  @Column({ type: "numeric", name: "settlement_rate", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "settlement_rate",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   settlementRate: string | null;
 
-  @Column({ type: "numeric", name: "gross_revenue", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "gross_revenue",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   grossRevenue: string | null;
 
-  @Column({ type: "numeric", name: "revenue_receivable", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "revenue_receivable",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   revenueReceivable: string | null;
 
   @Column({ type: "uuid", name: "agent_id", nullable: true })
   agentId: string | null;
 
-  @Column({ type: "numeric", name: "agent_comm", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "agent_comm",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   agentComm: string | null;
 
-  @Column({ type: "numeric", name: "tds", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "tds",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   tds: string | null;
 
-  @Column({ type: "numeric", name: "commission_payable", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "commission_payable",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   commissionPayable: string | null;
 
-  @Column({ type: "numeric", name: "net_revenue", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "net_revenue",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   netRevenue: string | null;
 
   @Column({ type: "uuid", name: "bank_name_id", nullable: true })

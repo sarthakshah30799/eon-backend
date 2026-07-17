@@ -1,10 +1,4 @@
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-} from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "./transaction.entity";
 import { TransactionLogAction } from "../transactions.enums";
@@ -27,7 +21,6 @@ export class TransactionLog extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionLogAction,
-    enumName: "transaction_logs_action_enum",
   })
   action: TransactionLogAction;
 

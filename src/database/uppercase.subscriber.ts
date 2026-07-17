@@ -41,6 +41,7 @@ export class UppercaseSubscriber implements EntitySubscriberInterface {
       'id',
       'createdBy',
       'updatedBy',
+      'deletedBy',
       'createdAt',
       'updatedAt',
     ];
