@@ -407,7 +407,7 @@ export class TransactionAccountPostingWorker
       return averageCost;
     };
 
-    const determineAccount = (
+  const determineAccount = (
       product: Product,
       kind: "purchase" | "sale" | "profit",
     ) => {
@@ -435,11 +435,32 @@ export class TransactionAccountPostingWorker
       return account;
     };
 
+    const resolveRoundOffDirection = (
+      roundOffAmount: number,
+      transactionType: TransactionType,
+    ): TransactionPostingDirection | null => {
+      if (!Number.isFinite(roundOffAmount) || roundOffAmount === 0) {
+        return null;
+      }
+
+      if (transactionType === TransactionType.PURCHASE) {
+        return roundOffAmount > 0
+          ? TransactionPostingDirection.DEBIT
+          : TransactionPostingDirection.CREDIT;
+      }
+
+      return roundOffAmount > 0
+        ? TransactionPostingDirection.CREDIT
+        : TransactionPostingDirection.DEBIT;
+    };
+
     const itemPostingGroups = new Map<
       string,
       Omit<PostingDraft, "amount"> & { amountCents: number }
     >();
     const postingSequence: PostingDraft[] = [];
+    let roundOffAccountId: string | null = null;
+    let roundOffAccountSnapshot: TransactionReferenceSnapshotValue = null;
     const postingActorId =
       transaction.updatedBy || transaction.createdBy || this.workerId;
 
@@ -512,6 +533,7 @@ export class TransactionAccountPostingWorker
       const per = Number(item.per ?? 1) || 1;
       const unitRate = rate / per;
       const itemTotalAmount = Number(roundMoney(quantity * unitRate));
+      const roundOffAmount = Number(item.roundOff ?? 0);
 
       if (!isFinalStandardTransaction) {
         item.holdCost = null;
@@ -540,6 +562,29 @@ export class TransactionAccountPostingWorker
           true,
         );
         itemUpdates.push(item);
+
+        const roundOffDirection = resolveRoundOffDirection(
+          roundOffAmount,
+          transaction.transactionType as TransactionType,
+        );
+        if (roundOffDirection) {
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ROUND_OFF,
+              sourceId: item.id,
+              accountId: roundOffAccountId as string,
+              accountSnapshot: roundOffAccountSnapshot,
+              profileId: null,
+              direction: roundOffDirection,
+              amount: roundMoney(Math.abs(roundOffAmount)),
+              remarks: `Purchase round off item ${item.lineNo}`,
+            },
+            false,
+          );
+        }
         continue;
       }
 
@@ -580,6 +625,29 @@ export class TransactionAccountPostingWorker
         },
         true,
       );
+
+      const roundOffDirection = resolveRoundOffDirection(
+        roundOffAmount,
+        transaction.transactionType as TransactionType,
+      );
+      if (roundOffDirection) {
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: TransactionPostingSourceType.ROUND_OFF,
+            sourceId: item.id,
+            accountId: roundOffAccountId as string,
+            accountSnapshot: roundOffAccountSnapshot,
+            profileId: null,
+            direction: roundOffDirection,
+            amount: roundMoney(Math.abs(roundOffAmount)),
+            remarks: `Sale round off item ${item.lineNo}`,
+          },
+          false,
+        );
+      }
 
       addPosting(
         {
@@ -631,6 +699,20 @@ export class TransactionAccountPostingWorker
 
       controlAccountId = accountIdText;
       controlAccountSnapshot = await resolveAccountSnapshot(accountIdText);
+      const roundOffAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "ROUND_OFF_ACCOUNT",
+        );
+
+      if (!roundOffAccountText) {
+        throw new BadRequestException(
+          "Missing ROUND_OFF_ACCOUNT additional setting",
+        );
+      }
+
+      roundOffAccountId = roundOffAccountText;
+      roundOffAccountSnapshot = await resolveAccountSnapshot(roundOffAccountText);
       controlDirection =
         transaction.transactionType === TransactionType.PURCHASE
           ? TransactionPostingDirection.CREDIT
@@ -645,7 +727,13 @@ export class TransactionAccountPostingWorker
         (sum, currentCharge) => sum + Number(roundMoney(Number(currentCharge.amount))),
         0,
       );
-      const controlAmountTotal = Number(roundMoney(itemTotal + chargeTotal));
+      const roundOffTotal = sortedItems.reduce(
+        (sum, currentItem) => sum + Number(currentItem.roundOff ?? 0),
+        0,
+      );
+      const controlAmountTotal = Number(
+        roundMoney(itemTotal + roundOffTotal + chargeTotal),
+      );
 
       addPosting(
         {

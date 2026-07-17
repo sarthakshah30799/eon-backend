@@ -23,7 +23,7 @@ export class UserController {
     @Query('activeOnly') activeOnly = 'true',
     @Query('search') search?: string,
     @Query('branchId') branchId?: string,
-    @Query('roleCode') roleCode?: string,
+    @Query('roleFilter') roleFilter?: string,
   ): Promise<UserResponseDto[]> {
     const user = await this.userService.findById(session.userId, session.userId, {
       activeBranchId: session?.activeBranchId ?? null,
@@ -36,7 +36,7 @@ export class UserController {
         activeOnly !== 'false',
         search,
         effectiveBranchId,
-        roleCode,
+        roleFilter,
       );
     }
 
@@ -51,7 +51,7 @@ export class UserController {
       activeOnly !== 'false',
       search,
       effectiveBranchId,
-      roleCode,
+      roleFilter,
     );
   }
 

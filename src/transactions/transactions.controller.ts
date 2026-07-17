@@ -70,6 +70,35 @@ export class TransactionsController {
     );
   }
 
+  @Get('quantity-availability')
+  @ApiOperation({ summary: 'Get approved quantity availability for a branch, currency, and product' })
+  async getQuantityAvailability(
+    @Session() session: any,
+    @Query('branchId') branchId?: string,
+    @Query('currencyId') currencyId?: string,
+    @Query('productId') productId?: string,
+    @Query('excludeTransactionId') excludeTransactionId?: string,
+  ): Promise<{
+    branchId: string;
+    currencyId: string;
+    productId: string;
+    purchasedQuantity: string;
+    soldQuantity: string;
+    availableQuantity: string;
+  }> {
+    const effectiveBranchId = session?.isAdmin ? branchId : session?.activeBranchId;
+    if (!effectiveBranchId) {
+      throw new BadRequestException('Branch is required');
+    }
+
+    return this.transactionsService.getQuantityAvailability(
+      effectiveBranchId,
+      String(currencyId ?? ''),
+      String(productId ?? ''),
+      excludeTransactionId ?? undefined,
+    );
+  }
+
   @Post(':id/account-postings/rebuild')
   @ApiOperation({ summary: 'Queue a manual account posting rebuild for a transaction' })
   async requestAccountPostingRebuild(
@@ -99,7 +128,9 @@ export class TransactionsController {
       body,
       files,
       session?.userId ?? null,
+      session?.activeBranchId ?? null,
       session?.activeCounterId ?? null,
+      Boolean(session?.isAdmin || session?.isHoStaff),
     );
   }
 

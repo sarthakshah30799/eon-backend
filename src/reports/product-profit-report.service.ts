@@ -7,6 +7,7 @@ import { TransactionItem } from "../transactions/entities/transaction-item.entit
 import { TransactionAdditionalCharge } from "../transactions/entities/transaction-additional-charge.entity";
 import { TransactionType } from "../transactions/transactions.enums";
 import { ProductProfitReportQueryDto } from "./dto/product-profit-report-query.dto";
+import { ReportSortBy } from "./dto/report-sort.dto";
 
 type ProductProfitReportColumn = {
   key: string;
@@ -31,6 +32,7 @@ type ResolvedFilters = {
   partyTypeCodes: string[];
   currencyIds: string[];
   productIds: string[];
+  sortBy: ReportSortBy;
 };
 
 const COLUMNS: ProductProfitReportColumn[] = [
@@ -134,6 +136,19 @@ const getSnapshotName = (snapshot: Record<string, unknown> | null | undefined) =
 
 const getTransactionDate = (transaction: Transaction) => {
   return transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt;
+};
+
+const compareIsoDateStrings = (
+  left: string,
+  right: string,
+  direction: ReportSortBy,
+) => {
+  if (left === right) {
+    return 0;
+  }
+
+  const result = left.localeCompare(right);
+  return direction === ReportSortBy.DATE_DESC ? result * -1 : result;
 };
 
 const getTransactionTypeLabel = (transaction: Transaction) => {
@@ -265,6 +280,7 @@ export class ProductProfitReportService {
       partyTypeCodes: query.partyTypeCodes ?? [],
       currencyIds: query.currencyIds ?? [],
       productIds: query.productIds ?? [],
+      sortBy: query.sortBy ?? ReportSortBy.DATE_ASC,
     };
   }
 
@@ -438,7 +454,7 @@ export class ProductProfitReportService {
         return left.sortBranch.localeCompare(right.sortBranch);
       }
       if (left.sortDateTime !== right.sortDateTime) {
-        return left.sortDateTime.localeCompare(right.sortDateTime);
+        return compareIsoDateStrings(left.sortDateTime, right.sortDateTime, filters.sortBy);
       }
       if (left.sortTransactionNumber !== right.sortTransactionNumber) {
         return left.sortTransactionNumber.localeCompare(right.sortTransactionNumber);

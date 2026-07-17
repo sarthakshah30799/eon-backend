@@ -1,4 +1,6 @@
 import {
+  BeforeInsert,
+  BeforeUpdate,
   Column,
   Entity,
   Index,
@@ -75,6 +77,15 @@ export class TransactionItem extends BaseEntity {
   @Column({ type: "numeric", name: "profit", precision: 18, scale: 2, nullable: true })
   profit: string | null;
 
+  @Column({
+    type: "numeric",
+    name: "round_off",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  roundOff: string | null;
+
   @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
   currencySnapshot: TransactionReferenceSnapshotValue;
 
@@ -99,4 +110,25 @@ export class TransactionItem extends BaseEntity {
 
   @Column({ type: "text", nullable: true })
   remarks: string | null;
+
+  private recalculateRoundOff() {
+    const quantity = Number(this.quantity);
+    const rate = Number(this.rate);
+    const per = Number(this.per ?? 1) || 1;
+
+    if (!Number.isFinite(quantity) || !Number.isFinite(rate) || per === 0) {
+      this.roundOff = null;
+      return;
+    }
+
+    const totalAmount = quantity * (rate / per);
+    const roundedAmount = Math.round(totalAmount);
+    this.roundOff = (roundedAmount - totalAmount).toFixed(2);
+  }
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  beforeSave() {
+    this.recalculateRoundOff();
+  }
 }

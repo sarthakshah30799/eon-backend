@@ -8,6 +8,7 @@ import {
   IsString,
 } from "class-validator";
 import { TransactionType } from "../../transactions/transactions.enums";
+import { ReportSortBy } from "./report-sort.dto";
 
 export enum SalePurchaseReportLayout {
   GROUPED = "grouped",
@@ -109,6 +110,15 @@ export class SalePurchaseReportQueryDto {
   @IsEnum(SalePurchaseReportLayout)
   @IsOptional()
   layout?: SalePurchaseReportLayout;
+
+  @ApiPropertyOptional({
+    description: "Sort order",
+    enum: ReportSortBy,
+    default: ReportSortBy.DATE_ASC,
+  })
+  @IsEnum(ReportSortBy)
+  @IsOptional()
+  sortBy?: ReportSortBy;
 
   @ApiPropertyOptional({
     description: "Export format",

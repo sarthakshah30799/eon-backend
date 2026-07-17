@@ -334,8 +334,10 @@ export class AdditionalSettingService {
     currentSeries: number,
     referenceDate: Date,
   ): string {
-    const series = String(Math.trunc(currentSeries)).padStart(9, '0');
-    return `${branchCode}${this.getFinancialYearSuffix(referenceDate)}${series}`;
+    const branchSegment = this.normalizeReferenceSegment(branchCode);
+    const availableSeriesDigits = Math.max(1, Math.min(9, 15 - branchSegment.length - 2));
+    const series = String(Math.trunc(currentSeries)).padStart(availableSeriesDigits, '0');
+    return `${branchSegment}${this.getFinancialYearSuffix(referenceDate)}${series}`;
   }
 
   async reserveTransactionNumber(

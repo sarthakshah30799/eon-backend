@@ -48,6 +48,7 @@ interface MigrationSummary {
   rowsSkipped: number;
   rowsFailed: number;
   transformations: number;
+  softDeletedRows: number;
 }
 
 interface ReportRow {
@@ -91,6 +92,7 @@ interface ResolvedRecord {
   sourceId: string | number | null | undefined;
   targetTable: string;
   lookupKey: string;
+  softDeleted?: boolean;
 }
 
 const TEMP_INITIAL_PASSWORD = 'Temp@1234';
@@ -151,6 +153,50 @@ const escapeIdentifier = (value: string): string =>
 
 const normalizeCode = (value: string): string =>
   value.trim().replace(/\s+/g, '_').toUpperCase();
+
+const MAX_WORKBOOK_CELL_LENGTH = 32000;
+
+const sanitizeWorkbookValue = (value: any): any => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return value.length > MAX_WORKBOOK_CELL_LENGTH
+      ? `${value.slice(0, MAX_WORKBOOK_CELL_LENGTH - 20)}...[truncated]`
+      : value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  if (Array.isArray(value) || typeof value === 'object') {
+    const text = JSON.stringify(value);
+    return text.length > MAX_WORKBOOK_CELL_LENGTH
+      ? `${text.slice(0, MAX_WORKBOOK_CELL_LENGTH - 20)}...[truncated]`
+      : text;
+  }
+
+  const text = String(value);
+  return text.length > MAX_WORKBOOK_CELL_LENGTH
+    ? `${text.slice(0, MAX_WORKBOOK_CELL_LENGTH - 20)}...[truncated]`
+    : text;
+};
+
+const sanitizeWorkbookRow = (row: ReportRow): ReportRow =>
+  Object.fromEntries(Object.entries(row).map(([key, value]) => [key, sanitizeWorkbookValue(value)]));
+
+interface ResolvedAuditFields {
+  deletedAt: Date | null;
+  deletedBy: string | null;
+  wasDeleted: boolean;
+  deletedAtSource: string;
+}
 
 @Injectable()
 export class MigrationToolService {
@@ -256,10 +302,13 @@ export class MigrationToolService {
   }
 
   async verifyConnection(dto: MigrationRunRequestDto) {
+    this.logger.log(`Verify connection started in ${dto.connectionMode} mode`);
     return this.withSourceConnection(dto, async pool => {
       const result = await pool.request().query('SELECT 1 AS ok');
+      const verified = Array.isArray(result.recordset) && result.recordset.length > 0;
+      this.logger.log(`Verify connection finished: verified=${verified}`);
       return {
-        verified: Array.isArray(result.recordset) && result.recordset.length > 0,
+        verified,
         message: 'Source database connection verified successfully.',
       };
     });
@@ -270,11 +319,12 @@ export class MigrationToolService {
     mode: MigrationMode,
     actorUserId: string,
   ): MigrationContext {
-    const expandedTables = this.expandSelectedTables(dto.selectedTables);
+    const selectedTables = dto.selectedTables ?? [];
+    const expandedTables = this.expandSelectedTables(selectedTables);
     return {
       mode,
       actorUserId,
-      selectedTables: dto.selectedTables,
+      selectedTables,
       expandedTables,
       sourceConnection: dto.connectionMode,
       summary: {
@@ -284,6 +334,7 @@ export class MigrationToolService {
         rowsSkipped: 0,
         rowsFailed: 0,
         transformations: 0,
+        softDeletedRows: 0,
       },
       tableResults: [],
       rowResults: [],
@@ -495,6 +546,10 @@ export class MigrationToolService {
       technicalNote: params.technicalNote ?? '',
     });
     context.summary.rowsFailed += 1;
+    this.logger.error(
+      `[${params.sourceTable}] row=${params.sourceRowIdentifier} field=${params.fieldName} error=${params.errorMessage}` +
+        (params.technicalNote ? ` note=${params.technicalNote}` : ''),
+    );
   }
 
   private addSkippedRow(
@@ -513,6 +568,9 @@ export class MigrationToolService {
       fallbackAction: params.fallbackAction,
     });
     context.summary.rowsSkipped += 1;
+    this.logger.warn(
+      `[${params.sourceTable}] row=${params.sourceRowIdentifier} skipped reason=${params.reason} fallback=${params.fallbackAction}`,
+    );
   }
 
   private addRowResult(
@@ -531,6 +589,125 @@ export class MigrationToolService {
       targetId: params.targetId,
       status: params.status,
       note: params.note,
+    });
+  }
+
+  private getSourceDate(row: SourceRow, keys: string[]): Date | null {
+    for (const key of keys) {
+      const date = toNullableDate(row[key]);
+      if (date) {
+        return date;
+      }
+    }
+    return null;
+  }
+
+  private getSourceString(row: SourceRow, keys: string[]): string | null {
+    for (const key of keys) {
+      const value = toNullableString(row[key]);
+      if (value) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private resolveAuditFields(
+    row: SourceRow,
+    context: MigrationContext,
+    params: {
+      sourceTable: string;
+      sourceRowIdentifier: string;
+    },
+  ): ResolvedAuditFields {
+    const deletedFlag = toBoolean(row.bIsDeleted ?? row.bIsdeleted);
+    const deletedDate =
+      this.getSourceDate(row, ['dDeletedDate', 'dDeleteddate', 'dDeletedAt', 'dDeletedat']) ??
+      this.getSourceDate(row, ['dLastUpdateDate', 'dlastupdatedDate', 'dCreationDate', 'dCreatedDate']) ??
+      (deletedFlag ? new Date() : null);
+    const deletedBySource = this.getSourceString(row, ['nDeletedBy', 'nDeletedBY', 'nDeletedby']);
+    const deletedBy = deletedBySource
+      ? this.userMap.get(String(deletedBySource)) ?? deletedBySource
+      : null;
+
+    if (deletedFlag) {
+      context.summary.softDeletedRows += 1;
+      const auditSource =
+        this.getSourceDate(row, ['dDeletedDate', 'dDeleteddate', 'dDeletedAt', 'dDeletedat']) ?
+          'source delete date'
+          : this.getSourceDate(row, ['dLastUpdateDate', 'dlastupdatedDate', 'dCreationDate', 'dCreatedDate']) ?
+            'row audit date'
+            : 'current migration timestamp';
+
+      this.addFieldStatus(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: 'bIsDeleted',
+        sourceValue: true,
+        targetColumn: 'deletedAt',
+        targetValue: deletedDate,
+        status: 'transformed',
+        note: `Soft-delete inferred from old row; deletedAt resolved from ${auditSource}`,
+      });
+
+      if (deletedBy) {
+        this.addFieldStatus(context, {
+          sourceTable: params.sourceTable,
+          sourceColumn: 'nDeletedBy',
+          sourceValue: deletedBySource,
+          targetColumn: 'deletedBy',
+          targetValue: deletedBy,
+          status: 'saved',
+          note: 'Soft-delete actor preserved as source reference only',
+        });
+      } else {
+        this.addWarning(context, {
+          sourceTable: params.sourceTable,
+          sourceColumn: 'nDeletedBy',
+          note: `Deleted row ${params.sourceRowIdentifier} has no resolvable deletedBy reference`,
+        });
+      }
+    }
+
+    return {
+      deletedAt: deletedFlag ? deletedDate : null,
+      deletedBy: deletedFlag ? deletedBy : null,
+      wasDeleted: deletedFlag,
+      deletedAtSource: deletedFlag
+        ? this.getSourceDate(row, ['dDeletedDate', 'dDeleteddate', 'dDeletedAt', 'dDeletedat'])
+          ? 'source delete date'
+          : this.getSourceDate(row, ['dLastUpdateDate', 'dlastupdatedDate', 'dCreationDate', 'dCreatedDate'])
+            ? 'row audit date'
+            : 'current migration timestamp'
+        : 'not deleted',
+    };
+  }
+
+  private logLegacyPermissionBlob(
+    row: SourceRow,
+    context: MigrationContext,
+    params: {
+      sourceTable: string;
+      sourceRowIdentifier: string;
+    },
+  ) {
+    const permissionValue = row.Permission ?? row.permission;
+    if (permissionValue === undefined || permissionValue === null || String(permissionValue).trim() === '') {
+      return;
+    }
+
+    this.addFieldStatus(context, {
+      sourceTable: params.sourceTable,
+      sourceColumn: 'Permission',
+      sourceValue: permissionValue,
+      targetColumn: 'permissions / roles_menu_permissions',
+      targetValue: null,
+      status: 'unmapped',
+      note: 'Legacy sidebar/menu permission blob captured for manual review; exact decode depends on business rule',
+    });
+    this.addWarning(context, {
+      sourceTable: params.sourceTable,
+      sourceColumn: 'Permission',
+      note: `Permission blob captured for row ${params.sourceRowIdentifier}; review required to map into current permission tables`,
     });
   }
 
@@ -580,9 +757,12 @@ export class MigrationToolService {
     pool: mssql.ConnectionPool,
     tableName: string,
   ): Promise<SourceRow[]> {
+    this.logger.log(`Reading source table ${tableName}`);
     const query = `SELECT * FROM ${escapeIdentifier(tableName)}`;
     const result = await pool.request().query(query);
-    return result.recordset ?? [];
+    const rows = result.recordset ?? [];
+    this.logger.log(`Read ${rows.length} row(s) from ${tableName}`);
+    return rows;
   }
 
   private ensureSourceRows(
@@ -604,6 +784,7 @@ export class MigrationToolService {
     const oldId = row.nCompID ?? row.ncompid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vCompanyName) || `company-${oldId}`;
     const targetTable = 'company';
+    this.logger.log(`[mstcompanyrecord] resolving company oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
 
     if (this.companyMap.has(String(oldId))) {
       return {
@@ -617,9 +798,20 @@ export class MigrationToolService {
 
     const name = toStringOrFallback(row.vCompanyName, `Company ${oldId}`);
     const panNo = toStringOrFallback(row.cgstno ?? row.panNo ?? row.PANNO, `PAN_PENDING_${oldId}`);
+    const audit = this.resolveAuditFields(row, context, {
+      sourceTable: 'mstcompanyrecord',
+      sourceRowIdentifier: String(oldId ?? ''),
+    });
     const existing = await this.companyRepository.findOne({ where: [{ panNo }, { name }] });
 
     if (existing) {
+      this.logger.log(`[mstcompanyrecord] reused company oldId=${String(oldId ?? '')} targetId=${existing.id}`);
+      if (audit.wasDeleted && context.mode === 'real') {
+        existing.deletedAt = audit.deletedAt;
+        existing.deletedBy = audit.deletedBy;
+        await this.companyRepository.save(existing);
+        this.logger.warn(`[mstcompanyrecord] applied soft-delete to reused company id=${existing.id}`);
+      }
       this.companyMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
         oldTable: 'mstcompanyrecord',
@@ -628,7 +820,7 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey };
+      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
       const company = this.companyRepository.create({
@@ -647,12 +839,13 @@ export class MigrationToolService {
         email: null,
         createdBy: context.actorUserId,
         updatedBy: context.actorUserId,
-        deletedAt: null,
-        deletedBy: null,
+        deletedAt: audit.deletedAt,
+        deletedBy: audit.deletedBy,
       });
 
     if (context.mode === 'real') {
       const saved = await this.companyRepository.save(company);
+      this.logger.log(`[mstcompanyrecord] created company id=${saved.id}`);
       this.companyMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
         oldTable: 'mstcompanyrecord',
@@ -661,10 +854,11 @@ export class MigrationToolService {
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey };
+      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const mockId = `mock-company-${oldId ?? randomUUID()}`;
+    this.logger.log(`[mstcompanyrecord] mock company id=${mockId}`);
     this.companyMap.set(String(oldId), mockId);
     this.addIdMap(context, {
       oldTable: 'mstcompanyrecord',
@@ -673,7 +867,7 @@ export class MigrationToolService {
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey };
+    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
   }
 
   private transformBranchCode(row: SourceRow): { value: string; transformed: boolean; sourceField: string } {
@@ -699,6 +893,7 @@ export class MigrationToolService {
     const oldId = row.nBranchID ?? row.nbranchid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vBranchCode) || `branch-${oldId}`;
     const targetTable = 'branches';
+    this.logger.log(`[mstcompany] resolving branch oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
 
     if (this.branchMap.has(String(oldId))) {
       return {
@@ -714,6 +909,10 @@ export class MigrationToolService {
     const branchNumber = toNullableNumber(row.nBranchID) ?? toNullableNumber(oldId) ?? 0;
     const companyOldId = row.nCompID ?? row.ncompid;
     const companyId = companyOldId !== undefined ? this.companyMap.get(String(companyOldId)) ?? null : null;
+    const audit = this.resolveAuditFields(row, context, {
+      sourceTable: 'mstcompany',
+      sourceRowIdentifier: String(oldId ?? ''),
+    });
     const existing = await this.branchRepository.findOne({
       where: [
         { code: transformedCode.value },
@@ -722,6 +921,13 @@ export class MigrationToolService {
     });
 
     if (existing) {
+      this.logger.log(`[mstcompany] reused branch oldId=${String(oldId ?? '')} targetId=${existing.id}`);
+      if (audit.wasDeleted && context.mode === 'real') {
+        existing.deletedAt = audit.deletedAt;
+        existing.deletedBy = audit.deletedBy;
+        await this.branchRepository.save(existing);
+        this.logger.warn(`[mstcompany] applied soft-delete to reused branch id=${existing.id}`);
+      }
       this.branchMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
         oldTable: 'mstcompany',
@@ -730,7 +936,7 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey };
+      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const branch = this.branchRepository.create({
@@ -760,8 +966,8 @@ export class MigrationToolService {
       isActive: toBoolean(row.bActive),
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
-      deletedAt: null,
-      deletedBy: null,
+      deletedAt: audit.deletedAt,
+      deletedBy: audit.deletedBy,
     });
 
     if (transformedCode.transformed) {
@@ -786,6 +992,7 @@ export class MigrationToolService {
 
     if (context.mode === 'real') {
       const saved = await this.branchRepository.save(branch);
+      this.logger.log(`[mstcompany] created branch id=${saved.id}`);
       this.branchMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
         oldTable: 'mstcompany',
@@ -794,10 +1001,11 @@ export class MigrationToolService {
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey };
+      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const mockId = `mock-branch-${oldId ?? randomUUID()}`;
+    this.logger.log(`[mstcompany] mock branch id=${mockId}`);
     this.branchMap.set(String(oldId), mockId);
     this.addIdMap(context, {
       oldTable: 'mstcompany',
@@ -806,7 +1014,7 @@ export class MigrationToolService {
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey };
+    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
   }
 
   private async resolveCounter(
@@ -816,6 +1024,7 @@ export class MigrationToolService {
     const oldId = row.nCounterId ?? row.ncounterid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vCounterId) || toNullableString(row.vCounterName) || `counter-${oldId}`;
     const targetTable = 'counters';
+    this.logger.log(`[mstcounter] resolving counter oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
 
     if (this.counterMap.has(String(oldId))) {
       return {
@@ -830,6 +1039,10 @@ export class MigrationToolService {
     const branchOldId = row.nBranchID ?? row.nbranchid;
     const branchId = branchOldId !== undefined ? this.branchMap.get(String(branchOldId)) ?? null : null;
     const counterNo = toNullableNumber(row.vCounterId) ?? toNullableNumber(row.nCounterId) ?? 1;
+    const audit = this.resolveAuditFields(row, context, {
+      sourceTable: 'mstcounter',
+      sourceRowIdentifier: String(oldId ?? ''),
+    });
     const existing = await this.counterRepository.findOne({
       where: [
         { counterNo, name: toStringOrFallback(row.vCounterName || row.vDescription, `Counter ${oldId}`) },
@@ -837,6 +1050,13 @@ export class MigrationToolService {
     });
 
     if (existing) {
+      this.logger.log(`[mstcounter] reused counter oldId=${String(oldId ?? '')} targetId=${existing.id}`);
+      if (audit.wasDeleted && context.mode === 'real') {
+        existing.deletedAt = audit.deletedAt;
+        existing.deletedBy = audit.deletedBy;
+        await this.counterRepository.save(existing);
+        this.logger.warn(`[mstcounter] applied soft-delete to reused counter id=${existing.id}`);
+      }
       this.counterMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
         oldTable: 'mstcounter',
@@ -845,7 +1065,7 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey };
+      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const counter = this.counterRepository.create({
@@ -858,12 +1078,13 @@ export class MigrationToolService {
       isCombine: false,
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
-      deletedAt: null,
-      deletedBy: null,
+      deletedAt: audit.deletedAt,
+      deletedBy: audit.deletedBy,
     });
 
     if (context.mode === 'real') {
       const saved = await this.counterRepository.save(counter);
+      this.logger.log(`[mstcounter] created counter id=${saved.id}`);
       this.counterMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
         oldTable: 'mstcounter',
@@ -872,10 +1093,11 @@ export class MigrationToolService {
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey };
+      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const mockId = `mock-counter-${oldId ?? randomUUID()}`;
+    this.logger.log(`[mstcounter] mock counter id=${mockId}`);
     this.counterMap.set(String(oldId), mockId);
     this.addIdMap(context, {
       oldTable: 'mstcounter',
@@ -884,7 +1106,126 @@ export class MigrationToolService {
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey };
+    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+  }
+
+  private getOldIdFromRow(row: SourceRow, primaryKeyFields: string[]): string | number | null | undefined {
+    for (const field of primaryKeyFields) {
+      if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+        return row[field];
+      }
+    }
+    return row.id ?? row.ID;
+  }
+
+  private findSourceRowByOldId(
+    context: MigrationContext,
+    task: InternalTask,
+    oldId: string | number | null | undefined,
+    primaryKeyFields: string[],
+  ): SourceRow | undefined {
+    if (oldId === null || oldId === undefined || oldId === '') {
+      return undefined;
+    }
+
+    const rows = this.getSourceRows(context, task);
+    return rows.find(row => {
+      const candidate = this.getOldIdFromRow(row, primaryKeyFields);
+      return candidate !== undefined && candidate !== null && String(candidate) === String(oldId);
+    });
+  }
+
+  private async resolveBranchByOldId(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+    oldId: string | number | null | undefined,
+  ): Promise<string | null> {
+    if (oldId === null || oldId === undefined || oldId === '') {
+      return null;
+    }
+
+    const key = String(oldId);
+    const existing = this.branchMap.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    this.logger.log(`[mstcompany] lazy resolving branch oldId=${key} from relation context`);
+    if (!this.getSourceRows(context, 'branch').length) {
+      const rows = await this.readSourceRows(pool, 'mstcompany');
+      this.ensureSourceRows(context, 'branch', rows);
+    }
+
+    const row = this.findSourceRowByOldId(context, 'branch', oldId, ['nBranchID', 'nbranchid', 'id', 'ID']);
+    if (!row) {
+      this.logger.warn(`[mstcompany] could not locate source branch row for oldId=${key}`);
+      return null;
+    }
+
+    const resolved = await this.resolveBranch(row, context);
+    return resolved.id;
+  }
+
+  private async resolveCounterByOldId(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+    oldId: string | number | null | undefined,
+  ): Promise<string | null> {
+    if (oldId === null || oldId === undefined || oldId === '') {
+      return null;
+    }
+
+    const key = String(oldId);
+    const existing = this.counterMap.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    this.logger.log(`[mstcounter] lazy resolving counter oldId=${key} from relation context`);
+    if (!this.getSourceRows(context, 'counter').length) {
+      const rows = await this.readSourceRows(pool, 'mstcounter');
+      this.ensureSourceRows(context, 'counter', rows);
+    }
+
+    const row = this.findSourceRowByOldId(context, 'counter', oldId, ['nCounterID', 'nCounterId', 'ncounterid', 'id', 'ID']);
+    if (!row) {
+      this.logger.warn(`[mstcounter] could not locate source counter row for oldId=${key}`);
+      return null;
+    }
+
+    const resolved = await this.resolveCounter(row, context);
+    return resolved.id;
+  }
+
+  private async resolveUserByOldId(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+    oldId: string | number | null | undefined,
+  ): Promise<string | null> {
+    if (oldId === null || oldId === undefined || oldId === '') {
+      return null;
+    }
+
+    const key = String(oldId);
+    const existing = this.userMap.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    this.logger.log(`[mstuser] lazy resolving user oldId=${key} from relation context`);
+    if (!this.getSourceRows(context, 'user').length) {
+      const rows = await this.readSourceRows(pool, 'mstuser');
+      this.ensureSourceRows(context, 'user', rows);
+    }
+
+    const row = this.findSourceRowByOldId(context, 'user', oldId, ['nUserID', 'nuserid', 'id', 'ID']);
+    if (!row) {
+      this.logger.warn(`[mstuser] could not locate source user row for oldId=${key}`);
+      return null;
+    }
+
+    const resolved = await this.resolveUser(row, context);
+    return resolved.id;
   }
 
   private roleFlagsFromUserRow(row: SourceRow) {
@@ -916,6 +1257,7 @@ export class MigrationToolService {
     const lookupKey = toNullableString(row.vUID) || `user-${oldId}`;
     const targetTable = 'roles';
     const roleCode = `OLD_${normalizeCode(toStringOrFallback(row.vUID, String(oldId)))}`;
+    this.logger.log(`[mstuser] resolving role bundle oldId=${String(oldId ?? '')} roleCode=${roleCode}`);
 
     if (this.roleMap.has(String(oldId))) {
       return {
@@ -928,7 +1270,18 @@ export class MigrationToolService {
     }
 
     const existing = await this.roleRepository.findOne({ where: { code: roleCode } });
+    const audit = this.resolveAuditFields(row, context, {
+      sourceTable: 'mstuser',
+      sourceRowIdentifier: String(oldId ?? ''),
+    });
     if (existing) {
+      this.logger.log(`[mstuser] reused role oldId=${String(oldId ?? '')} targetId=${existing.id}`);
+      if (audit.wasDeleted && context.mode === 'real') {
+        existing.deletedAt = audit.deletedAt;
+        existing.deletedBy = audit.deletedBy;
+        await this.roleRepository.save(existing);
+        this.logger.warn(`[mstuser] applied soft-delete to reused role id=${existing.id}`);
+      }
       this.roleMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
         oldTable: 'mstuser',
@@ -937,7 +1290,7 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey };
+      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const role = this.roleRepository.create({
@@ -946,12 +1299,13 @@ export class MigrationToolService {
       ...this.roleFlagsFromUserRow(row),
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
-      deletedAt: null,
-      deletedBy: null,
+      deletedAt: audit.deletedAt,
+      deletedBy: audit.deletedBy,
     });
 
     if (context.mode === 'real') {
       const saved = await this.roleRepository.save(role);
+      this.logger.log(`[mstuser] created role id=${saved.id}`);
       this.roleMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
         oldTable: 'mstuser',
@@ -960,10 +1314,11 @@ export class MigrationToolService {
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey };
+      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const mockId = `mock-role-${oldId ?? randomUUID()}`;
+    this.logger.log(`[mstuser] mock role id=${mockId}`);
     this.roleMap.set(String(oldId), mockId);
     this.addIdMap(context, {
       oldTable: 'mstuser',
@@ -972,7 +1327,7 @@ export class MigrationToolService {
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey };
+    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
   }
 
   private async resolveUser(
@@ -982,6 +1337,7 @@ export class MigrationToolService {
     const oldId = row.nUserID ?? row.nuserid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vUID) || `user-${oldId}`;
     const targetTable = 'users';
+    this.logger.log(`[mstuser] resolving user oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
 
     if (this.userMap.has(String(oldId))) {
       return {
@@ -995,9 +1351,20 @@ export class MigrationToolService {
 
     const code = toStringOrFallback(row.vUID, `USER_${oldId}`);
     const email = toNullableString(row.vMailID) ?? `user-${oldId}@migrated.local`;
+    const audit = this.resolveAuditFields(row, context, {
+      sourceTable: 'mstuser',
+      sourceRowIdentifier: String(oldId ?? ''),
+    });
     const existing = await this.userRepository.findOne({ where: [{ code }, { email }] });
 
     if (existing) {
+      this.logger.log(`[mstuser] reused user oldId=${String(oldId ?? '')} targetId=${existing.id}`);
+      if (audit.wasDeleted && context.mode === 'real') {
+        existing.deletedAt = audit.deletedAt;
+        existing.deletedBy = audit.deletedBy;
+        await this.userRepository.save(existing);
+        this.logger.warn(`[mstuser] applied soft-delete to reused user id=${existing.id}`);
+      }
       this.userMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
         oldTable: 'mstuser',
@@ -1006,7 +1373,7 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey };
+      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const hashedPassword = await bcrypt.hash(TEMP_INITIAL_PASSWORD, 10);
@@ -1031,12 +1398,13 @@ export class MigrationToolService {
       resetPasswordExpires: null,
       createdBy: context.actorUserId,
       updatedBy: context.actorUserId,
-      deletedAt: null,
-      deletedBy: null,
+      deletedAt: audit.deletedAt,
+      deletedBy: audit.deletedBy,
     });
 
     if (context.mode === 'real') {
       const saved = await this.userRepository.save(user);
+      this.logger.log(`[mstuser] created user id=${saved.id}`);
       this.userMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
         oldTable: 'mstuser',
@@ -1045,10 +1413,11 @@ export class MigrationToolService {
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey };
+      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
     }
 
     const mockId = `mock-user-${oldId ?? randomUUID()}`;
+    this.logger.log(`[mstuser] mock user id=${mockId}`);
     this.userMap.set(String(oldId), mockId);
     this.addIdMap(context, {
       oldTable: 'mstuser',
@@ -1057,7 +1426,7 @@ export class MigrationToolService {
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey };
+    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
   }
 
   private async processCompanies(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
@@ -1065,6 +1434,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstcompanyrecord] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstcompanyrecord');
     this.ensureSourceRows(context, 'company', rows);
     let inserted = 0;
@@ -1080,7 +1450,7 @@ export class MigrationToolService {
           sourcePrimaryKey: String(row.nCompID ?? row.id ?? row.ID ?? ''),
           targetId: resolved.id,
           status: context.mode === 'real' && resolved.created ? 'inserted' : 'mocked',
-          note: resolved.created ? 'Company created or mapped' : 'Company reused from target db',
+          note: `${resolved.created ? 'Company created or mapped' : 'Company reused from target db'}${resolved.softDeleted ? ' Source row marked deleted.' : ''}`,
         });
         if (resolved.created) {
           inserted += 1;
@@ -1106,6 +1476,7 @@ export class MigrationToolService {
       rowCountFailed: failed,
       note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
     });
+    this.logger.log(`[mstcompanyrecord] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
   }
 
   private async processBranches(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
@@ -1113,6 +1484,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstcompany] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstcompany');
     this.ensureSourceRows(context, 'branch', rows);
     let inserted = 0;
@@ -1140,7 +1512,7 @@ export class MigrationToolService {
           sourcePrimaryKey: String(row.nBranchID ?? row.id ?? row.ID ?? ''),
           targetId: resolved.id,
           status: resolved.created ? 'inserted' : 'reused',
-          note: resolved.created ? 'Branch created or mapped' : 'Branch reused from target db',
+          note: `${resolved.created ? 'Branch created or mapped' : 'Branch reused from target db'}${resolved.softDeleted ? ' Source row marked deleted.' : ''}`,
         });
         if (resolved.created) {
           inserted += 1;
@@ -1168,6 +1540,7 @@ export class MigrationToolService {
       rowCountFailed: failed,
       note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
     });
+    this.logger.log(`[mstcompany] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
   }
 
   private async processCounters(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
@@ -1175,6 +1548,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstcounter] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstcounter');
     this.ensureSourceRows(context, 'counter', rows);
     let inserted = 0;
@@ -1190,7 +1564,7 @@ export class MigrationToolService {
           sourcePrimaryKey: String(row.nCounterId ?? row.id ?? row.ID ?? ''),
           targetId: resolved.id,
           status: resolved.created ? 'inserted' : 'reused',
-          note: resolved.created ? 'Counter created or mapped' : 'Counter reused from target db',
+          note: `${resolved.created ? 'Counter created or mapped' : 'Counter reused from target db'}${resolved.softDeleted ? ' Source row marked deleted.' : ''}`,
         });
         if (resolved.created) {
           inserted += 1;
@@ -1218,6 +1592,7 @@ export class MigrationToolService {
       rowCountFailed: failed,
       note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
     });
+    this.logger.log(`[mstcounter] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
   }
 
   private async processUsers(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
@@ -1225,6 +1600,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstuser] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstuser');
     this.ensureSourceRows(context, 'user', rows);
     let insertedUsers = 0;
@@ -1234,23 +1610,30 @@ export class MigrationToolService {
     for (const row of rows) {
       context.summary.rowsScanned += 1;
       try {
+        this.logLegacyPermissionBlob(row, context, {
+          sourceTable: 'mstuser',
+          sourceRowIdentifier: String(row.nUserID ?? row.id ?? row.ID ?? ''),
+        });
         const userResolved = await this.resolveUser(row, context);
         const roleResolved = await this.resolveUserRoleBundle(row, context);
         context.userRows.push(row);
+
+        const userDeletedSuffix = userResolved.softDeleted ? ' Source row marked deleted.' : '';
+        const roleDeletedSuffix = roleResolved.softDeleted ? ' Source row marked deleted.' : '';
 
         this.addRowResult(context, {
           sourceTable: 'mstuser',
           sourcePrimaryKey: String(row.nUserID ?? row.id ?? row.ID ?? ''),
           targetId: userResolved.id,
           status: userResolved.created ? 'inserted' : 'reused',
-          note: userResolved.created ? 'User created or mapped' : 'User reused from target db',
+          note: `${userResolved.created ? 'User created or mapped' : 'User reused from target db'}${userDeletedSuffix}`,
         });
         this.addRowResult(context, {
           sourceTable: 'mstuser',
           sourcePrimaryKey: String(row.nUserID ?? row.id ?? row.ID ?? ''),
           targetId: roleResolved.id,
           status: roleResolved.created ? 'inserted' : 'reused',
-          note: roleResolved.created ? 'Role created from user access bundle' : 'Role reused from target db',
+          note: `${roleResolved.created ? 'Role created from user access bundle' : 'Role reused from target db'}${roleDeletedSuffix}`,
         });
 
         if (userResolved.created) insertedUsers += 1;
@@ -1277,20 +1660,28 @@ export class MigrationToolService {
       rowCountFailed: failed,
       note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
     });
+    this.logger.log(`[mstuser] table migration finished scanned=${rows.length} inserted=${insertedUsers + insertedRoles} failed=${failed}`);
   }
 
   private async ensureBranchCounterRelation(
     row: SourceRow,
     context: MigrationContext,
     sourceTable: string,
+    pool: mssql.ConnectionPool,
   ) {
     const branchOldId = row.nBranchID ?? row.nbranchid;
     const counterOldId = row.nCounterID ?? row.ncounterid;
     if (!branchOldId || !counterOldId) {
       return null;
     }
-    const branchId = this.branchMap.get(String(branchOldId));
-    const counterId = this.counterMap.get(String(counterOldId));
+    let branchId = this.branchMap.get(String(branchOldId));
+    let counterId = this.counterMap.get(String(counterOldId));
+    if (!branchId) {
+      branchId = await this.resolveBranchByOldId(pool, context, branchOldId);
+    }
+    if (!counterId) {
+      counterId = await this.resolveCounterByOldId(pool, context, counterOldId);
+    }
     if (!branchId || !counterId) {
       this.addSkippedRow(context, {
         sourceTable,
@@ -1319,6 +1710,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstBranchCounterLink] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstBranchCounterLink');
     this.ensureSourceRows(context, 'branchCounterLinks', rows);
     let inserted = 0;
@@ -1328,7 +1720,7 @@ export class MigrationToolService {
     for (const row of rows) {
       context.summary.rowsScanned += 1;
       try {
-        const relation = await this.ensureBranchCounterRelation(row, context, 'mstBranchCounterLink');
+        const relation = await this.ensureBranchCounterRelation(row, context, 'mstBranchCounterLink', pool);
         if (!relation) {
           skipped += 1;
           continue;
@@ -1365,6 +1757,7 @@ export class MigrationToolService {
       rowCountFailed: failed,
       note: context.mode === 'mock' ? 'Preview only' : 'Persisted as relation metadata',
     });
+    this.logger.log(`[mstBranchCounterLink] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
   }
 
   private async processBranchUserLinks(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
@@ -1372,6 +1765,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstBranchUserLink] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstBranchUserLink');
     this.ensureSourceRows(context, 'branchUserLinks', rows);
     context.branchUserLinks = rows;
@@ -1380,8 +1774,8 @@ export class MigrationToolService {
       context.summary.rowsScanned += 1;
       const branchOldId = row.nBranchID ?? row.nbranchid;
       const userOldId = row.nUserID ?? row.nuserid;
-      const branchId = branchOldId ? this.branchMap.get(String(branchOldId)) : undefined;
-      const userId = userOldId ? this.userMap.get(String(userOldId)) : undefined;
+      const branchId = branchOldId ? await this.resolveBranchByOldId(pool, context, branchOldId) : undefined;
+      const userId = userOldId ? await this.resolveUserByOldId(pool, context, userOldId) : undefined;
 
       if (!branchId || !userId) {
         this.addSkippedRow(context, {
@@ -1411,6 +1805,7 @@ export class MigrationToolService {
       rowCountFailed: 0,
       note: 'Used later for user-role assignments',
     });
+    this.logger.log(`[mstBranchUserLink] table migration finished scanned=${rows.length} skipped=${context.skippedRows.filter(row => row.sourceTable === 'mstBranchUserLink').length}`);
   }
 
   private async processCounterUserLinks(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
@@ -1418,6 +1813,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[mstCounterUserLink] table migration started mode=${context.mode}`);
     const rows = await this.readSourceRows(pool, 'mstCounterUserLink');
     this.ensureSourceRows(context, 'counterUserLinks', rows);
     context.counterUserLinks = rows;
@@ -1427,9 +1823,9 @@ export class MigrationToolService {
       const branchOldId = row.nBranchID ?? row.nbranchid;
       const counterOldId = row.nCounterID ?? row.ncounterid;
       const userOldId = row.nUserID ?? row.nuserid;
-      const branchId = branchOldId ? this.branchMap.get(String(branchOldId)) : undefined;
-      const counterId = counterOldId ? this.counterMap.get(String(counterOldId)) : undefined;
-      const userId = userOldId ? this.userMap.get(String(userOldId)) : undefined;
+      const branchId = branchOldId ? await this.resolveBranchByOldId(pool, context, branchOldId) : undefined;
+      const counterId = counterOldId ? await this.resolveCounterByOldId(pool, context, counterOldId) : undefined;
+      const userId = userOldId ? await this.resolveUserByOldId(pool, context, userOldId) : undefined;
 
       if (!branchId || !counterId || !userId) {
         this.addSkippedRow(context, {
@@ -1459,6 +1855,7 @@ export class MigrationToolService {
       rowCountFailed: 0,
       note: 'Used later for user-role assignments',
     });
+    this.logger.log(`[mstCounterUserLink] table migration finished scanned=${rows.length} skipped=${context.skippedRows.filter(row => row.sourceTable === 'mstCounterUserLink').length}`);
   }
 
   private getBranchCounterForBranch(branchId: string, context: MigrationContext): string | null {
@@ -1473,6 +1870,7 @@ export class MigrationToolService {
       return;
     }
 
+    this.logger.log(`[user_roles] flush started`);
     const uniqueAssignments = new Map<string, UserRole>();
     const actorId = context.actorUserId;
 
@@ -1564,24 +1962,30 @@ export class MigrationToolService {
       this.addWarning(context, {
         note: 'No user-role assignments were resolved from the selected tables.',
       });
+      this.logger.warn(`[user_roles] no assignments resolved`);
       return;
     }
 
     if (context.mode === 'real') {
       await this.userRoleRepository.save(entities);
+      this.logger.log(`[user_roles] saved ${entities.length} assignment(s)`);
     }
+    this.logger.log(`[user_roles] flush finished count=${entities.length}`);
   }
 
   private buildWorkbook(context: MigrationContext) {
+    this.logger.log(`Building workbook for ${context.mode} run with ${context.summary.tables} table result(s)`);
     const workbook = XLSX.utils.book_new();
     const addSheet = (name: string, rows: ReportRow[]) => {
-      const sheet = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ message: 'No rows' }]);
+      const safeRows = (rows.length > 0 ? rows : [{ message: 'No rows' }]).map(sanitizeWorkbookRow);
+      const sheet = XLSX.utils.json_to_sheet(safeRows);
       XLSX.utils.book_append_sheet(workbook, sheet, name.slice(0, 31));
     };
 
     addSheet('Summary', [
       {
         mode: context.mode,
+        runLabel: context.mode === 'mock' ? 'soft run / preview' : 'real migration',
         connectionMode: context.sourceConnection,
         selectedTables: context.selectedTables.join(', '),
         expandedTables: context.expandedTables.join(', '),
@@ -1592,6 +1996,7 @@ export class MigrationToolService {
         rowsSkipped: context.summary.rowsSkipped,
         rowsFailed: context.summary.rowsFailed,
         transformations: context.summary.transformations,
+        softDeletedRows: context.summary.softDeletedRows,
       },
     ]);
     addSheet(
@@ -1619,6 +2024,7 @@ export class MigrationToolService {
     addSheet('ID Map', context.idMap);
     addSheet('Field Status Log', context.fieldStatus);
 
+    this.logger.log(`Workbook built with ${workbook.SheetNames.length} sheet(s)`);
     return workbook;
   }
 
@@ -1627,12 +2033,17 @@ export class MigrationToolService {
     mode: MigrationMode,
     actorUserId: string,
   ): Promise<{ filename: string; buffer: Buffer; summary: MigrationSummary }> {
+    if (!dto.selectedTables || dto.selectedTables.length === 0) {
+      throw new BadRequestException('Please select at least one legacy table before running migration');
+    }
     const context = this.createContext(dto, mode, actorUserId);
     this.activeContext = context;
+    this.logger.log(`Migration run started mode=${mode} actor=${actorUserId} selectedTables=${dto.selectedTables.join(',')}`);
 
     try {
       await this.withSourceConnection(dto, async pool => {
         const selectedSet = new Set(context.expandedTables);
+        this.logger.log(`Expanded migration tables: ${context.expandedTables.join(', ')}`);
         const taskOrder: InternalTask[] = [
           'company',
           'branch',
@@ -1685,10 +2096,14 @@ export class MigrationToolService {
       const workbook = this.buildWorkbook(context);
       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
       const suffix = mode === 'mock' ? 'mock' : 'real';
-      const filename = `migration-${suffix}-${new Date().toISOString().replace(/[:.]/g, '-')}.xlsx`;
+      const filename = `migration-${suffix === 'mock' ? 'soft-run' : suffix}-${new Date().toISOString().replace(/[:.]/g, '-')}.xlsx`;
+      this.logger.log(
+        `Migration run finished mode=${mode} rowsScanned=${context.summary.rowsScanned} rowsInserted=${context.summary.rowsInserted} rowsSkipped=${context.summary.rowsSkipped} rowsFailed=${context.summary.rowsFailed} filename=${filename}`,
+      );
 
       return { filename, buffer, summary: context.summary };
     } finally {
+      this.logger.log(`Migration context cleared for mode=${mode}`);
       this.activeContext = null;
     }
   }
