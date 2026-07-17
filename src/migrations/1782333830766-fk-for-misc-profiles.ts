@@ -13,8 +13,8 @@ export class FkForMiscProfiles1782333830766 implements MigrationInterface {
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "business_nature" TO "business_nature_id"`);
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "tds_group" TO "tds_group_id"`);
         await queryRunner.query(`ALTER TABLE "party_profiles" RENAME COLUMN "location" TO "location_id"`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "financial_type" TO "financialType"`);
-        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "default_sign" TO "defaultSign"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "financial_type" TO "financial_type_id"`);
+        await queryRunner.query(`ALTER TABLE "financial_codes" RENAME COLUMN "default_sign" TO "default_sign_id"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "division_dept" TO "division_dept_id"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "account_type" TO "account_type_id"`);
         await queryRunner.query(`ALTER TABLE "account_profiles" RENAME COLUMN "sub_ledger" TO "sub_ledger_id"`);
