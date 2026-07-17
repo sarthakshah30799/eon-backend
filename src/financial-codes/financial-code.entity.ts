@@ -8,7 +8,6 @@ import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-pro
 export class FinancialCode extends BaseEntity {
   @ManyToOne(() => SelectOption, { nullable: false, onDelete: "RESTRICT" })
   @JoinColumn({
-    name: "financialType",
     foreignKeyConstraintName: "FK_financial_codes_financialType",
   })
   financialType: SelectOption;
@@ -22,7 +21,6 @@ export class FinancialCode extends BaseEntity {
 
   @ManyToOne(() => SelectOption, { nullable: false, onDelete: "RESTRICT" })
   @JoinColumn({
-    name: "defaultSign",
     foreignKeyConstraintName: "FK_financial_codes_defaultSign",
   })
   defaultSign: SelectOption;
