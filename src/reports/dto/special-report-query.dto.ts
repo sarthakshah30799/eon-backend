@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
 import { ArrayNotEmpty, IsArray, IsEnum, IsOptional, IsString } from "class-validator";
+import { ReportSortBy } from "./report-sort.dto";
 
 export enum SpecialReportTemplateEnum {
   ACCOUNT_POSTING = "ACCOUNT_POSTING",
@@ -41,6 +42,25 @@ export class SpecialReportQueryDto {
   @IsEnum(SpecialReportTemplateEnum)
   @IsOptional()
   template?: SpecialReportTemplateEnum;
+
+  @ApiPropertyOptional({
+    description: "Filter by transaction numbers",
+    isArray: true,
+  })
+  @Transform(parseArrayQuery)
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  transactionNumbers?: string[];
+
+  @ApiPropertyOptional({
+    description: "Sort order",
+    enum: ReportSortBy,
+    default: ReportSortBy.DATE_ASC,
+  })
+  @IsEnum(ReportSortBy)
+  @IsOptional()
+  sortBy?: ReportSortBy;
 
   @ApiPropertyOptional({
     description: "Export format",

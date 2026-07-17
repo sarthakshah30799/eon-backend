@@ -8,10 +8,11 @@ import { TransactionItem } from "../transactions/entities/transaction-item.entit
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { TransactionAdditionalCharge } from "../transactions/entities/transaction-additional-charge.entity";
 import { SalePurchaseReportQueryDto } from "./dto/sale-purchase-report-query.dto";
+import { ReportSortBy } from "./dto/report-sort.dto";
 
 type ReportLayout = "grouped" | "flat";
 type ReportExportFormat = "csv" | "xlsx";
-type ReportRowType = "ITEM" | "SUBTOTAL";
+type ReportRowType = "GROUP" | "ITEM" | "SUBTOTAL";
 
 type ReportColumn = {
   key: string;
@@ -23,6 +24,7 @@ type ReportRow = Record<string, string> & {
   transactionId: string;
   partyProfileId: string;
   sortPartyProfile: string;
+  sortBranch: string;
   sortDate: string;
   sortTransactionKey: string;
 };
@@ -36,6 +38,7 @@ type ResolvedFilters = {
   partyProfileIds: string[];
   partyTypeCodes: string[];
   transactionTypes: TransactionType[];
+  sortBy: ReportSortBy;
 };
 
 const BASE_COLUMNS: ReportColumn[] = [
@@ -232,6 +235,19 @@ const formatTransactionTypeLabel = (transaction: Transaction) =>
     .filter(Boolean)
     .join(" ");
 
+const compareIsoDateStrings = (
+  left: string,
+  right: string,
+  direction: ReportSortBy,
+) => {
+  if (left === right) {
+    return 0;
+  }
+
+  const result = left.localeCompare(right);
+  return direction === ReportSortBy.DATE_DESC ? result * -1 : result;
+};
+
 @Injectable()
 export class SalePurchaseReportService {
   constructor(
@@ -264,6 +280,7 @@ export class SalePurchaseReportService {
       partyProfileIds: query.partyProfileIds ?? [],
       partyTypeCodes: query.partyTypeCodes ?? [],
       transactionTypes: query.transactionTypes ?? [],
+      sortBy: query.sortBy ?? ReportSortBy.DATE_ASC,
     };
   }
 
@@ -338,6 +355,7 @@ export class SalePurchaseReportService {
   }
 
   private buildTransactionRows(transaction: Transaction): {
+    groupHeaderRow: ReportRow;
     groupedRows: ReportRow[];
     flatRows: ReportRow[];
     maxPayments: number;
@@ -355,10 +373,35 @@ export class SalePurchaseReportService {
       transaction.number ?? "",
     ].join("::");
     const branchLabel = getSnapshotLabel(transaction.branchSnapshot as Record<string, unknown> | null | undefined);
+    const branchSortKey = toText((transaction.branchSnapshot as Record<string, unknown> | null | undefined)?.code) || branchLabel;
     const partyProfileLabel = getSnapshotLabel(transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined);
     const partyProfileCode = toText((transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined)?.code);
     const partyProfileId = transaction.partyProfileId;
     const manualBillBook = getManualBookLabel(transaction);
+    const groupHeaderRow: ReportRow = {
+      rowType: "GROUP",
+      transactionId: transaction.id,
+      partyProfileId,
+      sortPartyProfile: partyProfileLabel,
+      sortBranch: branchSortKey,
+      sortDate,
+      sortTransactionKey,
+      branch: "",
+      date: "",
+      vno: "",
+      type: "Party Profile",
+      partyProfileCode: partyProfileCode || "",
+      partyProfileName: partyProfileLabel || partyProfileCode || partyProfileId,
+      currencyCode: "",
+      productCode: "",
+      quantity: "",
+      rate: "",
+      amount: "",
+      taxAmount: "",
+      netAmount: "",
+      manualBillBook: "",
+      profit: "",
+    } as ReportRow;
     const baseValues = {
       branch: branchLabel,
       date: dateLabel,
@@ -400,10 +443,11 @@ export class SalePurchaseReportService {
         rowType: "ITEM",
         transactionId: transaction.id,
         partyProfileId,
-        sortPartyProfile: partyProfileLabel,
-        sortDate,
-        sortTransactionKey,
-        ...transactionColumns,
+      sortPartyProfile: partyProfileLabel,
+      sortBranch: branchSortKey,
+      sortDate,
+      sortTransactionKey,
+      ...transactionColumns,
         currencyCode: toText((item.currencySnapshot as Record<string, unknown> | null | undefined)?.code),
         productCode: toText((item.productSnapshot as Record<string, unknown> | null | undefined)?.code),
         quantity: formatNumber(item.quantity, 7),
@@ -465,6 +509,7 @@ export class SalePurchaseReportService {
         transactionId: transaction.id,
         partyProfileId,
         sortPartyProfile: partyProfileLabel,
+        sortBranch: branchSortKey,
         sortDate,
         sortTransactionKey,
         branch: "",
@@ -505,6 +550,7 @@ export class SalePurchaseReportService {
     }
 
     return {
+      groupHeaderRow,
       groupedRows,
       flatRows,
       maxPayments: payments.length,
@@ -521,27 +567,37 @@ export class SalePurchaseReportService {
     const maxCharges = prepared.reduce((max, item) => Math.max(max, item.maxCharges), 0);
     const columns = buildColumns(maxPayments, maxCharges);
 
-    const rows = prepared
-      .flatMap(item => (layout === "grouped" ? item.groupedRows : item.flatRows))
-      .sort((left, right) => {
-        if (left.sortPartyProfile !== right.sortPartyProfile) {
-          return left.sortPartyProfile.localeCompare(right.sortPartyProfile);
-        }
+    const sortedPrepared = [...prepared].sort((left, right) => {
+      if (left.groupHeaderRow.sortPartyProfile !== right.groupHeaderRow.sortPartyProfile) {
+        return left.groupHeaderRow.sortPartyProfile.localeCompare(right.groupHeaderRow.sortPartyProfile);
+      }
 
-        if (left.sortDate !== right.sortDate) {
-          return left.sortDate.localeCompare(right.sortDate);
-        }
+      if (left.groupHeaderRow.sortBranch !== right.groupHeaderRow.sortBranch) {
+        return left.groupHeaderRow.sortBranch.localeCompare(right.groupHeaderRow.sortBranch);
+      }
 
-        if (left.sortTransactionKey !== right.sortTransactionKey) {
-          return left.sortTransactionKey.localeCompare(right.sortTransactionKey);
-        }
+      if (left.groupHeaderRow.sortDate !== right.groupHeaderRow.sortDate) {
+        return compareIsoDateStrings(left.groupHeaderRow.sortDate, right.groupHeaderRow.sortDate, filters.sortBy);
+      }
 
-        if (left.rowType !== right.rowType) {
-          return left.rowType === "ITEM" ? -1 : 1;
-        }
+      if (left.groupHeaderRow.sortTransactionKey !== right.groupHeaderRow.sortTransactionKey) {
+        return left.groupHeaderRow.sortTransactionKey.localeCompare(right.groupHeaderRow.sortTransactionKey);
+      }
 
-        return 0;
-      });
+      return 0;
+    });
+
+    const rows: ReportRow[] = [];
+    let lastPartyProfileId = "";
+
+    sortedPrepared.forEach(item => {
+      if (layout === "grouped" && item.groupHeaderRow.partyProfileId !== lastPartyProfileId) {
+        rows.push(item.groupHeaderRow);
+        lastPartyProfileId = item.groupHeaderRow.partyProfileId;
+      }
+
+      rows.push(...(layout === "grouped" ? item.groupedRows : item.flatRows));
+    });
 
     return {
       columns,

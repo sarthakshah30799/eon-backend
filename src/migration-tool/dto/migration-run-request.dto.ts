@@ -2,9 +2,11 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsInt,
   IsIn,
   IsOptional,
-  IsPort,
+  Max,
+  Min,
   IsString,
   ArrayNotEmpty,
   ValidateIf,
@@ -28,7 +30,9 @@ export class MigrationRunRequestDto {
 
   @ApiProperty({ required: false })
   @ValidateIf(dto => dto.connectionMode === 'options')
-  @IsPort()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
   @Type(() => Number)
   port?: number;
 
@@ -52,10 +56,11 @@ export class MigrationRunRequestDto {
   @IsBoolean()
   ssl?: boolean;
 
-  @ApiProperty({ type: [String] })
+  @ApiProperty({ type: [String], required: false, default: [] })
+  @IsOptional()
+  @ValidateIf(dto => dto.selectedTables !== undefined)
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
-  selectedTables: string[];
+  selectedTables?: string[];
 }
-

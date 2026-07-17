@@ -37,7 +37,6 @@ export class TransactionAccountPosting extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionPostingSourceType,
-    name: "source_type",
   })
   sourceType: TransactionPostingSourceType;
 

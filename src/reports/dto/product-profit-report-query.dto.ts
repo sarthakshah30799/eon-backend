@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
 } from "class-validator";
+import { ReportSortBy } from "./report-sort.dto";
 
 export enum ProductProfitReportFormat {
   CSV = "csv",
@@ -104,6 +105,15 @@ export class ProductProfitReportQueryDto {
   @IsString({ each: true })
   @IsOptional()
   productIds?: string[];
+
+  @ApiPropertyOptional({
+    description: "Sort order",
+    enum: ReportSortBy,
+    default: ReportSortBy.DATE_ASC,
+  })
+  @IsEnum(ReportSortBy)
+  @IsOptional()
+  sortBy?: ReportSortBy;
 
   @ApiPropertyOptional({
     description: "Export format",

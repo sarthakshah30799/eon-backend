@@ -384,6 +384,79 @@ export class TransactionsService {
     }) as Transaction[];
   }
 
+  async getQuantityAvailability(
+    branchId: string,
+    currencyId: string,
+    productId: string,
+    excludeTransactionId?: string,
+  ): Promise<{
+    branchId: string;
+    currencyId: string;
+    productId: string;
+    purchasedQuantity: string;
+    soldQuantity: string;
+    availableQuantity: string;
+  }> {
+    if (!branchId) {
+      throw new BadRequestException('Branch is required');
+    }
+
+    if (!currencyId) {
+      throw new BadRequestException('Currency is required');
+    }
+
+    if (!productId) {
+      throw new BadRequestException('Product is required');
+    }
+
+    const qb = this.transactionItemRepository
+      .createQueryBuilder('item')
+      .innerJoin('item.transaction', 'tx')
+      .select(
+        `COALESCE(SUM(CASE WHEN tx.transaction_type = :purchaseType THEN item.quantity ELSE 0 END), 0)`,
+        'purchasedQuantity',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN tx.transaction_type = :saleType THEN item.quantity ELSE 0 END), 0)`,
+        'soldQuantity',
+      )
+      .where('tx.isLatest = true')
+      .andWhere('tx.status = :approvedStatus', {
+        approvedStatus: TransactionStatus.APPROVED,
+      })
+      .andWhere('tx.branchId = :branchId', { branchId })
+      .andWhere('item.currencyId = :currencyId', { currencyId })
+      .andWhere('item.productId = :productId', { productId })
+      .setParameters({
+        purchaseType: TransactionType.PURCHASE,
+        saleType: TransactionType.SALE,
+      });
+
+    if (excludeTransactionId) {
+      qb.andWhere('tx.id <> :excludeTransactionId', { excludeTransactionId });
+    }
+
+    const raw = await qb.getRawOne<{
+      purchasedQuantity?: string;
+      soldQuantity?: string;
+    }>();
+
+    const purchasedQuantity = String(raw?.purchasedQuantity ?? '0');
+    const soldQuantity = String(raw?.soldQuantity ?? '0');
+    const availableQuantity = (
+      Number(purchasedQuantity || 0) - Number(soldQuantity || 0)
+    ).toString();
+
+    return {
+      branchId,
+      currencyId,
+      productId,
+      purchasedQuantity,
+      soldQuantity,
+      availableQuantity,
+    };
+  }
+
   async requestAccountPostingRebuild(
     transactionId: string,
     performedById: string | null,
@@ -440,7 +513,9 @@ export class TransactionsService {
     body: Record<string, any>,
     files: UploadedDraftFile[],
     performedById: string | null,
+    activeBranchId: string | null = null,
     activeCounterId: string | null = null,
+    allowWorkplaceOverride = false,
   ): Promise<Transaction> {
     if (!performedById) {
       throw new BadRequestException('User session not found');
@@ -454,7 +529,16 @@ export class TransactionsService {
       Array<{ documentProfileId: string; fileName?: string }>
     >(body.attachments, []);
 
-    if (!transactionPayload.branchId || !transactionPayload.partyProfileId) {
+    const requestedBranchId = String(transactionPayload.branchId ?? '').trim();
+    const requestedCounterId = String(transactionPayload.counterId ?? '').trim();
+    const resolvedBranchId = allowWorkplaceOverride
+      ? requestedBranchId || activeBranchId || ''
+      : activeBranchId || '';
+    const resolvedCounterId = allowWorkplaceOverride
+      ? requestedCounterId || activeCounterId || ''
+      : activeCounterId || '';
+
+    if (!resolvedBranchId || !transactionPayload.partyProfileId) {
       throw new BadRequestException('Branch and party profile are required');
     }
 
@@ -481,13 +565,28 @@ export class TransactionsService {
       throw new BadRequestException('Current company snapshot not found');
     }
 
+    if (allowWorkplaceOverride && resolvedBranchId && resolvedCounterId) {
+      const selectedCounter = await this.counterRepository.findOne({
+        where: { id: resolvedCounterId },
+        relations: ['branch'],
+      });
+
+      if (!selectedCounter) {
+        throw new NotFoundException(`Counter with id ${resolvedCounterId} not found`);
+      }
+
+      if (selectedCounter.branch?.id && selectedCounter.branch.id !== resolvedBranchId) {
+        throw new BadRequestException('Selected counter does not belong to the selected branch');
+      }
+    }
+
     const branchSnapshot = await loadEntitySnapshot(
       this.branchRepository,
-      String(transactionPayload.branchId),
+      String(resolvedBranchId),
     );
     if (!branchSnapshot) {
       throw new NotFoundException(
-        `Branch with id ${transactionPayload.branchId} not found`,
+        `Branch with id ${resolvedBranchId} not found`,
       );
     }
 
@@ -532,7 +631,6 @@ export class TransactionsService {
       );
     }
 
-    const resolvedCounterId = activeCounterId ?? transactionPayload.counterId ?? null;
     if (!resolvedCounterId) {
       throw new BadRequestException('Counter is required');
     }
@@ -553,7 +651,7 @@ export class TransactionsService {
         revisionNo: Number(transactionPayload.revisionNo ?? 1) || 1,
         number: generatedNumber,
         slug: transactionPayload.slug ?? null,
-        branchId: String(transactionPayload.branchId),
+        branchId: String(resolvedBranchId),
         branchSnapshot,
         counterId: String(resolvedCounterId),
         counterSnapshot,

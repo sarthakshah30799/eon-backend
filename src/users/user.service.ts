@@ -160,7 +160,7 @@ export class UserService {
     activeOnly = true,
     search?: string,
     branchId?: string,
-    roleCode?: string,
+    roleFilter?: string,
   ): Promise<UserResponseDto[]> {
     const requesterIsAdmin = await this.isRequesterAdmin(currentUserId);
     const requesterIsBranchManager = await this.isRequesterBranchManager(currentUserId);
@@ -207,8 +207,21 @@ export class UserService {
       query.andWhere('branch.id = :branchId', { branchId });
     }
 
-    if (roleCode) {
-      query.andWhere('role.code = :roleCode', { roleCode });
+    if (roleFilter) {
+      const normalizedRoleFilter = roleFilter.trim().toUpperCase();
+      if (normalizedRoleFilter === 'CASHIER') {
+        query.andWhere(
+          'role.isCashier = :isCashier',
+          { isCashier: true }
+        );
+      } else if (normalizedRoleFilter === 'DELIVERY_BOY') {
+        query.andWhere(
+          'role.isDeliveryBoy = :isDeliveryBoy',
+          { isDeliveryBoy: true }
+        );
+      } else {
+        query.andWhere('1 = 0');
+      }
     }
 
     const users = await query.getMany();

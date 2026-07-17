@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionStatus } from "../transactions/transactions.enums";
+import { ReportSortBy } from "./dto/report-sort.dto";
 import { SpecialReportFormat, SpecialReportQueryDto, SpecialReportTemplateEnum } from "./dto/special-report-query.dto";
 
 type SpecialReportColumn = {
@@ -109,6 +110,19 @@ const getTransactionDate = (transaction: Transaction) => {
   return transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt;
 };
 
+const compareIsoDateStrings = (
+  left: string,
+  right: string,
+  direction: ReportSortBy,
+) => {
+  if (left === right) {
+    return 0;
+  }
+
+  const result = left.localeCompare(right);
+  return direction === ReportSortBy.DATE_DESC ? result * -1 : result;
+};
+
 @Injectable()
 export class SpecialReportService {
   constructor(
@@ -118,6 +132,7 @@ export class SpecialReportService {
 
   private resolveFilters(query: SpecialReportQueryDto) {
     const branchIds = [...new Set((query.branchIds ?? []).map(item => item.trim()).filter(Boolean))];
+    const transactionNumbers = [...new Set((query.transactionNumbers ?? []).map(item => item.trim()).filter(Boolean))];
 
     if (branchIds.length === 0) {
       throw new BadRequestException("At least one branch is required");
@@ -130,22 +145,32 @@ export class SpecialReportService {
 
     return {
       branchIds,
+      transactionNumbers,
       template,
+      sortBy: query.sortBy ?? ReportSortBy.DATE_ASC,
     };
   }
 
-  private async loadTransactions(branchIds: string[]) {
-    return this.transactionRepository
+  private async loadTransactions(branchIds: string[], transactionNumbers: string[]) {
+    const qb = this.transactionRepository
       .createQueryBuilder("transaction")
       .innerJoinAndSelect("transaction.postings", "posting")
       .where("transaction.isLatest = true")
       .andWhere("transaction.status = :status", { status: TransactionStatus.APPROVED })
-      .andWhere("transaction.branchId IN (:...branchIds)", { branchIds })
-      .orderBy(`COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`, "ASC")
+      .andWhere("transaction.branchId IN (:...branchIds)", { branchIds });
+
+    if (transactionNumbers.length > 0) {
+      qb.andWhere("transaction.number IN (:...transactionNumbers)", {
+        transactionNumbers,
+      });
+    }
+
+    qb.orderBy(`COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`, "ASC")
       .addOrderBy("transaction.approvedAt", "ASC")
       .addOrderBy("transaction.number", "ASC")
-      .addOrderBy("posting.lineNo", "ASC")
-      .getMany();
+      .addOrderBy("posting.lineNo", "ASC");
+
+    return qb.getMany();
   }
 
   private buildRows(transaction: Transaction): SpecialReportRow[] {
@@ -188,7 +213,7 @@ export class SpecialReportService {
 
   async buildReport(query: SpecialReportQueryDto) {
     const filters = this.resolveFilters(query);
-    const transactions = await this.loadTransactions(filters.branchIds);
+    const transactions = await this.loadTransactions(filters.branchIds, filters.transactionNumbers);
 
     const rows = transactions
       .flatMap(transaction => this.buildRows(transaction))
@@ -198,7 +223,7 @@ export class SpecialReportService {
         }
 
         if (left.sortDateTime !== right.sortDateTime) {
-          return left.sortDateTime.localeCompare(right.sortDateTime);
+          return compareIsoDateStrings(left.sortDateTime, right.sortDateTime, filters.sortBy);
         }
 
         if (left.sortTransactionNumber !== right.sortTransactionNumber) {
