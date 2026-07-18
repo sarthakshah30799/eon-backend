@@ -10,11 +10,6 @@ export class CreateManualBookDto {
   @IsNotEmpty()
   dispatchDate: string;
 
-  @ApiProperty({ description: 'Branch ID (UUID)' })
-  @IsUUID()
-  @IsNotEmpty()
-  branchId: string;
-
   @ApiProperty({ description: 'Transaction Type', example: 'PB-RETAIL PURCHASE' })
   @IsEnum(TransactionTypeProfileEnum)
   @IsNotEmpty()

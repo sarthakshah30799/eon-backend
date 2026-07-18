@@ -100,7 +100,11 @@ export class PartyProfileController {
     @Body() dto: CreatePartyProfileDto,
     @Session() session: any,
   ): Promise<PartyProfileResponseDto> {
-    return this.partyProfileService.create(dto, session.userId);
+    return this.partyProfileService.create(
+      dto,
+      session.userId,
+      session.activeBranchId,
+    );
   }
 
   @Put(":id")

@@ -44,10 +44,13 @@ export class ChequeBookService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
   ) {}
 
-  async create(dto: CreateChequeBookDto, userId: string): Promise<ChequeBook> {
+  async create(
+    dto: CreateChequeBookDto,
+    userId: string,
+    activeBranchId?: string,
+  ): Promise<ChequeBook> {
     const {
       dispatchDate,
-      branchId,
       bankAccountCode,
       bookNoFrom,
       bookNoTo,
@@ -56,6 +59,11 @@ export class ChequeBookService {
       assignedTo,
       remarks,
     } = dto;
+
+    const branchId = activeBranchId;
+    if (!branchId) {
+      throw new BadRequestException("Current branch is required");
+    }
 
     // Verify branch exists in primary DB
     const branch = await this.branchRepository.findOne({

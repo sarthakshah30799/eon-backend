@@ -515,7 +515,6 @@ export class TransactionsService {
     performedById: string | null,
     activeBranchId: string | null = null,
     activeCounterId: string | null = null,
-    allowWorkplaceOverride = false,
   ): Promise<Transaction> {
     if (!performedById) {
       throw new BadRequestException('User session not found');
@@ -529,17 +528,11 @@ export class TransactionsService {
       Array<{ documentProfileId: string; fileName?: string }>
     >(body.attachments, []);
 
-    const requestedBranchId = String(transactionPayload.branchId ?? '').trim();
-    const requestedCounterId = String(transactionPayload.counterId ?? '').trim();
-    const resolvedBranchId = allowWorkplaceOverride
-      ? requestedBranchId || activeBranchId || ''
-      : activeBranchId || '';
-    const resolvedCounterId = allowWorkplaceOverride
-      ? requestedCounterId || activeCounterId || ''
-      : activeCounterId || '';
+    const resolvedBranchId = activeBranchId || '';
+    const resolvedCounterId = activeCounterId || '';
 
-    if (!resolvedBranchId || !transactionPayload.partyProfileId) {
-      throw new BadRequestException('Branch and party profile are required');
+    if (!resolvedBranchId || !resolvedCounterId || !transactionPayload.partyProfileId) {
+      throw new BadRequestException('Branch, counter, and party profile are required');
     }
 
     const filesByIndex = new Map<number, UploadedDraftFile>();
@@ -565,19 +558,17 @@ export class TransactionsService {
       throw new BadRequestException('Current company snapshot not found');
     }
 
-    if (allowWorkplaceOverride && resolvedBranchId && resolvedCounterId) {
-      const selectedCounter = await this.counterRepository.findOne({
-        where: { id: resolvedCounterId },
-        relations: ['branch'],
-      });
+    const selectedCounter = await this.counterRepository.findOne({
+      where: { id: resolvedCounterId },
+      relations: ['branch'],
+    });
 
-      if (!selectedCounter) {
-        throw new NotFoundException(`Counter with id ${resolvedCounterId} not found`);
-      }
+    if (!selectedCounter) {
+      throw new NotFoundException(`Counter with id ${resolvedCounterId} not found`);
+    }
 
-      if (selectedCounter.branch?.id && selectedCounter.branch.id !== resolvedBranchId) {
-        throw new BadRequestException('Selected counter does not belong to the selected branch');
-      }
+    if (selectedCounter.branch?.id && selectedCounter.branch.id !== resolvedBranchId) {
+      throw new BadRequestException('Selected counter does not belong to the selected branch');
     }
 
     const branchSnapshot = await loadEntitySnapshot(

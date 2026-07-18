@@ -67,10 +67,13 @@ export class ManualBillBookService {
     private readonly branchRepository: Repository<Branch>,
   ) { }
 
-  async create(dto: CreateManualBookDto, userId: string): Promise<ManualBook> {
+  async create(
+    dto: CreateManualBookDto,
+    userId: string,
+    activeBranchId?: string,
+  ): Promise<ManualBook> {
     const {
       dispatchDate,
-      branchId,
       transactionType,
       bookNoFrom,
       bookNoTo,
@@ -79,6 +82,11 @@ export class ManualBillBookService {
       assignedTo,
       remarks,
     } = dto;
+
+    const branchId = activeBranchId;
+    if (!branchId) {
+      throw new BadRequestException("Current branch is required");
+    }
 
     // Verify branch exists in primary DB
     const branch = await this.branchRepository.findOne({
