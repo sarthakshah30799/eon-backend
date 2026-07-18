@@ -31,12 +31,15 @@ export class TransactionAd1Service {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private async resolveSnapshots(payload: Record<string, any>): Promise<Partial<TransactionAd1>> {
+  private async resolveSnapshots(
+    payload: Record<string, any>,
+    branchId?: string | null,
+  ): Promise<Partial<TransactionAd1>> {
     const snapshots: Partial<TransactionAd1> = {};
 
-    if (payload.branchId) {
+    if (branchId) {
       const branch = await this.branchRepository.findOne({
-        where: { id: payload.branchId },
+        where: { id: branchId },
         relations: ['company'],
       });
       snapshots.branchSnapshot = branch ?? null;
@@ -126,10 +129,7 @@ export class TransactionAd1Service {
     });
     const companyId = branch?.company?.id ?? null;
 
-    const snapshots = await this.resolveSnapshots({
-      ...payload,
-      branchId: resolvedBranchId,
-    });
+    const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
     const ad1 = await this.repo.save(
       this.repo.create({
@@ -247,11 +247,13 @@ export class TransactionAd1Service {
       ad1.agentId = payload.fxRefAgentId || null;
     }
 
-    const snapshots = await this.resolveSnapshots({
-      ...payload,
-      branchId: ad1.branchId,
-      agentId: payload.agentId ?? payload.fxRefAgentId,
-    });
+    const snapshots = await this.resolveSnapshots(
+      {
+        ...payload,
+        agentId: payload.agentId ?? payload.fxRefAgentId,
+      },
+      ad1.branchId,
+    );
     Object.assign(ad1, snapshots);
 
     ad1.updatedBy = performedById;
