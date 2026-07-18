@@ -24,7 +24,7 @@ export class TransactionAd1Controller {
   @ApiOperation({ summary: 'Create an AD1 transaction' })
   async create(@Body() body: Record<string, any>, @Session() session: any) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.create(body, performedById);
+    return this.ad1Service.create(body, performedById, session?.activeBranchId ?? null);
   }
 
   @Get()
@@ -32,12 +32,8 @@ export class TransactionAd1Controller {
   async findAll(
     @Session() session: any,
     @Query('search') search?: string,
-    @Query('branchId') branchId?: string,
   ) {
-    const effectiveBranchId =
-      session?.isAdmin || session?.isHoStaff
-        ? branchId || session?.activeBranchId
-        : session?.activeBranchId;
+    const effectiveBranchId = session?.activeBranchId;
 
     return this.ad1Service.findAll({ branchId: effectiveBranchId, search });
   }
@@ -45,10 +41,10 @@ export class TransactionAd1Controller {
   @Get('agents')
   @ApiOperation({ summary: 'List agents available for AD1' })
   async getAgents(
-    @Query('branchId') branchId?: string,
+    @Session() session: any,
     @Query('search') search?: string,
   ) {
-    return this.ad1Service.getAgents({ branchId, search });
+    return this.ad1Service.getAgents({ branchId: session?.activeBranchId, search });
   }
 
   @Get(':id')
@@ -65,6 +61,6 @@ export class TransactionAd1Controller {
     @Session() session: any,
   ) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.update(id, body, performedById);
+    return this.ad1Service.update(id, body, performedById, session?.activeBranchId ?? null);
   }
 }

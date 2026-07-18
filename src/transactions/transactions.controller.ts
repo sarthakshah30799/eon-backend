@@ -41,10 +41,10 @@ export class TransactionsController {
   @Get('ad1/agents')
   @ApiOperation({ summary: 'Get agents for AD1 transactions' })
   async getAd1Agents(
-    @Query('branchId') branchId: string,
+    @Session() session: any,
     @Query('search') search?: string,
   ): Promise<any[]> {
-    return this.transactionsService.getAd1Agents(branchId, search);
+    return this.transactionsService.getAd1Agents(session?.activeBranchId, search);
   }
 
   @Get()
@@ -53,13 +53,12 @@ export class TransactionsController {
   async getTransactions(
     @Session() session: any,
     @Query('slug') slug?: string,
-    @Query('branchId') branchId?: string,
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('partyProfileId') partyProfileId?: string,
     @Query('transactionType') transactionType?: string,
   ): Promise<Transaction[]> {
-    const effectiveBranchId = session?.isAdmin ? branchId : session?.activeBranchId;
+    const effectiveBranchId = session?.activeBranchId;
     return this.transactionsService.getTransactions(
       slug,
       effectiveBranchId,
@@ -74,7 +73,6 @@ export class TransactionsController {
   @ApiOperation({ summary: 'Get approved quantity availability for a branch, currency, and product' })
   async getQuantityAvailability(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
     @Query('currencyId') currencyId?: string,
     @Query('productId') productId?: string,
     @Query('excludeTransactionId') excludeTransactionId?: string,
@@ -86,7 +84,7 @@ export class TransactionsController {
     soldQuantity: string;
     availableQuantity: string;
   }> {
-    const effectiveBranchId = session?.isAdmin ? branchId : session?.activeBranchId;
+    const effectiveBranchId = session?.activeBranchId;
     if (!effectiveBranchId) {
       throw new BadRequestException('Branch is required');
     }
@@ -130,7 +128,6 @@ export class TransactionsController {
       session?.userId ?? null,
       session?.activeBranchId ?? null,
       session?.activeCounterId ?? null,
-      Boolean(session?.isAdmin || session?.isHoStaff),
     );
   }
 

@@ -489,7 +489,11 @@ export class PartyProfileService {
     });
   }
 
-  async create(dto: CreatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
+  async create(
+    dto: CreatePartyProfileDto,
+    userId: string,
+    activeBranchId?: string | null,
+  ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
     const normalized = normalizeDto(dto);
     const commissionRules = this.normalizeCommissionRules(dto.commissionRules);
@@ -509,11 +513,13 @@ export class PartyProfileService {
       throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
     }
 
-    if (dto.branchId) {
-      const branch = await this.branchRepository.findOne({ where: { id: dto.branchId } });
-      if (!branch) {
-        throw new NotFoundException(`Branch with id ${dto.branchId} not found`);
-      }
+    if (!activeBranchId) {
+      throw new BadRequestException("Active branch is required");
+    }
+
+    const branch = await this.branchRepository.findOne({ where: { id: activeBranchId } });
+    if (!branch) {
+      throw new NotFoundException(`Branch with id ${activeBranchId} not found`);
     }
 
     if (dto.gstStateId) {
@@ -563,6 +569,7 @@ export class PartyProfileService {
       status: WorkflowStatus.PENDING,
       statusUpdatedById: null,
       statusUpdatedAt: null,
+      branch: branch ? ({ id: branch.id } as any) : null,
     });
 
     const saved = await this.partyProfileRepository.save(client);
@@ -588,13 +595,6 @@ export class PartyProfileService {
       });
       if (existingName) {
         throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
-      }
-    }
-
-    if (dto.branchId && dto.branchId !== client.branchId) {
-      const branch = await this.branchRepository.findOne({ where: { id: dto.branchId } });
-      if (!branch) {
-        throw new NotFoundException(`Branch with id ${dto.branchId} not found`);
       }
     }
 

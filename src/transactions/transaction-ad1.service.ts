@@ -31,12 +31,15 @@ export class TransactionAd1Service {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private async resolveSnapshots(payload: Record<string, any>): Promise<Partial<TransactionAd1>> {
+  private async resolveSnapshots(
+    payload: Record<string, any>,
+    branchId?: string | null,
+  ): Promise<Partial<TransactionAd1>> {
     const snapshots: Partial<TransactionAd1> = {};
 
-    if (payload.branchId) {
+    if (branchId) {
       const branch = await this.branchRepository.findOne({
-        where: { id: payload.branchId },
+        where: { id: branchId },
         relations: ['company'],
       });
       snapshots.branchSnapshot = branch ?? null;
@@ -110,23 +113,28 @@ export class TransactionAd1Service {
     return query.getMany();
   }
 
-  async create(payload: Record<string, any>, performedById: string): Promise<TransactionAd1> {
-    if (!payload.docNo || !payload.branchId) {
+  async create(
+    payload: Record<string, any>,
+    performedById: string,
+    activeBranchId: string | null,
+  ): Promise<TransactionAd1> {
+    const resolvedBranchId = activeBranchId || '';
+    if (!payload.docNo || !resolvedBranchId) {
       throw new BadRequestException('Doc No and branch are required');
     }
 
     const branch = await this.branchRepository.findOne({
-      where: { id: payload.branchId },
+      where: { id: resolvedBranchId },
       relations: ['company'],
     });
     const companyId = branch?.company?.id ?? null;
 
-    const snapshots = await this.resolveSnapshots(payload);
+    const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
     const ad1 = await this.repo.save(
       this.repo.create({
         number: String(payload.docNo),
-        branchId: String(payload.branchId),
+        branchId: String(resolvedBranchId),
         companyId,
         transactionType: payload.transactionType ?? TransactionType.PURCHASE,
         profileType: payload.profileType ?? TransactionProfileType.AD1,
@@ -204,17 +212,13 @@ export class TransactionAd1Service {
     return ad1;
   }
 
-  async update(id: string, payload: Record<string, any>, performedById: string): Promise<TransactionAd1> {
+  async update(
+    id: string,
+    payload: Record<string, any>,
+    performedById: string,
+    activeBranchId: string | null,
+  ): Promise<TransactionAd1> {
     const ad1 = await this.findOne(id);
-
-    if (payload.branchId && payload.branchId !== ad1.branchId) {
-      const branch = await this.branchRepository.findOne({
-        where: { id: payload.branchId },
-        relations: ['company'],
-      });
-      ad1.companyId = branch?.company?.id ?? null;
-      ad1.branchId = payload.branchId;
-    }
 
     if (payload.docNo) {
       ad1.number = String(payload.docNo);
@@ -243,10 +247,13 @@ export class TransactionAd1Service {
       ad1.agentId = payload.fxRefAgentId || null;
     }
 
-    const snapshots = await this.resolveSnapshots({
-      ...payload,
-      agentId: payload.agentId ?? payload.fxRefAgentId,
-    });
+    const snapshots = await this.resolveSnapshots(
+      {
+        ...payload,
+        agentId: payload.agentId ?? payload.fxRefAgentId,
+      },
+      ad1.branchId,
+    );
     Object.assign(ad1, snapshots);
 
     ad1.updatedBy = performedById;

@@ -45,7 +45,7 @@ export class ManualBillBookController {
   @ApiOperation({ summary: "Create manual bill book dispatch" })
   @ApiResponse({ status: 201, description: "Dispatch created successfully" })
   async create(@Body() dto: CreateManualBookDto, @Session() session: any) {
-    return this.service.create(dto, session.userId);
+    return this.service.create(dto, session.userId, session.activeBranchId);
   }
 
   @Get("validate-book-range")
@@ -90,14 +90,12 @@ export class ManualBillBookController {
   @ApiResponse({ status: 200, description: "List of dispatches" })
   async findAll(
     @Session() session: any,
-    @Query("branchId") branchId?: string,
     @Query("status") status?: string,
     @Query("transactionType") transactionType?: string,
   ) {
-    let effectiveBranchId = branchId;
+    const effectiveBranchId = session.activeBranchId;
     let assignedToFilter: string | undefined;
     if (!session.isAdmin && !session.isHoStaff) {
-      effectiveBranchId = session.activeBranchId;
       assignedToFilter = session.userId;
     }
     return this.service.findAll(
@@ -114,16 +112,10 @@ export class ManualBillBookController {
   })
   async getAuthorizedUsers(
     @Session() session: any,
-    @Query("branchId") branchId?: string,
   ) {
-    const effectiveBranchId =
-      session.isAdmin
-        ? branchId
-        : session.isHoStaff
-          ? branchId || session.activeBranchId
-          : session.activeBranchId;
+    const effectiveBranchId = session.activeBranchId;
     console.log(
-      `[DEBUG] users request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
+      `[DEBUG] users request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
     );
     return this.service.getAuthorizedUsers(effectiveBranchId);
   }
@@ -132,14 +124,10 @@ export class ManualBillBookController {
   @ApiOperation({ summary: "Get branch managers for a branch" })
   async getBranchManagers(
     @Session() session: any,
-    @Query("branchId") branchId: string,
   ) {
-    let effectiveBranchId = branchId;
-    if (!session.isAdmin && !session.isHoStaff) {
-      effectiveBranchId = session.activeBranchId;
-    }
+    const effectiveBranchId = session.activeBranchId;
     this.logger.log(
-      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
+      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
     );
     return this.service.getBranchManagers(effectiveBranchId);
   }
@@ -246,7 +234,7 @@ export class ManualBillBookController {
     @Query("pageNo") pageNoStr: string,
   ) {
     const pageNo = parseInt(pageNoStr, 10);
-    return this.service.searchPage(pageNo, session.isAdmin ? undefined : session.activeBranchId);
+    return this.service.searchPage(pageNo, session.activeBranchId);
   }
 
   @Get("pages/selectable")
@@ -257,14 +245,13 @@ export class ManualBillBookController {
   @ApiResponse({ status: 200, description: "Selectable pages" })
   async getSelectablePages(
     @Session() session: any,
-    @Query("branchId") branchId?: string,
     @Query("userId") userId?: string,
     @Query("transactionType") transactionType?: string,
   ) {
-    const effectiveBranchId = session.isAdmin ? branchId : session.activeBranchId;
+    const effectiveBranchId = session.activeBranchId;
     const effectiveUserId = userId?.trim() || session.userId;
     this.logger.log(
-      `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} branchId=${branchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"} transactionType=${transactionType ?? "null"}`
+      `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"} transactionType=${transactionType ?? "null"}`
     );
     return this.service.getSelectablePages(
       effectiveBranchId,

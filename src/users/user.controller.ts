@@ -22,14 +22,13 @@ export class UserController {
     @Session() session: any,
     @Query('activeOnly') activeOnly = 'true',
     @Query('search') search?: string,
-    @Query('branchId') branchId?: string,
     @Query('roleFilter') roleFilter?: string,
   ): Promise<UserResponseDto[]> {
     const user = await this.userService.findById(session.userId, session.userId, {
       activeBranchId: session?.activeBranchId ?? null,
       activeCounterId: session?.activeCounterId ?? null,
     });
-    const effectiveBranchId = user.isAdmin ? branchId : session.activeBranchId;
+    const effectiveBranchId = session.activeBranchId;
     if (user.isAdmin) {
       return this.userService.findAll(
         session.userId,
