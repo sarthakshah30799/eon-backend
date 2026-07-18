@@ -61,12 +61,14 @@ export class PartyProfileController {
   })
   async findAll(
     @Query() query: PartyProfileListQueryDto,
+    @Query('branchId') branchId: string | undefined,
     @Session() session: any,
   ): Promise<PartyProfileListResponseDto> {
+    const canSeeAllBranches = Boolean(session?.isAdmin || session?.isHoStaff);
     return this.partyProfileService.findAll(
       query,
       session.userId,
-      session.activeBranchId,
+      canSeeAllBranches ? branchId?.trim() || undefined : session.activeBranchId,
     );
   }
 

@@ -7,6 +7,7 @@ import { Transaction } from './entities/transaction.entity';
 import {
   TransactionLogAction,
   TransactionDocumentStatus,
+  TransactionPaymentMethod,
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
@@ -34,6 +35,7 @@ import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
 import {
   resolveProductTransactionAccount,
+  roundMoney,
 } from './transaction-accounting.util';
 import { TransactionEvent } from './entities/transaction-event.entity';
 import { TransactionEventStatus, TransactionEventType } from './transactions.enums';
@@ -132,6 +134,52 @@ export class TransactionsService {
     }
 
     return value as T;
+  }
+
+  private toNumber(value: unknown): number {
+    const parsedValue = Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : 0;
+  }
+
+  private calculateTransactionPayableTotal(transactionPayload: Record<string, any>): string {
+    const itemRows = Array.isArray(transactionPayload.items)
+      ? transactionPayload.items
+      : [];
+    const additionalChargeRows = Array.isArray(transactionPayload.additionalCharges)
+      ? transactionPayload.additionalCharges
+      : [];
+    const transactionType = transactionPayload.transactionType;
+
+    const itemTotal = itemRows.reduce((sum: number, row: Record<string, any>) => {
+      const quantity = this.toNumber(row.quantity);
+      const rate = this.toNumber(row.rate);
+      return sum + this.toNumber(roundMoney(quantity * rate));
+    }, 0);
+
+    const chargeMultiplier = transactionType === TransactionType.SALE ? 1 : -1;
+    const additionalChargeTotal = additionalChargeRows.reduce(
+      (sum: number, row: Record<string, any>) => {
+        const amount = this.toNumber(row.amount);
+        const gstAmount = this.toNumber(row.gstAmount);
+        return sum + (this.toNumber(roundMoney(amount + gstAmount)) * chargeMultiplier);
+      },
+      0,
+    );
+
+    return (itemTotal + additionalChargeTotal).toFixed(2);
+  }
+
+  private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === TransactionPaymentMethod.CASH) {
+      return TransactionPaymentMethod.CASH;
+    }
+
+    if (normalized === TransactionPaymentMethod.CHEQUE) {
+      return TransactionPaymentMethod.CHEQUE;
+    }
+
+    throw new BadRequestException('Payment mode must be CASH or CHEQUE');
   }
 
   private getFileIndex(fieldname: string) {
@@ -891,13 +939,83 @@ export class TransactionsService {
     const paymentRows = Array.isArray(transactionPayload.payments)
       ? transactionPayload.payments
       : [];
+    const payableTotal = this.calculateTransactionPayableTotal(transactionPayload);
+    const payableTotalAmount = Number(payableTotal || 0);
+    if (payableTotalAmount > 0 && paymentRows.length === 0) {
+      throw new BadRequestException('At least one payment row is required');
+    }
+
+    const paymentMethods = paymentRows.map(row =>
+      this.resolvePaymentMethod(row.paymentMethod),
+    );
+    if (new Set(paymentMethods).size > 1) {
+      throw new BadRequestException(
+        'All payment rows must use the same payment method',
+      );
+    }
+
+    const uniformPaymentMethod = paymentMethods[0] ?? null;
+    const cashControlAccountId = await this.additionalSettingService.getSettingTextValue(
+      'TRANSACTION_ACCOUNTING',
+      'CASH_CONTROL_ACCOUNT',
+    );
+    if (uniformPaymentMethod === TransactionPaymentMethod.CASH && !cashControlAccountId) {
+      throw new BadRequestException(
+        'Missing CASH_CONTROL_ACCOUNT additional setting',
+      );
+    }
+
     const paymentDirection =
       transactionPayload.transactionType === TransactionType.SALE
         ? TransactionPaymentDirection.RECEIPT
         : TransactionPaymentDirection.PAYMENT;
+    let cashTotal = 0;
+    let chequeTotal = 0;
     for (let index = 0; index < paymentRows.length; index += 1) {
       const row = paymentRows[index];
       const account = await resolveAccount(String(row.accountId));
+      const paymentMethod = this.resolvePaymentMethod(row.paymentMethod);
+      const amount = this.toNumber(row.amount);
+      if (amount <= 0) {
+        throw new BadRequestException('Payment amount must be greater than zero');
+      }
+
+      if (paymentMethod === TransactionPaymentMethod.CASH) {
+        if (cashControlAccountId && String(account.id) !== cashControlAccountId) {
+          throw new BadRequestException(
+            'Cash payments must use the configured cash control account',
+          );
+        }
+        cashTotal += amount;
+      } else {
+        chequeTotal += amount;
+      }
+
+      if (
+        paymentMethod === TransactionPaymentMethod.CHEQUE &&
+        !String(row.referenceNumber ?? '').trim()
+      ) {
+        throw new BadRequestException('Cheque reference number is required');
+      }
+
+      if (
+        paymentMethod === TransactionPaymentMethod.CHEQUE &&
+        transactionPayload.transactionType === TransactionType.SALE &&
+        row.chequePageId
+      ) {
+        throw new BadRequestException(
+          'Cheque page lookup is not allowed for sale cheque payments',
+        );
+      }
+
+      if (
+        paymentMethod === TransactionPaymentMethod.CHEQUE &&
+        transactionPayload.transactionType === TransactionType.PURCHASE &&
+        !row.chequePageId
+      ) {
+        throw new BadRequestException('Cheque page is required for purchase payments');
+      }
+
       const chequePageSnapshot = row.chequePageId
         ? ((await loadEntitySnapshot(
             this.chequeBookPageTrackingRepository,
@@ -920,7 +1038,7 @@ export class TransactionsService {
           accountSnapshot: account as TransactionReferenceSnapshotValue,
           chequePageId: row.chequePageId ?? null,
           chequePageSnapshot,
-          paymentMethod: row.paymentMethod,
+          paymentMethod,
           paymentDirection,
           referenceNumber: row.referenceNumber ?? null,
           referenceDate: row.referenceDate ?? null,
@@ -933,6 +1051,18 @@ export class TransactionsService {
         }),
       );
     }
+
+    const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
+    if (Number(payableTotal.toString()) !== totalPaid) {
+      throw new BadRequestException(
+        `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
+      );
+    }
+
+    transaction.byCash = cashTotal.toFixed(2);
+    transaction.byCheque = chequeTotal.toFixed(2);
+    transaction.updatedBy = performedById;
+    await this.transactionRepository.save(transaction);
 
     await this.transactionLogRepository.save(
       this.transactionLogRepository.create({

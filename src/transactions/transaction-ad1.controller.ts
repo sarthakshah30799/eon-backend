@@ -31,9 +31,13 @@ export class TransactionAd1Controller {
   @ApiOperation({ summary: 'List AD1 transactions' })
   async findAll(
     @Session() session: any,
+    @Query('branchId') branchId?: string,
     @Query('search') search?: string,
   ) {
-    const effectiveBranchId = session?.activeBranchId;
+    const canSeeAllBranches = Boolean(session?.isAdmin || session?.isHoStaff);
+    const effectiveBranchId = canSeeAllBranches
+      ? branchId?.trim() || undefined
+      : session?.activeBranchId;
 
     return this.ad1Service.findAll({ branchId: effectiveBranchId, search });
   }
