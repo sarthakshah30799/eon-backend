@@ -53,12 +53,15 @@ export class TransactionsController {
   async getTransactions(
     @Session() session: any,
     @Query('slug') slug?: string,
+    @Query('branchId') branchId?: string,
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('partyProfileId') partyProfileId?: string,
     @Query('transactionType') transactionType?: string,
   ): Promise<Transaction[]> {
-    const effectiveBranchId = session?.activeBranchId;
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
+      ? branchId?.trim() || undefined
+      : session?.activeBranchId;
     return this.transactionsService.getTransactions(
       slug,
       effectiveBranchId,

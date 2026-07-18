@@ -114,14 +114,13 @@ export class TransactionItem extends BaseEntity {
   private recalculateRoundOff() {
     const quantity = Number(this.quantity);
     const rate = Number(this.rate);
-    const per = Number(this.per ?? 1) || 1;
 
-    if (!Number.isFinite(quantity) || !Number.isFinite(rate) || per === 0) {
+    if (!Number.isFinite(quantity) || !Number.isFinite(rate)) {
       this.roundOff = null;
       return;
     }
 
-    const totalAmount = quantity * (rate / per);
+    const totalAmount = quantity * rate;
     const roundedAmount = Math.round(totalAmount);
     this.roundOff = (roundedAmount - totalAmount).toFixed(2);
   }

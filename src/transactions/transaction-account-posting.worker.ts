@@ -720,8 +720,7 @@ export class TransactionAccountPostingWorker
       const itemTotal = sortedItems.reduce((sum, currentItem) => {
         const quantity = Number(currentItem.quantity);
         const rate = Number(currentItem.rate);
-        const per = Number(currentItem.per ?? 1) || 1;
-        return sum + Number(roundMoney(quantity * (rate / per)));
+        return sum + Number(roundMoney(quantity * rate));
       }, 0);
       const chargeTotal = chargeRows.reduce(
         (sum, currentCharge) => sum + Number(roundMoney(Number(currentCharge.amount))),

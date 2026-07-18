@@ -63,10 +63,13 @@ export class ChequeBookController {
   @ApiResponse({ status: 200, description: 'List of dispatches' })
   async findAll(
     @Session() session: any,
+    @Query('branchId') branchId?: string,
     @Query('status') status?: string,
     @Query('bankAccountCode') bankAccountCode?: string,
   ) {
-    const effectiveBranchId = session.activeBranchId;
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
+      ? branchId?.trim() || undefined
+      : session.activeBranchId;
     let assignedToFilter: string | undefined;
     if (!session.isAdmin && !session.isHoStaff) {
       assignedToFilter = session.userId;
