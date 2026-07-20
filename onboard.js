@@ -664,12 +664,7 @@ async function main() {
         name: "Card Issuer Profile",
         path: "/party-profiles/card-issuer-profile",
         icon: "badge-check",
-      },
-      {
-        name: "Misc Profile",
-        path: "/party-profiles/misc-profile",
-        icon: "badge-check",
-      },
+      }
     ];
 
     for (let index = 0; index < partyProfileMenus.length; index += 1) {

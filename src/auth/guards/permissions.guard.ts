@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserService } from '../../users/user.service';
+import { toPartyProfileMenuPath } from '../../party-profiles/party-profile-path.util';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -152,9 +153,9 @@ export class PermissionsGuard implements CanActivate {
             .split(',')
             .map(type => type.trim())
             .filter(Boolean);
-      const requestedMenuPaths = requestedTypes.map(
-        type => `/party-profiles/${String(type).trim().toLowerCase().replace(/_/g, '-')}`
-      );
+      const requestedMenuPaths = requestedTypes
+        .map(type => toPartyProfileMenuPath(type))
+        .filter((menuPath): menuPath is string => Boolean(menuPath));
 
       if (requestedMenuPaths.length === 0) {
         return true;
