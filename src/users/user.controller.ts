@@ -29,7 +29,7 @@ export class UserController {
       activeCounterId: session?.activeCounterId ?? null,
     });
     const effectiveBranchId = session.activeBranchId;
-    if (user.isAdmin) {
+    if (user.isAdmin || user.isHoStaff) {
       return this.userService.findAll(
         session.userId,
         activeOnly !== 'false',
