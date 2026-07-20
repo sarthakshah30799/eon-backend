@@ -28,6 +28,7 @@ import {
   PartyProfileCommissionTypeEnum,
   type PartyProfileCommissionType,
 } from "./types/party-profile-commission-rule.types";
+import { toPartyProfileMenuPath } from "./party-profile-path.util";
 import {
   parseCommissionRulesCsv,
   parseCommissionRulesWorkbook,
@@ -160,11 +161,7 @@ export class PartyProfileService {
   }
 
   private normalizePartyProfilePath(type?: string) {
-    if (!type) {
-      return "";
-    }    
-
-    return `/party-profiles/${type.trim().toLowerCase().replace(/_/g, "-")}`;
+    return toPartyProfileMenuPath(type);
   }
 
   private canAccessPartyProfileType(
@@ -276,10 +273,7 @@ export class PartyProfileService {
 
     const frontendBaseUrl =
       this.configService.getOptional("FRONTEND_URL") || "http://localhost:5173";
-    const reviewUrl = `${frontendBaseUrl}/party-profiles/${client.type
-      .trim()
-      .toLowerCase()
-      .replace(/_/g, "-")}/edit/${client.id}?review=1`;
+    const reviewUrl = `${frontendBaseUrl}${this.normalizePartyProfilePath(client.type)}/edit/${client.id}?review=1`;
 
     const recipientEmails = recipients.map(user => user.email).filter(Boolean).join(",");
     const recipientNames = recipients.map(user => user.name).filter(Boolean).join(", ");
