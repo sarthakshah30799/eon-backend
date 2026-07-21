@@ -11,20 +11,20 @@ import {
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { OtherTransactionService } from './other-transaction.service';
+import { TransactionsService } from './transactions.service';
 
 @ApiTags('other-transaction')
 @ApiCookieAuth('sessionId')
 @UseGuards(AuthenticatedGuard)
 @Controller('transactions/other')
 export class OtherTransactionController {
-  constructor(private readonly service: OtherTransactionService) {}
+  constructor(private readonly service: TransactionsService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create an other transaction' })
   async create(@Body() body: Record<string, any>, @Session() session: any) {
     const performedById = session?.userId ?? null;
-    return this.service.create(body, performedById, session?.activeBranchId ?? null);
+    return this.service.createOtherTransaction(body, performedById, session?.activeBranchId ?? null);
   }
 
   @Get()
@@ -39,7 +39,7 @@ export class OtherTransactionController {
       ? branchId?.trim() || undefined
       : session?.activeBranchId;
 
-    return this.service.findAll({ branchId: effectiveBranchId, search });
+    return this.service.findAllOtherTransactions({ branchId: effectiveBranchId, search });
   }
 
   @Get('agents')
@@ -48,13 +48,13 @@ export class OtherTransactionController {
     @Session() session: any,
     @Query('search') search?: string,
   ) {
-    return this.service.getAgents({ branchId: session?.activeBranchId, search });
+    return this.service.getOtherTransactionAgents(session?.activeBranchId, search);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get an other transaction by ID' })
   async findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+    return this.service.findOtherTransaction(id);
   }
 
   @Put(':id')
@@ -65,6 +65,6 @@ export class OtherTransactionController {
     @Session() session: any,
   ) {
     const performedById = session?.userId ?? null;
-    return this.service.update(id, body, performedById, session?.activeBranchId ?? null);
+    return this.service.updateOtherTransaction(id, body, performedById, session?.activeBranchId ?? null);
   }
 }

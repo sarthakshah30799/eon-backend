@@ -11,7 +11,6 @@ import { TransactionEvent } from "./entities/transaction-event.entity";
 import { OtherTransaction } from "./entities/other-transaction.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
-import { OtherTransactionService } from "./other-transaction.service";
 import { OtherTransactionController } from "./other-transaction.controller";
 import { TransactionAccountPostingWorker } from "./transaction-account-posting.worker";
 import { MailModule } from "../mail/mail.module";
@@ -65,7 +64,7 @@ import { Counter } from "../counters/counter.entity";
     ),
   ],
   controllers: [OtherTransactionController, TransactionsController],
-  providers: [TransactionsService, OtherTransactionService, TransactionAccountPostingWorker],
+  providers: [TransactionsService, TransactionAccountPostingWorker],
   exports: [
     TypeOrmModule,
     TransactionsService,

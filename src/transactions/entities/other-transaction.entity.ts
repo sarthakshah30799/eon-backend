@@ -1,13 +1,65 @@
-import { Column, Entity, Index } from "typeorm";
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  Check,
+} from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
-import { TransactionType } from "../transactions.enums";
+import {
+  TradeMode,
+  TransactionStatus,
+  TransactionType,
+} from "../transactions.enums";
+import { TransactionItem } from "./transaction-item.entity";
+import { TransactionDocument } from "./transaction-document.entity";
+import { TransactionAdditionalCharge } from "./transaction-additional-charge.entity";
+import { TransactionPayment } from "./transaction-payment.entity";
+import { TransactionAccountPosting } from "./transaction-account-posting.entity";
+import { TransactionLog } from "./transaction-log.entity";
+import { TransactionEvent } from "./transaction-event.entity";
+import { Transaction } from "./transaction.entity";
+import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
 
+@Index("IDX_other_transaction_number", ["number"], { unique: true })
+@Index(
+  "IDX_other_transaction_root_transaction_revision",
+  ["rootTransactionId", "revisionNo"],
+  {
+    unique: true,
+  },
+)
+@Index("IDX_other_transaction_root_transaction_id", ["rootTransactionId"])
+@Index("IDX_other_transaction_branch_id", ["branchId"])
+@Index("IDX_other_transaction_counter_id", ["counterId"])
+@Index("IDX_other_transaction_company_id", ["companyId"])
+@Index("IDX_other_transaction_manual_book_page_id", ["manualBookPageId"])
+@Index("IDX_other_transaction_party_profile_id", ["partyProfileId"])
 @Index("IDX_other_transaction_slug", ["slug"])
+@Index("IDX_other_transaction_status", ["status"])
+@Check(
+  "CHK_other_transaction_number_required_when_approved",
+  `"status" <> 'APPROVED' OR "number" IS NOT NULL`,
+)
 @Entity("other_transaction")
 export class OtherTransaction extends BaseEntity {
-  // ── System / internal ─────────────────────────────────────────────────────
-  @Column({ type: "varchar", length: 100, name: "number" })
-  number: string;
+  @Column({ type: "uuid", name: "root_transaction_id", nullable: true })
+  rootTransactionId: string | null;
+
+  @ManyToOne(() => Transaction, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    name: "root_transaction_id",
+    foreignKeyConstraintName: "FK_other_transactions_root_transaction_id",
+  })
+  rootTransaction: Transaction | null;
+
+  @Column({ type: "integer", name: "revision_no", default: 1 })
+  revisionNo: number;
+
+  @Column({ type: "varchar", length: 100, name: "number", nullable: true })
+  number: string | null;
 
   @Column({ type: "citext", nullable: true })
   slug: string | null;
@@ -15,165 +67,155 @@ export class OtherTransaction extends BaseEntity {
   @Column({ type: "uuid", name: "branch_id" })
   branchId: string;
 
+  @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
+  branchSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "counter_id", nullable: false })
+  counterId: string;
+
+  @Column({ type: "jsonb", name: "counter_snapshot", nullable: true })
+  counterSnapshot: TransactionReferenceSnapshotValue;
+
   @Column({ type: "uuid", name: "company_id", nullable: true })
   companyId: string | null;
 
-  // ── Type / mode ───────────────────────────────────────────────────────────
+  @Column({ type: "jsonb", name: "company_snapshot", nullable: true })
+  companySnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "citext", name: "sac_code", nullable: true })
+  sacCode: string | null;
+
+  @Column({ type: "uuid", name: "party_profile_id" })
+  partyProfileId: string;
+
+  @Column({ type: "jsonb", name: "party_profile_snapshot", nullable: true })
+  partyProfileSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "agent_profile_id", nullable: true })
+  agentProfileId: string | null;
+
+  @Column({ type: "jsonb", name: "agent_profile_snapshot", nullable: true })
+  agentProfileSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "manual_book_page_id", nullable: true })
+  manualBookPageId: string | null;
+
+  @Column({
+    type: "jsonb",
+    name: "manual_book_page_snapshot",
+    nullable: true,
+  })
+  manualBookPageSnapshot: TransactionReferenceSnapshotValue;
+
   @Column({
     type: "enum",
     enum: TransactionType,
   })
   transactionType: TransactionType;
 
-  @Column({ type: "varchar", length: 50, name: "profile_type", nullable: true })
-  profileType: string | null;
+  @Column({
+    type: "enum",
+    enum: TradeMode,
+  })
+  tradeMode: TradeMode;
 
-  // ── Form fields ───────────────────────────────────────────────────────────
-  @Column({ type: "citext", name: "deal_id", nullable: true })
-  dealId: string | null;
+  @Column({
+    type: "enum",
+    enum: TransactionStatus,
+    default: TransactionStatus.DRAFT,
+  })
+  status: TransactionStatus;
 
-  @Column({ type: "citext", name: "doc_no", nullable: true })
-  docNo: string | null;
-
-  @Column({ type: "date", name: "transaction_date", nullable: true })
-  transactionDate: Date | string | null;
-
-  @Column({ type: "uuid", name: "marketing_id", nullable: true })
-  marketingId: string | null;
-
-  @Column({ type: "uuid", name: "segment_id", nullable: true })
-  segmentId: string | null;
-
-  @Column({ type: "citext", name: "serviced_by", nullable: true })
-  servicedBy: string | null;
-
-  @Column({ type: "uuid", name: "purpose_id", nullable: true })
-  purposeId: string | null;
-
-  @Column({ type: "citext", name: "remitter_name", nullable: true })
-  remitterName: string | null;
-
-  @Column({ type: "citext", name: "contact_no", nullable: true })
-  contactNo: string | null;
-
-  @Column({ type: "citext", name: "email", nullable: true })
-  email: string | null;
-
-  @Column({ type: "citext", name: "address", nullable: true })
-  address: string | null;
-
-  @Column({ type: "citext", name: "pan", nullable: true })
-  pan: string | null;
-
-  @Column({ type: "date", name: "date_of_birth", nullable: true })
-  dateOfBirth: Date | string | null;
-
-  @Column({ type: "uuid", name: "product_id", nullable: true })
-  productId: string | null;
-
-  @Column({ type: "citext", name: "beneficiary_name", nullable: true })
-  beneficiaryName: string | null;
-
-  @Column({ type: "citext", name: "beni_address", nullable: true })
-  beniAddress: string | null;
-
-  @Column({ type: "citext", name: "bene_account_number", nullable: true })
-  beneAccountNumber: string | null;
-
-  @Column({ type: "citext", name: "bene_bank_name", nullable: true })
-  beneBankName: string | null;
-
-  @Column({ type: "citext", name: "swift_code", nullable: true })
-  swiftCode: string | null;
-
-  @Column({ type: "uuid", name: "relationship_id", nullable: true })
-  relationshipId: string | null;
-
-  @Column({ type: "uuid", name: "currency_id", nullable: true })
-  currencyId: string | null;
-
-  @Column({ type: "numeric", name: "fc_volume", precision: 18, scale: 7, nullable: true })
-  fcVolume: string | null;
-
-  @Column({ type: "numeric", name: "sale_rate", precision: 18, scale: 7, nullable: true })
-  saleRate: string | null;
-
-  @Column({ type: "numeric", name: "total_inr_amt", precision: 18, scale: 2, nullable: true })
-  totalInrAmt: string | null;
-
-  @Column({ type: "numeric", name: "gst", precision: 18, scale: 2, nullable: true })
-  gst: string | null;
-
-  @Column({ type: "numeric", name: "bank_charges", precision: 18, scale: 2, nullable: true })
-  bankCharges: string | null;
-
-  @Column({ type: "numeric", name: "tcs", precision: 18, scale: 2, nullable: true })
-  tcs: string | null;
-
-  @Column({ type: "numeric", name: "other_income", precision: 18, scale: 2, nullable: true })
-  otherIncome: string | null;
-
-  @Column({ type: "numeric", name: "final_amount", precision: 18, scale: 2, nullable: true })
-  finalAmount: string | null;
-
-  @Column({ type: "numeric", name: "settlement_rate", precision: 18, scale: 2, nullable: true })
-  settlementRate: string | null;
-
-  @Column({ type: "numeric", name: "gross_revenue", precision: 18, scale: 2, nullable: true })
-  grossRevenue: string | null;
-
-  @Column({ type: "numeric", name: "revenue_receivable", precision: 18, scale: 2, nullable: true })
-  revenueReceivable: string | null;
-
-  @Column({ type: "uuid", name: "agent_id", nullable: true })
-  agentId: string | null;
-
-  @Column({ type: "numeric", name: "agent_comm", precision: 18, scale: 2, nullable: true })
-  agentComm: string | null;
-
-  @Column({ type: "numeric", name: "tds", precision: 18, scale: 2, nullable: true })
-  tds: string | null;
-
-  @Column({ type: "numeric", name: "commission_payable", precision: 18, scale: 2, nullable: true })
-  commissionPayable: string | null;
-
-  @Column({ type: "numeric", name: "net_revenue", precision: 18, scale: 2, nullable: true })
-  netRevenue: string | null;
-
-  @Column({ type: "uuid", name: "bank_name_id", nullable: true })
-  bankNameId: string | null;
-
-  @Column({ type: "citext", name: "rtgs_imps_neft_ref_no", nullable: true })
-  rtgsImpsNeftRefNo: string | null;
-
-  @Column({ type: "text", name: "remarks", nullable: true })
+  @Column({ type: "text", nullable: true })
   remarks: string | null;
 
-  // ── Snapshots (full entity JSON) ──────────────────────────────────────────
-  @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
-  branchSnapshot: Record<string, any> | null;
+  @Column({ type: "timestamptz", name: "submitted_at", nullable: true })
+  submittedAt: Date | null;
 
-  @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
-  currencySnapshot: Record<string, any> | null;
+  @Column({ type: "timestamptz", name: "approved_at", nullable: true })
+  approvedAt: Date | null;
 
-  @Column({ type: "jsonb", name: "product_snapshot", nullable: true })
-  productSnapshot: Record<string, any> | null;
+  @Column({ type: "timestamptz", name: "rejected_at", nullable: true })
+  rejectedAt: Date | null;
 
-  @Column({ type: "jsonb", name: "agent_snapshot", nullable: true })
-  agentSnapshot: Record<string, any> | null;
+  @Column({ type: "uuid", name: "approved_by_id", nullable: true })
+  approvedById: string | null;
 
-  @Column({ type: "jsonb", name: "bank_snapshot", nullable: true })
-  bankSnapshot: Record<string, any> | null;
+  @Column({ type: "uuid", name: "rejected_by_id", nullable: true })
+  rejectedById: string | null;
 
-  @Column({ type: "jsonb", name: "marketing_snapshot", nullable: true })
-  marketingSnapshot: Record<string, any> | null;
+  @Column({ type: "text", name: "approval_remarks", nullable: true })
+  approvalRemarks: string | null;
 
-  @Column({ type: "jsonb", name: "segment_snapshot", nullable: true })
-  segmentSnapshot: Record<string, any> | null;
+  @Column({ type: "text", name: "rejection_reason", nullable: true })
+  rejectionReason: string | null;
 
-  @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
-  purposeSnapshot: Record<string, any> | null;
+  @Column({ type: "boolean", name: "is_latest", default: true })
+  isLatest: boolean;
 
-  @Column({ type: "jsonb", name: "relationship_snapshot", nullable: true })
-  relationshipSnapshot: Record<string, any> | null;
+  @Column({
+    type: "numeric",
+    name: "by_cash",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  byCash: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "by_cheque",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  byCheque: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "by_card",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  byCard: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "by_transfer",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  byTransfer: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "by_other",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  byOther: string | null;
+
+  @OneToMany(() => TransactionItem, (item) => item.transaction)
+  items: TransactionItem[];
+
+  @OneToMany(() => TransactionDocument, (document) => document.transaction)
+  documents: TransactionDocument[];
+
+  @OneToMany(() => TransactionAdditionalCharge, (charge) => charge.transaction)
+  additionalCharges: TransactionAdditionalCharge[];
+
+  @OneToMany(() => TransactionPayment, (payment) => payment.transaction)
+  payments: TransactionPayment[];
+
+  @OneToMany(() => TransactionAccountPosting, (posting) => posting.transaction)
+  postings: TransactionAccountPosting[];
+
+  @OneToMany(() => TransactionLog, (log) => log.transaction)
+  logs: TransactionLog[];
+
+  @OneToMany(() => TransactionEvent, (event) => event.transaction)
+  events: TransactionEvent[];
 }
