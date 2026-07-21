@@ -101,7 +101,7 @@ export class DashboardService {
       .getCount();
 
     const pendingPP = await this.partyProfileRepository.count({
-      where: { status: WorkflowStatus.PENDING as any },
+      where: { status: WorkflowStatus.PENDING },
     });
 
     const pendingQB = this.chequeBookRepository
@@ -338,7 +338,7 @@ export class DashboardService {
 
     if (isAdminOrHo) {
       const partyProfiles = await this.partyProfileRepository.find({
-        where: { status: WorkflowStatus.PENDING as any },
+        where: { status: WorkflowStatus.PENDING },
         order: { createdAt: "ASC" },
         take: limit,
       });
