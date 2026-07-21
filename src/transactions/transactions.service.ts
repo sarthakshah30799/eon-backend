@@ -17,7 +17,7 @@ import { TransactionItem } from './entities/transaction-item.entity';
 import { TransactionDocument } from './entities/transaction-document.entity';
 import { TransactionAdditionalCharge } from './entities/transaction-additional-charge.entity';
 import { TransactionPayment } from './entities/transaction-payment.entity';
-import { TransactionAd1 } from './entities/transaction-ad1.entity';
+import { OtherTransaction } from './entities/other-transaction.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
@@ -53,8 +53,8 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction, 'database2')
     private readonly transactionRepository: Repository<Transaction>,
-    @InjectRepository(TransactionAd1, 'database2')
-    private readonly transactionAd1Repository: Repository<TransactionAd1>,
+    @InjectRepository(OtherTransaction, 'database2')
+    private readonly otherTransactionRepository: Repository<OtherTransaction>,
     @InjectRepository(TransactionItem, 'database2')
     private readonly transactionItemRepository: Repository<TransactionItem>,
     @InjectRepository(TransactionDocument, 'database2')
@@ -93,7 +93,7 @@ export class TransactionsService {
     private readonly storageService: StorageService,
   ) { }
 
-  async getAd1Agents(
+  async getOtherTransactionAgents(
     branchId: string,
     search?: string,
   ): Promise<any[]> {
@@ -1353,5 +1353,96 @@ export class TransactionsService {
       message,
       messageId,
     };
+  }
+
+  // ── OtherTransaction CRUD Methods ─────────────────────────────────────────
+  // Since OtherTransaction is now normalized like Transaction, these methods
+  // provide the same functionality but for OtherTransaction entity
+
+  async createOtherTransaction(
+    payload: Record<string, any>,
+    performedById: string,
+    activeBranchId: string | null,
+  ): Promise<OtherTransaction> {
+    const resolvedBranchId = activeBranchId || '';
+    if (!resolvedBranchId) {
+      throw new BadRequestException('Branch is required');
+    }
+
+    const branch = await this.branchRepository.findOne({
+      where: { id: resolvedBranchId },
+      relations: ['company'],
+    });
+    const companyId = branch?.company?.id ?? null;
+
+    const entity = await this.otherTransactionRepository.save(
+      this.otherTransactionRepository.create({
+        slug: payload.slug ?? 'OTHER',
+        number: String(payload.number ?? ''),
+        branchId: String(resolvedBranchId),
+        companyId,
+        transactionType: payload.transactionType ?? TransactionType.PURCHASE,
+        tradeMode: payload.tradeMode ?? 'SPOT',
+        status: payload.status ?? TransactionStatus.DRAFT,
+        remarks: payload.remarks ?? null,
+        createdBy: performedById,
+        updatedBy: performedById,
+      }),
+    );
+
+    return this.otherTransactionRepository.findOne({ where: { id: entity.id } });
+  }
+
+  async findAllOtherTransactions(params?: { branchId?: string; search?: string }): Promise<OtherTransaction[]> {
+    const query = this.otherTransactionRepository.createQueryBuilder('ot');
+
+    if (params?.branchId) {
+      query.andWhere('ot.branchId = :branchId', { branchId: params.branchId });
+    }
+
+    if (params?.search?.trim()) {
+      query.andWhere('ot.number ILIKE :search', { search: `%${params.search.trim()}%` });
+    }
+
+    query.orderBy('ot.createdAt', 'DESC');
+    return query.getMany();
+  }
+
+  async findOtherTransaction(id: string): Promise<OtherTransaction> {
+    const entity = await this.otherTransactionRepository.findOne({ where: { id } });
+    if (!entity) {
+      throw new NotFoundException(`Other transaction ${id} not found`);
+    }
+    return entity;
+  }
+
+  async updateOtherTransaction(
+    id: string,
+    payload: Record<string, any>,
+    performedById: string,
+    activeBranchId: string | null,
+  ): Promise<OtherTransaction> {
+    const entity = await this.findOtherTransaction(id);
+
+    // Update basic fields
+    if (payload.number !== undefined) {
+      entity.number = String(payload.number);
+    }
+    if (payload.transactionType !== undefined) {
+      entity.transactionType = payload.transactionType;
+    }
+    if (payload.tradeMode !== undefined) {
+      entity.tradeMode = payload.tradeMode;
+    }
+    if (payload.status !== undefined) {
+      entity.status = payload.status;
+    }
+    if (payload.remarks !== undefined) {
+      entity.remarks = payload.remarks;
+    }
+
+    entity.updatedBy = performedById;
+    await this.otherTransactionRepository.save(entity);
+    return this.findOtherTransaction(id);
   }
 }

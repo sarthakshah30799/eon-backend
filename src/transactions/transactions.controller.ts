@@ -38,13 +38,13 @@ type UploadedDraftFile = {
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
-  @Get('ad1/agents')
-  @ApiOperation({ summary: 'Get agents for AD1 transactions' })
-  async getAd1Agents(
+  @Get('other/agents')
+  @ApiOperation({ summary: 'Get agents for other transactions' })
+  async getOtherTransactionAgents(
     @Session() session: any,
     @Query('search') search?: string,
   ): Promise<any[]> {
-    return this.transactionsService.getAd1Agents(session?.activeBranchId, search);
+    return this.transactionsService.getOtherTransactionAgents(session?.activeBranchId, search);
   }
 
   @Get()
