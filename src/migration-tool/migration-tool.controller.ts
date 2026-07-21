@@ -74,5 +74,14 @@ export class MigrationToolController {
     response.setHeader('X-Migration-Summary', JSON.stringify(result.summary));
     return new StreamableFile(result.buffer);
   }
-}
 
+  @Post('apply-current-schema')
+  @ApiBody({ type: MigrationRunRequestDto })
+  async applyCurrentSchema(
+    @Body() dto: MigrationRunRequestDto,
+    @Req() request: Request,
+  ) {
+    this.ensureAdmin(request);
+    return this.migrationToolService.runCurrentDatabaseMigrations(dto);
+  }
+}
