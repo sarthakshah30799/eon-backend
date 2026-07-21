@@ -25,4 +25,7 @@ export enum CategoryOptionCodeEnum {
   ServicedBy = "SERVICEDBY",
   Product = "PRODUCT",
   Marketing = "MARKETING",
+  PassengerNationality = "NATIONALITY",
+  PassengerResidentStatus = "RESIDENT",
+  PassengerPanHolderRelation = "RELATION",
 }
