@@ -343,6 +343,30 @@ const buildCrudMenuSeeds = (params: {
   return seeds;
 };
 
+const PARTY_PROFILE_MENU_TYPES: Array<{ routeType: string; label: string }> = [
+  { routeType: 'corporate-client', label: 'Corporate Client' },
+  { routeType: 'ffmc', label: 'FFMC' },
+  { routeType: 'rf', label: 'RF' },
+  { routeType: 'authorised-dealer', label: 'Authorised Dealer' },
+  { routeType: 'rmc', label: 'RMC' },
+  { routeType: 'franchise', label: 'Franchise' },
+  { routeType: 'agent', label: 'Agent' },
+  { routeType: 'foreign-correspondent', label: 'Foreign Correspondent' },
+  { routeType: 'forex-correspondent', label: 'Forex Correspondent' },
+  { routeType: 'marketing-executive', label: 'Marketing Executive' },
+  { routeType: 'card-issuer-profile', label: 'Card Issuer' },
+  { routeType: 'misc-supplier-profile', label: 'Misc Supplier' },
+];
+
+const buildPartyProfileMenuSeeds = (): MenuSeedDefinition[] =>
+  PARTY_PROFILE_MENU_TYPES.map(({ routeType, label }, index) => ({
+    path: `/party-profiles/${routeType}`,
+    name: `${label} Profile`,
+    parentPath: '/party-profiles',
+    isAdmin: false,
+    sortOrder: 20 + index,
+  }));
+
 const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
   { path: '/', name: 'Dashboard', parentPath: null, isAdmin: false, sortOrder: 0 },
   ...buildCrudMenuSeeds({
@@ -467,10 +491,8 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
     basePath: '/party-profiles',
     name: 'Party Profiles',
     isAdmin: false,
-    createPath: '/party-profiles/:type/create',
-    editPath: '/party-profiles/:type/edit/:id',
-    detailPath: '/party-profiles/:type/documents/:id',
   }),
+  ...buildPartyProfileMenuSeeds(),
   ...buildCrudMenuSeeds({
     basePath: '/ad1',
     name: 'AD1',
@@ -2523,6 +2545,7 @@ export class MigrationToolService {
           existing.path = path;
           changed = true;
         }
+        existing.updatedBy = context.actorUserId;
 
         if (changed && context.mode === 'real') {
           await this.targetMenuRepository.save(existing);
@@ -2564,6 +2587,10 @@ export class MigrationToolService {
         parent: parentRef ? ({ id: parentRef.id } as Menu) : null,
         sortOrder: seed.sortOrder,
         isActive: true,
+        createdBy: context.actorUserId,
+        updatedBy: context.actorUserId,
+        deletedAt: null,
+        deletedBy: null,
       });
 
       if (context.mode === 'real') {
@@ -2636,7 +2663,8 @@ export class MigrationToolService {
       }
     }
 
-    const firstCompany = await this.targetCompanyRepository.findOne({
+    const [firstCompany] = await this.targetCompanyRepository.find({
+      take: 1,
       order: { createdAt: 'ASC' },
     });
     if (firstCompany) {
