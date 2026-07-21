@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -107,13 +106,6 @@ export class CompanyService {
         updatedBy: userId,
       });
 
-      const existingPan = await companyRepository.findOne({
-        where: { panNo: company.panNo },
-      });
-      if (existingPan) {
-        throw new ConflictException('Company with this PAN already exists');
-      }
-
       if (fromDate) {
         const previousCompany = await companyRepository
           .createQueryBuilder('company')
@@ -156,15 +148,6 @@ export class CompanyService {
       });
       if (!company) {
         throw new NotFoundException(`Company with id ${id} not found`);
-      }
-
-      if (normalized.panNo && normalized.panNo !== company.panNo) {
-        const existingPan = await companyRepository.findOne({
-          where: { panNo: normalized.panNo },
-        });
-        if (existingPan) {
-          throw new ConflictException('Company with this PAN already exists');
-        }
       }
 
       const previousFromDate = company.fromDate ? new Date(company.fromDate) : null;

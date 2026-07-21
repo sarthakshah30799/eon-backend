@@ -23,7 +23,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         ],
         migrations: [__dirname + "/../migrations/*{.ts,.js}"],
         synchronize: false, // Ensure you handle schema changes properly
-        migrationsRun: configService.database.migrationsRun,
+        migrationsRun: false,
         logging: true,
         namingStrategy: new SnakeNamingStrategy(),
       }),

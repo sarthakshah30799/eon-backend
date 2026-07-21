@@ -1041,14 +1041,17 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
-    const requestedTypes = (query.type?.length
+    const hasRequestedTypes = Boolean(query.type?.length);
+    const requestedTypes = (hasRequestedTypes
       ? query.type
-      : [ClientType.CORPORATE_CLIENT]) as ClientType[];
-    const accessibleTypes = user
+      : query.isIndividual === true
+        ? undefined
+        : [ClientType.CORPORATE_CLIENT]) as ClientType[] | undefined;
+    const accessibleTypes = user && requestedTypes
       ? requestedTypes.filter(type => this.canAccessPartyProfileType(user, type, "view"))
       : requestedTypes;
 
-    if (accessibleTypes.length === 0) {
+    if (requestedTypes && accessibleTypes && accessibleTypes.length === 0) {
       return {
         data: [],
         page,
@@ -1058,7 +1061,15 @@ export class PartyProfileService {
       };
     }
 
-    qb.where("pp.type::text IN (:...types)", { types: accessibleTypes });
+    if (accessibleTypes && accessibleTypes.length > 0) {
+      qb.where("pp.type::text IN (:...types)", { types: accessibleTypes });
+    }
+
+    if (query.isIndividual !== undefined) {
+      qb.andWhere("pp.isIndividual = :isIndividual", {
+        isIndividual: query.isIndividual,
+      });
+    }
 
     if (!userCanSeeAllBranches && !activeBranchId) {
       return {

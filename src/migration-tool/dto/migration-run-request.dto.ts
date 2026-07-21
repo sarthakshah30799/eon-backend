@@ -8,12 +8,12 @@ import {
   Max,
   Min,
   IsString,
-  ArrayNotEmpty,
+  ValidateNested,
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-export class MigrationRunRequestDto {
+export class MigrationConnectionConfigDto {
   @ApiProperty({ enum: ['string', 'options'] })
   @IsIn(['string', 'options'])
   connectionMode: 'string' | 'options';
@@ -55,12 +55,41 @@ export class MigrationRunRequestDto {
   @IsOptional()
   @IsBoolean()
   ssl?: boolean;
+}
+
+export class MigrationRunRequestDto {
+  @ApiProperty({ enum: ['currentMaster', 'currentTransaction'], required: false })
+  @IsOptional()
+  @IsIn(['currentMaster', 'currentTransaction'])
+  schemaTarget?: 'currentMaster' | 'currentTransaction';
+
+  @ApiProperty({ type: () => MigrationConnectionConfigDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MigrationConnectionConfigDto)
+  currentMasterConnection?: MigrationConnectionConfigDto;
+
+  @ApiProperty({ type: () => MigrationConnectionConfigDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MigrationConnectionConfigDto)
+  currentTransactionConnection?: MigrationConnectionConfigDto;
+
+  @ApiProperty({ type: () => MigrationConnectionConfigDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MigrationConnectionConfigDto)
+  oldMasterConnection?: MigrationConnectionConfigDto;
+
+  @ApiProperty({ type: () => MigrationConnectionConfigDto, required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MigrationConnectionConfigDto)
+  oldTransactionConnection?: MigrationConnectionConfigDto;
 
   @ApiProperty({ type: [String], required: false, default: [] })
   @IsOptional()
-  @ValidateIf(dto => dto.selectedTables !== undefined)
   @IsArray()
-  @ArrayNotEmpty()
   @IsString({ each: true })
   selectedTables?: string[];
 }

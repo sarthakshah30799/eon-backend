@@ -9,6 +9,7 @@ import { TransactionAccountPosting } from "./entities/transaction-account-postin
 import { TransactionLog } from "./entities/transaction-log.entity";
 import { TransactionEvent } from "./entities/transaction-event.entity";
 import { TransactionAd1 } from "./entities/transaction-ad1.entity";
+import { TransactionPassengerOtherDocument } from "./entities/transaction-passenger-other-document.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
 import { TransactionAd1Service } from "./transaction-ad1.service";
@@ -22,6 +23,9 @@ import { SelectOption } from "../category-options/category-option.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
+import { Passenger } from "../passengers/passenger.entity";
+import { Country } from "../country/country.entity";
+import { State } from "../state/state.entity";
 import { CompanyModule } from "../company/company.module";
 import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
@@ -43,6 +47,9 @@ import { Counter } from "../counters/counter.entity";
       DocumentProfile,
       AccountProfile,
       PartyProfile,
+      Passenger,
+      Country,
+      State,
       Branch,
       Counter,
       User,
@@ -58,6 +65,7 @@ import { Counter } from "../counters/counter.entity";
         TransactionAccountPosting,
         TransactionLog,
         TransactionEvent,
+        TransactionPassengerOtherDocument,
         ManualBookPageTracking,
         ChequeBookPageTracking,
       ],

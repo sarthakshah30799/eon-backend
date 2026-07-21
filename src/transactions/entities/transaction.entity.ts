@@ -20,7 +20,11 @@ import { TransactionPayment } from "./transaction-payment.entity";
 import { TransactionAccountPosting } from "./transaction-account-posting.entity";
 import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
-import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
+import { TransactionPassengerOtherDocument } from "./transaction-passenger-other-document.entity";
+import {
+  TransactionPassengerSnapshotValue,
+  TransactionReferenceSnapshotValue,
+} from "../types/transaction-snapshot.types";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
 @Index(
@@ -36,6 +40,8 @@ import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot
 @Index("IDX_transactions_company_id", ["companyId"])
 @Index("IDX_transactions_manual_book_page_id", ["manualBookPageId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
+@Index("IDX_transactions_passenger_id", ["passengerId"])
+@Index("IDX_transactions_purpose_id", ["purposeId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
 @Check(
@@ -89,6 +95,18 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "jsonb", name: "party_profile_snapshot", nullable: true })
   partyProfileSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "purpose_id", nullable: true })
+  purposeId: string | null;
+
+  @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
+  purposeSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "passenger_id", nullable: true })
+  passengerId: string | null;
+
+  @Column({ type: "jsonb", name: "passenger_snapshot", nullable: true })
+  passengerSnapshot: TransactionPassengerSnapshotValue;
 
   @Column({ type: "uuid", name: "agent_profile_id", nullable: true })
   agentProfileId: string | null;
@@ -202,6 +220,12 @@ export class Transaction extends BaseEntity {
 
   @OneToMany(() => TransactionDocument, (document) => document.transaction)
   documents: TransactionDocument[];
+
+  @OneToMany(
+    () => TransactionPassengerOtherDocument,
+    (otherDocument) => otherDocument.transaction
+  )
+  passengerOtherDocuments: TransactionPassengerOtherDocument[];
 
   @OneToMany(() => TransactionAdditionalCharge, (charge) => charge.transaction)
   additionalCharges: TransactionAdditionalCharge[];
