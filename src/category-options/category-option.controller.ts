@@ -9,6 +9,7 @@ import {
   UseGuards,
   Session,
 } from "@nestjs/common";
+import type { Session as ExpressSession, SessionData } from "express-session";
 import {
   ApiBearerAuth,
   ApiCookieAuth,
@@ -26,6 +27,8 @@ import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
 import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { SelectOptionService } from "./category-option.service";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
+
+type SelectOptionSession = ExpressSession & SessionData;
 
 @ApiTags("select-options")
 @ApiCookieAuth("sessionId")
@@ -105,7 +108,7 @@ export class SelectOptionController {
   })
   async create(
     @Body() dto: CreateSelectOptionDto,
-    @Session() session: any,
+    @Session() session: SelectOptionSession,
   ): Promise<SelectOptionResponseDto> {
     return this.selectOptionService.create(dto, session.userId);
   }
@@ -119,7 +122,7 @@ export class SelectOptionController {
   })
   async bulkUpsert(
     @Body() dto: CreateSelectOptionDto[],
-    @Session() session: any,
+    @Session() session: SelectOptionSession,
   ): Promise<SelectOptionResponseDto[]> {
     return this.selectOptionService.bulkUpsert(dto, session.userId);
   }
@@ -135,7 +138,7 @@ export class SelectOptionController {
   async update(
     @Param("id") id: string,
     @Body() dto: UpdateSelectOptionDto,
-    @Session() session: any,
+    @Session() session: SelectOptionSession,
   ): Promise<SelectOptionResponseDto> {
     return this.selectOptionService.update(id, dto, session.userId);
   }

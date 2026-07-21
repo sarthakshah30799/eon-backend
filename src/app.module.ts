@@ -37,6 +37,7 @@ import { TransactionsModule } from "./transactions/transactions.module";
 import { MigrationToolModule } from "./migration-tool/migration-tool.module";
 import { ReportsModule } from "./reports/reports.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { PassengerModule } from "./passengers/passenger.module";
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     ManualBillBookModule,
     ChequeBookModule,
     TransactionsModule,
+    PassengerModule,
     MigrationToolModule,
     ReportsModule,
     DashboardModule,

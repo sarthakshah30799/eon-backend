@@ -40,6 +40,7 @@ async function bootstrap() {
     .addTag('roles', 'Role management')
     .addTag('menus', 'Dynamic menu management')
     .addTag('tds-profiles', 'TDS profile management')
+    .addTag('passengers', 'Passenger AML verification')
     .addCookieAuth('sessionId')
     .build();
 
