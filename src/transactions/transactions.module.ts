@@ -8,11 +8,11 @@ import { TransactionPayment } from "./entities/transaction-payment.entity";
 import { TransactionAccountPosting } from "./entities/transaction-account-posting.entity";
 import { TransactionLog } from "./entities/transaction-log.entity";
 import { TransactionEvent } from "./entities/transaction-event.entity";
-import { TransactionAd1 } from "./entities/transaction-ad1.entity";
+import { OtherTransaction } from "./entities/other-transaction.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
-import { TransactionAd1Service } from "./transaction-ad1.service";
-import { TransactionAd1Controller } from "./transaction-ad1.controller";
+import { OtherTransactionService } from "./other-transaction.service";
+import { OtherTransactionController } from "./other-transaction.controller";
 import { TransactionAccountPostingWorker } from "./transaction-account-posting.worker";
 import { MailModule } from "../mail/mail.module";
 import { StorageModule } from "../storage/storage.module";
@@ -50,7 +50,7 @@ import { Counter } from "../counters/counter.entity";
     TypeOrmModule.forFeature(
       [
         Transaction,
-        TransactionAd1,
+        OtherTransaction,
         TransactionItem,
         TransactionDocument,
         TransactionAdditionalCharge,
@@ -64,8 +64,8 @@ import { Counter } from "../counters/counter.entity";
       "database2",
     ),
   ],
-  controllers: [TransactionAd1Controller, TransactionsController],
-  providers: [TransactionsService, TransactionAd1Service, TransactionAccountPostingWorker],
+  controllers: [OtherTransactionController, TransactionsController],
+  providers: [TransactionsService, OtherTransactionService, TransactionAccountPostingWorker],
   exports: [
     TypeOrmModule,
     TransactionsService,

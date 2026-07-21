@@ -17,7 +17,7 @@ import { TransactionItem } from './entities/transaction-item.entity';
 import { TransactionDocument } from './entities/transaction-document.entity';
 import { TransactionAdditionalCharge } from './entities/transaction-additional-charge.entity';
 import { TransactionPayment } from './entities/transaction-payment.entity';
-import { TransactionAd1 } from './entities/transaction-ad1.entity';
+import { OtherTransaction } from './entities/other-transaction.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
@@ -53,8 +53,8 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction, 'database2')
     private readonly transactionRepository: Repository<Transaction>,
-    @InjectRepository(TransactionAd1, 'database2')
-    private readonly transactionAd1Repository: Repository<TransactionAd1>,
+    @InjectRepository(OtherTransaction, 'database2')
+    private readonly otherTransactionRepository: Repository<OtherTransaction>,
     @InjectRepository(TransactionItem, 'database2')
     private readonly transactionItemRepository: Repository<TransactionItem>,
     @InjectRepository(TransactionDocument, 'database2')
@@ -93,7 +93,7 @@ export class TransactionsService {
     private readonly storageService: StorageService,
   ) { }
 
-  async getAd1Agents(
+  async getOtherTransactionAgents(
     branchId: string,
     search?: string,
   ): Promise<any[]> {

@@ -1,20 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TransactionAd1 } from './entities/transaction-ad1.entity';
+import { OtherTransaction } from './entities/other-transaction.entity';
 import { Branch } from '../branches/branch.entity';
 import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
 import { Currency } from '../currencies/currency.entity';
 import { SelectOption } from '../category-options/category-option.entity';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { Product } from '../products/product.entity';
-import { TransactionProfileType, TransactionType } from './transactions.enums';
+import { TransactionType } from './transactions.enums';
 
 @Injectable()
-export class TransactionAd1Service {
+export class OtherTransactionService {
   constructor(
-    @InjectRepository(TransactionAd1, 'database2')
-    private readonly repo: Repository<TransactionAd1>,
+    @InjectRepository(OtherTransaction, 'database2')
+    private readonly repo: Repository<OtherTransaction>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(PartyProfile)
@@ -34,8 +34,8 @@ export class TransactionAd1Service {
   private async resolveSnapshots(
     payload: Record<string, any>,
     branchId?: string | null,
-  ): Promise<Partial<TransactionAd1>> {
-    const snapshots: Partial<TransactionAd1> = {};
+  ): Promise<Partial<OtherTransaction>> {
+    const snapshots: Partial<OtherTransaction> = {};
 
     if (branchId) {
       const branch = await this.branchRepository.findOne({
@@ -117,7 +117,7 @@ export class TransactionAd1Service {
     payload: Record<string, any>,
     performedById: string,
     activeBranchId: string | null,
-  ): Promise<TransactionAd1> {
+  ): Promise<OtherTransaction> {
     const resolvedBranchId = activeBranchId || '';
     if (!payload.docNo || !resolvedBranchId) {
       throw new BadRequestException('Doc No and branch are required');
@@ -131,13 +131,14 @@ export class TransactionAd1Service {
 
     const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
-    const ad1 = await this.repo.save(
+    const entity = await this.repo.save(
       this.repo.create({
+        slug: payload.slug ?? 'AD1',
         number: String(payload.docNo),
         branchId: String(resolvedBranchId),
         companyId,
         transactionType: payload.transactionType ?? TransactionType.PURCHASE,
-        profileType: payload.profileType ?? TransactionProfileType.AD1,
+        profileType: payload.profileType ?? 'AD1',
         createdBy: performedById,
         updatedBy: performedById,
 
@@ -186,30 +187,30 @@ export class TransactionAd1Service {
       }),
     );
 
-    return this.repo.findOne({ where: { id: ad1.id } });
+    return this.repo.findOne({ where: { id: entity.id } });
   }
 
-  async findAll(params?: { branchId?: string; search?: string }): Promise<TransactionAd1[]> {
-    const query = this.repo.createQueryBuilder('ad1');
+  async findAll(params?: { branchId?: string; search?: string }): Promise<OtherTransaction[]> {
+    const query = this.repo.createQueryBuilder('ot');
 
     if (params?.branchId) {
-      query.andWhere('ad1.branchId = :branchId', { branchId: params.branchId });
+      query.andWhere('ot.branchId = :branchId', { branchId: params.branchId });
     }
 
     if (params?.search?.trim()) {
-      query.andWhere('ad1.number ILIKE :search', { search: `%${params.search.trim()}%` });
+      query.andWhere('ot.number ILIKE :search', { search: `%${params.search.trim()}%` });
     }
 
-    query.orderBy('ad1.createdAt', 'DESC');
+    query.orderBy('ot.createdAt', 'DESC');
     return query.getMany();
   }
 
-  async findOne(id: string): Promise<TransactionAd1> {
-    const ad1 = await this.repo.findOne({ where: { id } });
-    if (!ad1) {
-      throw new NotFoundException(`AD1 transaction ${id} not found`);
+  async findOne(id: string): Promise<OtherTransaction> {
+    const entity = await this.repo.findOne({ where: { id } });
+    if (!entity) {
+      throw new NotFoundException(`Other transaction ${id} not found`);
     }
-    return ad1;
+    return entity;
   }
 
   async update(
@@ -217,12 +218,12 @@ export class TransactionAd1Service {
     payload: Record<string, any>,
     performedById: string,
     activeBranchId: string | null,
-  ): Promise<TransactionAd1> {
-    const ad1 = await this.findOne(id);
+  ): Promise<OtherTransaction> {
+    const entity = await this.findOne(id);
 
     if (payload.docNo) {
-      ad1.number = String(payload.docNo);
-      ad1.docNo = payload.docNo;
+      entity.number = String(payload.docNo);
+      entity.docNo = payload.docNo;
     }
 
     const fields = [
@@ -238,13 +239,12 @@ export class TransactionAd1Service {
 
     for (const field of fields) {
       if (payload[field] !== undefined) {
-        (ad1 as any)[field] = payload[field] || null;
+        (entity as any)[field] = payload[field] || null;
       }
     }
 
-    // Handle legacy fxRefAgentId field name from frontend
     if (payload.fxRefAgentId !== undefined && payload.agentId === undefined) {
-      ad1.agentId = payload.fxRefAgentId || null;
+      entity.agentId = payload.fxRefAgentId || null;
     }
 
     const snapshots = await this.resolveSnapshots(
@@ -252,12 +252,12 @@ export class TransactionAd1Service {
         ...payload,
         agentId: payload.agentId ?? payload.fxRefAgentId,
       },
-      ad1.branchId,
+      entity.branchId,
     );
-    Object.assign(ad1, snapshots);
+    Object.assign(entity, snapshots);
 
-    ad1.updatedBy = performedById;
-    await this.repo.save(ad1);
+    entity.updatedBy = performedById;
+    await this.repo.save(entity);
     return this.findOne(id);
   }
 }

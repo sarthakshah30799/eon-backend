@@ -11,24 +11,24 @@ import {
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { TransactionAd1Service } from './transaction-ad1.service';
+import { OtherTransactionService } from './other-transaction.service';
 
-@ApiTags('transaction-ad1')
+@ApiTags('other-transaction')
 @ApiCookieAuth('sessionId')
 @UseGuards(AuthenticatedGuard)
-@Controller('transactions/ad1')
-export class TransactionAd1Controller {
-  constructor(private readonly ad1Service: TransactionAd1Service) {}
+@Controller('transactions/other')
+export class OtherTransactionController {
+  constructor(private readonly service: OtherTransactionService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create an AD1 transaction' })
+  @ApiOperation({ summary: 'Create an other transaction' })
   async create(@Body() body: Record<string, any>, @Session() session: any) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.create(body, performedById, session?.activeBranchId ?? null);
+    return this.service.create(body, performedById, session?.activeBranchId ?? null);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List AD1 transactions' })
+  @ApiOperation({ summary: 'List other transactions' })
   async findAll(
     @Session() session: any,
     @Query('branchId') branchId?: string,
@@ -39,32 +39,32 @@ export class TransactionAd1Controller {
       ? branchId?.trim() || undefined
       : session?.activeBranchId;
 
-    return this.ad1Service.findAll({ branchId: effectiveBranchId, search });
+    return this.service.findAll({ branchId: effectiveBranchId, search });
   }
 
   @Get('agents')
-  @ApiOperation({ summary: 'List agents available for AD1' })
+  @ApiOperation({ summary: 'List agents available for other transactions' })
   async getAgents(
     @Session() session: any,
     @Query('search') search?: string,
   ) {
-    return this.ad1Service.getAgents({ branchId: session?.activeBranchId, search });
+    return this.service.getAgents({ branchId: session?.activeBranchId, search });
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get an AD1 transaction by ID' })
+  @ApiOperation({ summary: 'Get an other transaction by ID' })
   async findOne(@Param('id') id: string) {
-    return this.ad1Service.findOne(id);
+    return this.service.findOne(id);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update an AD1 transaction' })
+  @ApiOperation({ summary: 'Update an other transaction' })
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, any>,
     @Session() session: any,
   ) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.update(id, body, performedById, session?.activeBranchId ?? null);
+    return this.service.update(id, body, performedById, session?.activeBranchId ?? null);
   }
 }
