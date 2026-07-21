@@ -74,12 +74,16 @@ export class DashboardController {
   }
 
   @Get("pending-approvals")
-  @ApiOperation({ summary: "Get pending party profile approvals" })
+  @ApiOperation({ summary: "Get pending approvals across all entity types" })
   async getPendingApprovals(
     @Session() session: any,
     @Query("limit") limit?: string,
   ): Promise<PendingApprovalDto[]> {
+    const ctx = this.getBranchContext(session);
     return this.dashboardService.getPendingApprovals(
+      session.userId,
+      ctx.isAdminOrHo,
+      ctx.branchId,
       limit ? parseInt(limit, 10) : 20,
     );
   }

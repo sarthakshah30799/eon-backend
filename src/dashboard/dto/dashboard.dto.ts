@@ -5,6 +5,9 @@ export class DashboardStatsDto {
   yesterdayTransactionCount: number;
   pendingApprovals: number;
   pendingPartyProfileReviews: number;
+  pendingTransactions: number;
+  pendingChequeBooks: number;
+  pendingManualBooks: number;
   activeAlerts: number;
 }
 
@@ -46,8 +49,10 @@ export class RecentTransactionDto {
 
 export class PendingApprovalDto {
   id: string;
+  entityType: string;
   code: string;
   name: string;
   type: string;
+  subType?: string;
   createdAt: string;
 }

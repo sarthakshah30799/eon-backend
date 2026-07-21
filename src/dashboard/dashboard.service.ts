@@ -4,6 +4,8 @@ import { Repository } from "typeorm";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
+import { ChequeBook } from "../chequebooks/entities/cheque-book.entity";
+import { ManualBook } from "../manual-bill-books/entities/manual-book.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import {
   DashboardStatsDto,
@@ -22,6 +24,10 @@ export class DashboardService {
     private readonly transactionItemRepository: Repository<TransactionItem>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
+    @InjectRepository(ChequeBook, "database2")
+    private readonly chequeBookRepository: Repository<ChequeBook>,
+    @InjectRepository(ManualBook, "database2")
+    private readonly manualBookRepository: Repository<ManualBook>,
   ) {}
 
   private dateRange(key: string): { from: Date; to: Date } {
@@ -98,6 +104,18 @@ export class DashboardService {
       where: { status: WorkflowStatus.PENDING as any },
     });
 
+    const pendingQB = this.chequeBookRepository
+      .createQueryBuilder("t")
+      .where("t.status = :status", { status: WorkflowStatus.PENDING });
+    this.branchFilter(pendingQB, branchId, isAdminOrHo);
+    const pendingChequeBooks = await pendingQB.getCount();
+
+    const pendingMB = this.manualBookRepository
+      .createQueryBuilder("t")
+      .where("t.status = :status", { status: WorkflowStatus.PENDING });
+    this.branchFilter(pendingMB, branchId, isAdminOrHo);
+    const pendingManualBooks = await pendingMB.getCount();
+
     const flaggedTxns = await this.transactionRepository
       .createQueryBuilder("t")
       .where("t.isLatest = true")
@@ -110,8 +128,11 @@ export class DashboardService {
       yesterdayVolume: yesterdayVol.toFixed(2),
       todayTransactionCount: todayCount,
       yesterdayTransactionCount: yesterdayCount,
-      pendingApprovals: pendingTxns + pendingPP,
+      pendingApprovals: pendingTxns + pendingPP + pendingChequeBooks + pendingManualBooks,
       pendingPartyProfileReviews: pendingPP,
+      pendingTransactions: pendingTxns,
+      pendingChequeBooks,
+      pendingManualBooks,
       activeAlerts: flaggedTxns,
     };
   }
@@ -308,20 +329,92 @@ export class DashboardService {
   }
 
   async getPendingApprovals(
+    userId: string,
+    isAdminOrHo: boolean,
+    branchId?: string,
     limit: number = 20,
   ): Promise<PendingApprovalDto[]> {
-    const profiles = await this.partyProfileRepository.find({
-      where: { status: WorkflowStatus.PENDING as any },
-      order: { createdAt: "ASC" },
-      take: limit,
-    });
+    const results: PendingApprovalDto[] = [];
 
-    return profiles.map((p) => ({
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      type: p.type,
-      createdAt: p.createdAt.toISOString(),
-    }));
+    if (isAdminOrHo) {
+      const partyProfiles = await this.partyProfileRepository.find({
+        where: { status: WorkflowStatus.PENDING as any },
+        order: { createdAt: "ASC" },
+        take: limit,
+      });
+      for (const p of partyProfiles) {
+        results.push({
+          id: p.id,
+          entityType: "party-profile",
+          code: p.code,
+          name: p.type ?? "",
+          type: p.type ?? "",
+          subType: p.type,
+          createdAt: p.createdAt.toISOString(),
+        });
+      }
+
+      const transactions = await this.transactionRepository
+        .createQueryBuilder("t")
+        .where("t.isLatest = true")
+        .andWhere("t.status = 'PENDING'")
+        .orderBy("t.createdAt", "ASC")
+        .take(limit)
+        .getMany();
+      for (const t of transactions) {
+        const partySnap = t.partyProfileSnapshot as Record<string, string> | null;
+        results.push({
+          id: t.id,
+          entityType: "transaction",
+          code: t.number ?? t.id.slice(0, 8),
+          name: partySnap?.name ?? partySnap?.label ?? "",
+          type: t.transactionType,
+          createdAt: t.createdAt.toISOString(),
+        });
+      }
+    }
+
+    const chequeQB = this.chequeBookRepository
+      .createQueryBuilder("t")
+      .where("t.status = :status", { status: WorkflowStatus.PENDING })
+      .orderBy("t.createdAt", "ASC")
+      .take(limit);
+    if (!isAdminOrHo && branchId) {
+      chequeQB.andWhere("t.branchId = :branchId", { branchId });
+    }
+    const chequeBooks = await chequeQB.getMany();
+    for (const cb of chequeBooks) {
+      results.push({
+        id: cb.id,
+        entityType: "chequebook",
+        code: cb.no,
+        name: cb.no,
+        type: "chequebook",
+        createdAt: cb.createdAt.toISOString(),
+      });
+    }
+
+    const manualQB = this.manualBookRepository
+      .createQueryBuilder("t")
+      .where("t.status = :status", { status: WorkflowStatus.PENDING })
+      .orderBy("t.createdAt", "ASC")
+      .take(limit);
+    if (!isAdminOrHo && branchId) {
+      manualQB.andWhere("t.branchId = :branchId", { branchId });
+    }
+    const manualBooks = await manualQB.getMany();
+    for (const mb of manualBooks) {
+      results.push({
+        id: mb.id,
+        entityType: "manual-book",
+        code: mb.no,
+        name: mb.no,
+        type: "manual-book",
+        createdAt: mb.createdAt.toISOString(),
+      });
+    }
+
+    results.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return results.slice(0, limit);
   }
 }
