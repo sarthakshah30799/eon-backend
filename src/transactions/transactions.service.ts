@@ -159,32 +159,76 @@ export class TransactionsService {
     return Number.isFinite(parsedValue) ? parsedValue : 0;
   }
 
-  private calculateTransactionPayableTotal(transactionPayload: Record<string, any>): string {
-    const itemRows = Array.isArray(transactionPayload.items)
-      ? transactionPayload.items
-      : [];
-    const additionalChargeRows = Array.isArray(transactionPayload.additionalCharges)
-      ? transactionPayload.additionalCharges
-      : [];
-    const transactionType = transactionPayload.transactionType;
-
-    const itemTotal = itemRows.reduce((sum: number, row: Record<string, any>) => {
-      const quantity = this.toNumber(row.quantity);
-      const rate = this.toNumber(row.rate);
-      return sum + this.toNumber(roundMoney(quantity * rate));
-    }, 0);
-
-    const chargeMultiplier = transactionType === TransactionType.SALE ? 1 : -1;
-    const additionalChargeTotal = additionalChargeRows.reduce(
-      (sum: number, row: Record<string, any>) => {
-        const amount = this.toNumber(row.amount);
-        const gstAmount = this.toNumber(row.gstAmount);
-        return sum + (this.toNumber(roundMoney(amount + gstAmount)) * chargeMultiplier);
-      },
-      0,
+  private async resolveGstRatePercent(): Promise<number> {
+    const configuredRate = await this.additionalSettingService.getSettingTextValue(
+      'TAX_CONFIGURATION',
+      'GST_RATE',
     );
 
-    return (itemTotal + additionalChargeTotal).toFixed(2);
+    if (!configuredRate) {
+      throw new BadRequestException('Missing GST_RATE additional setting');
+    }
+
+    const parsedRate = Number(configuredRate);
+    if (!Number.isFinite(parsedRate)) {
+      throw new BadRequestException('GST_RATE additional setting must be numeric');
+    }
+
+    return parsedRate;
+  }
+
+  private async runGstPreview(body: Record<string, any>): Promise<Record<string, any>> {
+    const transactionPayload = body.transaction ?? body;
+    const previewRows = await this.transactionRepository.query(
+      `SELECT public.calculate_transaction_gst_preview($1::jsonb) AS preview`,
+      [JSON.stringify(transactionPayload)],
+    );
+
+    const preview = previewRows?.[0]?.preview ?? previewRows?.[0]?.calculate_transaction_gst_preview ?? null;
+    return typeof preview === 'string' ? JSON.parse(preview) : preview ?? {};
+  }
+
+  private async getTransactionTaxSummary(transactionId: string): Promise<Record<string, any> | null> {
+    const rows = await this.transactionRepository.query(
+      `
+        SELECT *
+        FROM transaction_tax_summaries
+        WHERE transaction_id = $1
+      `,
+      [transactionId],
+    );
+
+    return rows[0] ?? null;
+  }
+
+  private mapTransactionTaxSummaryRow(
+    row: Record<string, any> | null,
+  ): Record<string, any> | null {
+    if (!row) {
+      return null;
+    }
+
+    return {
+      gstRatePercent: row.gst_rate_percent ?? row.gstRatePercent ?? '0.00',
+      taxableAmount: row.taxable_amount ?? row.taxableAmount ?? '0.00',
+      itemBaseAmount: row.item_base_amount ?? row.itemBaseAmount ?? '0.00',
+      itemTaxAmount: row.item_tax_amount ?? row.itemTaxAmount ?? '0.00',
+      additionalChargeBaseAmount:
+        row.additional_charge_base_amount ?? row.additionalChargeBaseAmount ?? '0.00',
+      additionalChargeTaxAmount:
+        row.additional_charge_tax_amount ?? row.additionalChargeTaxAmount ?? '0.00',
+      igstAmount: row.igst_amount ?? row.igstAmount ?? '0.00',
+      cgstAmount: row.cgst_amount ?? row.cgstAmount ?? '0.00',
+      sgstAmount: row.sgst_amount ?? row.sgstAmount ?? '0.00',
+      finalAmount: row.final_amount ?? row.finalAmount ?? '0.00',
+      splitMode: row.split_mode ?? row.splitMode ?? 'CGST_SGST',
+      branchStateName: row.branch_state_name ?? row.branchStateName ?? null,
+      partyStateName: row.party_state_name ?? row.partyStateName ?? null,
+    };
+  }
+
+  async previewTransactionTax(body: Record<string, any>): Promise<Record<string, any>> {
+    return this.runGstPreview(body);
   }
 
   private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
@@ -624,6 +668,8 @@ export class TransactionsService {
       throw new BadRequestException('Current company snapshot not found');
     }
 
+    const gstRatePercent = await this.resolveGstRatePercent();
+
     const selectedCounter = await this.counterRepository.findOne({
       where: { id: resolvedCounterId },
       relations: ['branch'],
@@ -827,6 +873,7 @@ export class TransactionsService {
         approvalRemarks: null,
         rejectionReason: null,
         isLatest: true,
+        gstRatePercent: roundMoney(gstRatePercent),
         createdBy: performedById,
         updatedBy: performedById,
       }),
@@ -1080,9 +1127,7 @@ export class TransactionsService {
           lineNo: index + 1,
           accountId: String(account.id),
           accountSnapshot: account as TransactionReferenceSnapshotValue,
-          amount: String(row.amount),
-          gstRate: row.gstRate ?? null,
-          gstAmount: row.gstAmount ?? null,
+          amount: roundMoney(this.toNumber(row.amount)),
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
@@ -1090,10 +1135,15 @@ export class TransactionsService {
       );
     }
 
+    const taxSummary = await this.getTransactionTaxSummary(transaction.id);
+    if (!taxSummary) {
+      throw new BadRequestException('Failed to calculate transaction tax');
+    }
+
     const paymentRows = Array.isArray(transactionPayload.payments)
       ? transactionPayload.payments
       : [];
-    const payableTotal = this.calculateTransactionPayableTotal(transactionPayload);
+    const payableTotal = String(taxSummary.final_amount ?? taxSummary.finalAmount ?? '0');
     const payableTotalAmount = Number(payableTotal || 0);
     if (payableTotalAmount > 0 && paymentRows.length === 0) {
       throw new BadRequestException('At least one payment row is required');
@@ -1386,6 +1436,10 @@ export class TransactionsService {
     await this.hydratePartyProfileSnapshot(transaction);
     await this.hydrateAgentProfileSnapshot(transaction);
     await this.hydrateCounterSnapshot(transaction);
+
+    const taxSummary = await this.getTransactionTaxSummary(transaction.id);
+    (transaction as Transaction & { taxSummary?: Record<string, any> | null }).taxSummary =
+      this.mapTransactionTaxSummaryRow(taxSummary);
     return transaction;
   }
 

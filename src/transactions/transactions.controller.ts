@@ -134,6 +134,14 @@ export class TransactionsController {
     );
   }
 
+  @Post('tax-preview')
+  @ApiOperation({ summary: 'Preview GST tax calculation for a transaction payload' })
+  async previewTax(
+    @Body() body: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    return this.transactionsService.previewTransactionTax(body);
+  }
+
   @Get('next-number')
   @ApiOperation({ summary: 'Get next transaction number preview' })
   async getNextNumber(
