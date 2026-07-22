@@ -308,6 +308,38 @@ export class TransactionAccountPostingWorker
       (transaction.transactionType === TransactionType.PURCHASE ||
         transaction.transactionType === TransactionType.SALE);
 
+    let taxSummary: Record<string, any> | null = null;
+    if (isFinalStandardTransaction) {
+      const summaryRows = await this.database2.query(
+        `
+          SELECT *
+          FROM transaction_tax_summaries
+          WHERE transaction_id = $1
+        `,
+        [transaction.id],
+      );
+
+      taxSummary = summaryRows[0] ?? null;
+
+      if (!taxSummary) {
+        await this.database2.query(
+          `SELECT public.refresh_transaction_tax_summary($1::uuid)`,
+          [transaction.id],
+        );
+
+        const refreshedRows = await this.database2.query(
+          `
+            SELECT *
+            FROM transaction_tax_summaries
+            WHERE transaction_id = $1
+          `,
+          [transaction.id],
+        );
+
+        taxSummary = refreshedRows[0] ?? null;
+      }
+    }
+
     const productSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
     const accountSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
     const productAccountCache = new Map<string, Product>();
@@ -680,6 +712,12 @@ export class TransactionAccountPostingWorker
     let controlAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let controlDirection: TransactionPostingDirection =
       TransactionPostingDirection.CREDIT;
+    let igstAccountId: string | null = null;
+    let cgstAccountId: string | null = null;
+    let sgstAccountId: string | null = null;
+    let igstAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let cgstAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let sgstAccountSnapshot: TransactionReferenceSnapshotValue = null;
 
     if (isFinalStandardTransaction) {
       const settingCode =
@@ -713,6 +751,33 @@ export class TransactionAccountPostingWorker
 
       roundOffAccountId = roundOffAccountText;
       roundOffAccountSnapshot = await resolveAccountSnapshot(roundOffAccountText);
+
+      const igstAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "IGST_CONTROL_ACCOUNT",
+      );
+      const cgstAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "CGST_CONTROL_ACCOUNT",
+      );
+      const sgstAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "SGST_CONTROL_ACCOUNT",
+      );
+
+      if (!igstAccountText || !cgstAccountText || !sgstAccountText) {
+        throw new BadRequestException(
+          "Missing GST control account additional setting",
+        );
+      }
+
+      igstAccountId = igstAccountText;
+      cgstAccountId = cgstAccountText;
+      sgstAccountId = sgstAccountText;
+      igstAccountSnapshot = await resolveAccountSnapshot(igstAccountText);
+      cgstAccountSnapshot = await resolveAccountSnapshot(cgstAccountText);
+      sgstAccountSnapshot = await resolveAccountSnapshot(sgstAccountText);
+
       controlDirection =
         transaction.transactionType === TransactionType.PURCHASE
           ? TransactionPostingDirection.CREDIT
@@ -752,6 +817,146 @@ export class TransactionAccountPostingWorker
               : "Sale party control",
         },
         false,
+      );
+
+      const addGstControlPostings = (
+        taxAmount: number,
+        sourceType: TransactionPostingSourceType,
+        sourceId: string | null,
+        remarksPrefix: string,
+      ) => {
+        if (!taxAmount) {
+          return;
+        }
+
+        const isPurchase = transaction.transactionType === TransactionType.PURCHASE;
+        const gstDirection = isPurchase
+          ? TransactionPostingDirection.CREDIT
+          : TransactionPostingDirection.DEBIT;
+        const controlTaxDirection = isPurchase
+          ? TransactionPostingDirection.DEBIT
+          : TransactionPostingDirection.CREDIT;
+        const splitMode = String(taxSummary?.split_mode ?? "CGST_SGST") === "IGST"
+          ? "IGST"
+          : "CGST_SGST";
+        const roundedTaxAmount = Number(roundMoney(taxAmount));
+
+        if (splitMode === "IGST") {
+          if (!igstAccountId || !igstAccountSnapshot) {
+            throw new BadRequestException(
+              "Missing IGST_CONTROL_ACCOUNT additional setting",
+            );
+          }
+
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType,
+              sourceId,
+              accountId: igstAccountId,
+              accountSnapshot: igstAccountSnapshot,
+              profileId: null,
+              direction: gstDirection,
+              amount: roundMoney(roundedTaxAmount),
+              remarks: `${remarksPrefix} GST`,
+            },
+            false,
+          );
+
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType,
+              sourceId,
+              accountId: controlAccountId as string,
+              accountSnapshot: controlAccountSnapshot,
+              profileId: transaction.partyProfileId,
+              direction: controlTaxDirection,
+              amount: roundMoney(roundedTaxAmount),
+              remarks: `${remarksPrefix} GST control`,
+            },
+            false,
+          );
+          return;
+        }
+
+        const cgstAmount = Number(roundMoney(roundedTaxAmount / 2));
+        const sgstAmount = Number(roundMoney(roundedTaxAmount - cgstAmount));
+
+        if (!cgstAccountId || !cgstAccountSnapshot || !sgstAccountId || !sgstAccountSnapshot) {
+          throw new BadRequestException(
+            "Missing CGST_CONTROL_ACCOUNT or SGST_CONTROL_ACCOUNT additional setting",
+          );
+        }
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType,
+            sourceId,
+            accountId: cgstAccountId,
+            accountSnapshot: cgstAccountSnapshot,
+            profileId: null,
+            direction: gstDirection,
+            amount: roundMoney(cgstAmount),
+            remarks: `${remarksPrefix} CGST`,
+          },
+          false,
+        );
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType,
+            sourceId,
+            accountId: sgstAccountId,
+            accountSnapshot: sgstAccountSnapshot,
+            profileId: null,
+            direction: gstDirection,
+            amount: roundMoney(sgstAmount),
+            remarks: `${remarksPrefix} SGST`,
+          },
+          false,
+        );
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType,
+            sourceId,
+            accountId: controlAccountId as string,
+            accountSnapshot: controlAccountSnapshot,
+            profileId: transaction.partyProfileId,
+            direction: controlTaxDirection,
+            amount: roundMoney(cgstAmount + sgstAmount),
+            remarks: `${remarksPrefix} GST control`,
+          },
+          false,
+        );
+      };
+
+      addGstControlPostings(
+        Number(taxSummary?.item_tax_amount ?? 0),
+        TransactionPostingSourceType.GST_ITEM,
+        null,
+        "Item",
+      );
+
+      addGstControlPostings(
+        Number(taxSummary?.additional_charge_tax_amount ?? 0),
+        TransactionPostingSourceType.GST_ADDITIONAL_CHARGE,
+        null,
+        "Additional charge",
       );
     }
 

@@ -215,6 +215,15 @@ export class Transaction extends BaseEntity {
   })
   byOther: string | null;
 
+  @Column({
+    type: "numeric",
+    name: "gst_rate_percent",
+    precision: 18,
+    scale: 4,
+    nullable: true,
+  })
+  gstRatePercent: string | null;
+
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];
 
