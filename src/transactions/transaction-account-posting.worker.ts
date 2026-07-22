@@ -947,14 +947,14 @@ export class TransactionAccountPostingWorker
 
       addGstControlPostings(
         Number(taxSummary?.item_tax_amount ?? 0),
-        TransactionPostingSourceType.GST_ITEM,
+        TransactionPostingSourceType.TAX_ITEM,
         null,
         "Item",
       );
 
       addGstControlPostings(
         Number(taxSummary?.additional_charge_tax_amount ?? 0),
-        TransactionPostingSourceType.GST_ADDITIONAL_CHARGE,
+        TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE,
         null,
         "Additional charge",
       );

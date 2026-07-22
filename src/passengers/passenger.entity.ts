@@ -1,11 +1,4 @@
-import {
-  Check,
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-} from "typeorm";
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { Country } from "../country/country.entity";
@@ -52,10 +45,7 @@ export enum PassengerOtherIdProofType {
   "CHK_passengers_party_profile_required",
   `"party_profile_id" IS NOT NULL`,
 )
-@Check(
-  "CHK_passengers_country_required",
-  `"country_id" IS NOT NULL`,
-)
+@Check("CHK_passengers_country_required", `"country_id" IS NOT NULL`)
 @Check(
   "CHK_passengers_passport_date_order",
   `"passport_issue_date" IS NULL OR "passport_expiry_date" IS NULL OR "passport_expiry_date" >= "passport_issue_date"`,
@@ -83,14 +73,12 @@ export class Passenger extends BaseEntity {
   @Column({
     type: "enum",
     enum: PassengerEntityType,
-    enumName: "passengers_entity_type_enum",
   })
   entityType: PassengerEntityType;
 
   @Column({
     type: "enum",
     enum: PassengerNationalityType,
-    enumName: "passengers_nationality_type_enum",
   })
   nationalityType: PassengerNationalityType;
 
@@ -146,7 +134,6 @@ export class Passenger extends BaseEntity {
   @Column({
     type: "enum",
     enum: PassengerPanHolderRelationType,
-    enumName: "passengers_pan_holder_relation_type_enum",
     nullable: true,
   })
   panHolderRelationType: PassengerPanHolderRelationType | null;
@@ -180,7 +167,6 @@ export class Passenger extends BaseEntity {
   @Column({
     type: "enum",
     enum: PassengerPanHolderRelationType,
-    enumName: "passengers_corporate_pan_holder_relation_type_enum",
     nullable: true,
   })
   corporatePanHolderRelationType: PassengerPanHolderRelationType | null;
