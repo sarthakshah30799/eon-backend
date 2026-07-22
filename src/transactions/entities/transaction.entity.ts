@@ -217,12 +217,12 @@ export class Transaction extends BaseEntity {
 
   @Column({
     type: "numeric",
-    name: "gst_rate_percent",
+    name: "tax_rate_percent",
     precision: 18,
     scale: 4,
     nullable: true,
   })
-  gstRatePercent: string | null;
+  taxRatePercent: string | null;
 
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];

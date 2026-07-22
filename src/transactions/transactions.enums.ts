@@ -90,13 +90,21 @@ export const TransactionPostingSourceType = {
   ROUND_OFF: "ROUND_OFF",
   PARTY_CONTROL: "PARTY_CONTROL",
   ADDITIONAL_CHARGE: "ADDITIONAL_CHARGE",
-  GST_ITEM: "GST_ITEM",
-  GST_ADDITIONAL_CHARGE: "GST_ADDITIONAL_CHARGE",
+  TAX_ITEM: "TAX_ITEM",
+  TAX_ADDITIONAL_CHARGE: "TAX_ADDITIONAL_CHARGE",
   PAYMENT: "PAYMENT",
 } as const;
 
 export type TransactionPostingSourceType =
   (typeof TransactionPostingSourceType)[keyof typeof TransactionPostingSourceType];
+
+export const TransactionTaxSplitMode = {
+  CGST_SGST: "CGST_SGST",
+  IGST: "IGST",
+} as const;
+
+export type TransactionTaxSplitMode =
+  (typeof TransactionTaxSplitMode)[keyof typeof TransactionTaxSplitMode];
 
 export const TransactionEventType = {
   ACCOUNT_POSTINGS_REBUILD: "ACCOUNT_POSTINGS_REBUILD",

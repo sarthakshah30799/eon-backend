@@ -209,7 +209,7 @@ export class TransactionsService {
     }
 
     return {
-      gstRatePercent: row.gst_rate_percent ?? row.gstRatePercent ?? '0.00',
+      taxRatePercent: row.tax_rate_percent ?? row.taxRatePercent ?? '0.00',
       taxableAmount: row.taxable_amount ?? row.taxableAmount ?? '0.00',
       itemBaseAmount: row.item_base_amount ?? row.itemBaseAmount ?? '0.00',
       itemTaxAmount: row.item_tax_amount ?? row.itemTaxAmount ?? '0.00',
@@ -873,7 +873,7 @@ export class TransactionsService {
         approvalRemarks: null,
         rejectionReason: null,
         isLatest: true,
-        gstRatePercent: roundMoney(gstRatePercent),
+        taxRatePercent: roundMoney(gstRatePercent),
         createdBy: performedById,
         updatedBy: performedById,
       }),
