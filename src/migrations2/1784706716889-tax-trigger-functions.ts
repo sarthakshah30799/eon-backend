@@ -36,6 +36,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
             v_tax_rate numeric := COALESCE(p_tax_rate_percent, 0);
             v_apply_tax boolean := COALESCE(p_apply_tax, false);
             v_item_tax numeric := 0;
+            v_item_taxable numeric := 0;
             v_charge_tax numeric := 0;
             v_total_tax numeric := 0;
             v_taxable_amount numeric := 0;
@@ -46,21 +47,23 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
             v_sgst numeric := 0;
             v_branch_state text := NULLIF(BTRIM(COALESCE(p_branch_state, '')), '');
             v_party_state text := NULLIF(BTRIM(COALESCE(p_party_state, '')), '');
+            v_half_rate numeric := 0;
           BEGIN
             v_taxable_amount := ROUND(v_item_base + v_charge_base, 2);
 
             IF v_apply_tax THEN
               IF v_item_base <= 25000 THEN
-                v_item_tax := 250;
+                v_item_taxable := 250;
               ELSIF v_item_base <= 100000 THEN
-                v_item_tax := v_item_base * 0.01;
+                v_item_taxable := v_item_base * 0.01;
               ELSIF v_item_base < 1000000 THEN
-                v_item_tax := 1000 + ((v_item_base - 100000) * 0.005);
+                v_item_taxable := 1000 + ((v_item_base - 100000) * 0.005);
               ELSE
-                v_item_tax := 5500 + ((v_item_base - 1000000) * 0.001);
+                v_item_taxable := 5500 + ((v_item_base - 1000000) * 0.001);
               END IF;
 
-              v_item_tax := ROUND(COALESCE(v_item_tax, 0), 2);
+              v_item_taxable := ROUND(COALESCE(v_item_taxable, 0), 2);
+              v_item_tax := ROUND(v_item_taxable * v_tax_rate / 100, 2);
               v_charge_tax := ROUND(v_charge_base * v_tax_rate / 100, 2);
             END IF;
 
@@ -76,8 +79,9 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
               IF v_split_mode = 'IGST' THEN
                 v_igst := v_total_tax;
               ELSE
-                v_cgst := ROUND(v_total_tax / 2.0, 2);
-                v_sgst := ROUND(v_total_tax - v_cgst, 2);
+                v_half_rate := v_tax_rate / 2.0;
+                v_cgst := ROUND((v_item_taxable * v_half_rate / 100) + (v_charge_base * v_half_rate / 100), 2);
+                v_sgst := ROUND((v_item_taxable * v_half_rate / 100) + (v_charge_base * v_half_rate / 100), 2);
               END IF;
             END IF;
 
@@ -137,6 +141,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
             v_charge_base numeric := 0;
             v_item jsonb;
             v_charge jsonb;
+            v_summary jsonb;
           BEGIN
             FOR v_item IN
               SELECT value
@@ -156,7 +161,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
               v_charge_base := v_charge_base + COALESCE((v_charge->>'amount')::numeric, 0);
             END LOOP;
 
-            RETURN public.calculate_transaction_gst_components(
+            v_summary := public.calculate_transaction_gst_components(
               v_transaction_type,
               v_apply_tax,
               v_tax_rate,
@@ -164,6 +169,75 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
               v_charge_base,
               v_branch_state,
               v_party_state
+            );
+
+            RETURN v_summary || jsonb_build_object(
+              'additionalChargeRows',
+              COALESCE(
+                (
+                  SELECT jsonb_agg(
+                    jsonb_build_object(
+                      'lineNo', charge_rows.line_no,
+                      'amount', ROUND(charge_rows.amount, 2),
+                      'gstRatePercent', ROUND(v_tax_rate, 4),
+                      'igstRatePercent', CASE
+                        WHEN v_apply_tax AND charge_rows.applies_tax AND charge_rows.split_mode = 'IGST' THEN ROUND(v_tax_rate, 4)
+                        ELSE 0
+                      END,
+                      'cgstRatePercent', CASE
+                        WHEN v_apply_tax AND charge_rows.applies_tax AND charge_rows.split_mode = 'CGST_SGST' THEN ROUND(v_tax_rate / 2.0, 4)
+                        ELSE 0
+                      END,
+                      'sgstRatePercent', CASE
+                        WHEN v_apply_tax AND charge_rows.applies_tax AND charge_rows.split_mode = 'CGST_SGST' THEN ROUND(v_tax_rate / 2.0, 4)
+                        ELSE 0
+                      END,
+                      'gstAmount', ROUND(charge_rows.gst_amount, 2),
+                      'igstAmount', ROUND(charge_rows.igst_amount, 2),
+                      'cgstAmount', ROUND(charge_rows.cgst_amount, 2),
+                      'sgstAmount', ROUND(charge_rows.sgst_amount, 2),
+                      'totalAmount', ROUND(charge_rows.total_amount, 2)
+                    )
+                    ORDER BY charge_rows.line_no
+                  )
+                  FROM (
+                    SELECT
+                      ordinality AS line_no,
+                      COALESCE((value->>'amount')::numeric, 0) AS amount,
+                      COALESCE((value->>'applyTax')::boolean, false) AS applies_tax,
+                      CASE
+                        WHEN v_branch_state IS NULL OR v_party_state IS NULL OR UPPER(v_branch_state) = UPPER(v_party_state) THEN 'CGST_SGST'
+                        ELSE 'IGST'
+                      END AS split_mode,
+                      CASE
+                        WHEN v_apply_tax AND COALESCE((value->>'applyTax')::boolean, false) THEN ROUND(COALESCE((value->>'amount')::numeric, 0) * v_tax_rate / 100, 2)
+                        ELSE 0
+                      END AS gst_amount,
+                      CASE
+                        WHEN v_apply_tax AND COALESCE((value->>'applyTax')::boolean, false) AND NOT (
+                          v_branch_state IS NULL OR v_party_state IS NULL OR UPPER(v_branch_state) = UPPER(v_party_state)
+                        ) THEN ROUND(COALESCE((value->>'amount')::numeric, 0) * v_tax_rate / 100, 2)
+                        ELSE 0
+                      END AS igst_amount,
+                      CASE
+                        WHEN v_apply_tax AND COALESCE((value->>'applyTax')::boolean, false) AND v_branch_state IS NOT NULL AND v_party_state IS NOT NULL AND UPPER(v_branch_state) = UPPER(v_party_state) THEN ROUND(COALESCE((value->>'amount')::numeric, 0) * (v_tax_rate / 2.0) / 100, 2)
+                        ELSE 0
+                      END AS cgst_amount,
+                      CASE
+                        WHEN v_apply_tax AND COALESCE((value->>'applyTax')::boolean, false) AND v_branch_state IS NOT NULL AND v_party_state IS NOT NULL AND UPPER(v_branch_state) = UPPER(v_party_state) THEN ROUND(COALESCE((value->>'amount')::numeric, 0) * (v_tax_rate / 2.0) / 100, 2)
+                        ELSE 0
+                      END AS sgst_amount,
+                      CASE
+                        WHEN UPPER(COALESCE(v_transaction_type, '')) = 'PURCHASE' THEN
+                          -(COALESCE((value->>'amount')::numeric, 0) + CASE WHEN v_apply_tax AND COALESCE((value->>'applyTax')::boolean, false) THEN ROUND(COALESCE((value->>'amount')::numeric, 0) * v_tax_rate / 100, 2) ELSE 0 END)
+                        ELSE
+                          COALESCE((value->>'amount')::numeric, 0) + CASE WHEN v_apply_tax AND COALESCE((value->>'applyTax')::boolean, false) THEN ROUND(COALESCE((value->>'amount')::numeric, 0) * v_tax_rate / 100, 2) ELSE 0 END
+                      END AS total_amount
+                    FROM jsonb_array_elements(COALESCE(p_payload->'additionalCharges', '[]'::jsonb)) WITH ORDINALITY AS charge(value, ordinality)
+                  ) charge_rows
+                ),
+                '[]'::jsonb
+              )
             );
           END;
           $$;
@@ -375,9 +449,22 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
            FOR EACH ROW
            EXECUTE FUNCTION public.transaction_tax_summary_refresh_trigger()`,
         );
+
+        await queryRunner.query(
+          `DROP TRIGGER IF EXISTS transaction_header_tax_summary_refresh_trigger ON "transactions"`,
+        );
+        await queryRunner.query(
+          `CREATE TRIGGER transaction_header_tax_summary_refresh_trigger
+           AFTER INSERT OR UPDATE OF transaction_type, tax_rate_percent, branch_snapshot, party_profile_snapshot ON "transactions"
+           FOR EACH ROW
+           EXECUTE FUNCTION public.transaction_tax_summary_refresh_trigger()`,
+        );
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(
+          `DROP TRIGGER IF EXISTS transaction_header_tax_summary_refresh_trigger ON "transactions"`,
+        );
         await queryRunner.query(
           `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_summary_refresh_trigger ON "transaction_additional_charges"`,
         );

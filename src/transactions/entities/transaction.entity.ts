@@ -12,6 +12,7 @@ import {
   TradeMode,
   TransactionStatus,
   TransactionType,
+  TransactionTaxSplitMode,
 } from "../transactions.enums";
 import { TransactionItem } from "./transaction-item.entity";
 import { TransactionDocument } from "./transaction-document.entity";
@@ -223,6 +224,104 @@ export class Transaction extends BaseEntity {
     nullable: true,
   })
   taxRatePercent: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "taxable_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  taxableAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "item_base_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  itemBaseAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "item_taxable_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  itemTaxableAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "item_tax_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  itemTaxAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "additional_charge_base_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  additionalChargeBaseAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "additional_charge_tax_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  additionalChargeTaxAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "igst_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  igstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "cgst_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  cgstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "sgst_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  sgstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "final_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  finalAmount: string;
+
+  @Column({
+    type: "enum",
+    enum: TransactionTaxSplitMode,
+    name: "split_mode",
+    nullable: true,
+  })
+  splitMode: TransactionTaxSplitMode | null;
 
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];

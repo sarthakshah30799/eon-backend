@@ -55,16 +55,10 @@ const resolveSplitMode = (
     : "IGST";
 };
 
-const splitMoney = (amount: number) => {
-  const firstHalf = toMoney(amount / 2);
-  const secondHalf = toMoney(amount - firstHalf);
-  return {
-    firstHalf: roundMoney(firstHalf),
-    secondHalf: roundMoney(secondHalf),
-  };
-};
+const calculateChargeTaxAmount = (baseAmount: number, taxRatePercent: number) =>
+  (baseAmount * taxRatePercent) / 100;
 
-const calculateItemTaxAmount = (baseAmount: number) => {
+const calculateItemTaxableAmount = (baseAmount: number) => {
   if (baseAmount <= 25000) {
     return 250;
   }
@@ -80,17 +74,19 @@ const calculateItemTaxAmount = (baseAmount: number) => {
   return 5500 + ((baseAmount - 1000000) * 0.1) / 100;
 };
 
-const calculateChargeTaxAmount = (baseAmount: number, taxRatePercent: number) =>
-  (baseAmount * taxRatePercent) / 100;
-
 const buildComponentBreakdown = (
-  totalTaxAmount: number,
+  itemTaxableAmount: number,
+  additionalChargeBaseAmount: number,
+  itemTaxAmount: number,
+  additionalChargeTaxAmount: number,
   splitMode: TransactionTaxSplitMode,
   taxRatePercent: number,
 ): TransactionTaxComponentBreakdown => {
+  const totalTaxAmount = toMoney(itemTaxAmount + additionalChargeTaxAmount);
+
   if (totalTaxAmount <= 0) {
     return {
-      splitMode: "NONE",
+      splitMode: null,
       igstAmount: "0.00",
       cgstAmount: "0.00",
       sgstAmount: "0.00",
@@ -112,13 +108,16 @@ const buildComponentBreakdown = (
     };
   }
 
-  const { firstHalf, secondHalf } = splitMoney(totalTaxAmount);
   const halfRate = taxRatePercent / 2;
+  const itemCgst = toMoney(calculateChargeTaxAmount(itemTaxableAmount, halfRate));
+  const itemSgst = toMoney(calculateChargeTaxAmount(itemTaxableAmount, halfRate));
+  const chargeCgst = toMoney(calculateChargeTaxAmount(additionalChargeBaseAmount, halfRate));
+  const chargeSgst = toMoney(calculateChargeTaxAmount(additionalChargeBaseAmount, halfRate));
   return {
     splitMode,
     igstAmount: "0.00",
-    cgstAmount: firstHalf,
-    sgstAmount: secondHalf,
+    cgstAmount: roundMoney(itemCgst + chargeCgst),
+    sgstAmount: roundMoney(itemSgst + chargeSgst),
     igstRatePercent: "0.00",
     cgstRatePercent: roundMoney(halfRate),
     sgstRatePercent: roundMoney(halfRate),
@@ -137,7 +136,7 @@ export function calculateTransactionTaxSummary(
   const branchStateName = getSnapshotStateName(input.branchSnapshot);
   const partyStateName =
     getSnapshotStateName(input.partyProfileSnapshot) ?? null;
-  const splitMode = resolveSplitMode(branchStateName, partyStateName);
+  const splitMode = applyTax ? resolveSplitMode(branchStateName, partyStateName) : null;
 
   const itemBaseAmount = items.reduce((sum, row) => {
     const quantity = toNumber(row.quantity);
@@ -150,7 +149,45 @@ export function calculateTransactionTaxSummary(
     return sum + toMoney(amount);
   }, 0);
 
-  const itemTaxAmount = applyTax ? calculateItemTaxAmount(itemBaseAmount) : 0;
+  const itemTaxableAmount = calculateItemTaxableAmount(itemBaseAmount);
+  const itemTaxAmount = applyTax
+    ? toMoney(calculateChargeTaxAmount(itemTaxableAmount, gstRatePercent))
+    : 0;
+  const itemRows = items.map((row, index) => {
+    const quantity = toNumber(row.quantity);
+    const rate = toNumber(row.rate);
+    const rowBaseAmount = toMoney(quantity * rate);
+    const rowTaxableAmount = applyTax ? rowBaseAmount : 0;
+    const rowTaxAmount = applyTax
+      ? toMoney(calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent))
+      : 0;
+    const rowSplitMode: Exclude<TransactionTaxSplitMode, null> =
+      splitMode === "IGST" ? "IGST" : "CGST_SGST";
+
+    return {
+      lineNo: index + 1,
+      taxableAmount: roundMoney(rowTaxableAmount),
+      taxRatePercent: roundMoney(applyTax ? gstRatePercent : 0),
+      gstAmount: roundMoney(rowTaxAmount),
+      igstRatePercent:
+        applyTax && rowSplitMode === "IGST" ? roundMoney(gstRatePercent) : "0.00",
+      cgstRatePercent:
+        applyTax && rowSplitMode !== "IGST" ? roundMoney(gstRatePercent / 2) : "0.00",
+      sgstRatePercent:
+        applyTax && rowSplitMode !== "IGST" ? roundMoney(gstRatePercent / 2) : "0.00",
+      igstAmount:
+        applyTax && rowSplitMode === "IGST" ? roundMoney(rowTaxAmount) : "0.00",
+      cgstAmount:
+        applyTax && rowSplitMode !== "IGST"
+          ? roundMoney(calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent / 2))
+          : "0.00",
+      sgstAmount:
+        applyTax && rowSplitMode !== "IGST"
+          ? roundMoney(calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent / 2))
+          : "0.00",
+      splitMode: applyTax ? rowSplitMode : null,
+    };
+  });
   const additionalChargeTaxAmount = applyTax
     ? additionalCharges.reduce((sum, row) => {
         if (row.applyTax === false) {
@@ -164,9 +201,22 @@ export function calculateTransactionTaxSummary(
   const additionalChargeRows = additionalCharges.map((row, index) => {
     const amount = toNumber(row.amount);
     const rowAppliesTax = applyTax && row.applyTax !== false;
+    const rowHalfRate = gstRatePercent / 2;
     const gstAmount = rowAppliesTax
       ? toMoney(calculateChargeTaxAmount(amount, gstRatePercent))
       : 0;
+    const igstAmount =
+      rowAppliesTax && splitMode === "IGST"
+        ? gstAmount
+        : 0;
+    const cgstAmount =
+      rowAppliesTax && splitMode !== "IGST"
+        ? toMoney(calculateChargeTaxAmount(amount, rowHalfRate))
+        : 0;
+    const sgstAmount =
+      rowAppliesTax && splitMode !== "IGST"
+        ? toMoney(calculateChargeTaxAmount(amount, rowHalfRate))
+        : 0;
     const signedTotalAmount =
       input.transactionType === TransactionType.PURCHASE
         ? -(amount + gstAmount)
@@ -177,13 +227,22 @@ export function calculateTransactionTaxSummary(
       amount: roundMoney(amount),
       gstRatePercent: roundMoney(gstRatePercent),
       gstAmount: roundMoney(gstAmount),
+      igstAmount: roundMoney(igstAmount),
+      cgstAmount: roundMoney(cgstAmount),
+      sgstAmount: roundMoney(sgstAmount),
+      igstRatePercent: rowAppliesTax && splitMode === "IGST" ? roundMoney(gstRatePercent) : "0.00",
+      cgstRatePercent: rowAppliesTax && splitMode !== "IGST" ? roundMoney(rowHalfRate) : "0.00",
+      sgstRatePercent: rowAppliesTax && splitMode !== "IGST" ? roundMoney(rowHalfRate) : "0.00",
       totalAmount: roundMoney(signedTotalAmount),
     };
   });
 
   const totalTaxAmount = toMoney(itemTaxAmount + additionalChargeTaxAmount);
   const componentBreakdown = buildComponentBreakdown(
-    totalTaxAmount,
+    itemTaxableAmount,
+    additionalChargeBaseAmount,
+    itemTaxAmount,
+    additionalChargeTaxAmount,
     splitMode,
     gstRatePercent,
   );
@@ -196,13 +255,21 @@ export function calculateTransactionTaxSummary(
 
   return {
     itemBaseAmount: roundMoney(itemBaseAmount),
+    itemTaxableAmount: roundMoney(itemTaxableAmount),
     itemTaxAmount: roundMoney(itemTaxAmount),
+    itemIgstAmount: componentBreakdown.igstAmount,
+    itemCgstAmount: componentBreakdown.cgstAmount,
+    itemSgstAmount: componentBreakdown.sgstAmount,
+    itemIgstRatePercent: componentBreakdown.igstRatePercent,
+    itemCgstRatePercent: componentBreakdown.cgstRatePercent,
+    itemSgstRatePercent: componentBreakdown.sgstRatePercent,
     additionalChargeBaseAmount: roundMoney(additionalChargeBaseAmount),
     additionalChargeTaxAmount: roundMoney(additionalChargeTaxAmount),
     totalTaxAmount: roundMoney(totalTaxAmount),
     finalAmount: roundMoney(finalAmount),
     branchStateName,
     partyStateName,
+    itemRows,
     additionalChargeRows,
     ...componentBreakdown,
   };
