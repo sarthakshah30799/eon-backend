@@ -308,38 +308,6 @@ export class TransactionAccountPostingWorker
       (transaction.transactionType === TransactionType.PURCHASE ||
         transaction.transactionType === TransactionType.SALE);
 
-    let taxSummary: Record<string, any> | null = null;
-    if (isFinalStandardTransaction) {
-      const summaryRows = await this.database2.query(
-        `
-          SELECT *
-          FROM transaction_tax_summaries
-          WHERE transaction_id = $1
-        `,
-        [transaction.id],
-      );
-
-      taxSummary = summaryRows[0] ?? null;
-
-      if (!taxSummary) {
-        await this.database2.query(
-          `SELECT public.refresh_transaction_tax_summary($1::uuid)`,
-          [transaction.id],
-        );
-
-        const refreshedRows = await this.database2.query(
-          `
-            SELECT *
-            FROM transaction_tax_summaries
-            WHERE transaction_id = $1
-          `,
-          [transaction.id],
-        );
-
-        taxSummary = refreshedRows[0] ?? null;
-      }
-    }
-
     const productSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
     const accountSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
     const productAccountCache = new Map<string, Product>();
@@ -718,6 +686,7 @@ export class TransactionAccountPostingWorker
     let igstAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let cgstAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let sgstAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let handlingFeeAccountId: string | null = null;
 
     if (isFinalStandardTransaction) {
       const settingCode =
@@ -764,6 +733,10 @@ export class TransactionAccountPostingWorker
         "TRANSACTION_ACCOUNTING",
         "SGST_CONTROL_ACCOUNT",
       );
+      const handlingFeeAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "HANDLING_CHARGE_ACCOUNT",
+      );
 
       if (!igstAccountText || !cgstAccountText || !sgstAccountText) {
         throw new BadRequestException(
@@ -777,6 +750,9 @@ export class TransactionAccountPostingWorker
       igstAccountSnapshot = await resolveAccountSnapshot(igstAccountText);
       cgstAccountSnapshot = await resolveAccountSnapshot(cgstAccountText);
       sgstAccountSnapshot = await resolveAccountSnapshot(sgstAccountText);
+      if (handlingFeeAccountText) {
+        handlingFeeAccountId = handlingFeeAccountText;
+      }
 
       controlDirection =
         transaction.transactionType === TransactionType.PURCHASE
@@ -836,9 +812,7 @@ export class TransactionAccountPostingWorker
         const controlTaxDirection = isPurchase
           ? TransactionPostingDirection.DEBIT
           : TransactionPostingDirection.CREDIT;
-        const splitMode = String(taxSummary?.split_mode ?? "CGST_SGST") === "IGST"
-          ? "IGST"
-          : "CGST_SGST";
+        const splitMode = transaction.splitMode === "IGST" ? "IGST" : "CGST_SGST";
         const roundedTaxAmount = Number(roundMoney(taxAmount));
 
         if (splitMode === "IGST") {
@@ -946,14 +920,14 @@ export class TransactionAccountPostingWorker
       };
 
       addGstControlPostings(
-        Number(taxSummary?.item_tax_amount ?? 0),
+        Number(transaction.itemTaxAmount ?? 0),
         TransactionPostingSourceType.TAX_ITEM,
         null,
         "Item",
       );
 
       addGstControlPostings(
-        Number(taxSummary?.additional_charge_tax_amount ?? 0),
+        Number(transaction.additionalChargeTaxAmount ?? 0),
         TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE,
         null,
         "Additional charge",
@@ -961,10 +935,19 @@ export class TransactionAccountPostingWorker
     }
 
     for (const charge of chargeRows) {
-      const accountSnapshot = await resolveAccountSnapshot(charge.accountId);
+      const chargeAccountId = charge.accountId || handlingFeeAccountId;
+      const accountSnapshot = chargeAccountId
+        ? await resolveAccountSnapshot(chargeAccountId)
+        : null;
 
       if (!isFinalStandardTransaction) {
         continue;
+      }
+
+      if (!chargeAccountId || !accountSnapshot) {
+        throw new BadRequestException(
+          "Missing handling fee control account or additional charge account",
+        );
       }
 
       addPosting(
@@ -974,7 +957,7 @@ export class TransactionAccountPostingWorker
           updatedBy: postingActorId,
           sourceType: "ADDITIONAL_CHARGE",
           sourceId: charge.id,
-          accountId: charge.accountId,
+          accountId: chargeAccountId,
           accountSnapshot,
           profileId: null,
           direction: TransactionPostingDirection.CREDIT,

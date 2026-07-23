@@ -8,6 +8,7 @@ import {
 import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "./transaction.entity";
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
+import { TransactionTaxSplitMode } from "../transactions.enums";
 
 @Index("IDX_transaction_additional_charges_transaction_id", ["transactionId"])
 @Index(
@@ -54,6 +55,77 @@ export class TransactionAdditionalCharge extends BaseEntity {
     nullable: true,
   })
   gstAmount: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "tax_rate_percent",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  taxRatePercent: string;
+
+  @Column({
+    type: "numeric",
+    name: "igst_rate_percent",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  igstRatePercent: string;
+
+  @Column({
+    type: "numeric",
+    name: "cgst_rate_percent",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  cgstRatePercent: string;
+
+  @Column({
+    type: "numeric",
+    name: "sgst_rate_percent",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  sgstRatePercent: string;
+
+  @Column({
+    type: "numeric",
+    name: "igst_amount",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  igstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "cgst_amount",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  cgstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "sgst_amount",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  sgstAmount: string;
+
+  @Column({
+    type: "enum",
+    enum: TransactionTaxSplitMode,
+    name: "split_mode",
+    nullable: true,
+  })
+  splitMode: TransactionTaxSplitMode | null;
 
   @Column({ type: "text", nullable: true })
   remarks: string | null;

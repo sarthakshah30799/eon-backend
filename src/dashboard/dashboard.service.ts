@@ -184,7 +184,7 @@ export class DashboardService {
     const raw = await this.transactionRepository
       .createQueryBuilder("t")
       .select([
-        `ti.currencySnapshot->>'currencyCode' as currency_code`,
+        `ti."currency_snapshot"->>'code' as currency_code`,
         `ti.currencyId as currency_id`,
         `DATE(t.approvedAt) as vol_date`,
         `COALESCE(SUM(ti.quantity * ti.rate), 0) as volume`,
@@ -193,7 +193,7 @@ export class DashboardService {
       .where("t.isLatest = true")
       .andWhere("t.status = 'APPROVED'")
       .andWhere("t.approvedAt >= :from", { from: yesterday.from })
-      .groupBy("ti.currencySnapshot->>'currencyCode'")
+      .groupBy(`ti."currency_snapshot"->>'code'`)
       .addGroupBy("ti.currencyId")
       .addGroupBy("DATE(t.approvedAt)")
       .getRawMany();

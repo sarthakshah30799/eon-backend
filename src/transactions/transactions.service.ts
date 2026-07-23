@@ -188,45 +188,6 @@ export class TransactionsService {
     return typeof preview === 'string' ? JSON.parse(preview) : preview ?? {};
   }
 
-  private async getTransactionTaxSummary(transactionId: string): Promise<Record<string, any> | null> {
-    const rows = await this.transactionRepository.query(
-      `
-        SELECT *
-        FROM transaction_tax_summaries
-        WHERE transaction_id = $1
-      `,
-      [transactionId],
-    );
-
-    return rows[0] ?? null;
-  }
-
-  private mapTransactionTaxSummaryRow(
-    row: Record<string, any> | null,
-  ): Record<string, any> | null {
-    if (!row) {
-      return null;
-    }
-
-    return {
-      taxRatePercent: row.tax_rate_percent ?? row.taxRatePercent ?? '0.00',
-      taxableAmount: row.taxable_amount ?? row.taxableAmount ?? '0.00',
-      itemBaseAmount: row.item_base_amount ?? row.itemBaseAmount ?? '0.00',
-      itemTaxAmount: row.item_tax_amount ?? row.itemTaxAmount ?? '0.00',
-      additionalChargeBaseAmount:
-        row.additional_charge_base_amount ?? row.additionalChargeBaseAmount ?? '0.00',
-      additionalChargeTaxAmount:
-        row.additional_charge_tax_amount ?? row.additionalChargeTaxAmount ?? '0.00',
-      igstAmount: row.igst_amount ?? row.igstAmount ?? '0.00',
-      cgstAmount: row.cgst_amount ?? row.cgstAmount ?? '0.00',
-      sgstAmount: row.sgst_amount ?? row.sgstAmount ?? '0.00',
-      finalAmount: row.final_amount ?? row.finalAmount ?? '0.00',
-      splitMode: row.split_mode ?? row.splitMode ?? 'CGST_SGST',
-      branchStateName: row.branch_state_name ?? row.branchStateName ?? null,
-      partyStateName: row.party_state_name ?? row.partyStateName ?? null,
-    };
-  }
-
   async previewTransactionTax(body: Record<string, any>): Promise<Record<string, any>> {
     return this.runGstPreview(body);
   }
@@ -1135,15 +1096,17 @@ export class TransactionsService {
       );
     }
 
-    const taxSummary = await this.getTransactionTaxSummary(transaction.id);
-    if (!taxSummary) {
+    const refreshedTransaction = await this.transactionRepository.findOne({
+      where: { id: transaction.id },
+    });
+    if (!refreshedTransaction) {
       throw new BadRequestException('Failed to calculate transaction tax');
     }
 
     const paymentRows = Array.isArray(transactionPayload.payments)
       ? transactionPayload.payments
       : [];
-    const payableTotal = String(taxSummary.final_amount ?? taxSummary.finalAmount ?? '0');
+    const payableTotal = String(refreshedTransaction.finalAmount ?? '0');
     const payableTotalAmount = Number(payableTotal || 0);
     if (payableTotalAmount > 0 && paymentRows.length === 0) {
       throw new BadRequestException('At least one payment row is required');
@@ -1437,9 +1400,6 @@ export class TransactionsService {
     await this.hydrateAgentProfileSnapshot(transaction);
     await this.hydrateCounterSnapshot(transaction);
 
-    const taxSummary = await this.getTransactionTaxSummary(transaction.id);
-    (transaction as Transaction & { taxSummary?: Record<string, any> | null }).taxSummary =
-      this.mapTransactionTaxSummaryRow(taxSummary);
     return transaction;
   }
 

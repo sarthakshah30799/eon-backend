@@ -76,6 +76,7 @@ export class TransactionsController {
   @ApiOperation({ summary: 'Get approved quantity availability for a branch, currency, and product' })
   async getQuantityAvailability(
     @Session() session: any,
+    @Query('branchId') branchId?: string,
     @Query('currencyId') currencyId?: string,
     @Query('productId') productId?: string,
     @Query('excludeTransactionId') excludeTransactionId?: string,
@@ -87,7 +88,9 @@ export class TransactionsController {
     soldQuantity: string;
     availableQuantity: string;
   }> {
-    const effectiveBranchId = session?.activeBranchId;
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
+      ? branchId?.trim() || undefined
+      : session?.activeBranchId;
     if (!effectiveBranchId) {
       throw new BadRequestException('Branch is required');
     }

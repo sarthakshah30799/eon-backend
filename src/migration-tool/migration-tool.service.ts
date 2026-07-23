@@ -22,6 +22,8 @@ import { UserRole } from '../user-roles/user-role.entity';
 import { RolesMenuPermission } from '../roles-menu-permission/roles-menu-permission.entity';
 import { SelectOption } from '../category-options/category-option.entity';
 import { Country } from '../country/country.entity';
+import { CountryGroup } from '../country-groups/country-group.entity';
+import { Currency } from '../currencies/currency.entity';
 import { State } from '../state/state.entity';
 import { normalizeMenuPath } from '../menu/menu-path.util';
 
@@ -44,6 +46,7 @@ type MigrationConnectionConfig =
 
 type InternalTask =
   | 'company'
+  | 'currency'
   | 'branch'
   | 'counter'
   | 'user'
@@ -90,6 +93,8 @@ interface MigrationContext {
   fieldStatus: ReportRow[];
   sourceCache: Record<string, SourceRow[]>;
   companyMap: Map<string, string>;
+  countryMap: Map<string, string>;
+  currencyMap: Map<string, string>;
   branchMap: Map<string, string>;
   counterMap: Map<string, string>;
   userMap: Map<string, string>;
@@ -116,6 +121,8 @@ const TEMP_INITIAL_PASSWORD = 'Temp@1234';
 const TABLE_DEPENDENCIES: Record<string, InternalTask[]> = {
   company: ['company'],
   mstcompanyrecord: ['company'],
+  currency: ['currency'],
+  mcurrency: ['currency'],
   branches: ['company', 'branch'],
   mstcompany: ['company', 'branch'],
   counters: ['company', 'branch', 'counter', 'branchCounterLinks'],
@@ -670,6 +677,14 @@ export class MigrationToolService {
     return this.activeContext?.branchMap ?? new Map<string, string>();
   }
 
+  private get countryMap() {
+    return this.activeContext?.countryMap ?? new Map<string, string>();
+  }
+
+  private get currencyMap() {
+    return this.activeContext?.currencyMap ?? new Map<string, string>();
+  }
+
   private get counterMap() {
     return this.activeContext?.counterMap ?? new Map<string, string>();
   }
@@ -750,8 +765,16 @@ export class MigrationToolService {
     return this.targetDataSource.getRepository(Country);
   }
 
+  private get targetCountryGroupRepository() {
+    return this.targetDataSource.getRepository(CountryGroup);
+  }
+
   private get targetStateRepository() {
     return this.targetDataSource.getRepository(State);
+  }
+
+  private get targetCurrencyRepository() {
+    return this.targetDataSource.getRepository(Currency);
   }
 
   private getConnectionProfiles(dto: MigrationRunRequestDto): Record<ConnectionSlot, MigrationConnectionConfigDto | undefined> {
@@ -1078,6 +1101,8 @@ export class MigrationToolService {
       fieldStatus: [],
       sourceCache: {},
       companyMap: new Map(),
+      countryMap: new Map(),
+      currencyMap: new Map(),
       branchMap: new Map(),
       counterMap: new Map(),
       userMap: new Map(),
@@ -1109,6 +1134,8 @@ export class MigrationToolService {
     switch (task) {
       case 'company':
         return 'company';
+      case 'currency':
+        return 'currencies';
       case 'branch':
         return 'branches';
       case 'counter':
@@ -1134,6 +1161,8 @@ export class MigrationToolService {
     switch (task) {
       case 'company':
         return 'mstcompanyrecord';
+      case 'currency':
+        return 'mcurrency';
       case 'branch':
         return 'mstcompany';
       case 'counter':
@@ -1936,6 +1965,283 @@ export class MigrationToolService {
       gstState: rawLocation,
       note: 'Raw location preserved as fallback text',
     };
+  }
+
+  private getLegacyCountryIdentifier(row: SourceRow): string | number | null | undefined {
+    return (
+      row.nCountryID ??
+      row.nCountryId ??
+      row.ncountryid ??
+      row.countryId ??
+      row.country_id ??
+      row.CountryID ??
+      row.id ??
+      row.ID
+    );
+  }
+
+  private getLegacyCountrySourceRows(context: MigrationContext): SourceRow[] {
+    return context.sourceCache.legacyCountryCandidates ?? [];
+  }
+
+  private async loadLegacyCountryCandidates(pool: mssql.ConnectionPool, context: MigrationContext): Promise<SourceRow[]> {
+    const cached = this.getLegacyCountrySourceRows(context);
+    if (cached.length > 0) {
+      return cached;
+    }
+
+    const discoveredTables: string[] = [];
+    try {
+      const result = await pool
+        .request()
+        .query(
+          `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND LOWER(TABLE_NAME) LIKE '%country%'`,
+        );
+      for (const row of result.recordset ?? []) {
+        const tableName = toNullableString(row.TABLE_NAME);
+        if (tableName) {
+          discoveredTables.push(tableName);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `[mcurrency] could not inspect INFORMATION_SCHEMA.TABLES for country lookup candidates: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
+
+    const fallbackTables = ['mstcountry', 'mcountry', 'country', 'countries', 'mst_country', 'tblcountry'];
+    const tableNames = [...new Set([...discoveredTables, ...fallbackTables])];
+    const rows: SourceRow[] = [];
+
+    for (const tableName of tableNames) {
+      try {
+        const tableRows = await this.readSourceRows(pool, tableName);
+        for (const row of tableRows) {
+          rows.push({
+            ...row,
+            __legacySourceTable: tableName,
+          });
+        }
+      } catch (error) {
+        this.logger.warn(
+          `[mcurrency] skipping legacy country candidate table ${tableName}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    }
+
+    context.sourceCache.legacyCountryCandidates = rows;
+    this.logger.log(`[mcurrency] loaded ${rows.length} legacy country candidate row(s)`);
+    return rows;
+  }
+
+  private async resolveCountryGroupFromLegacyRow(
+    row: SourceRow,
+    context: MigrationContext,
+    params: {
+      sourceTable: string;
+      sourceRowIdentifier: string;
+    },
+  ): Promise<CountryGroup | null> {
+    const rawName =
+      this.getSourceString(row, ['vCountryGroup', 'countryGroup', 'countryGroupName', 'groupName', 'group']) ?? null;
+    if (!rawName) {
+      return null;
+    }
+
+    const normalizedCode = normalizeCode(rawName);
+    const existing = await this.targetCountryGroupRepository.findOne({
+      where: [{ code: normalizedCode }, { name: rawName }],
+    });
+    if (existing) {
+      return existing;
+    }
+
+    const group = this.targetCountryGroupRepository.create({
+      code: normalizedCode,
+      name: rawName,
+      createdBy: this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
+        sourceTable: params.sourceTable,
+        sourceRowIdentifier: params.sourceRowIdentifier,
+        fieldName: 'nCreatedBy',
+      }),
+      updatedBy: this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
+        sourceTable: params.sourceTable,
+        sourceRowIdentifier: params.sourceRowIdentifier,
+        fieldName: 'nLastUpdateBy',
+      }),
+    });
+
+    if (context.mode === 'real') {
+      return this.targetCountryGroupRepository.save(group);
+    }
+
+    return { ...group, id: `mock-country-group-${normalizedCode}` } as CountryGroup;
+  }
+
+  private async resolveLegacyCountryReference(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+    legacyCountryId: string | number | null | undefined,
+    params: {
+      sourceTable: string;
+      sourceRowIdentifier: string;
+    },
+  ): Promise<Country | null> {
+    if (legacyCountryId === null || legacyCountryId === undefined || legacyCountryId === '') {
+      this.addSkippedRow(context, {
+        sourceTable: params.sourceTable,
+        sourceRowIdentifier: params.sourceRowIdentifier,
+        reason: 'Currency country reference missing',
+        fallbackAction: 'Currency row skipped',
+      });
+      return null;
+    }
+
+    const legacyKey = String(legacyCountryId);
+    const cachedTargetId = this.countryMap.get(legacyKey);
+    if (cachedTargetId) {
+      const cachedCountry = await this.targetCountryRepository.findOne({
+        where: { id: cachedTargetId },
+        relations: { countryGroup: true },
+      });
+      if (cachedCountry) {
+        return cachedCountry;
+      }
+      return {
+        id: cachedTargetId,
+      } as Country;
+    }
+
+    const candidates = await this.loadLegacyCountryCandidates(pool, context);
+    const sourceRow = candidates.find(candidate => {
+      const candidateId = this.getLegacyCountryIdentifier(candidate);
+      return candidateId !== undefined && candidateId !== null && String(candidateId) === legacyKey;
+    });
+
+    if (!sourceRow) {
+      this.addSkippedRow(context, {
+        sourceTable: params.sourceTable,
+        sourceRowIdentifier: params.sourceRowIdentifier,
+        reason: `Could not resolve legacy country id ${legacyKey} from available source tables`,
+        fallbackAction: 'Currency row skipped',
+      });
+      this.addUnmappedColumn(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: 'nCountryID',
+        sourceValue: legacyCountryId,
+        reason: 'Legacy country source row was not found in the connected MSSQL database',
+      });
+      return null;
+    }
+
+    const sourceTableName = toNullableString(sourceRow.__legacySourceTable) ?? 'legacy-country';
+    const countryCode =
+      this.getSourceString(sourceRow, ['vCncode', 'vCountryCode', 'countryCode', 'code', 'isoCode', 'alpha2Code']) ??
+      normalizeCode(this.getSourceString(sourceRow, ['vCnName', 'vCountryName', 'countryName', 'name']) ?? `COUNTRY_${legacyKey}`);
+    const countryName =
+      this.getSourceString(sourceRow, ['vCnName', 'vCountryName', 'countryName', 'name', 'description']) ??
+      countryCode;
+    const countryGroup = await this.resolveCountryGroupFromLegacyRow(sourceRow, context, {
+      sourceTable: sourceTableName,
+      sourceRowIdentifier: String(this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey),
+    });
+    const existing = await this.targetCountryRepository.findOne({
+      where: [
+        { code: countryCode },
+        { name: countryName },
+        { lrsCountryCode: countryCode },
+        { ctrCountryCode: countryCode },
+      ],
+      relations: {
+        countryGroup: true,
+      },
+    });
+
+    if (existing) {
+      if (countryGroup && (!existing.countryGroup || existing.countryGroup.id !== countryGroup.id)) {
+        existing.countryGroup = { id: countryGroup.id } as CountryGroup;
+      }
+      if (context.mode === 'real' && countryGroup) {
+        await this.targetCountryRepository.save(existing);
+      }
+      this.countryMap.set(legacyKey, existing.id);
+      this.addIdMap(context, {
+        oldTable: sourceTableName,
+        oldId: this.getLegacyCountryIdentifier(sourceRow),
+        newTable: 'countries',
+        newUuid: existing.id,
+        lookupKey: `${countryCode}:${countryName}`,
+      });
+      return existing;
+    }
+
+    const country = {
+      code: countryCode,
+      name: countryName,
+      countryGroup: countryGroup ? ({ id: countryGroup.id } as CountryGroup) : null,
+      lrsCountryCode: countryCode,
+      ctrCountryCode: countryCode,
+      riskCategory: 'low',
+      restrictedCountry: false,
+      greyListCountry: false,
+      baseCountry: false,
+      createdBy: this.resolveAuditUserId(context, sourceRow.nCreatedBy ?? sourceRow.nCreatedBY, {
+        sourceTable: sourceTableName,
+        sourceRowIdentifier: String(this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey),
+        fieldName: 'nCreatedBy',
+      }),
+      updatedBy: this.resolveAuditUserId(context, sourceRow.nLastUpdateBy ?? sourceRow.nLastupdatedBy, {
+        sourceTable: sourceTableName,
+        sourceRowIdentifier: String(this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey),
+        fieldName: 'nLastUpdateBy',
+      }),
+    } as Country;
+
+    if (context.mode === 'real') {
+      const saved = await this.targetCountryRepository.save(country);
+      this.countryMap.set(legacyKey, saved.id);
+      this.addIdMap(context, {
+        oldTable: sourceTableName,
+        oldId: this.getLegacyCountryIdentifier(sourceRow),
+        newTable: 'countries',
+        newUuid: saved.id,
+        lookupKey: `${countryCode}:${countryName}`,
+      });
+      this.addFieldStatus(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: 'nCountryID',
+        sourceValue: legacyCountryId,
+        targetColumn: 'country_id',
+        targetValue: saved.id,
+        status: 'saved',
+        note: `Resolved and created/reused country from legacy table ${sourceTableName}`,
+      });
+      return saved;
+    }
+
+    const mockId = `mock-country-${legacyKey}`;
+    this.countryMap.set(legacyKey, mockId);
+    this.addIdMap(context, {
+      oldTable: sourceTableName,
+      oldId: this.getLegacyCountryIdentifier(sourceRow),
+      newTable: 'countries',
+      newUuid: mockId,
+      lookupKey: `${countryCode}:${countryName}`,
+    });
+    this.addFieldStatus(context, {
+      sourceTable: params.sourceTable,
+      sourceColumn: 'nCountryID',
+      sourceValue: legacyCountryId,
+      targetColumn: 'country_id',
+      targetValue: mockId,
+      status: 'saved',
+      note: `Would resolve country from legacy table ${sourceTableName}`,
+    });
+    return { ...country, id: mockId } as Country;
   }
 
   private async resolveBranch(
@@ -3170,6 +3476,348 @@ export class MigrationToolService {
     };
   }
 
+  private mapCurrencyCalculationMethod(value: any): { value: string; transformed: boolean } {
+    const text = toNullableString(value);
+    if (!text) {
+      return { value: 'MULTIPLICATION', transformed: false };
+    }
+
+    const normalized = normalizeMatchText(text);
+    if (normalized.includes('div') || normalized.includes('divide')) {
+      return { value: 'DIVISION', transformed: true };
+    }
+
+    if (normalized.includes('mul') || normalized.includes('mult')) {
+      return { value: 'MULTIPLICATION', transformed: normalized !== 'multiplication' };
+    }
+
+    if (normalized === 'division' || normalized === 'divide') {
+      return { value: 'DIVISION', transformed: false };
+    }
+
+    return { value: 'MULTIPLICATION', transformed: true };
+  }
+
+  private mapCurrencyProductAllowed(value: any): string {
+    const normalized = toNullableString(value)?.toUpperCase() ?? '';
+    return ['CN', 'CM', 'CC', 'ET', 'TC', 'TM'].includes(normalized) ? normalized : '';
+  }
+
+  private async processCurrencies(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
+    if (!this.isTaskIncluded(context, 'currency')) {
+      return;
+    }
+
+    this.logger.log(`[mcurrency] table migration started mode=${context.mode}`);
+    const rows = await this.readSourceRows(pool, 'mcurrency');
+    this.ensureSourceRows(context, 'currency', rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const oldId = row.nCurrencyID ?? row.nCurrencyId ?? row.ncurrencyid ?? row.id ?? row.ID;
+      const lookupKey = toNullableString(row.vCncode) || toNullableString(row.vCnName) || `currency-${oldId}`;
+
+      try {
+        const country = await this.resolveLegacyCountryReference(pool, context, row.nCountryID ?? row.nCountryId ?? row.ncountryid, {
+          sourceTable: 'mcurrency',
+          sourceRowIdentifier: String(oldId ?? ''),
+        });
+        if (!country) {
+          skipped += 1;
+          continue;
+        }
+
+        const existing = await this.targetCurrencyRepository.findOne({
+          where: { currencyCode: toStringOrFallback(row.vCncode, `CURRENCY_${oldId}`) },
+          relations: { country: true, pricingGroup: true },
+        });
+        const calculationMethod = this.mapCurrencyCalculationMethod(row.vCalculationMethod);
+        const productAllowed = this.mapCurrencyProductAllowed(row.vProductAlloowd);
+        const onlyStocking = toBoolean(row.bTradedCurrency);
+        const pricingGroupCode = toNullableString(row.nCurrencyGroupID) ?? null;
+        const currencyCode = toStringOrFallback(row.vCncode, `CURRENCY_${oldId}`);
+        const currencyName = toStringOrFallback(row.vCnName, currencyCode);
+        const resolvedCountryLabel = (country as any).name ?? currencyCode;
+        const createdBy = this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
+          sourceTable: 'mcurrency',
+          sourceRowIdentifier: String(oldId ?? ''),
+          fieldName: 'nCreatedBy',
+        });
+        const updatedBy = this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
+          sourceTable: 'mcurrency',
+          sourceRowIdentifier: String(oldId ?? ''),
+          fieldName: 'nLastUpdateBy',
+        });
+        const audit = this.resolveAuditFields(row, context, {
+          sourceTable: 'mcurrency',
+          sourceRowIdentifier: String(oldId ?? ''),
+        });
+
+        this.addFieldStatus(context, {
+          sourceTable: 'mcurrency',
+          sourceColumn: 'bTradedCurrency',
+          sourceValue: row.bTradedCurrency,
+          targetColumn: 'onlyStocking',
+          targetValue: onlyStocking,
+          status: 'saved',
+          note: 'Legacy traded currency flag mapped to onlyStocking',
+        });
+
+        if (row.vProductAlloowd !== undefined && row.vProductAlloowd !== null) {
+          this.addFieldStatus(context, {
+            sourceTable: 'mcurrency',
+            sourceColumn: 'vProductAlloowd',
+            sourceValue: row.vProductAlloowd,
+            targetColumn: 'productAllowed',
+            targetValue: onlyStocking ? productAllowed || '' : '',
+            status: onlyStocking && productAllowed ? 'saved' : 'unmapped',
+            note: onlyStocking && productAllowed
+              ? 'Mapped to current productAllowed code'
+              : 'Legacy product allowance is not valid for the current currency rules',
+          });
+        }
+
+        if (existing) {
+          let changed = false;
+          if (existing.currencyName !== currencyName) {
+            existing.currencyName = currencyName;
+            changed = true;
+          }
+          if (String(existing.country?.id ?? '') !== String(country.id)) {
+            existing.country = { id: country.id } as Country;
+            changed = true;
+          }
+          if (existing.priority !== toStringOrFallback(row.nPriority, existing.priority)) {
+            existing.priority = toStringOrFallback(row.nPriority, existing.priority);
+            changed = true;
+          }
+          if (existing.ratePer !== toStringOrFallback(row.nRatePer, existing.ratePer)) {
+            existing.ratePer = toStringOrFallback(row.nRatePer, existing.ratePer);
+            changed = true;
+          }
+          if (existing.defaultMinRate !== toStringOrFallback(row.nDefaultMinRate, existing.defaultMinRate)) {
+            existing.defaultMinRate = toStringOrFallback(row.nDefaultMinRate, existing.defaultMinRate);
+            changed = true;
+          }
+          if (existing.defaultMaxRate !== toStringOrFallback(row.nDefaultMaxRate, existing.defaultMaxRate)) {
+            existing.defaultMaxRate = toStringOrFallback(row.nDefaultMaxRate, existing.defaultMaxRate);
+            changed = true;
+          }
+          if (existing.calculationMethod !== calculationMethod.value) {
+            existing.calculationMethod = calculationMethod.value as any;
+            changed = true;
+          }
+          if (existing.openRatePremium !== toStringOrFallback(row.nOpenRatePremium, existing.openRatePremium)) {
+            existing.openRatePremium = toStringOrFallback(row.nOpenRatePremium, existing.openRatePremium);
+            changed = true;
+          }
+          if (existing.gulfDiscFactor !== toStringOrFallback(row.nGulfDiscFactor, existing.gulfDiscFactor)) {
+            existing.gulfDiscFactor = toStringOrFallback(row.nGulfDiscFactor, existing.gulfDiscFactor);
+            changed = true;
+          }
+          if (existing.amexMapCode !== toStringOrFallback(row.vAmexCode, existing.amexMapCode)) {
+            existing.amexMapCode = toStringOrFallback(row.vAmexCode, existing.amexMapCode);
+            changed = true;
+          }
+          if (existing.active !== toBoolean(row.bIsActive)) {
+            existing.active = toBoolean(row.bIsActive);
+            changed = true;
+          }
+          if (existing.onlyStocking !== onlyStocking) {
+            existing.onlyStocking = onlyStocking;
+            changed = true;
+          }
+          const desiredProductAllowed = onlyStocking ? productAllowed : '';
+          if (existing.productAllowed !== desiredProductAllowed) {
+            existing.productAllowed = desiredProductAllowed as any;
+            changed = true;
+          }
+          if (pricingGroupCode) {
+            this.addUnmappedColumn(context, {
+              sourceTable: 'mcurrency',
+              sourceColumn: 'nCurrencyGroupID',
+              sourceValue: pricingGroupCode,
+              reason: 'Pricing group mapping is not yet confirmed; logged for review only',
+            });
+          }
+          if (row.VIssuerAllowed !== undefined) {
+            this.addUnmappedColumn(context, {
+              sourceTable: 'mcurrency',
+              sourceColumn: 'VIssuerAllowed',
+              sourceValue: row.VIssuerAllowed,
+              reason: 'Issuer allowance is not mapped to a current currency column',
+            });
+          }
+          if (row.vBranchCode !== undefined) {
+            this.addUnmappedColumn(context, {
+              sourceTable: 'mcurrency',
+              sourceColumn: 'vBranchCode',
+              sourceValue: row.vBranchCode,
+              reason: 'Branch code is logged for review only',
+            });
+          }
+          if (changed && context.mode === 'real') {
+            existing.createdBy = createdBy;
+            existing.updatedBy = updatedBy;
+            existing.deletedAt = audit.deletedAt;
+            existing.deletedBy = audit.deletedBy;
+            await this.targetCurrencyRepository.save(existing);
+            this.logger.log(`[mcurrency] updated existing currency id=${existing.id}`);
+          }
+
+          this.currencyMap.set(String(oldId), existing.id);
+          this.addIdMap(context, {
+            oldTable: 'mcurrency',
+            oldId,
+            newTable: 'currencies',
+            newUuid: existing.id,
+            lookupKey,
+          });
+          this.addRowResult(context, {
+            sourceTable: 'mcurrency',
+            sourcePrimaryKey: String(oldId ?? ''),
+            targetId: existing.id,
+            status: changed ? 'updated' : 'mapped',
+            note: `Reused currency ${currencyCode} for country ${country.id}`,
+          });
+          continue;
+        }
+
+        const currency = {
+          currencyCode,
+          currencyName,
+          country: { id: country.id } as Country,
+          priority: toStringOrFallback(row.nPriority, '0'),
+          ratePer: toStringOrFallback(row.nRatePer, '1'),
+          defaultMinRate: toStringOrFallback(row.nDefaultMinRate, '0'),
+          defaultMaxRate: toStringOrFallback(row.nDefaultMaxRate, '0'),
+          calculationMethod: calculationMethod.value as any,
+          openRatePremium: toStringOrFallback(row.nOpenRatePremium, '0'),
+          gulfDiscFactor: toStringOrFallback(row.nGulfDiscFactor, '0'),
+          amexMapCode: toStringOrFallback(row.vAmexCode, ''),
+          group: 'ASIA',
+          pricingGroup: null,
+          active: toBoolean(row.bIsActive),
+          onlyStocking,
+          productAllowed: (onlyStocking ? productAllowed : '') as any,
+          createdBy,
+          updatedBy,
+          deletedAt: audit.deletedAt,
+          deletedBy: audit.deletedBy,
+        } as Currency;
+
+        if (pricingGroupCode) {
+          this.addUnmappedColumn(context, {
+            sourceTable: 'mcurrency',
+            sourceColumn: 'nCurrencyGroupID',
+            sourceValue: pricingGroupCode,
+            reason: 'Pricing group mapping is not yet confirmed; logged for review only',
+          });
+        }
+        if (row.VIssuerAllowed !== undefined) {
+          this.addUnmappedColumn(context, {
+            sourceTable: 'mcurrency',
+            sourceColumn: 'VIssuerAllowed',
+            sourceValue: row.VIssuerAllowed,
+            reason: 'Issuer allowance is not mapped to a current currency column',
+          });
+        }
+        if (row.vBranchCode !== undefined) {
+          this.addUnmappedColumn(context, {
+            sourceTable: 'mcurrency',
+            sourceColumn: 'vBranchCode',
+            sourceValue: row.vBranchCode,
+            reason: 'Branch code is logged for review only',
+          });
+        }
+
+        if (calculationMethod.transformed) {
+          this.addTransformation(context, {
+            sourceTable: 'mcurrency',
+            sourceField: 'vCalculationMethod',
+            ruleName: 'currency-calculation-method-normalization',
+            originalValue: row.vCalculationMethod,
+            transformedValue: calculationMethod.value,
+            result: 'transformed',
+          });
+        }
+
+        this.addFieldStatus(context, {
+          sourceTable: 'mcurrency',
+          sourceColumn: 'nCountryID',
+          sourceValue: row.nCountryID,
+          targetColumn: 'country_id',
+          targetValue: country.id,
+          status: 'saved',
+          note: `Resolved via legacy country lookup for currency ${currencyCode}`,
+        });
+
+        if (context.mode === 'real') {
+          const saved = await this.targetCurrencyRepository.save(currency);
+          this.currencyMap.set(String(oldId), saved.id);
+          this.addIdMap(context, {
+            oldTable: 'mcurrency',
+            oldId,
+            newTable: 'currencies',
+            newUuid: saved.id,
+            lookupKey,
+          });
+          this.addRowResult(context, {
+            sourceTable: 'mcurrency',
+            sourcePrimaryKey: String(oldId ?? ''),
+            targetId: saved.id,
+            status: 'inserted',
+            note: `Currency created for ${resolvedCountryLabel}`,
+          });
+          inserted += 1;
+        } else {
+          const mockId = `mock-currency-${oldId ?? randomUUID()}`;
+          this.currencyMap.set(String(oldId), mockId);
+          this.addIdMap(context, {
+            oldTable: 'mcurrency',
+            oldId,
+            newTable: 'currencies',
+            newUuid: mockId,
+            lookupKey,
+          });
+          this.addRowResult(context, {
+            sourceTable: 'mcurrency',
+            sourcePrimaryKey: String(oldId ?? ''),
+            targetId: mockId,
+            status: 'saved',
+            note: `Would create currency for ${resolvedCountryLabel}`,
+          });
+          inserted += 1;
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: 'mcurrency',
+          sourceRowIdentifier: String(oldId ?? ''),
+          fieldName: 'currency',
+          errorMessage: error instanceof Error ? error.message : 'Unknown currency migration failure',
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    this.addTableResult(context, {
+      sourceTable: 'mcurrency',
+      targetTable: 'currencies',
+      rowCountScanned: rows.length,
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
+    });
+    this.logger.log(`[mcurrency] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
+  }
+
   private async processCompanies(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
     if (!this.isTaskIncluded(context, 'company')) {
       return;
@@ -3835,6 +4483,7 @@ export class MigrationToolService {
           );
           const taskOrder: InternalTask[] = [
             'company',
+            'currency',
             'branch',
             'counter',
             'user',
@@ -3853,6 +4502,9 @@ export class MigrationToolService {
             switch (task) {
               case 'company':
                 await this.processCompanies(pools.master, context);
+                break;
+              case 'currency':
+                await this.processCurrencies(sourcePool, context);
                 break;
               case 'branch':
                 await this.processBranches(sourcePool, context);
@@ -3901,6 +4553,7 @@ export class MigrationToolService {
   private shouldRunImplicitTask(task: InternalTask, selectedSet: Set<string>): boolean {
     // If any selected table implies this task, allow it to run.
     if (task === 'company' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('company'))) return true;
+    if (task === 'currency' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('currency'))) return true;
     if (task === 'branch' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('branch'))) return true;
     if (task === 'counter' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('counter'))) return true;
     if (task === 'user' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('user'))) return true;
