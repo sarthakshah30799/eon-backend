@@ -19,7 +19,6 @@ export enum CategoryOptionCodeEnum {
   MasterDocument = "MASTER",
   TransactionDocument = "TRANSACTION",
   Segment = "SEGMENT",
-  Purpose = "PURPOSE",
   Relationship = "RELATIONSHIP",
   CommissionGiven = "COMMISSIONGIVEN",
   ServicedBy = "SERVICEDBY",

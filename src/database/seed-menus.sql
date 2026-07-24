@@ -12,6 +12,7 @@
 --     ├─ Accounts Profile
 --     ├─ User Role
 --     ├─ TDS Profile
+--     ├─ Purpose
 --     ├─ Menu Management
 --     └─ Additional Settings
 --
@@ -83,16 +84,19 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'Tds Profile', '/admin/tds-profile', 'receipt', v_admin_id, 11, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Menu Management', '/admin/menu-management', 'menu', v_admin_id, 12, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Purpose', '/admin/purpose', 'receipt-text', v_admin_id, 12, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Additional Settings', '/admin/additional-settings', 'settings', v_admin_id, 13, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Menu Management', '/admin/menu-management', 'menu', v_admin_id, 13, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Manual Bill Books', '/manual-bill-books', 'book-open', v_admin_id, 14, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Additional Settings', '/admin/additional-settings', 'settings', v_admin_id, 14, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Chequebooks', '/admin/chequebooks', 'book-open', v_admin_id, 15, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Manual Bill Books', '/manual-bill-books', 'book-open', v_admin_id, 15, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Chequebooks', '/admin/chequebooks', 'book-open', v_admin_id, 16, true, v_system_user, v_system_user);
 
   -- Insert "Party Profiles" root menu
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)

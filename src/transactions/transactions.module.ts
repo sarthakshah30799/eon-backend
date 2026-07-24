@@ -20,6 +20,7 @@ import { StorageModule } from "../storage/storage.module";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { Purpose } from "../purpose/purpose.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
@@ -45,6 +46,7 @@ import { PurchaseRuleService } from "./purchase-rule.service";
       Currency,
       Product,
       SelectOption,
+      Purpose,
       DocumentProfile,
       AccountProfile,
       PartyProfile,

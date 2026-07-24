@@ -8,6 +8,7 @@ import { Currency } from '../currencies/currency.entity';
 import { SelectOption } from '../category-options/category-option.entity';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { Product } from '../products/product.entity';
+import { Purpose } from '../purpose/purpose.entity';
 import { TransactionProfileType, TransactionType } from './transactions.enums';
 
 @Injectable()
@@ -23,6 +24,8 @@ export class TransactionAd1Service {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(SelectOption)
     private readonly selectOptionRepository: Repository<SelectOption>,
+    @InjectRepository(Purpose)
+    private readonly purposeRepository: Repository<Purpose>,
     @InjectRepository(AccountProfile)
     private readonly accountProfileRepository: Repository<AccountProfile>,
     @InjectRepository(Product)
@@ -79,8 +82,18 @@ export class TransactionAd1Service {
     }
 
     if (payload.purposeId) {
-      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.purposeId } });
-      snapshots.purposeSnapshot = opt ?? null;
+      const purpose = await this.purposeRepository.findOne({ where: { id: payload.purposeId } });
+      if (!purpose) {
+        throw new BadRequestException(`Purpose with id ${payload.purposeId} not found`);
+      }
+
+      if (payload.transactionType && purpose.transactionType !== payload.transactionType) {
+        throw new BadRequestException(
+          `Purpose ${purpose.code} is not valid for ${payload.transactionType}`,
+        );
+      }
+
+      snapshots.purposeSnapshot = purpose ?? null;
     }
 
     if (payload.relationshipId) {
