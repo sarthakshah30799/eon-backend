@@ -30,6 +30,9 @@ export class CountryResponseDto {
   @ApiProperty()
   baseCountry: boolean;
 
+  @ApiProperty()
+  isCisCountry: boolean;
+
   @ApiPropertyOptional()
   countryGroupId?: string;
 
@@ -53,6 +56,7 @@ export class CountryResponseDto {
     dto.restrictedCountry = entity.restrictedCountry;
     dto.greyListCountry = entity.greyListCountry;
     dto.baseCountry = entity.baseCountry;
+    dto.isCisCountry = entity.isCisCountry;
     
     if (entity.countryGroup) {
       dto.countryGroupId = entity.countryGroup.id;

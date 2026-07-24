@@ -5,6 +5,7 @@ import { CountryGroup } from "./country-group.entity";
 import { CreateCountryGroupDto } from "./dto/create-country-group.dto";
 import { UpdateCountryGroupDto } from "./dto/update-country-group.dto";
 import { CountryGroupResponseDto } from "./dto/country-group-response.dto";
+import { Currency } from "../currencies/currency.entity";
 
 @Injectable()
 export class CountryGroupService {
@@ -19,13 +20,21 @@ export class CountryGroupService {
 
   async findAll(): Promise<CountryGroupResponseDto[]> {
     const groups = await this.countryGroupRepository.find({
+      relations: {
+        sellLimitCurrency: true,
+      },
       order: { createdAt: "DESC" },
     });
     return groups.map(CountryGroupResponseDto.fromEntity);
   }
 
   async findById(id: string): Promise<CountryGroupResponseDto> {
-    const group = await this.countryGroupRepository.findOne({ where: { id } });
+    const group = await this.countryGroupRepository.findOne({
+      where: { id },
+      relations: {
+        sellLimitCurrency: true,
+      },
+    });
     if (!group) {
       throw new NotFoundException(`Country Group with id ${id} not found`);
     }
@@ -55,12 +64,16 @@ export class CountryGroupService {
     const group = this.countryGroupRepository.create({
       name,
       code,
+      sellLimitAmount: dto.sellLimitAmount !== undefined ? String(dto.sellLimitAmount) : null,
+      sellLimitCurrency: dto.sellLimitCurrencyId ? ({ id: dto.sellLimitCurrencyId } as Currency) : null,
+      minTravelDays: dto.minTravelDays ?? null,
+      maxTravelDays: dto.maxTravelDays ?? null,
       createdBy: userId,
       updatedBy: userId,
     });
 
     const saved = await this.countryGroupRepository.save(group);
-    return CountryGroupResponseDto.fromEntity(saved);
+    return this.findById(saved.id);
   }
 
   async update(id: string, dto: UpdateCountryGroupDto, userId: string): Promise<CountryGroupResponseDto> {
@@ -82,9 +95,26 @@ export class CountryGroupService {
       group.name = name;
     }
 
+    if (dto.sellLimitAmount !== undefined) {
+      group.sellLimitAmount = dto.sellLimitAmount === null ? null : String(dto.sellLimitAmount);
+    }
+
+    if (dto.sellLimitCurrencyId !== undefined) {
+      group.sellLimitCurrency = dto.sellLimitCurrencyId ? ({ id: dto.sellLimitCurrencyId } as Currency) : null;
+      group.sellLimitCurrencyId = dto.sellLimitCurrencyId ?? null;
+    }
+
+    if (dto.minTravelDays !== undefined) {
+      group.minTravelDays = dto.minTravelDays ?? null;
+    }
+
+    if (dto.maxTravelDays !== undefined) {
+      group.maxTravelDays = dto.maxTravelDays ?? null;
+    }
+
     group.updatedBy = userId;
     const saved = await this.countryGroupRepository.save(group);
-    return CountryGroupResponseDto.fromEntity(saved);
+    return this.findById(saved.id);
   }
 
   async delete(id: string): Promise<{ message: string }> {

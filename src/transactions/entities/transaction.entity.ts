@@ -21,11 +21,14 @@ import { TransactionPayment } from "./transaction-payment.entity";
 import { TransactionAccountPosting } from "./transaction-account-posting.entity";
 import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
+import { TransactionTcsBreakdown } from "./transaction-tcs-breakdown.entity";
 import { TransactionPassengerOtherDocument } from "./transaction-passenger-other-document.entity";
 import {
   TransactionPassengerSnapshotValue,
+  TransactionPassengerTravelSnapshotValue,
   TransactionReferenceSnapshotValue,
 } from "../types/transaction-snapshot.types";
+import { PurposeRateType } from "../../purpose/purpose.enums";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
 @Index(
@@ -43,6 +46,7 @@ import {
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
 @Index("IDX_transactions_passenger_id", ["passengerId"])
 @Index("IDX_transactions_purpose_id", ["purposeId"])
+@Index("IDX_transactions_passenger_travel_id", ["passengerTravelId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
 @Check(
@@ -108,6 +112,16 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "jsonb", name: "passenger_snapshot", nullable: true })
   passengerSnapshot: TransactionPassengerSnapshotValue;
+
+  @Column({ type: "uuid", name: "passenger_travel_id", nullable: true })
+  passengerTravelId: string | null;
+
+  @Column({
+    type: "jsonb",
+    name: "passenger_travel_snapshot",
+    nullable: true,
+  })
+  passengerTravelSnapshot: TransactionPassengerTravelSnapshotValue;
 
   @Column({ type: "uuid", name: "agent_profile_id", nullable: true })
   agentProfileId: string | null;
@@ -227,6 +241,42 @@ export class Transaction extends BaseEntity {
 
   @Column({
     type: "numeric",
+    name: "pre_tcs_final_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  preTcsFinalAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "tcs_rate_percent",
+    precision: 18,
+    scale: 4,
+    default: 0,
+  })
+  tcsRatePercent: string;
+
+  @Column({
+    type: "enum",
+    enum: PurposeRateType,
+    enumName: "purpose_rate_type_enum",
+    name: "tcs_rate_type",
+    nullable: true,
+  })
+  tcsRateType: PurposeRateType | null;
+
+  @Column({
+    type: "numeric",
+    name: "tcs_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  tcsAmount: string;
+
+  @Column({
+    type: "numeric",
     name: "taxable_amount",
     precision: 18,
     scale: 2,
@@ -316,6 +366,41 @@ export class Transaction extends BaseEntity {
   finalAmount: string;
 
   @Column({
+    type: "numeric",
+    name: "loan_amount",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  loanAmount: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "declared_amount",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  declaredAmount: string | null;
+
+  @Column({ type: "boolean", name: "itr_filed", nullable: true })
+  itrFiled: boolean | null;
+
+  @Column({
+    type: "boolean",
+    name: "tcs_declaration_accepted",
+    nullable: true,
+  })
+  tcsDeclarationAccepted: boolean | null;
+
+  @Column({
+    type: "boolean",
+    name: "is_proprietorship",
+    nullable: true,
+  })
+  isProprietorship: boolean | null;
+
+  @Column({
     type: "enum",
     enum: TransactionTaxSplitMode,
     name: "split_mode",
@@ -337,6 +422,9 @@ export class Transaction extends BaseEntity {
 
   @OneToMany(() => TransactionAdditionalCharge, (charge) => charge.transaction)
   additionalCharges: TransactionAdditionalCharge[];
+
+  @OneToMany(() => TransactionTcsBreakdown, (breakdown) => breakdown.transaction)
+  tcsBreakdowns: TransactionTcsBreakdown[];
 
   @OneToMany(() => TransactionPayment, (payment) => payment.transaction)
   payments: TransactionPayment[];

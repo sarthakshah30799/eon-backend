@@ -140,7 +140,12 @@ export class AdditionalSettingService {
   private resolveTransactionNumberSeriesCodes(seriesCode: string): string[] {
     const normalizedSeriesCode = normalizeCode(seriesCode);
 
-    if (normalizedSeriesCode === 'PURCHASE_CORPORATE' || normalizedSeriesCode === 'PURCHASE_INDIVIDUAL') {
+    if (
+      normalizedSeriesCode === 'PURCHASE_CORPORATE' ||
+      normalizedSeriesCode === 'PURCHASE_INDIVIDUAL' ||
+      normalizedSeriesCode === 'SALE_CORPORATE' ||
+      normalizedSeriesCode === 'SALE_INDIVIDUAL'
+    ) {
       return [...COMMON_PURCHASE_NUMBER_SERIES_CODES];
     }
 

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, ObjectLiteral, Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { TransactionLog } from './entities/transaction-log.entity';
 import { Transaction } from './entities/transaction.entity';
@@ -19,11 +19,14 @@ import { TransactionAdditionalCharge } from './entities/transaction-additional-c
 import { TransactionPayment } from './entities/transaction-payment.entity';
 import { TransactionAd1 } from './entities/transaction-ad1.entity';
 import { TransactionPassengerOtherDocument } from './entities/transaction-passenger-other-document.entity';
+import { PassengerOtherIdProofType } from '../passengers/passenger.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
 import { StorageService } from '../storage/storage.service';
 import { Purpose } from '../purpose/purpose.entity';
+import { PurposePartyProfileType } from '../purpose/purpose.enums';
+import { PurposeResponseDto } from '../purpose/dto/purpose-response.dto';
 import {
   TransactionPassengerSnapshotValue,
   TransactionReferenceSnapshotValue,
@@ -31,6 +34,10 @@ import {
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { Passenger } from '../passengers/passenger.entity';
+import {
+  PassengerEntityType,
+  PassengerNationalityType,
+} from '../passengers/passenger.entity';
 import { SelectOption } from '../category-options/category-option.entity';
 import { Country } from '../country/country.entity';
 import { State } from '../state/state.entity';
@@ -49,6 +56,7 @@ import {
 } from './transaction-accounting.util';
 import { TransactionEvent } from './entities/transaction-event.entity';
 import { TransactionEventStatus, TransactionEventType } from './transactions.enums';
+import { DeepPartial } from 'typeorm';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -56,6 +64,135 @@ type UploadedDraftFile = {
   mimetype: string;
   size: number;
   buffer: Buffer;
+};
+
+type TransactionPassengerOtherDocumentPayload = {
+  documentType: string;
+  documentNumber: string;
+  validTill?: string | null;
+  issueAt?: string | null;
+  issueDate?: string | null;
+  expiryDate?: string | null;
+  documentFile?: string | null;
+  remarks?: string | null;
+};
+
+type TransactionPassengerPayload = {
+  entityType: string;
+  nationalityType: string;
+  residentStatus: string;
+  countryId: string;
+  stateId?: string | null;
+  locationId?: string | null;
+  city?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  email?: string | null;
+  contactNo?: string | null;
+  panNumber?: string | null;
+  panHolderName?: string | null;
+  panDob?: string | null;
+  panHolderRelationType?: string | null;
+  corporatePanNumber?: string | null;
+  corporatePanHolderName?: string | null;
+  corporatePanDob?: string | null;
+  corporatePanHolderRelationType?: string | null;
+  paidByPanNumber?: string | null;
+  paidByPanHolderName?: string | null;
+  paidByPanDob?: string | null;
+  gstNumber?: string | null;
+  gstStateId?: string | null;
+  passportNumber?: string | null;
+  passportIssueAt?: string | null;
+  passportIssueDate?: string | null;
+  passportExpiryDate?: string | null;
+  arrivalDate?: string | null;
+  isPep?: boolean | null;
+  otherDocuments?: TransactionPassengerOtherDocumentPayload[];
+};
+
+type TransactionItemPayload = {
+  currencyId: string;
+  productId: string;
+  currencyRateId?: string | null;
+  productCurrencyRateId?: string | null;
+  quantity: string | number;
+  per: string | number;
+  rate: string | number;
+  commission?: string | null;
+  commissionSnapshot?: Record<string, unknown> | null;
+  currencyRateSnapshot?: Record<string, unknown> | null;
+  productCurrencyRateSnapshot?: Record<string, unknown> | null;
+  pricingRuleSnapshot?: Record<string, unknown> | null;
+  remarks?: string | null;
+};
+
+type TransactionDocumentPayload = {
+  documentProfileId: string;
+  status?: TransactionDocumentStatus | null;
+  remarks?: string | null;
+};
+
+type TransactionAdditionalChargePayload = {
+  accountId: string;
+  amount: string | number;
+  gstRate?: string | null;
+  gstAmount?: string | null;
+  applyTax?: boolean;
+  remarks?: string | null;
+};
+
+type TransactionPaymentPayload = {
+  accountId: string;
+  paymentMethod: TransactionPaymentMethod;
+  paymentDirection?: TransactionPaymentDirection;
+  referenceNumber?: string | null;
+  referenceDate?: string | null;
+  branchName?: string | null;
+  drawnOn?: string | null;
+  chequePageId?: string | null;
+  chequePageSnapshot?: Record<string, unknown> | null;
+  amount: string | number;
+  remarks?: string | null;
+};
+
+type TransactionDraftPayload = {
+  rootTransactionId?: string | null;
+  revisionNo?: number;
+  number?: string | null;
+  slug?: string | null;
+  branchSnapshot?: TransactionReferenceSnapshotValue;
+  requiresApproval?: boolean;
+  partyProfileId: string;
+  purposeId?: string | null;
+  agentProfileId?: string | null;
+  passenger?: TransactionPassengerPayload | null;
+  manualBookPageId?: string | null;
+  manualBookPageSnapshot?: Record<string, unknown> | null;
+  transactionType: TransactionType;
+  tradeMode: import('./transactions.enums').TradeMode;
+  remarks?: string | null;
+  items?: TransactionItemPayload[];
+  documents?: TransactionDocumentPayload[];
+  additionalCharges?: TransactionAdditionalChargePayload[];
+  payments?: TransactionPaymentPayload[];
+};
+
+type TransactionTcsPreviewRequestPayload = {
+  transactionType: TransactionType;
+  purposeId: string;
+  slug?: string | null;
+  preTcsFinalAmount?: string | number | null;
+  itemBaseAmount?: string | number | null;
+  itemTaxAmount?: string | number | null;
+  additionalChargeBaseAmount?: string | number | null;
+  additionalChargeTaxAmount?: string | number | null;
+  loanAmount?: string | number | null;
+  declaredAmount?: string | number | null;
+  itrFiled?: boolean | null;
+  tcsDeclarationAccepted?: boolean | null;
+  isProprietorship?: boolean | null;
+  maxTcsRatePercent?: string | number | null;
 };
 
 @Injectable()
@@ -119,7 +256,7 @@ export class TransactionsService {
   async getAd1Agents(
     branchId: string,
     search?: string,
-  ): Promise<any[]> {
+  ): Promise<PartyProfile[]> {
     if (!branchId) {
       return [];
     }
@@ -164,6 +301,43 @@ export class TransactionsService {
     return Number.isFinite(parsedValue) ? parsedValue : 0;
   }
 
+  private resolveTransactionPartyProfileType(
+    slug?: string | null,
+  ): PurposePartyProfileType | null {
+    const normalizedSlug = String(slug ?? '').trim().toLowerCase();
+
+    if (normalizedSlug === 'corporate') {
+      return PurposePartyProfileType.CORPORATE;
+    }
+
+    if (normalizedSlug === 'individual') {
+      return PurposePartyProfileType.INDIVIDUAL;
+    }
+
+    return null;
+  }
+
+  private purposeAppliesToContext(
+    purpose: Pick<Purpose, 'corporate' | 'individual' | 'sell' | 'purchase'>,
+    transactionType: TransactionType,
+    partyProfileType: PurposePartyProfileType | null,
+  ): boolean {
+    const matchesTransactionType =
+      transactionType === TransactionType.SALE ? purpose.sell : purpose.purchase;
+
+    if (!matchesTransactionType) {
+      return false;
+    }
+
+    if (!partyProfileType) {
+      return true;
+    }
+
+    return partyProfileType === PurposePartyProfileType.CORPORATE
+      ? purpose.corporate
+      : purpose.individual;
+  }
+
   private async resolveGstRatePercent(): Promise<number> {
     const configuredRate = await this.additionalSettingService.getSettingTextValue(
       'TAX_CONFIGURATION',
@@ -182,7 +356,7 @@ export class TransactionsService {
     return parsedRate;
   }
 
-  private async runGstPreview(body: Record<string, any>): Promise<Record<string, any>> {
+  private async runGstPreview(body: Record<string, unknown>): Promise<Record<string, unknown>> {
     const transactionPayload = body.transaction ?? body;
     const previewRows = await this.transactionRepository.query(
       `SELECT public.calculate_transaction_gst_preview($1::jsonb) AS preview`,
@@ -193,8 +367,68 @@ export class TransactionsService {
     return typeof preview === 'string' ? JSON.parse(preview) : preview ?? {};
   }
 
-  async previewTransactionTax(body: Record<string, any>): Promise<Record<string, any>> {
+  async previewTransactionTax(body: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.runGstPreview(body);
+  }
+
+  private async runTcsPreview(
+    body: TransactionTcsPreviewRequestPayload,
+  ): Promise<Record<string, unknown>> {
+    const purposeId = String(body.purposeId ?? '').trim();
+    if (!purposeId) {
+      throw new BadRequestException('Purpose is required for TCS preview');
+    }
+
+    const purpose = await this.purposeRepository.findOne({
+      where: { id: purposeId },
+      relations: { slabs: true },
+    });
+
+    if (!purpose) {
+      throw new NotFoundException(`Purpose with id ${purposeId} not found`);
+    }
+
+    const pagePartyProfileType = this.resolveTransactionPartyProfileType(body.slug);
+    if (!this.purposeAppliesToContext(purpose, body.transactionType, pagePartyProfileType)) {
+      throw new BadRequestException(
+        `Purpose ${purpose.code} is not valid for ${body.transactionType}`,
+      );
+    }
+
+    const preTcsFinalAmount =
+      body.preTcsFinalAmount !== undefined && body.preTcsFinalAmount !== null
+        ? this.toNumber(body.preTcsFinalAmount)
+        : this.toNumber(body.itemBaseAmount) +
+          this.toNumber(body.itemTaxAmount) +
+          this.toNumber(body.additionalChargeBaseAmount) +
+          this.toNumber(body.additionalChargeTaxAmount);
+
+    const payload = {
+      transactionType: body.transactionType,
+      purposeId: purpose.id,
+      purposeSnapshot: PurposeResponseDto.fromEntity(purpose),
+      preTcsFinalAmount,
+      loanAmount: this.toNumber(body.loanAmount),
+      declaredAmount: this.toNumber(body.declaredAmount),
+      itrFiled: Boolean(body.itrFiled),
+      tcsDeclarationAccepted: Boolean(body.tcsDeclarationAccepted),
+      isProprietorship: Boolean(body.isProprietorship),
+      maxTcsRatePercent: this.toNumber(body.maxTcsRatePercent ?? 20),
+    };
+
+    const previewRows = await this.transactionRepository.query(
+      `SELECT public.calculate_transaction_tcs_preview($1::jsonb) AS preview`,
+      [JSON.stringify(payload)],
+    );
+
+    const preview = previewRows?.[0]?.preview ?? previewRows?.[0]?.calculate_transaction_tcs_preview ?? null;
+    return typeof preview === 'string' ? JSON.parse(preview) : preview ?? {};
+  }
+
+  async previewTransactionTcs(
+    body: TransactionTcsPreviewRequestPayload,
+  ): Promise<Record<string, unknown>> {
+    return this.runTcsPreview(body);
   }
 
   private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
@@ -586,7 +820,7 @@ export class TransactionsService {
   }
 
   async createDraft(
-    body: Record<string, any>,
+    body: Record<string, unknown>,
     files: UploadedDraftFile[],
     performedById: string | null,
     activeBranchId: string | null = null,
@@ -596,7 +830,7 @@ export class TransactionsService {
       throw new BadRequestException('User session not found');
     }
 
-    const transactionPayload = this.parseJsonField<Record<string, any>>(
+    const transactionPayload = this.parseJsonField<Partial<TransactionDraftPayload>>(
       body.transaction,
       {},
     );
@@ -723,9 +957,16 @@ export class TransactionsService {
         `Purpose with id ${purposeId} not found`,
       );
     }
+    const transactionPartyProfileType = this.resolveTransactionPartyProfileType(
+      transactionPayload.slug,
+    );
     if (
       purpose &&
-      purpose.transactionType !== transactionPayload.transactionType
+      !this.purposeAppliesToContext(
+        purpose,
+        transactionPayload.transactionType,
+        transactionPartyProfileType,
+      )
     ) {
       throw new BadRequestException(
         `Purpose ${purpose.code} is not valid for ${transactionPayload.transactionType}`,
@@ -758,7 +999,7 @@ export class TransactionsService {
       ].filter(Boolean) as Array<Record<string, string>>;
 
       const existingPassenger = passengerLookup.length
-        ? await this.passengerRepository.findOne({ where: passengerLookup as any })
+        ? await this.passengerRepository.findOne({ where: passengerLookup as never })
         : null;
 
       const residentStatusOption = passengerPayload.residentStatus
@@ -770,12 +1011,11 @@ export class TransactionsService {
           })
         : null;
 
-      const savedPassenger = await this.passengerRepository.save(
-        this.passengerRepository.create({
+      const passengerToSave: DeepPartial<Passenger> = {
           id: existingPassenger?.id ?? undefined,
           partyProfileId: String(transactionPayload.partyProfileId),
-          entityType: passengerPayload.entityType,
-          nationalityType: passengerPayload.nationalityType,
+          entityType: passengerPayload.entityType as PassengerEntityType,
+          nationalityType: passengerPayload.nationalityType as PassengerNationalityType,
           countryId: String(passengerPayload.countryId),
           residentStatusId: residentStatusOption?.id ?? null,
           locationId: passengerPayload.locationId ?? null,
@@ -791,8 +1031,7 @@ export class TransactionsService {
           corporatePanNumber: passengerPayload.corporatePanNumber ?? null,
           corporatePanHolderName: passengerPayload.corporatePanHolderName ?? null,
           corporatePanDob: passengerPayload.corporatePanDob ?? null,
-          corporatePanHolderRelationType:
-            passengerPayload.corporatePanHolderRelationType ?? null,
+          corporatePanHolderRelationType: passengerPayload.corporatePanHolderRelationType ?? null,
           gstStateId: passengerPayload.gstStateId ?? null,
           gstNumber: passengerPayload.gstNumber ?? null,
           address1: passengerPayload.address1 ?? null,
@@ -808,7 +1047,10 @@ export class TransactionsService {
           remarks: null,
           createdBy: performedById,
           updatedBy: performedById,
-        }),
+        };
+
+      const savedPassenger = await this.passengerRepository.save(
+        this.passengerRepository.create(passengerToSave),
       );
 
       passengerId = savedPassenger.id;
@@ -873,12 +1115,11 @@ export class TransactionsService {
         : null;
       const mimeType = hasDataUrlPrefix ? rawFile.slice(5, rawFile.indexOf(';')) : null;
 
-      await this.transactionPassengerOtherDocumentRepository.save(
-        this.transactionPassengerOtherDocumentRepository.create({
+      const passengerOtherDocumentToSave: DeepPartial<TransactionPassengerOtherDocument> = {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          documentType: row.documentType,
+          documentType: row.documentType as PassengerOtherIdProofType,
           documentNumber: String(row.documentNumber),
           validTill: row.validTill ?? null,
           issueAt: row.issueAt ?? null,
@@ -895,7 +1136,10 @@ export class TransactionsService {
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
-        }),
+        };
+
+      await this.transactionPassengerOtherDocumentRepository.save(
+        this.transactionPassengerOtherDocumentRepository.create(passengerOtherDocumentToSave),
       );
     }
 
@@ -903,9 +1147,9 @@ export class TransactionsService {
     const productSnapshots = new Map<string, Record<string, unknown>>();
     const accountSnapshots = new Map<string, Record<string, unknown>>();
     const documentProfileSnapshots = new Map<string, Record<string, unknown>>();
-    const resolveSnapshot = async (
+    const resolveSnapshot = async <T extends ObjectLiteral>(
       cache: Map<string, Record<string, unknown>>,
-      repository: Repository<any>,
+      repository: Repository<T>,
       id: string,
       label: string,
     ) => {
@@ -1004,8 +1248,7 @@ export class TransactionsService {
         itemAccount.id,
       );
 
-      await this.transactionItemRepository.save(
-        this.transactionItemRepository.create({
+      const transactionItemToSave: DeepPartial<TransactionItem> = {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
@@ -1016,7 +1259,7 @@ export class TransactionsService {
           currencyRateId: row.currencyRateId ?? null,
           productCurrencyRateId: row.productCurrencyRateId ?? null,
           quantity: String(row.quantity),
-          per: row.per ?? null,
+          per: row.per === null || row.per === undefined ? null : String(row.per),
           rate: String(row.rate),
           commission: row.commission ?? null,
           currencySnapshot: currency as TransactionReferenceSnapshotValue,
@@ -1028,7 +1271,10 @@ export class TransactionsService {
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
-        }),
+        };
+
+      await this.transactionItemRepository.save(
+        this.transactionItemRepository.create(transactionItemToSave),
       );
     }
 
@@ -1070,8 +1316,7 @@ export class TransactionsService {
         }
       }
 
-      await this.transactionDocumentRepository.save(
-        this.transactionDocumentRepository.create({
+      const transactionDocumentToSave: DeepPartial<TransactionDocument> = {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
@@ -1089,7 +1334,10 @@ export class TransactionsService {
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
-        }),
+        };
+
+      await this.transactionDocumentRepository.save(
+        this.transactionDocumentRepository.create(transactionDocumentToSave),
       );
     }
 

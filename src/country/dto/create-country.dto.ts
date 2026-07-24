@@ -51,6 +51,11 @@ export class CreateCountryDto {
   @IsOptional()
   baseCountry?: boolean;
 
+  @ApiPropertyOptional({ description: "CIS country flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  isCisCountry?: boolean;
+
   @ApiPropertyOptional({ description: "Country group UUID" })
   @IsUUID()
   @IsOptional()

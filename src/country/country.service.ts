@@ -7,6 +7,7 @@ import { UpdateCountryDto } from "./dto/update-country.dto";
 import { CountryResponseDto } from "./dto/country-response.dto";
 import { CountryListQueryDto } from "./dto/country-list-query.dto";
 import { CountryListResponseDto } from "./dto/country-list-response.dto";
+import { CountryGroup } from "../country-groups/country-group.entity";
 
 function normalizeCountryDto(dto: CreateCountryDto | UpdateCountryDto) {
   return {
@@ -18,7 +19,7 @@ function normalizeCountryDto(dto: CreateCountryDto | UpdateCountryDto) {
   };
 }
 
-function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> {
+function pickDefinedFields<T extends Record<string, unknown>>(value: T): Partial<T> {
   const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
   return Object.fromEntries(entries) as Partial<T>;
 }
@@ -43,11 +44,12 @@ export class CountryService {
 
     const country = this.countryRepository.create({
       ...normalized,
-      countryGroup: countryGroupId ? ({ id: countryGroupId } as any) : null,
+      countryGroup: countryGroupId ? ({ id: countryGroupId } as CountryGroup) : null,
       riskCategory: normalized.riskCategory ?? CountryRiskCategory.Low,
       restrictedCountry: normalized.restrictedCountry ?? false,
       greyListCountry: normalized.greyListCountry ?? false,
       baseCountry: normalized.baseCountry ?? false,
+      isCisCountry: normalized.isCisCountry ?? false,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -73,7 +75,7 @@ export class CountryService {
     Object.assign(country, updates);
 
     if (countryGroupId !== undefined) {
-      country.countryGroup = countryGroupId ? ({ id: countryGroupId } as any) : null;
+      country.countryGroup = countryGroupId ? ({ id: countryGroupId } as CountryGroup) : null;
     }
 
     country.updatedBy = userId;

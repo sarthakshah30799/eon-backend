@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Purpose } from '../purpose.entity';
 import { PurposeRateType } from '../purpose.enums';
 import { PurposeSlabResponseDto } from './purpose-slab-response.dto';
-import { TransactionType } from '../../transactions/transactions.enums';
 
 export class PurposeResponseDto {
   @ApiProperty()
@@ -23,8 +22,17 @@ export class PurposeResponseDto {
   @ApiProperty({ enum: PurposeRateType })
   rateType: PurposeRateType;
 
-  @ApiProperty({ enum: TransactionType })
-  transactionType: TransactionType;
+  @ApiProperty()
+  corporate: boolean;
+
+  @ApiProperty()
+  individual: boolean;
+
+  @ApiProperty()
+  sell: boolean;
+
+  @ApiProperty()
+  purchase: boolean;
 
   @ApiProperty({ type: [PurposeSlabResponseDto] })
   slabs: PurposeSlabResponseDto[];
@@ -49,7 +57,10 @@ export class PurposeResponseDto {
     dto.threshold = Number(entity.threshold);
     dto.rate = Number(entity.rate);
     dto.rateType = entity.rateType;
-    dto.transactionType = entity.transactionType;
+    dto.corporate = entity.corporate;
+    dto.individual = entity.individual;
+    dto.sell = entity.sell;
+    dto.purchase = entity.purchase;
     dto.slabs = (entity.slabs ?? [])
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)

@@ -1,9 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Length, ValidateNested, Min } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { PurposeRateType } from '../purpose.enums';
 import { PurposeSlabDto } from './purpose-slab.dto';
-import { TransactionType } from '../../transactions/transactions.enums';
 
 export class CreatePurposeDto {
   @ApiProperty({ description: '2-character purpose code', example: 'B' })
@@ -36,9 +46,29 @@ export class CreatePurposeDto {
   @IsOptional()
   rateType?: PurposeRateType;
 
-  @ApiProperty({ enum: TransactionType })
-  @IsEnum(TransactionType)
-  transactionType: TransactionType;
+  @ApiPropertyOptional({ default: true })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  corporate?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  individual?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  sell?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @Type(() => Boolean)
+  @IsBoolean()
+  @IsOptional()
+  purchase?: boolean;
 
   @ApiPropertyOptional({ type: [PurposeSlabDto] })
   @IsArray()

@@ -49,4 +49,7 @@ export class Country extends BaseEntity {
 
   @Column({ type: "boolean", default: false })
   baseCountry: boolean;
+
+  @Column({ type: "boolean", name: "is_cis_country", default: false })
+  isCisCountry: boolean;
 }
