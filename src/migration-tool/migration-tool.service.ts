@@ -421,6 +421,13 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
     createPath: '/admin/miscellaneous-profile/create',
     editPath: '/admin/miscellaneous-profile/edit/:code',
   }),
+  ...buildCrudMenuSeeds({
+    basePath: '/admin/purpose',
+    name: 'Purpose',
+    isAdmin: true,
+    createPath: '/admin/purpose/create',
+    editPath: '/admin/purpose/edit/:id',
+  }),
   { path: '/admin/menu-management', name: 'Menu Management', parentPath: null, isAdmin: true, sortOrder: 40 },
   { path: '/reports', name: 'Reports', parentPath: null, isAdmin: false, sortOrder: 41 },
   { path: '/reports/:slug', name: 'Report Detail', parentPath: '/reports', isAdmin: false, sortOrder: 1 },
