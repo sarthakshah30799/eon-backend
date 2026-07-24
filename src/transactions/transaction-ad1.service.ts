@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DeepPartial, Repository } from 'typeorm';
 import { TransactionAd1 } from './entities/transaction-ad1.entity';
 import { Branch } from '../branches/branch.entity';
 import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
@@ -10,6 +10,53 @@ import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { Product } from '../products/product.entity';
 import { Purpose } from '../purpose/purpose.entity';
 import { TransactionProfileType, TransactionType } from './transactions.enums';
+
+interface Ad1Payload {
+  currencyId?: string;
+  productId?: string;
+  agentId?: string;
+  bankNameId?: string;
+  marketingId?: string;
+  segmentId?: string;
+  purposeId?: string;
+  relationshipId?: string;
+  transactionType?: TransactionType;
+  profileType?: TransactionProfileType;
+  docNo?: string;
+  dealId?: string;
+  transactionDate?: string;
+  servicedBy?: string;
+  remitterName?: string;
+  contactNo?: string;
+  email?: string;
+  address?: string;
+  pan?: string;
+  dateOfBirth?: string;
+  beneficiaryName?: string;
+  beniAddress?: string;
+  beneAccountNumber?: string;
+  beneBankName?: string;
+  swiftCode?: string;
+  fcVolume?: string | number | null;
+  saleRate?: string | number | null;
+  totalInrAmt?: string | number | null;
+  gst?: string | number | null;
+  bankCharges?: string | number | null;
+  tcs?: string | number | null;
+  otherIncome?: string | number | null;
+  finalAmount?: string | number | null;
+  settlementRate?: string | number | null;
+  grossRevenue?: string | number | null;
+  revenueReceivable?: string | number | null;
+  agentComm?: string | number | null;
+  tds?: string | number | null;
+  commissionPayable?: string | number | null;
+  netRevenue?: string | number | null;
+  rtgsImpsNeftRefNo?: string;
+  remarks?: string;
+  fxRefAgentId?: string;
+  [key: string]: unknown;
+}
 
 @Injectable()
 export class TransactionAd1Service {
@@ -35,7 +82,7 @@ export class TransactionAd1Service {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   private async resolveSnapshots(
-    payload: Record<string, any>,
+    payload: Ad1Payload,
     branchId?: string | null,
   ): Promise<Partial<TransactionAd1>> {
     const snapshots: Partial<TransactionAd1> = {};
@@ -87,7 +134,19 @@ export class TransactionAd1Service {
         throw new BadRequestException(`Purpose with id ${payload.purposeId} not found`);
       }
 
-      if (payload.transactionType && purpose.transactionType !== payload.transactionType) {
+      if (
+        payload.transactionType === TransactionType.SALE &&
+        !purpose.sell
+      ) {
+        throw new BadRequestException(
+          `Purpose ${purpose.code} is not valid for ${payload.transactionType}`,
+        );
+      }
+
+      if (
+        payload.transactionType === TransactionType.PURCHASE &&
+        !purpose.purchase
+      ) {
         throw new BadRequestException(
           `Purpose ${purpose.code} is not valid for ${payload.transactionType}`,
         );
@@ -102,6 +161,14 @@ export class TransactionAd1Service {
     }
 
     return snapshots;
+  }
+
+  private toNullableString(value: unknown): string | null {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+
+    return String(value);
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -127,7 +194,7 @@ export class TransactionAd1Service {
   }
 
   async create(
-    payload: Record<string, any>,
+    payload: Ad1Payload,
     performedById: string,
     activeBranchId: string | null,
   ): Promise<TransactionAd1> {
@@ -144,8 +211,7 @@ export class TransactionAd1Service {
 
     const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
-    const ad1 = await this.repo.save(
-      this.repo.create({
+    const ad1Data: DeepPartial<TransactionAd1> = {
         number: String(payload.docNo),
         branchId: String(resolvedBranchId),
         companyId,
@@ -175,29 +241,30 @@ export class TransactionAd1Service {
         swiftCode: payload.swiftCode || null,
         relationshipId: payload.relationshipId || null,
         currencyId: payload.currencyId || null,
-        fcVolume: payload.fcVolume || null,
-        saleRate: payload.saleRate || null,
-        totalInrAmt: payload.totalInrAmt || null,
-        gst: payload.gst || null,
-        bankCharges: payload.bankCharges || null,
-        tcs: payload.tcs || null,
-        otherIncome: payload.otherIncome || null,
-        finalAmount: payload.finalAmount || null,
-        settlementRate: payload.settlementRate || null,
-        grossRevenue: payload.grossRevenue || null,
-        revenueReceivable: payload.revenueReceivable || null,
+        fcVolume: this.toNullableString(payload.fcVolume),
+        saleRate: this.toNullableString(payload.saleRate),
+        totalInrAmt: this.toNullableString(payload.totalInrAmt),
+        gst: this.toNullableString(payload.gst),
+        bankCharges: this.toNullableString(payload.bankCharges),
+        tcs: this.toNullableString(payload.tcs),
+        otherIncome: this.toNullableString(payload.otherIncome),
+        finalAmount: this.toNullableString(payload.finalAmount),
+        settlementRate: this.toNullableString(payload.settlementRate),
+        grossRevenue: this.toNullableString(payload.grossRevenue),
+        revenueReceivable: this.toNullableString(payload.revenueReceivable),
         agentId: payload.agentId || payload.fxRefAgentId || null,
-        agentComm: payload.agentComm || null,
-        tds: payload.tds || null,
-        commissionPayable: payload.commissionPayable || null,
-        netRevenue: payload.netRevenue || null,
+        agentComm: this.toNullableString(payload.agentComm),
+        tds: this.toNullableString(payload.tds),
+        commissionPayable: this.toNullableString(payload.commissionPayable),
+        netRevenue: this.toNullableString(payload.netRevenue),
         bankNameId: payload.bankNameId || null,
         rtgsImpsNeftRefNo: payload.rtgsImpsNeftRefNo || null,
         remarks: payload.remarks || null,
 
         ...snapshots,
-      }),
-    );
+      };
+
+    const ad1 = await this.repo.save(this.repo.create(ad1Data));
 
     return this.repo.findOne({ where: { id: ad1.id } });
   }
@@ -227,7 +294,7 @@ export class TransactionAd1Service {
 
   async update(
     id: string,
-    payload: Record<string, any>,
+    payload: Ad1Payload,
     performedById: string,
     activeBranchId: string | null,
   ): Promise<TransactionAd1> {
@@ -251,7 +318,8 @@ export class TransactionAd1Service {
 
     for (const field of fields) {
       if (payload[field] !== undefined) {
-        (ad1 as any)[field] = payload[field] || null;
+        const ad1Record = ad1 as unknown as Record<string, unknown>;
+        ad1Record[field] = payload[field] ?? null;
       }
     }
 

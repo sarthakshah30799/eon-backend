@@ -56,3 +56,20 @@ export interface TransactionPassengerSnapshot extends TransactionReferenceSnapsh
 export type TransactionPassengerSnapshotValue =
   | TransactionPassengerSnapshot
   | null;
+
+export interface TransactionPassengerTravelSnapshot extends TransactionReferenceSnapshot {
+  airlineTt?: TransactionReferenceSnapshotValue;
+  ticketNo?: string | null;
+  route?: string | null;
+  travellingCountry?: TransactionReferenceSnapshotValue;
+  noOfDays?: number | null;
+  noOfPax?: number | null;
+  departureDate?: string | null;
+  travelPnr?: string | null;
+  visa?: boolean | null;
+  isCisCountry?: boolean | null;
+}
+
+export type TransactionPassengerTravelSnapshotValue =
+  | TransactionPassengerTravelSnapshot
+  | null;

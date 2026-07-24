@@ -1,13 +1,12 @@
-import { Column, Entity, Index, OneToMany, Check } from 'typeorm';
+import { Check, Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
 import { PurposeSlab } from './purpose-slab.entity';
 import { PurposeRateType } from './purpose.enums';
-import { TransactionType } from '../transactions/transactions.enums';
 
 @Entity('purposes')
 @Index('IDX_purposes_code', ['code'], { unique: true })
-@Index('IDX_purposes_transaction_type', ['transactionType'])
 @Check('CHK_purposes_code_length', 'char_length("code") = 2')
+@Check('CHK_purposes_scope_flags', '("corporate" OR "individual") AND ("sell" OR "purchase")')
 export class Purpose extends BaseEntity {
   @Column({ type: 'citext' })
   code: string;
@@ -30,13 +29,17 @@ export class Purpose extends BaseEntity {
   })
   rateType: PurposeRateType;
 
-  @Column({
-    type: 'enum',
-    enum: TransactionType,
-    enumName: 'transactions_transaction_type_enum',
-    name: 'transaction_type',
-  })
-  transactionType: TransactionType;
+  @Column({ type: 'boolean', name: 'corporate', default: false })
+  corporate: boolean;
+
+  @Column({ type: 'boolean', name: 'individual', default: false })
+  individual: boolean;
+
+  @Column({ type: 'boolean', name: 'sell', default: false })
+  sell: boolean;
+
+  @Column({ type: 'boolean', name: 'purchase', default: false })
+  purchase: boolean;
 
   @OneToMany(() => PurposeSlab, slab => slab.purpose, {
     cascade: true,

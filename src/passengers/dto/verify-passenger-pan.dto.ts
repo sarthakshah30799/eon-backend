@@ -1,9 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 import {
   PassengerEntityType,
   PassengerNationalityType,
-  PassengerPanHolderRelationType,
 } from '../passenger.entity';
 
 export class VerifyPassengerPanDto {
@@ -27,8 +26,8 @@ export class VerifyPassengerPanDto {
   @IsOptional()
   panDob?: string;
 
-  @ApiPropertyOptional({ enum: PassengerPanHolderRelationType })
+  @ApiPropertyOptional({ example: 'Company', description: 'Dynamic category option value' })
   @IsOptional()
-  @IsEnum(PassengerPanHolderRelationType)
-  panHolderRelationType?: PassengerPanHolderRelationType;
+  @IsString()
+  panHolderRelationType?: string;
 }
