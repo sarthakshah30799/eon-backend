@@ -1,9 +1,10 @@
-import { Check, Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { Country } from "../country/country.entity";
 import { State } from "../state/state.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { PassengerTravel } from "./passenger-travel.entity";
 
 export enum PassengerEntityType {
   CORPORATE = "CORPORATE",
@@ -16,10 +17,7 @@ export enum PassengerNationalityType {
   FOREIGNER = "FOREIGNER",
 }
 
-export enum PassengerPanHolderRelationType {
-  COMPANY = "COMPANY",
-  INDIVIDUAL = "INDIVIDUAL",
-}
+export type PassengerPanHolderRelationType = string;
 
 export enum PassengerOtherIdProofType {
   AADHAAR = "AADHAAR",
@@ -132,8 +130,7 @@ export class Passenger extends BaseEntity {
   panDob: string | null;
 
   @Column({
-    type: "enum",
-    enum: PassengerPanHolderRelationType,
+    type: "citext",
     nullable: true,
   })
   panHolderRelationType: PassengerPanHolderRelationType | null;
@@ -165,8 +162,7 @@ export class Passenger extends BaseEntity {
   corporatePanDob: string | null;
 
   @Column({
-    type: "enum",
-    enum: PassengerPanHolderRelationType,
+    type: "citext",
     nullable: true,
   })
   corporatePanHolderRelationType: PassengerPanHolderRelationType | null;
@@ -217,6 +213,9 @@ export class Passenger extends BaseEntity {
 
   @Column({ type: "date", name: "arrival_date", nullable: true })
   arrivalDate: string | null;
+
+  @OneToMany(() => PassengerTravel, (travel) => travel.passenger)
+  travels: PassengerTravel[];
 
   @Column({ type: "boolean", name: "is_pep", default: false })
   isPep: boolean;

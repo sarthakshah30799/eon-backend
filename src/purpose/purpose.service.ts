@@ -7,6 +7,7 @@ import { CreatePurposeDto } from './dto/create-purpose.dto';
 import { UpdatePurposeDto } from './dto/update-purpose.dto';
 import { PurposeResponseDto } from './dto/purpose-response.dto';
 import { PurposeListQueryDto } from './dto/purpose-list-query.dto';
+import { TransactionType } from '../transactions/transactions.enums';
 
 @Injectable()
 export class PurposeService {
@@ -47,6 +48,16 @@ export class PurposeService {
       if (slab.toAmount !== undefined && slab.toAmount !== null && slab.toAmount < slab.fromAmount) {
         throw new BadRequestException(`Slab sort order ${slab.sortOrder}: toAmount cannot be less than fromAmount`);
       }
+    }
+  }
+
+  private ensureScopeRules(scope: Pick<Purpose, 'corporate' | 'individual' | 'sell' | 'purchase'>): void {
+    if (!scope.corporate && !scope.individual) {
+      throw new BadRequestException('Purpose must apply to at least one party profile type');
+    }
+
+    if (!scope.sell && !scope.purchase) {
+      throw new BadRequestException('Purpose must apply to at least one transaction type');
     }
   }
 
@@ -96,10 +107,20 @@ export class PurposeService {
       );
     }
 
-    if (query?.transactionType) {
-      qb.andWhere('purpose.transactionType = :transactionType', {
-        transactionType: query.transactionType,
-      });
+    if (query?.transactionType === TransactionType.SALE) {
+      qb.andWhere('purpose.sell = true');
+    }
+
+    if (query?.transactionType === TransactionType.PURCHASE) {
+      qb.andWhere('purpose.purchase = true');
+    }
+
+    if (query?.partyProfileType === 'CORPORATE') {
+      qb.andWhere('purpose.corporate = true');
+    }
+
+    if (query?.partyProfileType === 'INDIVIDUAL') {
+      qb.andWhere('purpose.individual = true');
     }
 
     const purposes = await qb
@@ -124,6 +145,13 @@ export class PurposeService {
     const code = this.normalizeCode(dto.code);
     this.ensureCodeLength(code);
     this.ensureSlabRules(dto.slabs);
+    const scope = {
+      corporate: dto.corporate ?? false,
+      individual: dto.individual ?? false,
+      sell: dto.sell ?? false,
+      purchase: dto.purchase ?? false,
+    };
+    this.ensureScopeRules(scope);
     await this.ensureUniqueCode(code);
 
     const result = await this.dataSource.transaction(async manager => {
@@ -136,7 +164,7 @@ export class PurposeService {
         threshold: String(dto.threshold ?? 0),
         rate: String(dto.rate ?? 0),
         rateType: dto.rateType ?? undefined,
-        transactionType: dto.transactionType,
+        ...scope,
         createdBy: userId,
         updatedBy: userId,
       });
@@ -208,9 +236,19 @@ export class PurposeService {
       if (dto.rateType !== undefined) {
         existing.rateType = dto.rateType;
       }
-      if (dto.transactionType !== undefined) {
-        existing.transactionType = dto.transactionType;
+      if (dto.corporate !== undefined) {
+        existing.corporate = dto.corporate;
       }
+      if (dto.individual !== undefined) {
+        existing.individual = dto.individual;
+      }
+      if (dto.sell !== undefined) {
+        existing.sell = dto.sell;
+      }
+      if (dto.purchase !== undefined) {
+        existing.purchase = dto.purchase;
+      }
+      this.ensureScopeRules(existing);
       existing.updatedBy = userId;
 
       await purposeRepository.save(existing);

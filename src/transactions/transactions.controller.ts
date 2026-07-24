@@ -149,6 +149,31 @@ export class TransactionsController {
     return this.transactionsService.previewTransactionTax(body);
   }
 
+  @Post('tcs-preview')
+  @ApiOperation({ summary: 'Preview TCS calculation for a transaction payload' })
+  async previewTcs(
+    @Body() body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this.transactionsService.previewTransactionTcs(
+      body as {
+        transactionType: import('./transactions.enums').TransactionType;
+        purposeId: string;
+        slug?: string | null;
+        preTcsFinalAmount?: string | number | null;
+        itemBaseAmount?: string | number | null;
+        itemTaxAmount?: string | number | null;
+        additionalChargeBaseAmount?: string | number | null;
+        additionalChargeTaxAmount?: string | number | null;
+        loanAmount?: string | number | null;
+        declaredAmount?: string | number | null;
+        itrFiled?: boolean | null;
+        tcsDeclarationAccepted?: boolean | null;
+        isProprietorship?: boolean | null;
+        maxTcsRatePercent?: string | number | null;
+      },
+    );
+  }
+
   @Post('purchase-rule-preview')
   @ApiOperation({ summary: 'Preview purchase rule validation for a transaction payload' })
   async previewPurchaseRule(

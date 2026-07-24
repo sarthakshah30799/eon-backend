@@ -10,6 +10,7 @@ import { TransactionLog } from "./entities/transaction-log.entity";
 import { TransactionEvent } from "./entities/transaction-event.entity";
 import { TransactionAd1 } from "./entities/transaction-ad1.entity";
 import { TransactionPassengerOtherDocument } from "./entities/transaction-passenger-other-document.entity";
+import { TransactionTcsBreakdown } from "./entities/transaction-tcs-breakdown.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
 import { TransactionAd1Service } from "./transaction-ad1.service";
@@ -69,6 +70,7 @@ import { PurchaseRuleService } from "./purchase-rule.service";
         TransactionLog,
         TransactionEvent,
         TransactionPassengerOtherDocument,
+        TransactionTcsBreakdown,
         ManualBookPageTracking,
         ChequeBookPageTracking,
       ],
