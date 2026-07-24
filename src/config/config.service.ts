@@ -65,11 +65,10 @@ export class ConfigService {
       database: this.get('DB_DATABASE'),
       database2: this.getOptional('DB2_DATABASE') || this.getOptional('DB_DATABASE2') || this.get('DB_DATABASE'),
       transactionDatabase: this.getOptional('DB2_DATABASE') || this.getOptional('DB_DATABASE2') || this.get('DB_DATABASE'),
-      synchronize: this.getBoolean('DB_SYNCHRONIZE') || false,
-      migrationsRun: this.getBoolean('DB_MIGRATIONS_RUN') || true,
       ssl: sslEnabled
         ? { rejectUnauthorized: this.getOptionalBoolean('DB_SSL_REJECT_UNAUTHORIZED') !== false }
         : false,
+      synchronize: false,
     };
   }
 

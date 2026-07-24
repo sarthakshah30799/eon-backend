@@ -20,6 +20,7 @@ import { Response } from 'express';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { RecordTransactionPrintDto } from './dto/record-transaction-print.dto';
 import { TransactionsService } from './transactions.service';
+import { PurchaseRuleService } from './purchase-rule.service';
 import { Transaction } from './entities/transaction.entity';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 
@@ -36,7 +37,10 @@ type UploadedDraftFile = {
 @UseGuards(AuthenticatedGuard)
 @Controller('transactions')
 export class TransactionsController {
-  constructor(private readonly transactionsService: TransactionsService) {}
+  constructor(
+    private readonly transactionsService: TransactionsService,
+    private readonly purchaseRuleService: PurchaseRuleService,
+  ) {}
 
   @Get('ad1/agents')
   @ApiOperation({ summary: 'Get agents for AD1 transactions' })
@@ -76,6 +80,7 @@ export class TransactionsController {
   @ApiOperation({ summary: 'Get approved quantity availability for a branch, currency, and product' })
   async getQuantityAvailability(
     @Session() session: any,
+    @Query('branchId') branchId?: string,
     @Query('currencyId') currencyId?: string,
     @Query('productId') productId?: string,
     @Query('excludeTransactionId') excludeTransactionId?: string,
@@ -87,7 +92,9 @@ export class TransactionsController {
     soldQuantity: string;
     availableQuantity: string;
   }> {
-    const effectiveBranchId = session?.activeBranchId;
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
+      ? branchId?.trim() || undefined
+      : session?.activeBranchId;
     if (!effectiveBranchId) {
       throw new BadRequestException('Branch is required');
     }
@@ -132,6 +139,22 @@ export class TransactionsController {
       session?.activeBranchId ?? null,
       session?.activeCounterId ?? null,
     );
+  }
+
+  @Post('tax-preview')
+  @ApiOperation({ summary: 'Preview GST tax calculation for a transaction payload' })
+  async previewTax(
+    @Body() body: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    return this.transactionsService.previewTransactionTax(body);
+  }
+
+  @Post('purchase-rule-preview')
+  @ApiOperation({ summary: 'Preview purchase rule validation for a transaction payload' })
+  async previewPurchaseRule(
+    @Body() body: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    return this.purchaseRuleService.preview(body);
   }
 
   @Get('next-number')

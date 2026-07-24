@@ -155,6 +155,16 @@ export class UserService {
     await this.userRoleRepository.save(userRoles);
   }
 
+  private async loadUserResponse(id: string): Promise<UserResponseDto> {
+    const user = await this.findEntityById(id);
+
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
+
+    return UserResponseDto.fromEntity(user);
+  }
+
   async findAll(
     currentUserId?: string,
     activeOnly = true,
@@ -273,7 +283,7 @@ export class UserService {
 
     await this.syncUserRoles(savedUser.id, assignments, userId);
 
-    return this.findById(savedUser.id);
+    return this.loadUserResponse(savedUser.id);
   }
 
   async update(id: string, dto: UpdateUserDto, userId: string): Promise<UserResponseDto> {
@@ -327,7 +337,7 @@ export class UserService {
       await this.syncUserRoles(saved.id, assignments, userId);
     }
 
-    return this.findById(saved.id);
+    return this.loadUserResponse(saved.id);
   }
 
   async delete(id: string, userId?: string): Promise<{ message: string }> {

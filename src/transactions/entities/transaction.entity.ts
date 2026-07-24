@@ -12,6 +12,7 @@ import {
   TradeMode,
   TransactionStatus,
   TransactionType,
+  TransactionTaxSplitMode,
 } from "../transactions.enums";
 import { TransactionItem } from "./transaction-item.entity";
 import { TransactionDocument } from "./transaction-document.entity";
@@ -20,7 +21,11 @@ import { TransactionPayment } from "./transaction-payment.entity";
 import { TransactionAccountPosting } from "./transaction-account-posting.entity";
 import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
-import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
+import { TransactionPassengerOtherDocument } from "./transaction-passenger-other-document.entity";
+import {
+  TransactionPassengerSnapshotValue,
+  TransactionReferenceSnapshotValue,
+} from "../types/transaction-snapshot.types";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
 @Index(
@@ -36,6 +41,8 @@ import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot
 @Index("IDX_transactions_company_id", ["companyId"])
 @Index("IDX_transactions_manual_book_page_id", ["manualBookPageId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
+@Index("IDX_transactions_passenger_id", ["passengerId"])
+@Index("IDX_transactions_purpose_id", ["purposeId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
 @Check(
@@ -89,6 +96,18 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "jsonb", name: "party_profile_snapshot", nullable: true })
   partyProfileSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "purpose_id", nullable: true })
+  purposeId: string | null;
+
+  @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
+  purposeSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "passenger_id", nullable: true })
+  passengerId: string | null;
+
+  @Column({ type: "jsonb", name: "passenger_snapshot", nullable: true })
+  passengerSnapshot: TransactionPassengerSnapshotValue;
 
   @Column({ type: "uuid", name: "agent_profile_id", nullable: true })
   agentProfileId: string | null;
@@ -197,11 +216,124 @@ export class Transaction extends BaseEntity {
   })
   byOther: string | null;
 
+  @Column({
+    type: "numeric",
+    name: "tax_rate_percent",
+    precision: 18,
+    scale: 4,
+    nullable: true,
+  })
+  taxRatePercent: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "taxable_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  taxableAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "item_base_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  itemBaseAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "item_taxable_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  itemTaxableAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "item_tax_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  itemTaxAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "additional_charge_base_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  additionalChargeBaseAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "additional_charge_tax_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  additionalChargeTaxAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "igst_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  igstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "cgst_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  cgstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "sgst_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  sgstAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "final_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  finalAmount: string;
+
+  @Column({
+    type: "enum",
+    enum: TransactionTaxSplitMode,
+    name: "split_mode",
+    nullable: true,
+  })
+  splitMode: TransactionTaxSplitMode | null;
+
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];
 
   @OneToMany(() => TransactionDocument, (document) => document.transaction)
   documents: TransactionDocument[];
+
+  @OneToMany(
+    () => TransactionPassengerOtherDocument,
+    (otherDocument) => otherDocument.transaction
+  )
+  passengerOtherDocuments: TransactionPassengerOtherDocument[];
 
   @OneToMany(() => TransactionAdditionalCharge, (charge) => charge.transaction)
   additionalCharges: TransactionAdditionalCharge[];

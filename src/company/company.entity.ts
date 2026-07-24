@@ -26,7 +26,7 @@ export class Company extends BaseEntity {
   @Column({ type: 'citext', nullable: true })
   cinNo: string;
 
-  @Column({ type: 'citext', nullable: false, unique: true })
+  @Column({ type: 'citext', nullable: false })
   panNo: string;
 
   @Column({ type: 'citext', nullable: true })

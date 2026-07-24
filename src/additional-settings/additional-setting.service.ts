@@ -42,6 +42,10 @@ const TRANSACTION_NUMBERING_CODE_LIST = Object.values(
 const TRANSACTION_NUMBERING_CODES = new Set<TransactionTypeProfile>(
   TRANSACTION_NUMBERING_CODE_LIST
 );
+const COMMON_PURCHASE_NUMBER_SERIES_CODES = [
+  'PURCHASE_CORPORATE',
+  'PURCHASE_INDIVIDUAL',
+] as const;
 
 const isTransactionTypeProfile = (
   code: string
@@ -131,6 +135,21 @@ export class AdditionalSettingService {
         'Transaction numbering series must be exactly 9 digits',
       );
     }
+  }
+
+  private resolveTransactionNumberSeriesCodes(seriesCode: string): string[] {
+    const normalizedSeriesCode = normalizeCode(seriesCode);
+
+    if (normalizedSeriesCode === 'PURCHASE_CORPORATE' || normalizedSeriesCode === 'PURCHASE_INDIVIDUAL') {
+      return [...COMMON_PURCHASE_NUMBER_SERIES_CODES];
+    }
+
+    return [normalizedSeriesCode];
+  }
+
+  private parseSeriesValue(setting: AdvancedSetting): number {
+    const value = setting.valueNumber ?? Number(setting.valueText ?? NaN);
+    return Number.isFinite(value) ? value : NaN;
   }
 
   private getPolicyHandlers(): Record<string, PolicyHandler> {
@@ -345,14 +364,14 @@ export class AdditionalSettingService {
     branchCode: string,
     referenceDate = new Date(),
   ): Promise<string> {
-    const normalizedSeriesCode = normalizeCode(seriesCode);
+    const normalizedSeriesCodes = this.resolveTransactionNumberSeriesCodes(seriesCode);
     const normalizedBranchCode = this.normalizeReferenceSegment(branchCode);
 
     if (!normalizedBranchCode) {
       throw new NotFoundException('Branch code is required to generate transaction number');
     }
 
-    if (!normalizedSeriesCode) {
+    if (!normalizedSeriesCodes.length) {
       throw new NotFoundException('Transaction series code is required');
     }
 
@@ -371,26 +390,29 @@ export class AdditionalSettingService {
         );
       }
 
-      const seriesSetting = await settingRepository.findOne({
-        where: {
-          parentId: category.id,
-          code: normalizedSeriesCode,
-          nodeType: NodeType.Setting,
-        },
-        lock: { mode: 'pessimistic_write' },
-      });
+      const seriesSettings = await settingRepository
+        .createQueryBuilder('setting')
+        .where('setting.parentId = :parentId', { parentId: category.id })
+        .andWhere('setting.nodeType = :nodeType', { nodeType: NodeType.Setting })
+        .andWhere('UPPER(setting.code) IN (:...codes)', {
+          codes: normalizedSeriesCodes.map(code => normalizeCode(code)),
+        })
+        .setLock('pessimistic_write')
+        .getMany();
 
-      if (!seriesSetting) {
+      if (!seriesSettings.length) {
         throw new NotFoundException(
-          `Transaction number series setting for ${normalizedSeriesCode} is not configured`,
+          `Transaction number series setting for ${normalizedSeriesCodes.join(', ')} is not configured`,
         );
       }
 
-      const currentSeries =
-        seriesSetting.valueNumber ?? Number(seriesSetting.valueText ?? NaN);
+      const seriesValues = seriesSettings
+        .map(setting => this.parseSeriesValue(setting))
+        .filter(value => Number.isFinite(value) && value >= 0);
+      const currentSeries = Math.max(...seriesValues);
       if (!Number.isFinite(currentSeries) || currentSeries < 0) {
         throw new NotFoundException(
-          `Transaction number series for ${normalizedSeriesCode} is invalid`,
+          `Transaction number series for ${normalizedSeriesCodes.join(', ')} is invalid`,
         );
       }
 
@@ -405,12 +427,15 @@ export class AdditionalSettingService {
         );
       }
 
-      seriesSetting.valueNumber = Math.trunc(currentSeries) + 1;
-      seriesSetting.valueText = null;
-      seriesSetting.valueDate = null;
-      seriesSetting.valueJson = null;
-      seriesSetting.valueBoolean = null;
-      await settingRepository.save(seriesSetting);
+      const nextSeries = Math.trunc(currentSeries) + 1;
+      for (const seriesSetting of seriesSettings) {
+        seriesSetting.valueNumber = nextSeries;
+        seriesSetting.valueText = null;
+        seriesSetting.valueDate = null;
+        seriesSetting.valueJson = null;
+        seriesSetting.valueBoolean = null;
+      }
+      await settingRepository.save(seriesSettings);
 
       return generated;
     });
@@ -421,14 +446,14 @@ export class AdditionalSettingService {
     branchCode: string,
     referenceDate = new Date(),
   ): Promise<{ nextNumber: string }> {
-    const normalizedSeriesCode = normalizeCode(seriesCode);
+    const normalizedSeriesCodes = this.resolveTransactionNumberSeriesCodes(seriesCode);
     const normalizedBranchCode = this.normalizeReferenceSegment(branchCode);
 
     if (!normalizedBranchCode) {
       throw new NotFoundException('Branch code is required to generate transaction number');
     }
 
-    if (!normalizedSeriesCode) {
+    if (!normalizedSeriesCodes.length) {
       throw new NotFoundException('Transaction series code is required');
     }
 
@@ -445,25 +470,28 @@ export class AdditionalSettingService {
       );
     }
 
-    const seriesSetting = await this.settingRepository.findOne({
-      where: {
-        parentId: category.id,
-        code: normalizedSeriesCode,
-        nodeType: NodeType.Setting,
-      },
-    });
+    const seriesSettings = await this.settingRepository
+      .createQueryBuilder('setting')
+      .where('setting.parentId = :parentId', { parentId: category.id })
+      .andWhere('setting.nodeType = :nodeType', { nodeType: NodeType.Setting })
+      .andWhere('UPPER(setting.code) IN (:...codes)', {
+        codes: normalizedSeriesCodes.map(code => normalizeCode(code)),
+      })
+      .getMany();
 
-    if (!seriesSetting) {
+    if (!seriesSettings.length) {
       throw new NotFoundException(
-        `Transaction number series setting for ${normalizedSeriesCode} is not configured`,
+        `Transaction number series setting for ${normalizedSeriesCodes.join(', ')} is not configured`,
       );
     }
 
-    const currentSeries =
-      seriesSetting.valueNumber ?? Number(seriesSetting.valueText ?? NaN);
+    const seriesValues = seriesSettings
+      .map(setting => this.parseSeriesValue(setting))
+      .filter(value => Number.isFinite(value) && value >= 0);
+    const currentSeries = Math.max(...seriesValues);
     if (!Number.isFinite(currentSeries) || currentSeries < 0) {
       throw new NotFoundException(
-        `Transaction number series for ${normalizedSeriesCode} is invalid`,
+        `Transaction number series for ${normalizedSeriesCodes.join(', ')} is invalid`,
       );
     }
 

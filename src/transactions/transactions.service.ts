@@ -18,13 +18,21 @@ import { TransactionDocument } from './entities/transaction-document.entity';
 import { TransactionAdditionalCharge } from './entities/transaction-additional-charge.entity';
 import { TransactionPayment } from './entities/transaction-payment.entity';
 import { TransactionAd1 } from './entities/transaction-ad1.entity';
+import { TransactionPassengerOtherDocument } from './entities/transaction-passenger-other-document.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
 import { StorageService } from '../storage/storage.service';
-import { TransactionReferenceSnapshotValue } from './types/transaction-snapshot.types';
+import {
+  TransactionPassengerSnapshotValue,
+  TransactionReferenceSnapshotValue,
+} from './types/transaction-snapshot.types';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
+import { Passenger } from '../passengers/passenger.entity';
+import { SelectOption } from '../category-options/category-option.entity';
+import { Country } from '../country/country.entity';
+import { State } from '../state/state.entity';
 import { CompanyService } from '../company/company.service';
 import { Branch } from '../branches/branch.entity';
 import { Counter } from '../counters/counter.entity';
@@ -33,6 +41,7 @@ import { ManualBookPageTracking } from '../manual-bill-books/entities/manual-boo
 import { ChequeBookPageTracking } from '../chequebooks/entities/cheque-book-page-tracking.entity';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
+import { PurchaseRuleService } from './purchase-rule.service';
 import {
   resolveProductTransactionAccount,
   roundMoney,
@@ -67,6 +76,8 @@ export class TransactionsService {
     private readonly transactionLogRepository: Repository<TransactionLog>,
     @InjectRepository(TransactionEvent, 'database2')
     private readonly transactionEventRepository: Repository<TransactionEvent>,
+    @InjectRepository(TransactionPassengerOtherDocument, 'database2')
+    private readonly transactionPassengerOtherDocumentRepository: Repository<TransactionPassengerOtherDocument>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
@@ -77,6 +88,14 @@ export class TransactionsService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
+    @InjectRepository(Passenger)
+    private readonly passengerRepository: Repository<Passenger>,
+    @InjectRepository(SelectOption)
+    private readonly selectOptionRepository: Repository<SelectOption>,
+    @InjectRepository(Country)
+    private readonly countryRepository: Repository<Country>,
+    @InjectRepository(State)
+    private readonly stateRepository: Repository<State>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Counter)
@@ -91,6 +110,7 @@ export class TransactionsService {
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
+    private readonly purchaseRuleService: PurchaseRuleService,
   ) { }
 
   async getAd1Agents(
@@ -141,32 +161,37 @@ export class TransactionsService {
     return Number.isFinite(parsedValue) ? parsedValue : 0;
   }
 
-  private calculateTransactionPayableTotal(transactionPayload: Record<string, any>): string {
-    const itemRows = Array.isArray(transactionPayload.items)
-      ? transactionPayload.items
-      : [];
-    const additionalChargeRows = Array.isArray(transactionPayload.additionalCharges)
-      ? transactionPayload.additionalCharges
-      : [];
-    const transactionType = transactionPayload.transactionType;
-
-    const itemTotal = itemRows.reduce((sum: number, row: Record<string, any>) => {
-      const quantity = this.toNumber(row.quantity);
-      const rate = this.toNumber(row.rate);
-      return sum + this.toNumber(roundMoney(quantity * rate));
-    }, 0);
-
-    const chargeMultiplier = transactionType === TransactionType.SALE ? 1 : -1;
-    const additionalChargeTotal = additionalChargeRows.reduce(
-      (sum: number, row: Record<string, any>) => {
-        const amount = this.toNumber(row.amount);
-        const gstAmount = this.toNumber(row.gstAmount);
-        return sum + (this.toNumber(roundMoney(amount + gstAmount)) * chargeMultiplier);
-      },
-      0,
+  private async resolveGstRatePercent(): Promise<number> {
+    const configuredRate = await this.additionalSettingService.getSettingTextValue(
+      'TAX_CONFIGURATION',
+      'GST_RATE',
     );
 
-    return (itemTotal + additionalChargeTotal).toFixed(2);
+    if (!configuredRate) {
+      throw new BadRequestException('Missing GST_RATE additional setting');
+    }
+
+    const parsedRate = Number(configuredRate);
+    if (!Number.isFinite(parsedRate)) {
+      throw new BadRequestException('GST_RATE additional setting must be numeric');
+    }
+
+    return parsedRate;
+  }
+
+  private async runGstPreview(body: Record<string, any>): Promise<Record<string, any>> {
+    const transactionPayload = body.transaction ?? body;
+    const previewRows = await this.transactionRepository.query(
+      `SELECT public.calculate_transaction_gst_preview($1::jsonb) AS preview`,
+      [JSON.stringify(transactionPayload)],
+    );
+
+    const preview = previewRows?.[0]?.preview ?? previewRows?.[0]?.calculate_transaction_gst_preview ?? null;
+    return typeof preview === 'string' ? JSON.parse(preview) : preview ?? {};
+  }
+
+  async previewTransactionTax(body: Record<string, any>): Promise<Record<string, any>> {
+    return this.runGstPreview(body);
   }
 
   private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
@@ -606,6 +631,8 @@ export class TransactionsService {
       throw new BadRequestException('Current company snapshot not found');
     }
 
+    const gstRatePercent = await this.resolveGstRatePercent();
+
     const selectedCounter = await this.counterRepository.findOne({
       where: { id: resolvedCounterId },
       relations: ['branch'],
@@ -684,6 +711,99 @@ export class TransactionsService {
       );
     }
 
+    const purposeId = String(transactionPayload.purposeId ?? '').trim() || null;
+    const purposeSnapshot = purposeId
+      ? ((await loadEntitySnapshot(
+          this.selectOptionRepository,
+          purposeId,
+        )) as TransactionReferenceSnapshotValue)
+      : null;
+    if (purposeId && !purposeSnapshot) {
+      throw new NotFoundException(
+        `Purpose option with id ${purposeId} not found`,
+      );
+    }
+
+    await this.purchaseRuleService.validate(transactionPayload);
+
+    const passengerPayload = transactionPayload.passenger ?? null;
+    let passengerId: string | null = null;
+    let passengerSnapshot: TransactionPassengerSnapshotValue = null;
+
+    if (passengerPayload) {
+      const passengerLookup = [
+        passengerPayload.corporatePanNumber
+          ? { corporatePanNumber: String(passengerPayload.corporatePanNumber).trim() }
+          : null,
+        passengerPayload.panNumber
+          ? { panNumber: String(passengerPayload.panNumber).trim() }
+          : null,
+        passengerPayload.passportNumber
+          ? { passportNumber: String(passengerPayload.passportNumber).trim() }
+          : null,
+      ].filter(Boolean) as Array<Record<string, string>>;
+
+      const existingPassenger = passengerLookup.length
+        ? await this.passengerRepository.findOne({ where: passengerLookup as any })
+        : null;
+
+      const residentStatusOption = passengerPayload.residentStatus
+        ? await this.selectOptionRepository.findOne({
+            where: {
+              code: 'RESIDENTSTATUS',
+              value: String(passengerPayload.residentStatus).trim(),
+            },
+          })
+        : null;
+
+      const savedPassenger = await this.passengerRepository.save(
+        this.passengerRepository.create({
+          id: existingPassenger?.id ?? undefined,
+          partyProfileId: String(transactionPayload.partyProfileId),
+          entityType: passengerPayload.entityType,
+          nationalityType: passengerPayload.nationalityType,
+          countryId: String(passengerPayload.countryId),
+          residentStatusId: residentStatusOption?.id ?? null,
+          locationId: passengerPayload.locationId ?? null,
+          email: passengerPayload.email ?? null,
+          contactNo: passengerPayload.contactNo ?? null,
+          panNumber: passengerPayload.panNumber ?? null,
+          panHolderName: passengerPayload.panHolderName ?? null,
+          panDob: passengerPayload.panDob ?? null,
+          panHolderRelationType: passengerPayload.panHolderRelationType ?? null,
+          paidByPanNumber: passengerPayload.paidByPanNumber ?? null,
+          paidByPanHolderName: passengerPayload.paidByPanHolderName ?? null,
+          paidByPanDob: passengerPayload.paidByPanDob ?? null,
+          corporatePanNumber: passengerPayload.corporatePanNumber ?? null,
+          corporatePanHolderName: passengerPayload.corporatePanHolderName ?? null,
+          corporatePanDob: passengerPayload.corporatePanDob ?? null,
+          corporatePanHolderRelationType:
+            passengerPayload.corporatePanHolderRelationType ?? null,
+          gstStateId: passengerPayload.gstStateId ?? null,
+          gstNumber: passengerPayload.gstNumber ?? null,
+          address1: passengerPayload.address1 ?? null,
+          address2: passengerPayload.address2 ?? null,
+          city: passengerPayload.city ?? null,
+          stateId: passengerPayload.stateId ?? null,
+          passportNumber: passengerPayload.passportNumber ?? null,
+          passportIssueAt: passengerPayload.passportIssueAt ?? null,
+          passportIssueDate: passengerPayload.passportIssueDate ?? null,
+          passportExpiryDate: passengerPayload.passportExpiryDate ?? null,
+          arrivalDate: passengerPayload.arrivalDate ?? null,
+          isPep: Boolean(passengerPayload.isPep),
+          remarks: null,
+          createdBy: performedById,
+          updatedBy: performedById,
+        }),
+      );
+
+      passengerId = savedPassenger.id;
+      passengerSnapshot = (await loadEntitySnapshot(
+        this.passengerRepository,
+        savedPassenger.id,
+      )) as TransactionPassengerSnapshotValue;
+    }
+
     const transaction = await this.transactionRepository.save(
       this.transactionRepository.create({
         rootTransactionId: transactionPayload.rootTransactionId ?? null,
@@ -698,6 +818,10 @@ export class TransactionsService {
         companySnapshot: currentCompanySnapshot,
         partyProfileId: String(transactionPayload.partyProfileId),
         partyProfileSnapshot,
+        purposeId,
+        purposeSnapshot,
+        passengerId,
+        passengerSnapshot,
         agentProfileId: transactionPayload.agentProfileId ?? null,
         agentProfileSnapshot,
         manualBookPageId: transactionPayload.manualBookPageId ?? null,
@@ -714,10 +838,52 @@ export class TransactionsService {
         approvalRemarks: null,
         rejectionReason: null,
         isLatest: true,
+        taxRatePercent: roundMoney(gstRatePercent),
         createdBy: performedById,
         updatedBy: performedById,
       }),
     );
+
+    const passengerOtherDocumentRows = Array.isArray(passengerPayload?.otherDocuments)
+      ? passengerPayload.otherDocuments
+      : [];
+    for (let index = 0; index < passengerOtherDocumentRows.length; index += 1) {
+      const row = passengerOtherDocumentRows[index];
+      const rawFile = String(row.documentFile ?? '').trim();
+      const hasDataUrlPrefix = rawFile.startsWith('data:');
+      const fileContent = rawFile
+        ? Buffer.from(
+            hasDataUrlPrefix ? rawFile.split(',')[1] ?? '' : rawFile,
+            'base64',
+          )
+        : null;
+      const mimeType = hasDataUrlPrefix ? rawFile.slice(5, rawFile.indexOf(';')) : null;
+
+      await this.transactionPassengerOtherDocumentRepository.save(
+        this.transactionPassengerOtherDocumentRepository.create({
+          transactionId: transaction.id,
+          transaction,
+          lineNo: index + 1,
+          documentType: row.documentType,
+          documentNumber: String(row.documentNumber),
+          validTill: row.validTill ?? null,
+          issueAt: row.issueAt ?? null,
+          issueDate: row.issueDate ?? null,
+          expiryDate: row.expiryDate ?? null,
+          fileName: rawFile ? `${row.documentType || 'document'}-${index + 1}` : null,
+          originalFileName: rawFile ? `${row.documentType || 'document'}-${index + 1}` : null,
+          mimeType,
+          fileSize: fileContent ? String(fileContent.length) : null,
+          storageKey: null,
+          storagePath: null,
+          storageUrl: null,
+          content: fileContent,
+          remarks: row.remarks ?? null,
+          createdBy: performedById,
+          updatedBy: performedById,
+        }),
+      );
+    }
 
     const currencySnapshots = new Map<string, Record<string, unknown>>();
     const productSnapshots = new Map<string, Record<string, unknown>>();
@@ -926,9 +1092,7 @@ export class TransactionsService {
           lineNo: index + 1,
           accountId: String(account.id),
           accountSnapshot: account as TransactionReferenceSnapshotValue,
-          amount: String(row.amount),
-          gstRate: row.gstRate ?? null,
-          gstAmount: row.gstAmount ?? null,
+          amount: roundMoney(this.toNumber(row.amount)),
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
@@ -936,10 +1100,17 @@ export class TransactionsService {
       );
     }
 
+    const refreshedTransaction = await this.transactionRepository.findOne({
+      where: { id: transaction.id },
+    });
+    if (!refreshedTransaction) {
+      throw new BadRequestException('Failed to calculate transaction tax');
+    }
+
     const paymentRows = Array.isArray(transactionPayload.payments)
       ? transactionPayload.payments
       : [];
-    const payableTotal = this.calculateTransactionPayableTotal(transactionPayload);
+    const payableTotal = String(refreshedTransaction.finalAmount ?? '0');
     const payableTotalAmount = Number(payableTotal || 0);
     if (payableTotalAmount > 0 && paymentRows.length === 0) {
       throw new BadRequestException('At least one payment row is required');
@@ -1232,6 +1403,7 @@ export class TransactionsService {
     await this.hydratePartyProfileSnapshot(transaction);
     await this.hydrateAgentProfileSnapshot(transaction);
     await this.hydrateCounterSnapshot(transaction);
+
     return transaction;
   }
 

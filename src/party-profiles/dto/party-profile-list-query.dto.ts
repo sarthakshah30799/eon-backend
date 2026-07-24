@@ -65,6 +65,12 @@ export class PartyProfileListQueryDto {
   @Transform(parseBooleanQuery)
   activeOnly?: boolean;
 
+  @ApiPropertyOptional({ description: "Filter by individual party profile flag" })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(parseBooleanQuery)
+  isIndividual?: boolean;
+
   @ApiPropertyOptional({ description: "Filter by one or more Party Profile types", enum: ClientType, isArray: true })
   @Transform(({ value }) => {
     if (value === undefined || value === null || value === '') {
