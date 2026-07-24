@@ -33,6 +33,7 @@ import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-boo
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { Counter } from "../counters/counter.entity";
+import { PurchaseRuleService } from "./purchase-rule.service";
 
 @Module({
   imports: [
@@ -73,7 +74,7 @@ import { Counter } from "../counters/counter.entity";
     ),
   ],
   controllers: [TransactionAd1Controller, TransactionsController],
-  providers: [TransactionsService, TransactionAd1Service, TransactionAccountPostingWorker],
+  providers: [TransactionsService, TransactionAd1Service, TransactionAccountPostingWorker, PurchaseRuleService],
   exports: [
     TypeOrmModule,
     TransactionsService,

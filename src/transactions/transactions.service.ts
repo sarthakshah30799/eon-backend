@@ -41,6 +41,7 @@ import { ManualBookPageTracking } from '../manual-bill-books/entities/manual-boo
 import { ChequeBookPageTracking } from '../chequebooks/entities/cheque-book-page-tracking.entity';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
+import { PurchaseRuleService } from './purchase-rule.service';
 import {
   resolveProductTransactionAccount,
   roundMoney,
@@ -109,6 +110,7 @@ export class TransactionsService {
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
+    private readonly purchaseRuleService: PurchaseRuleService,
   ) { }
 
   async getAd1Agents(
@@ -721,6 +723,8 @@ export class TransactionsService {
         `Purpose option with id ${purposeId} not found`,
       );
     }
+
+    await this.purchaseRuleService.validate(transactionPayload);
 
     const passengerPayload = transactionPayload.passenger ?? null;
     let passengerId: string | null = null;
