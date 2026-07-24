@@ -23,6 +23,7 @@ import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
 import { StorageService } from '../storage/storage.service';
+import { Purpose } from '../purpose/purpose.entity';
 import {
   TransactionPassengerSnapshotValue,
   TransactionReferenceSnapshotValue,
@@ -92,6 +93,8 @@ export class TransactionsService {
     private readonly passengerRepository: Repository<Passenger>,
     @InjectRepository(SelectOption)
     private readonly selectOptionRepository: Repository<SelectOption>,
+    @InjectRepository(Purpose)
+    private readonly purposeRepository: Repository<Purpose>,
     @InjectRepository(Country)
     private readonly countryRepository: Repository<Country>,
     @InjectRepository(State)
@@ -712,17 +715,28 @@ export class TransactionsService {
     }
 
     const purposeId = String(transactionPayload.purposeId ?? '').trim() || null;
-    const purposeSnapshot = purposeId
-      ? ((await loadEntitySnapshot(
-          this.selectOptionRepository,
-          purposeId,
-        )) as TransactionReferenceSnapshotValue)
+    const purpose = purposeId
+      ? await this.purposeRepository.findOne({ where: { id: purposeId } })
       : null;
-    if (purposeId && !purposeSnapshot) {
+    if (purposeId && !purpose) {
       throw new NotFoundException(
-        `Purpose option with id ${purposeId} not found`,
+        `Purpose with id ${purposeId} not found`,
       );
     }
+    if (
+      purpose &&
+      purpose.transactionType !== transactionPayload.transactionType
+    ) {
+      throw new BadRequestException(
+        `Purpose ${purpose.code} is not valid for ${transactionPayload.transactionType}`,
+      );
+    }
+    const purposeSnapshot = purpose
+      ? ((await loadEntitySnapshot(
+          this.purposeRepository,
+          purpose.id,
+        )) as TransactionReferenceSnapshotValue)
+      : null;
 
     await this.purchaseRuleService.validate(transactionPayload);
 
