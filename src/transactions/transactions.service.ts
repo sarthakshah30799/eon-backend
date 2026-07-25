@@ -93,10 +93,6 @@ type TransactionPassengerPayload = {
   panHolderName?: string | null;
   panDob?: string | null;
   panHolderRelationType?: string | null;
-  corporatePanNumber?: string | null;
-  corporatePanHolderName?: string | null;
-  corporatePanDob?: string | null;
-  corporatePanHolderRelationType?: string | null;
   paidByPanNumber?: string | null;
   paidByPanHolderName?: string | null;
   paidByPanDob?: string | null;
@@ -164,6 +160,7 @@ type TransactionDraftPayload = {
   branchSnapshot?: TransactionReferenceSnapshotValue;
   requiresApproval?: boolean;
   partyProfileId: string;
+  transactionPartyProfileType?: PurposePartyProfileType | null;
   purposeId?: string | null;
   agentProfileId?: string | null;
   passenger?: TransactionPassengerPayload | null;
@@ -987,9 +984,6 @@ export class TransactionsService {
 
     if (passengerPayload) {
       const passengerLookup = [
-        passengerPayload.corporatePanNumber
-          ? { corporatePanNumber: String(passengerPayload.corporatePanNumber).trim() }
-          : null,
         passengerPayload.panNumber
           ? { panNumber: String(passengerPayload.panNumber).trim() }
           : null,
@@ -1028,10 +1022,6 @@ export class TransactionsService {
           paidByPanNumber: passengerPayload.paidByPanNumber ?? null,
           paidByPanHolderName: passengerPayload.paidByPanHolderName ?? null,
           paidByPanDob: passengerPayload.paidByPanDob ?? null,
-          corporatePanNumber: passengerPayload.corporatePanNumber ?? null,
-          corporatePanHolderName: passengerPayload.corporatePanHolderName ?? null,
-          corporatePanDob: passengerPayload.corporatePanDob ?? null,
-          corporatePanHolderRelationType: passengerPayload.corporatePanHolderRelationType ?? null,
           gstStateId: passengerPayload.gstStateId ?? null,
           gstNumber: passengerPayload.gstNumber ?? null,
           address1: passengerPayload.address1 ?? null,
@@ -1073,6 +1063,8 @@ export class TransactionsService {
         companyId: currentCompany.id,
         companySnapshot: currentCompanySnapshot,
         partyProfileId: String(transactionPayload.partyProfileId),
+        transactionPartyProfileType:
+          transactionPayload.transactionPartyProfileType ?? null,
         partyProfileSnapshot,
         purposeId,
         purposeSnapshot,
@@ -1101,8 +1093,21 @@ export class TransactionsService {
     );
 
     const passengerOtherDocumentRows = Array.isArray(passengerPayload?.otherDocuments)
-      ? passengerPayload.otherDocuments
+      ? passengerPayload.otherDocuments.filter(row =>
+          Boolean(String(row.documentType ?? '').trim()) ||
+          Boolean(String(row.documentNumber ?? '').trim()) ||
+          Boolean(String(row.validTill ?? '').trim()) ||
+          Boolean(String(row.documentFile ?? '').trim())
+        )
       : [];
+
+    if (
+      passengerPayload?.nationalityType === PassengerNationalityType.INDIAN &&
+      passengerOtherDocumentRows.length === 0
+    ) {
+      throw new BadRequestException('At least one other document is required for Indian passengers');
+    }
+
     for (let index = 0; index < passengerOtherDocumentRows.length; index += 1) {
       const row = passengerOtherDocumentRows[index];
       const rawFile = String(row.documentFile ?? '').trim();
@@ -1116,27 +1121,27 @@ export class TransactionsService {
       const mimeType = hasDataUrlPrefix ? rawFile.slice(5, rawFile.indexOf(';')) : null;
 
       const passengerOtherDocumentToSave: DeepPartial<TransactionPassengerOtherDocument> = {
-          transactionId: transaction.id,
-          transaction,
-          lineNo: index + 1,
-          documentType: row.documentType as PassengerOtherIdProofType,
-          documentNumber: String(row.documentNumber),
-          validTill: row.validTill ?? null,
-          issueAt: row.issueAt ?? null,
-          issueDate: row.issueDate ?? null,
-          expiryDate: row.expiryDate ?? null,
-          fileName: rawFile ? `${row.documentType || 'document'}-${index + 1}` : null,
-          originalFileName: rawFile ? `${row.documentType || 'document'}-${index + 1}` : null,
-          mimeType,
-          fileSize: fileContent ? String(fileContent.length) : null,
-          storageKey: null,
-          storagePath: null,
-          storageUrl: null,
-          content: fileContent,
-          remarks: row.remarks ?? null,
-          createdBy: performedById,
-          updatedBy: performedById,
-        };
+        transactionId: transaction.id,
+        transaction,
+        lineNo: index + 1,
+        documentType: row.documentType as PassengerOtherIdProofType,
+        documentNumber: String(row.documentNumber),
+        validTill: row.validTill ?? null,
+        issueAt: row.issueAt ?? null,
+        issueDate: row.issueDate ?? null,
+        expiryDate: row.expiryDate ?? null,
+        fileName: rawFile ? `${row.documentType || 'document'}-${index + 1}` : null,
+        originalFileName: rawFile ? `${row.documentType || 'document'}-${index + 1}` : null,
+        mimeType,
+        fileSize: fileContent ? String(fileContent.length) : null,
+        storageKey: null,
+        storagePath: null,
+        storageUrl: null,
+        content: fileContent,
+        remarks: row.remarks ?? null,
+        createdBy: performedById,
+        updatedBy: performedById,
+      };
 
       await this.transactionPassengerOtherDocumentRepository.save(
         this.transactionPassengerOtherDocumentRepository.create(passengerOtherDocumentToSave),

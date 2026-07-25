@@ -82,7 +82,7 @@ export class TransactionItem extends BaseEntity {
     type: "numeric",
     name: "tax_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   taxRatePercent: string;
@@ -100,7 +100,7 @@ export class TransactionItem extends BaseEntity {
     type: "numeric",
     name: "igst_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   igstRatePercent: string;
@@ -109,7 +109,7 @@ export class TransactionItem extends BaseEntity {
     type: "numeric",
     name: "cgst_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   cgstRatePercent: string;
@@ -118,7 +118,7 @@ export class TransactionItem extends BaseEntity {
     type: "numeric",
     name: "sgst_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   sgstRatePercent: string;
@@ -153,6 +153,7 @@ export class TransactionItem extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionTaxSplitMode,
+    enumName: "transaction_tax_split_mode_enum",
     name: "split_mode",
     nullable: true,
   })

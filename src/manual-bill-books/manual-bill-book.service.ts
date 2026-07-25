@@ -11,7 +11,6 @@ import { ManualBook } from "./entities/manual-book.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.entity";
 import { Branch } from "../branches/branch.entity";
-import { SelectOption } from "../category-options/category-option.entity";
 import { User } from "../users/user.entity";
 import { TransactionTypeProfileEnum, type TransactionTypeProfile } from "../transactions/transactions.enums";
 import {
@@ -33,11 +32,25 @@ type UserLookup = {
 };
 
 const TRANSACTION_TYPE_PROFILE_ALIASES: Record<string, TransactionTypeProfile> = {
-  PURCHASE: TransactionTypeProfileEnum.PURCHASE_FFMC,
-  SALE: TransactionTypeProfileEnum.SALE_FFMC,
+  PURCHASE: TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL,
+  SALE: TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL,
 };
 
-const normalizeTransactionTypeProfile = (
+const TRANSACTION_TYPE_PROFILE_GROUPS: Record<string, TransactionTypeProfile[]> = {
+  PURCHASE: [
+    TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL,
+  ],
+  SALE: [
+    TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL,
+  ],
+};
+
+const TRANSACTION_TYPE_PROFILE_GROUP_LABELS: Record<string, string> = {
+  PURCHASE: 'Purchase (Corporate/Individual)',
+  SALE: 'Sell (Corporate/Individual)',
+};
+
+const resolveStoredTransactionTypeProfile = (
   value?: string,
 ): TransactionTypeProfile | undefined => {
   if (!value) {
@@ -50,6 +63,51 @@ const normalizeTransactionTypeProfile = (
       ? (value as TransactionTypeProfile)
       : undefined)
   );
+};
+
+const resolveTransactionTypeProfileGroup = (
+  value?: string,
+): TransactionTypeProfile[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  const grouped = TRANSACTION_TYPE_PROFILE_GROUPS[normalized];
+  if (grouped) {
+    return grouped;
+  }
+
+  const resolved = resolveStoredTransactionTypeProfile(value);
+  return resolved ? [resolved] : undefined;
+};
+
+const resolveTransactionTypeProfileLabel = (
+  value?: string,
+  fallback?: string,
+): string => {
+  if (!value) {
+    return fallback ?? '';
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (normalized in TRANSACTION_TYPE_PROFILE_GROUP_LABELS) {
+    return TRANSACTION_TYPE_PROFILE_GROUP_LABELS[normalized];
+  }
+
+  if (
+    normalized === TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL
+  ) {
+    return TRANSACTION_TYPE_PROFILE_GROUP_LABELS.PURCHASE;
+  }
+
+  if (
+    normalized === TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL
+  ) {
+    return TRANSACTION_TYPE_PROFILE_GROUP_LABELS.SALE;
+  }
+
+  return fallback ?? value;
 };
 
 @Injectable()
@@ -153,12 +211,17 @@ export class ManualBillBookService {
       }
     }
     const no = `${prefix}${String(nextSeq).padStart(5, "0")}`;
+    const storedTransactionType = resolveStoredTransactionTypeProfile(transactionType);
+
+    if (!storedTransactionType) {
+      throw new BadRequestException(`Invalid transaction type: ${transactionType}`);
+    }
 
     const book = this.manualBookRepository.create({
       dispatchDate,
       no,
       branchId,
-      transactionType,
+      transactionType: storedTransactionType,
       bookNoFrom,
       bookNoTo,
       vouchersPerBook,
@@ -214,8 +277,13 @@ export class ManualBillBookService {
     const where: any = {};
     if (branchId) where.branchId = branchId;
     if (status) where.status = status;
-    if (transactionType && transactionType !== "ALL")
-      where.transactionType = transactionType;
+    const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
+    if (transactionType && transactionType !== "ALL" && transactionTypeGroup) {
+      where.transactionType =
+        transactionTypeGroup.length === 1
+          ? transactionTypeGroup[0]
+          : In(transactionTypeGroup);
+    }
     if (assignedTo) where.assignedTo = assignedTo;
 
     const books = await this.manualBookRepository.find({
@@ -234,20 +302,6 @@ export class ManualBillBookService {
     });
     const branchMap = new Map(branches.map((b) => [b.id, b]));
 
-    // Fetch transaction options from DB1
-    const transactionTypeIds = Array.from(
-      new Set(
-        books.map((b) => b.transactionType).filter((id) => id && isUuid(id)),
-      ),
-    );
-    let selectOptions: SelectOption[] = [];
-    if (transactionTypeIds.length > 0) {
-      selectOptions = await this.branchRepository.manager.find(SelectOption, {
-        where: { id: In(transactionTypeIds) },
-      });
-    }
-    const optionMap = new Map(selectOptions.map((o) => [o.id, o]));
-
     // Fetch assigned users from DB1
     const assignedToIds = Array.from(
       new Set(books.map((b) => b.assignedTo).filter((id) => id && isUuid(id))),
@@ -262,13 +316,12 @@ export class ManualBillBookService {
 
     return books.map((book) => {
       const branch = branchMap.get(book.branchId);
-      const option = optionMap.get(book.transactionType);
       const assignedUser = userMap.get(book.assignedTo);
       return {
         ...book,
         branchName: branch ? branch.name : "Unknown Branch",
         branchCode: branch ? branch.code : "",
-        transactionTypeLabel: option ? option.label : book.transactionType,
+        transactionTypeLabel: resolveTransactionTypeProfileLabel(book.transactionType),
         assignedTo: {
           id: assignedUser ? assignedUser.id : book.assignedTo,
           name: assignedUser ? assignedUser.name : book.assignedTo,
@@ -351,7 +404,13 @@ export class ManualBillBookService {
     book.assignedTo = dto.assignedTo;
     if (dto.remarks !== undefined) book.remarks = dto.remarks;
     if (dto.dispatchDate !== undefined) book.dispatchDate = dto.dispatchDate;
-    if (dto.transactionType !== undefined) book.transactionType = dto.transactionType;
+    if (dto.transactionType !== undefined) {
+      const storedTransactionType = resolveStoredTransactionTypeProfile(dto.transactionType);
+      if (!storedTransactionType) {
+        throw new BadRequestException(`Invalid transaction type: ${dto.transactionType}`);
+      }
+      book.transactionType = storedTransactionType;
+    }
     if (dto.bookNoFrom !== undefined) book.bookNoFrom = dto.bookNoFrom;
     if (dto.bookNoTo !== undefined) book.bookNoTo = dto.bookNoTo;
     if (dto.vouchersPerBook !== undefined) book.vouchersPerBook = dto.vouchersPerBook;
@@ -671,7 +730,7 @@ export class ManualBillBookService {
     userId?: string,
     transactionType?: string,
   ): Promise<any[]> {
-    const normalizedTransactionType = normalizeTransactionTypeProfile(transactionType);
+    const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.manualBook", "book")
@@ -687,10 +746,15 @@ export class ManualBillBookService {
       });
     }
 
-    if (transactionType?.trim().toUpperCase() !== "ALL" && normalizedTransactionType) {
-      query.andWhere("book.transactionType = :transactionType", {
-        transactionType: normalizedTransactionType,
-      });
+    if (transactionType?.trim().toUpperCase() !== "ALL" && transactionTypeGroup) {
+      query.andWhere(
+        transactionTypeGroup.length === 1
+          ? "book.transactionType = :transactionType"
+          : "book.transactionType IN (:...transactionTypes)",
+        transactionTypeGroup.length === 1
+          ? { transactionType: transactionTypeGroup[0] }
+          : { transactionTypes: transactionTypeGroup },
+      );
     }
 
     query.andWhere(
@@ -741,6 +805,7 @@ export class ManualBillBookService {
           mvNoTo: page.manualBook.mvNoTo,
           branchId: page.manualBook.branchId,
           transactionType: page.manualBook.transactionType,
+          transactionTypeLabel: resolveTransactionTypeProfileLabel(page.manualBook.transactionType),
         }
         : null,
     }));
@@ -785,7 +850,7 @@ export class ManualBillBookService {
     }
 
     // Find all manual books matching branch, transactionType (if not ALL), and book range containing bookNo
-    const normalizedTransactionType = normalizeTransactionTypeProfile(transactionType);
+    const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
 
     const queryBooks = await this.manualBookRepository
       .createQueryBuilder("mb")
@@ -794,10 +859,16 @@ export class ManualBillBookService {
       .andWhere("mb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("mb.bookNoTo >= :bookNo", { bookNo })
       .andWhere(
-        transactionType?.trim().toUpperCase() === "ALL" || normalizedTransactionType === undefined
+        transactionType?.trim().toUpperCase() === "ALL" || transactionTypeGroup === undefined
           ? "1=1"
-          : "mb.transactionType = :transactionType",
-        { transactionType: normalizedTransactionType ?? transactionType },
+          : transactionTypeGroup.length === 1
+            ? "mb.transactionType = :transactionType"
+            : "mb.transactionType IN (:...transactionTypes)",
+        transactionTypeGroup && transactionTypeGroup.length === 1
+          ? { transactionType: transactionTypeGroup[0] }
+          : transactionTypeGroup
+            ? { transactionTypes: transactionTypeGroup }
+            : { transactionType },
       )
       .getMany();
 
@@ -842,22 +913,6 @@ export class ManualBillBookService {
       return [];
     }
 
-    // Fetch transaction options from DB1
-    const transactionTypeIds = Array.from(
-      new Set(
-        queryBooks
-          .map((b) => b.transactionType)
-          .filter((id) => id && isUuid(id)),
-      ),
-    );
-    let selectOptions: SelectOption[] = [];
-    if (transactionTypeIds.length > 0) {
-      selectOptions = await this.branchRepository.manager.find(SelectOption, {
-        where: { id: In(transactionTypeIds) },
-      });
-    }
-    const optionMap = new Map(selectOptions.map((o) => [o.id, o]));
-
     // Map names to ids
     const userNamesMap: Record<string, string> = {};
     deliveryPersons.forEach((u: any) => {
@@ -884,14 +939,12 @@ export class ManualBillBookService {
       const book = bookMap.get(page.manualBookId);
       if (!book) continue;
 
-      const option = optionMap.get(book.transactionType);
-
       if (!currentGroup) {
         currentGroup = {
           manualBookId: page.manualBookId,
           bookNo: bookNo,
           transactionType: book.transactionType,
-          transactionTypeLabel: option ? option.label : book.transactionType,
+          transactionTypeLabel: resolveTransactionTypeProfileLabel(book.transactionType),
           mvNoFrom: page.pageNo,
           mvNoTo: page.pageNo,
           qty: 1,
@@ -914,7 +967,7 @@ export class ManualBillBookService {
             manualBookId: page.manualBookId,
             bookNo: bookNo,
             transactionType: book.transactionType,
-            transactionTypeLabel: option ? option.label : book.transactionType,
+            transactionTypeLabel: resolveTransactionTypeProfileLabel(book.transactionType),
             mvNoFrom: page.pageNo,
             mvNoTo: page.pageNo,
             qty: 1,

@@ -29,6 +29,10 @@ import {
   TransactionReferenceSnapshotValue,
 } from "../types/transaction-snapshot.types";
 import { PurposeRateType } from "../../purpose/purpose.enums";
+import {
+  TransactionPartyProfileType,
+  TransactionPartyProfileTypeEnum,
+} from "../transactions.enums";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
 @Index(
@@ -44,6 +48,7 @@ import { PurposeRateType } from "../../purpose/purpose.enums";
 @Index("IDX_transactions_company_id", ["companyId"])
 @Index("IDX_transactions_manual_book_page_id", ["manualBookPageId"])
 @Index("IDX_transactions_party_profile_id", ["partyProfileId"])
+@Index("IDX_transactions_party_profile_type", ["transactionPartyProfileType"])
 @Index("IDX_transactions_passenger_id", ["passengerId"])
 @Index("IDX_transactions_purpose_id", ["purposeId"])
 @Index("IDX_transactions_passenger_travel_id", ["passengerTravelId"])
@@ -103,6 +108,14 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "uuid", name: "purpose_id", nullable: true })
   purposeId: string | null;
+
+  @Column({
+    type: "enum",
+    enum: TransactionPartyProfileTypeEnum,
+    name: "transaction_party_profile_type",
+    nullable: true,
+  })
+  transactionPartyProfileType: TransactionPartyProfileType | null;
 
   @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
   purposeSnapshot: TransactionReferenceSnapshotValue;
@@ -234,7 +247,7 @@ export class Transaction extends BaseEntity {
     type: "numeric",
     name: "tax_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     nullable: true,
   })
   taxRatePercent: string | null;
@@ -252,7 +265,7 @@ export class Transaction extends BaseEntity {
     type: "numeric",
     name: "tcs_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   tcsRatePercent: string;
@@ -403,6 +416,7 @@ export class Transaction extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionTaxSplitMode,
+    enumName: "transaction_tax_split_mode_enum",
     name: "split_mode",
     nullable: true,
   })
@@ -416,14 +430,17 @@ export class Transaction extends BaseEntity {
 
   @OneToMany(
     () => TransactionPassengerOtherDocument,
-    (otherDocument) => otherDocument.transaction
+    (otherDocument) => otherDocument.transaction,
   )
   passengerOtherDocuments: TransactionPassengerOtherDocument[];
 
   @OneToMany(() => TransactionAdditionalCharge, (charge) => charge.transaction)
   additionalCharges: TransactionAdditionalCharge[];
 
-  @OneToMany(() => TransactionTcsBreakdown, (breakdown) => breakdown.transaction)
+  @OneToMany(
+    () => TransactionTcsBreakdown,
+    (breakdown) => breakdown.transaction,
+  )
   tcsBreakdowns: TransactionTcsBreakdown[];
 
   @OneToMany(() => TransactionPayment, (payment) => payment.transaction)

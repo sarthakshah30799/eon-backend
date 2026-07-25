@@ -11,18 +11,21 @@ import {
   ["partyProfileId", "currencyCode", "productCode"],
   { unique: true },
 )
-@Index("IDX_party_profile_commission_rules_party_profile_id", ["partyProfileId"])
+@Index("IDX_party_profile_commission_rules_party_profile_id", [
+  "partyProfileId",
+])
 @Entity("party_profile_commission_rules")
 export class PartyProfileCommissionRule extends BaseEntity {
   @Column({ type: "uuid", name: "party_profile_id" })
   partyProfileId: string;
 
-  @ManyToOne(() => PartyProfile, profile => profile.commissionRules, {
+  @ManyToOne(() => PartyProfile, (profile) => profile.commissionRules, {
     onDelete: "CASCADE",
   })
   @JoinColumn({
     name: "party_profile_id",
-    foreignKeyConstraintName: "FK_party_profile_commission_rules_party_profile_id",
+    foreignKeyConstraintName:
+      "FK_party_profile_commission_rules_party_profile_id",
   })
   partyProfile: PartyProfile;
 
@@ -45,6 +48,11 @@ export class PartyProfileCommissionRule extends BaseEntity {
   })
   commissionType: PartyProfileCommissionType;
 
-  @Column({ type: "numeric", name: "commission_value", precision: 18, scale: 4 })
+  @Column({
+    type: "numeric",
+    name: "commission_value",
+    precision: 18,
+    scale: 2,
+  })
   commissionValue: string;
 }

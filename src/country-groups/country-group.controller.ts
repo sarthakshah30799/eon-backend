@@ -7,6 +7,10 @@ import { CreateCountryGroupDto } from "./dto/create-country-group.dto";
 import { UpdateCountryGroupDto } from "./dto/update-country-group.dto";
 import { CountryGroupResponseDto } from "./dto/country-group-response.dto";
 
+interface SessionUserContext {
+  userId?: string;
+}
+
 @ApiTags("country-groups")
 @ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
@@ -40,7 +44,7 @@ export class CountryGroupController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async create(
     @Body() dto: CreateCountryGroupDto,
-    @Session() session: any,
+    @Session() session: SessionUserContext,
   ): Promise<CountryGroupResponseDto> {
     return this.countryGroupService.create(dto, session.userId);
   }
@@ -55,7 +59,7 @@ export class CountryGroupController {
   async update(
     @Param("id") id: string,
     @Body() dto: UpdateCountryGroupDto,
-    @Session() session: any,
+    @Session() session: SessionUserContext,
   ): Promise<CountryGroupResponseDto> {
     return this.countryGroupService.update(id, dto, session.userId);
   }
