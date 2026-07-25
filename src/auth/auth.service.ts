@@ -34,9 +34,6 @@ export class AuthService {
     // Note: lastLoginAt is already updated in validateUser method
     const isHoStaff = user.userRoles?.some(userRole => userRole.role?.isHoStaff) === true;
 
-    // Always invalidate previous sessions for this user
-    await this.sessionService.invalidateUserSessions(user.id, session.id);
-
     return this.sessionPolicyService.applyLoginSessionPolicy(
       {
         id: user.id,
@@ -45,7 +42,8 @@ export class AuthService {
         isHoStaff,
       },
       session,
-      async () => {},
+      (userId: string, currentSessionId?: string) =>
+        this.sessionService.invalidateUserSessions(userId, currentSessionId),
     );
   }
 
