@@ -30,22 +30,6 @@ export class VerifyPassengerAmlDto {
   @IsOptional()
   panHolderRelationType?: string;
 
-  @ApiPropertyOptional({ example: 'ABCDE1234F' })
-  @IsOptional()
-  corporatePanNumber?: string;
-
-  @ApiPropertyOptional({ example: 'Acme Pvt Ltd' })
-  @IsOptional()
-  corporatePanHolderName?: string;
-
-  @ApiPropertyOptional({ example: '1990-01-31' })
-  @IsOptional()
-  corporatePanDob?: string;
-
-  @ApiPropertyOptional({ example: 'COMPANY' })
-  @IsOptional()
-  corporatePanHolderRelationType?: string;
-
   @ApiPropertyOptional({ example: 'P1234567' })
   @IsOptional()
   passportNumber?: string;

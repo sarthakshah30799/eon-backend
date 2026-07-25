@@ -4,16 +4,20 @@ import { PurposeRateType } from "../../purpose/purpose.enums";
 import { Transaction } from "./transaction.entity";
 
 @Index("IDX_transaction_tcs_breakdowns_transaction_id", ["transactionId"])
-@Index("IDX_transaction_tcs_breakdowns_transaction_line", ["transactionId", "lineNo"], {
-  unique: true,
-})
+@Index(
+  "IDX_transaction_tcs_breakdowns_transaction_line",
+  ["transactionId", "lineNo"],
+  {
+    unique: true,
+  },
+)
 @Index("IDX_transaction_tcs_breakdowns_purpose_id", ["purposeId"])
 @Entity("transaction_tcs_breakdowns")
 export class TransactionTcsBreakdown extends BaseEntity {
   @Column({ type: "uuid", name: "transaction_id" })
   transactionId: string;
 
-  @ManyToOne(() => Transaction, transaction => transaction.tcsBreakdowns, {
+  @ManyToOne(() => Transaction, (transaction) => transaction.tcsBreakdowns, {
     nullable: false,
     onDelete: "CASCADE",
   })
@@ -32,10 +36,22 @@ export class TransactionTcsBreakdown extends BaseEntity {
   @Column({ type: "uuid", name: "purpose_slab_id", nullable: true })
   purposeSlabId: string | null;
 
-  @Column({ type: "numeric", name: "base_amount", precision: 18, scale: 2, default: 0 })
+  @Column({
+    type: "numeric",
+    name: "base_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
   baseAmount: string;
 
-  @Column({ type: "numeric", name: "rate_percent", precision: 18, scale: 4, default: 0 })
+  @Column({
+    type: "numeric",
+    name: "rate_percent",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
   ratePercent: string;
 
   @Column({
@@ -47,6 +63,12 @@ export class TransactionTcsBreakdown extends BaseEntity {
   })
   rateType: PurposeRateType;
 
-  @Column({ type: "numeric", name: "tcs_amount", precision: 18, scale: 2, default: 0 })
+  @Column({
+    type: "numeric",
+    name: "tcs_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
   tcsAmount: string;
 }

@@ -35,9 +35,6 @@ export enum PassengerOtherIdProofType {
 @Index("IDX_passengers_pan_number", ["panNumber"], {
   unique: true,
 })
-@Index("IDX_passengers_corporate_pan_number", ["corporatePanNumber"], {
-  unique: true,
-})
 @Index("IDX_passengers_passport_number", ["passportNumber"], { unique: true })
 @Check(
   "CHK_passengers_party_profile_required",
@@ -51,10 +48,6 @@ export enum PassengerOtherIdProofType {
 @Check(
   "CHK_passengers_pan_holder_present",
   `"pan_number" IS NULL OR "pan_holder_name" IS NOT NULL`,
-)
-@Check(
-  "CHK_passengers_corporate_pan_holder_present",
-  `"corporate_pan_number" IS NULL OR "corporate_pan_holder_name" IS NOT NULL`,
 )
 @Entity("passengers")
 export class Passenger extends BaseEntity {
@@ -147,25 +140,6 @@ export class Passenger extends BaseEntity {
 
   @Column({ type: "date", name: "paid_by_pan_dob", nullable: true })
   paidByPanDob: string | null;
-
-  @Column({ type: "citext", name: "corporate_pan_number", nullable: true })
-  corporatePanNumber: string | null;
-
-  @Column({
-    type: "citext",
-    name: "corporate_pan_holder_name",
-    nullable: true,
-  })
-  corporatePanHolderName: string | null;
-
-  @Column({ type: "date", name: "corporate_pan_dob", nullable: true })
-  corporatePanDob: string | null;
-
-  @Column({
-    type: "citext",
-    nullable: true,
-  })
-  corporatePanHolderRelationType: PassengerPanHolderRelationType | null;
 
   @Column({ type: "uuid", name: "gst_state_id", nullable: true })
   gstStateId: string | null;

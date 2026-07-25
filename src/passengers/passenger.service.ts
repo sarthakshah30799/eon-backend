@@ -53,9 +53,6 @@ export class PassengerService {
       if (isBlank(dto.panDob)) {
         return this.buildFailure('PAN holder DOB is required');
       }
-      if (isBlank(dto.panHolderRelationType)) {
-        return this.buildFailure('PAN holder relation is required');
-      }
     }
 
     if (
@@ -63,7 +60,6 @@ export class PassengerService {
         dto.panNumber,
         dto.panHolderName,
         dto.panDob,
-        dto.panHolderRelationType,
       ])
     ) {
       return this.buildFailure('Verification failed. Please review the entered details.');
