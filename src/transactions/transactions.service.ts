@@ -25,10 +25,11 @@ import { Product } from '../products/product.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
 import { StorageService } from '../storage/storage.service';
 import { Purpose } from '../purpose/purpose.entity';
-import { PurposePartyProfileType } from '../purpose/purpose.enums';
+import { PurposePartyProfileType, PurposeRateType } from '../purpose/purpose.enums';
 import { PurposeResponseDto } from '../purpose/dto/purpose-response.dto';
 import {
   TransactionPassengerSnapshotValue,
+  TransactionPassengerTravelSnapshotValue,
   TransactionReferenceSnapshotValue,
 } from './types/transaction-snapshot.types';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
@@ -57,6 +58,8 @@ import {
 import { TransactionEvent } from './entities/transaction-event.entity';
 import { TransactionEventStatus, TransactionEventType } from './transactions.enums';
 import { DeepPartial } from 'typeorm';
+import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
+import { CountryService } from '../country/country.service';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -107,6 +110,19 @@ type TransactionPassengerPayload = {
   otherDocuments?: TransactionPassengerOtherDocumentPayload[];
 };
 
+type TransactionPassengerTravelPayload = {
+  airlineTtId?: string | null;
+  ticketNo?: string | null;
+  route?: string | null;
+  travellingCountryId?: string | null;
+  noOfDays?: number | null;
+  noOfPax?: number | null;
+  departureDate?: string | null;
+  travelPnr?: string | null;
+  visa?: boolean | null;
+  isCisCountry?: boolean | null;
+};
+
 type TransactionItemPayload = {
   currencyId: string;
   productId: string;
@@ -152,11 +168,17 @@ type TransactionPaymentPayload = {
   remarks?: string | null;
 };
 
+const normalizeNullableString = (value?: string | null) => {
+  const normalized = String(value ?? '').trim();
+  return normalized ? normalized : null;
+};
+
 type TransactionDraftPayload = {
   rootTransactionId?: string | null;
   revisionNo?: number;
   number?: string | null;
   slug?: string | null;
+  transactionDate?: string | null;
   branchSnapshot?: TransactionReferenceSnapshotValue;
   requiresApproval?: boolean;
   partyProfileId: string;
@@ -164,11 +186,21 @@ type TransactionDraftPayload = {
   purposeId?: string | null;
   agentProfileId?: string | null;
   passenger?: TransactionPassengerPayload | null;
+  passengerTravel?: TransactionPassengerTravelPayload | null;
   manualBookPageId?: string | null;
   manualBookPageSnapshot?: Record<string, unknown> | null;
   transactionType: TransactionType;
   tradeMode: import('./transactions.enums').TradeMode;
   remarks?: string | null;
+  preTcsFinalAmount?: string | number | null;
+  tcsRatePercent?: string | number | null;
+  tcsRateType?: PurposeRateType | null;
+  tcsAmount?: string | number | null;
+  loanAmount?: string | number | null;
+  declaredAmount?: string | number | null;
+  itrFiled?: boolean | null;
+  tcsDeclarationAccepted?: boolean | null;
+  isProprietorship?: boolean | null;
   items?: TransactionItemPayload[];
   documents?: TransactionDocumentPayload[];
   additionalCharges?: TransactionAdditionalChargePayload[];
@@ -245,6 +277,8 @@ export class TransactionsService {
     private readonly chequeBookPageTrackingRepository: Repository<ChequeBookPageTracking>,
     private readonly companyService: CompanyService,
     private readonly additionalSettingService: AdditionalSettingService,
+    private readonly dayEndStartProcessService: DayEndStartProcessService,
+    private readonly countryService: CountryService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
@@ -616,6 +650,34 @@ export class TransactionsService {
     return transaction;
   }
 
+  private async resolveSelectOptionByIdOrValue(
+    rawValue?: string | null,
+  ): Promise<SelectOption | null> {
+    const normalizedValue = String(rawValue ?? '').trim();
+
+    if (!normalizedValue) {
+      return null;
+    }
+
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        normalizedValue,
+      )
+    ) {
+      const optionById = await this.selectOptionRepository.findOne({
+        where: { id: normalizedValue },
+      });
+
+      if (optionById) {
+        return optionById;
+      }
+    }
+
+    return this.selectOptionRepository.findOne({
+      where: { value: normalizedValue },
+    });
+  }
+
   async getTransactions(
     slug?: string,
     branchId?: string,
@@ -855,6 +917,21 @@ export class TransactionsService {
       ? TransactionStatus.DRAFT
       : TransactionStatus.APPROVED;
     const now = new Date();
+    const policyContext = await this.dayEndStartProcessService.getPolicyContext({
+      userId: performedById,
+      activeBranchId: resolvedBranchId,
+      activeCounterId: resolvedCounterId,
+    });
+    const resolvedTransactionDate = transactionPayload.transactionDate?.trim()
+      ? transactionPayload.transactionDate
+      : policyContext.transactionDate;
+
+    await this.dayEndStartProcessService.assertTransactionDateAllowed(
+      resolvedBranchId,
+      performedById,
+      resolvedTransactionDate,
+    );
+
     const currentCompany = await this.companyService.getCurrentCompany(now);
     if (!currentCompany) {
       throw new BadRequestException('Current company not found');
@@ -979,10 +1056,21 @@ export class TransactionsService {
     await this.purchaseRuleService.validate(transactionPayload);
 
     const passengerPayload = transactionPayload.passenger ?? null;
+    const passengerTravelPayload =
+      transactionPayload.transactionType === TransactionType.SALE
+        ? (transactionPayload.passengerTravel ?? null)
+        : null;
     let passengerId: string | null = null;
     let passengerSnapshot: TransactionPassengerSnapshotValue = null;
+    let passengerTravelSnapshot: TransactionPassengerTravelSnapshotValue = null;
 
     if (passengerPayload) {
+      await this.countryService.assertCountryAllowed(
+        String(passengerPayload.countryId),
+        resolvedBranchId,
+        performedById,
+      );
+
       const passengerLookup = [
         passengerPayload.panNumber
           ? { panNumber: String(passengerPayload.panNumber).trim() }
@@ -1050,46 +1138,150 @@ export class TransactionsService {
       )) as TransactionPassengerSnapshotValue;
     }
 
+    if (passengerTravelPayload) {
+      const hasTravelDetails =
+        Boolean(String(passengerTravelPayload.airlineTtId ?? '').trim()) ||
+        Boolean(String(passengerTravelPayload.ticketNo ?? '').trim()) ||
+        Boolean(String(passengerTravelPayload.route ?? '').trim()) ||
+        Boolean(String(passengerTravelPayload.travellingCountryId ?? '').trim()) ||
+        (passengerTravelPayload.noOfDays !== undefined &&
+          passengerTravelPayload.noOfDays !== null) ||
+        (passengerTravelPayload.noOfPax !== undefined &&
+          passengerTravelPayload.noOfPax !== null) ||
+        Boolean(String(passengerTravelPayload.departureDate ?? '').trim()) ||
+        Boolean(String(passengerTravelPayload.travelPnr ?? '').trim()) ||
+        Boolean(passengerTravelPayload.visa) ||
+        Boolean(passengerTravelPayload.isCisCountry);
+
+      if (hasTravelDetails) {
+        const airlineOption = passengerTravelPayload.airlineTtId
+          ? await this.resolveSelectOptionByIdOrValue(
+              String(passengerTravelPayload.airlineTtId),
+            )
+          : null;
+        const airlineSnapshot = airlineOption
+          ? ((await loadEntitySnapshot(
+              this.selectOptionRepository,
+              airlineOption.id,
+            )) as TransactionReferenceSnapshotValue)
+          : null;
+        if (passengerTravelPayload.airlineTtId && !airlineSnapshot) {
+          throw new NotFoundException(
+            `Airline option with id ${passengerTravelPayload.airlineTtId} not found`,
+          );
+        }
+
+        const travelCountrySnapshot = passengerTravelPayload.travellingCountryId
+          ? ((await loadEntitySnapshot(
+              this.countryRepository,
+              String(passengerTravelPayload.travellingCountryId),
+            )) as TransactionReferenceSnapshotValue)
+          : null;
+        if (
+          passengerTravelPayload.travellingCountryId &&
+          !travelCountrySnapshot
+        ) {
+          throw new NotFoundException(
+            `Travel country with id ${passengerTravelPayload.travellingCountryId} not found`,
+          );
+        }
+
+        passengerTravelSnapshot = {
+          id: String(
+            passengerTravelPayload.airlineTtId ??
+              passengerTravelPayload.travellingCountryId ??
+              'travel',
+          ),
+          airlineTt: airlineSnapshot,
+          ticketNo: passengerTravelPayload.ticketNo ?? null,
+          route: passengerTravelPayload.route ?? null,
+          travellingCountry: travelCountrySnapshot,
+          noOfDays: passengerTravelPayload.noOfDays ?? null,
+          noOfPax: passengerTravelPayload.noOfPax ?? null,
+          departureDate: passengerTravelPayload.departureDate ?? null,
+          travelPnr: passengerTravelPayload.travelPnr ?? null,
+          visa: passengerTravelPayload.visa ?? false,
+          isCisCountry: passengerTravelPayload.isCisCountry ?? false,
+        };
+      }
+    }
+
+    const transactionToSave: DeepPartial<Transaction> = {
+      rootTransactionId: transactionPayload.rootTransactionId ?? null,
+      revisionNo: Number(transactionPayload.revisionNo ?? 1) || 1,
+      number: generatedNumber,
+      slug: transactionPayload.slug ?? null,
+      branchId: String(resolvedBranchId),
+      branchSnapshot,
+      counterId: String(resolvedCounterId),
+      counterSnapshot,
+      companyId: currentCompany.id,
+      companySnapshot: currentCompanySnapshot,
+      partyProfileId: String(transactionPayload.partyProfileId),
+      transactionPartyProfileType:
+        transactionPayload.transactionPartyProfileType ?? null,
+      partyProfileSnapshot,
+      purposeId,
+      purposeSnapshot,
+      passengerId,
+      passengerSnapshot,
+      passengerTravelId: null,
+      passengerTravelSnapshot,
+      agentProfileId: transactionPayload.agentProfileId ?? null,
+      agentProfileSnapshot,
+      manualBookPageId: transactionPayload.manualBookPageId ?? null,
+      manualBookPageSnapshot,
+      transactionDate: resolvedTransactionDate
+        ? new Date(`${String(resolvedTransactionDate).slice(0, 10)}T00:00:00.000Z`)
+        : null,
+      transactionType: transactionPayload.transactionType,
+      tradeMode: transactionPayload.tradeMode,
+      status: transactionStatus,
+      remarks: transactionPayload.remarks ?? null,
+      submittedAt: shouldRequireApproval ? now : now,
+      approvedAt: shouldRequireApproval ? null : now,
+      rejectedAt: null,
+      approvedById: shouldRequireApproval ? null : performedById,
+      rejectedById: null,
+      approvalRemarks: null,
+      rejectionReason: null,
+      isLatest: true,
+      taxRatePercent: roundMoney(gstRatePercent),
+      preTcsFinalAmount:
+        transactionPayload.preTcsFinalAmount !== undefined &&
+        transactionPayload.preTcsFinalAmount !== null
+          ? roundMoney(this.toNumber(transactionPayload.preTcsFinalAmount))
+          : roundMoney(0),
+      tcsRatePercent:
+        transactionPayload.tcsRatePercent !== undefined &&
+        transactionPayload.tcsRatePercent !== null
+          ? roundMoney(this.toNumber(transactionPayload.tcsRatePercent))
+          : roundMoney(0),
+      tcsRateType: transactionPayload.tcsRateType ?? null,
+      tcsAmount:
+        transactionPayload.tcsAmount !== undefined &&
+        transactionPayload.tcsAmount !== null
+          ? roundMoney(this.toNumber(transactionPayload.tcsAmount))
+          : roundMoney(0),
+      loanAmount:
+        transactionPayload.loanAmount !== undefined &&
+        transactionPayload.loanAmount !== null
+          ? roundMoney(this.toNumber(transactionPayload.loanAmount))
+          : null,
+      declaredAmount:
+        transactionPayload.declaredAmount !== undefined &&
+        transactionPayload.declaredAmount !== null
+          ? roundMoney(this.toNumber(transactionPayload.declaredAmount))
+          : null,
+      itrFiled: Boolean(transactionPayload.itrFiled),
+      tcsDeclarationAccepted: Boolean(transactionPayload.tcsDeclarationAccepted),
+      isProprietorship: Boolean(transactionPayload.isProprietorship),
+      createdBy: performedById,
+      updatedBy: performedById,
+    };
+
     const transaction = await this.transactionRepository.save(
-      this.transactionRepository.create({
-        rootTransactionId: transactionPayload.rootTransactionId ?? null,
-        revisionNo: Number(transactionPayload.revisionNo ?? 1) || 1,
-        number: generatedNumber,
-        slug: transactionPayload.slug ?? null,
-        branchId: String(resolvedBranchId),
-        branchSnapshot,
-        counterId: String(resolvedCounterId),
-        counterSnapshot,
-        companyId: currentCompany.id,
-        companySnapshot: currentCompanySnapshot,
-        partyProfileId: String(transactionPayload.partyProfileId),
-        transactionPartyProfileType:
-          transactionPayload.transactionPartyProfileType ?? null,
-        partyProfileSnapshot,
-        purposeId,
-        purposeSnapshot,
-        passengerId,
-        passengerSnapshot,
-        agentProfileId: transactionPayload.agentProfileId ?? null,
-        agentProfileSnapshot,
-        manualBookPageId: transactionPayload.manualBookPageId ?? null,
-        manualBookPageSnapshot,
-        transactionType: transactionPayload.transactionType,
-        tradeMode: transactionPayload.tradeMode,
-        status: transactionStatus,
-        remarks: transactionPayload.remarks ?? null,
-        submittedAt: shouldRequireApproval ? now : now,
-        approvedAt: shouldRequireApproval ? null : now,
-        rejectedAt: null,
-        approvedById: shouldRequireApproval ? null : performedById,
-        rejectedById: null,
-        approvalRemarks: null,
-        rejectionReason: null,
-        isLatest: true,
-        taxRatePercent: roundMoney(gstRatePercent),
-        createdBy: performedById,
-        updatedBy: performedById,
-      }),
+      this.transactionRepository.create(transactionToSave),
     );
 
     const passengerOtherDocumentRows = Array.isArray(passengerPayload?.otherDocuments)
@@ -1367,6 +1559,11 @@ export class TransactionsService {
       );
     }
 
+    await this.transactionRepository.query(
+      'SELECT public.refresh_transaction_tcs($1::uuid)',
+      [transaction.id],
+    );
+
     const refreshedTransaction = await this.transactionRepository.findOne({
       where: { id: transaction.id },
     });
@@ -1438,6 +1635,13 @@ export class TransactionsService {
 
       if (
         paymentMethod === TransactionPaymentMethod.CHEQUE &&
+        !String(row.referenceDate ?? '').trim()
+      ) {
+        throw new BadRequestException('Cheque date is required');
+      }
+
+      if (
+        paymentMethod === TransactionPaymentMethod.CHEQUE &&
         transactionPayload.transactionType === TransactionType.SALE &&
         row.chequePageId
       ) {
@@ -1478,12 +1682,12 @@ export class TransactionsService {
           chequePageSnapshot,
           paymentMethod,
           paymentDirection,
-          referenceNumber: row.referenceNumber ?? null,
-          referenceDate: row.referenceDate ?? null,
-          branchName: row.branchName ?? null,
-          drawnOn: row.drawnOn ?? null,
+          referenceNumber: normalizeNullableString(row.referenceNumber),
+          referenceDate: normalizeNullableString(row.referenceDate),
+          branchName: normalizeNullableString(row.branchName),
+          drawnOn: normalizeNullableString(row.drawnOn),
           amount: String(row.amount),
-          remarks: row.remarks ?? null,
+          remarks: normalizeNullableString(row.remarks),
           createdBy: performedById,
           updatedBy: performedById,
         }),

@@ -54,6 +54,7 @@ import {
 @Index("IDX_transactions_passenger_travel_id", ["passengerTravelId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
+@Index("IDX_transactions_transaction_date", ["transactionDate"])
 @Check(
   "CHK_transactions_number_required_when_approved",
   `"status" <> 'APPROVED' OR "number" IS NOT NULL`,
@@ -78,6 +79,9 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "citext", nullable: true })
   slug: string | null;
+
+  @Column({ type: "timestamptz", name: "transaction_date", nullable: true })
+  transactionDate: Date | string | null;
 
   @Column({ type: "uuid", name: "branch_id" })
   branchId: string;

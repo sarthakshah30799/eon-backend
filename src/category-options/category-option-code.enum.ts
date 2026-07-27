@@ -18,6 +18,7 @@ export enum CategoryOptionCodeEnum {
   TdsGroup = "TDSGROUP",
   MasterDocument = "MASTER",
   TransactionDocument = "TRANSACTION",
+  Airline = "AIRLINE",
   Segment = "SEGMENT",
   Relationship = "RELATIONSHIP",
   CommissionGiven = "COMMISSIONGIVEN",

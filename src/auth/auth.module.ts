@@ -6,9 +6,10 @@ import { SessionService } from './session.service';
 import { PasswordPolicyModule } from '../password-policy/password-policy.module';
 import { SessionPolicyModule } from '../session-policy/session-policy.module';
 import { MailModule } from '../mail/mail.module';
+import { DayEndStartProcessModule } from '../day-end-start-process/day-end-start-process.module';
 
 @Module({
-  imports: [UserModule, PasswordPolicyModule, SessionPolicyModule, MailModule],
+  imports: [UserModule, PasswordPolicyModule, SessionPolicyModule, MailModule, DayEndStartProcessModule],
   controllers: [AuthController],
   providers: [AuthService, SessionService],
   exports: [AuthService, SessionService],
