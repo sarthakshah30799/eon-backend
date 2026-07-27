@@ -36,11 +36,15 @@ import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { Counter } from "../counters/counter.entity";
 import { PurchaseRuleService } from "./purchase-rule.service";
+import { CountryModule } from "../country/country.module";
+import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
 
 @Module({
   imports: [
     CompanyModule,
     AdditionalSettingModule,
+    CountryModule,
+    DayEndStartProcessModule,
     MailModule,
     StorageModule,
     TypeOrmModule.forFeature([

@@ -10,6 +10,7 @@ import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { Product } from '../products/product.entity';
 import { Purpose } from '../purpose/purpose.entity';
 import { TransactionProfileType, TransactionType } from './transactions.enums';
+import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
 
 interface Ad1Payload {
   currencyId?: string;
@@ -77,6 +78,7 @@ export class TransactionAd1Service {
     private readonly accountProfileRepository: Repository<AccountProfile>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    private readonly dayEndStartProcessService: DayEndStartProcessService,
   ) {}
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -208,6 +210,21 @@ export class TransactionAd1Service {
       relations: ['company'],
     });
     const companyId = branch?.company?.id ?? null;
+    const policyContext = await this.dayEndStartProcessService.getDayEndContext(
+      {
+        userId: performedById,
+        activeBranchId: resolvedBranchId,
+      },
+      false,
+    );
+    const resolvedTransactionDate = payload.transactionDate?.trim()
+      ? payload.transactionDate
+      : policyContext.transactionDate;
+    await this.dayEndStartProcessService.assertTransactionDateAllowed(
+      resolvedBranchId,
+      performedById,
+      resolvedTransactionDate,
+    );
 
     const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
@@ -222,7 +239,7 @@ export class TransactionAd1Service {
 
         dealId: payload.dealId || null,
         docNo: payload.docNo || null,
-        transactionDate: payload.transactionDate || null,
+        transactionDate: resolvedTransactionDate || null,
         marketingId: payload.marketingId || null,
         segmentId: payload.segmentId || null,
         servicedBy: payload.servicedBy || null,
@@ -299,6 +316,31 @@ export class TransactionAd1Service {
     activeBranchId: string | null,
   ): Promise<TransactionAd1> {
     const ad1 = await this.findOne(id);
+    const branchId = ad1.branchId || activeBranchId || '';
+    if (payload.transactionDate !== undefined) {
+      const currentTransactionDate = ad1.transactionDate
+        ? String(ad1.transactionDate).slice(0, 10)
+        : '';
+      const resolvedTransactionDate = payload.transactionDate?.trim()
+        ? payload.transactionDate
+        : '';
+
+      if (resolvedTransactionDate && resolvedTransactionDate.slice(0, 10) !== currentTransactionDate) {
+        const policyContext = await this.dayEndStartProcessService.getDayEndContext(
+          {
+            userId: performedById,
+            activeBranchId: branchId,
+          },
+          false,
+        );
+        const effectiveTransactionDate = resolvedTransactionDate || policyContext.transactionDate;
+        await this.dayEndStartProcessService.assertTransactionDateAllowed(
+          branchId,
+          performedById,
+          effectiveTransactionDate,
+        );
+      }
+    }
 
     if (payload.docNo) {
       ad1.number = String(payload.docNo);
@@ -333,7 +375,7 @@ export class TransactionAd1Service {
         ...payload,
         agentId: payload.agentId ?? payload.fxRefAgentId,
       },
-      ad1.branchId,
+      branchId,
     );
     Object.assign(ad1, snapshots);
 

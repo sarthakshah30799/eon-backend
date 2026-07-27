@@ -5,7 +5,11 @@ import { AdditionalSettingService } from '../additional-settings/additional-sett
 import { Currency } from '../currencies/currency.entity';
 import { Passenger, PassengerEntityType, PassengerNationalityType } from '../passengers/passenger.entity';
 import { Transaction } from './entities/transaction.entity';
-import { TransactionPaymentMethod, TransactionStatus } from './transactions.enums';
+import {
+  TransactionPaymentMethod,
+  TransactionStatus,
+  TransactionType,
+} from './transactions.enums';
 
 type PurchaseRuleConfig = {
   referenceCurrencyCode: string;
@@ -33,6 +37,7 @@ type PurchaseRulePassengerInput = {
 };
 
 type PurchaseRuleTransactionBlock = {
+  transactionType?: string | null;
   passenger?: PurchaseRulePassengerInput | null;
   items?: PurchaseRuleRowInput[] | null;
   additionalCharges?: PurchaseRuleRowInput[] | null;
@@ -40,6 +45,7 @@ type PurchaseRuleTransactionBlock = {
 };
 
 type PurchaseRuleTransactionInput = {
+  transactionType?: string | null;
   transaction?: PurchaseRuleTransactionBlock | null;
   passenger?: PurchaseRulePassengerInput | null;
   items?: PurchaseRuleRowInput[] | null;
@@ -164,6 +170,10 @@ export class PurchaseRuleService {
     }
 
     return Array.isArray(body.payments) ? body.payments : [];
+  }
+
+  private resolveTransactionType(body: PurchaseRuleTransactionInput): string {
+    return normalizeUpper(body.transaction?.transactionType ?? body.transactionType);
   }
 
   private calculateRowAmount(row: PurchaseRuleRowInput) {
@@ -400,6 +410,30 @@ export class PurchaseRuleService {
   }
 
   async preview(body: PurchaseRuleTransactionInput): Promise<PurchaseRulePreviewResponse> {
+    const transactionType = this.resolveTransactionType(body);
+
+    if (transactionType === TransactionType.SALE) {
+      return {
+        allowed: true,
+        ruleType: 'OK',
+        blockingReason: null,
+        requiresCdf: false,
+        cdfThresholdAmount: '0.00',
+        referenceCurrencyCode: 'USD',
+        transactionAmount: '0.00',
+        transactionAmountInReferenceCurrency: '0.00',
+        cumulativeAmountInReferenceCurrency: '0.00',
+        cashLimitAmount: '0.00',
+        cashTotalAmount: '0.00',
+        chequeTotalAmount: '0.00',
+        passengerMatchTier: null,
+        passengerId: null,
+        isCorporate: false,
+        nationalityType: null,
+        paymentMethodsAllowed: [],
+      };
+    }
+
     const config = await this.getConfig();
     const resolvedReferenceCurrency = await this.resolveCurrencyByCodeOrId(config.referenceCurrencyCode);
     const referenceCurrencyCode =
@@ -545,6 +579,10 @@ export class PurchaseRuleService {
   }
 
   async validate(body: PurchaseRuleTransactionInput): Promise<void> {
+    if (this.resolveTransactionType(body) === TransactionType.SALE) {
+      return;
+    }
+
     const result = await this.preview(body);
 
     if (!result.allowed) {

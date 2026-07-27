@@ -33,6 +33,18 @@ export class CountryResponseDto {
   @ApiProperty()
   isCisCountry: boolean;
 
+  @ApiProperty()
+  isBlocked: boolean;
+
+  @ApiProperty({ required: false, nullable: true })
+  blockedAt?: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  blockedById?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  blockedReason?: string | null;
+
   @ApiPropertyOptional()
   countryGroupId?: string;
 
@@ -57,6 +69,10 @@ export class CountryResponseDto {
     dto.greyListCountry = entity.greyListCountry;
     dto.baseCountry = entity.baseCountry;
     dto.isCisCountry = entity.isCisCountry;
+    dto.isBlocked = entity.isBlocked;
+    dto.blockedAt = entity.blockedAt ?? null;
+    dto.blockedById = entity.blockedById ?? null;
+    dto.blockedReason = entity.blockedReason ?? null;
     
     if (entity.countryGroup) {
       dto.countryGroupId = entity.countryGroup.id;

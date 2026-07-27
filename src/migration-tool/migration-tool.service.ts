@@ -429,7 +429,9 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
     editPath: '/admin/purpose/edit/:id',
   }),
   { path: '/admin/menu-management', name: 'Menu Management', parentPath: null, isAdmin: true, sortOrder: 40 },
-  { path: '/reports', name: 'Reports', parentPath: null, isAdmin: false, sortOrder: 41 },
+  { path: '/admin/day-end-start-process', name: 'Day End/Start Process', parentPath: null, isAdmin: true, sortOrder: 41 },
+  { path: '/admin/monthwise-locking', name: 'Monthwise Locking', parentPath: null, isAdmin: true, sortOrder: 42 },
+  { path: '/reports', name: 'Reports', parentPath: null, isAdmin: false, sortOrder: 43 },
   { path: '/reports/:slug', name: 'Report Detail', parentPath: '/reports', isAdmin: false, sortOrder: 1 },
   ...buildCrudMenuSeeds({
     basePath: '/admin/manual-bill-books',
