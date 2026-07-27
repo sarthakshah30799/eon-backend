@@ -44,6 +44,18 @@ export class DayEndStartProcessContextDto {
   @ApiProperty()
   bodCompleted: boolean;
 
+  @ApiProperty()
+  canStartDay: boolean;
+
+  @ApiProperty()
+  canCompleteDayEnd: boolean;
+
+  @ApiProperty()
+  openBusinessDate: string;
+
+  @ApiProperty()
+  workflowState: string;
+
   @ApiPropertyOptional()
   activeMonthlyLock?: MonthlyLockWindowResponseDto | null;
 

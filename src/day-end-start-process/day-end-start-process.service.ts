@@ -31,6 +31,30 @@ const normalizeDateOnly = (value: Date | string): string => {
   return `${year}-${month}-${day}`;
 };
 
+const parseDateOnly = (value: string | null | undefined): Date | undefined => {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = new Date(`${normalized.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+const formatDateOnly = (date: Date): string => normalizeDateOnly(date);
+
+const clampDate = (date: Date, min?: Date, max?: Date): Date => {
+  if (min && date < min) {
+    return min;
+  }
+
+  if (max && date > max) {
+    return max;
+  }
+
+  return date;
+};
+
 @Injectable()
 export class DayEndStartProcessService {
   constructor(
@@ -93,6 +117,100 @@ export class DayEndStartProcessService {
     });
   }
 
+  private getWorkflowStateForExecution(
+    today: string,
+    todayExecution: DayEndExecution | null,
+    latestExecution: DayEndExecution | null,
+  ) {
+    const openExecution =
+      todayExecution && !todayExecution.eodAt
+        ? todayExecution
+        : latestExecution && !latestExecution.eodAt
+          ? latestExecution
+          : null;
+
+    if (todayExecution?.bodAt && todayExecution.eodAt) {
+      return {
+        workflowState: "CLOSED_TODAY",
+        openExecution,
+        canStartDay: false,
+        canCompleteDayEnd: false,
+        openBusinessDate: todayExecution.businessDate,
+        currentBusinessDate: today,
+        eodIncomplete: false,
+        bodCompleted: true,
+      };
+    }
+
+    if (todayExecution && !todayExecution.bodAt) {
+      return {
+        workflowState: "PENDING_BOD",
+        openExecution,
+        canStartDay: true,
+        canCompleteDayEnd: false,
+        openBusinessDate: todayExecution.businessDate,
+        currentBusinessDate: today,
+        eodIncomplete: false,
+        bodCompleted: false,
+      };
+    }
+
+    if (todayExecution?.bodAt && !todayExecution.eodAt) {
+      return {
+        workflowState: "PENDING_EOD",
+        openExecution,
+        canStartDay: false,
+        canCompleteDayEnd: true,
+        openBusinessDate: todayExecution.businessDate,
+        currentBusinessDate: todayExecution.businessDate,
+        eodIncomplete: true,
+        bodCompleted: true,
+      };
+    }
+
+    if (latestExecution && !latestExecution.eodAt) {
+      return {
+        workflowState: latestExecution.bodAt ? "PENDING_EOD" : "PENDING_BOD",
+        openExecution,
+        canStartDay: false,
+        canCompleteDayEnd: Boolean(latestExecution.bodAt),
+        openBusinessDate: latestExecution.businessDate,
+        currentBusinessDate: latestExecution.businessDate,
+        eodIncomplete: Boolean(latestExecution.bodAt),
+        bodCompleted: Boolean(latestExecution.bodAt),
+      };
+    }
+
+    return {
+      workflowState: "READY_TO_START",
+      openExecution,
+      canStartDay: true,
+      canCompleteDayEnd: false,
+      openBusinessDate: today,
+      currentBusinessDate: today,
+      eodIncomplete: false,
+      bodCompleted: false,
+    };
+  }
+
+  private resolveSuggestedTransactionDate(
+    currentBusinessDate: string,
+    activeMonthlyLock: { fromDate: string; toDate: string } | null,
+  ): string {
+    const currentDate = parseDateOnly(currentBusinessDate);
+    if (!currentDate) {
+      return currentBusinessDate;
+    }
+
+    if (!activeMonthlyLock) {
+      return currentBusinessDate;
+    }
+
+    const minDate = parseDateOnly(activeMonthlyLock.fromDate);
+    const maxDate = parseDateOnly(activeMonthlyLock.toDate);
+    return formatDateOnly(clampDate(currentDate, minDate, maxDate));
+  }
+
   private async upsertBodRow(
     branchId: string,
     userId: string,
@@ -141,19 +259,27 @@ export class DayEndStartProcessService {
   ): Promise<DayEndStartProcessContextDto> {
     const { userId, branchId, counterId } = this.assertSessionContext(session, requireCounter);
     const today = this.getTodayBusinessDate();
+    const todayExecution = await this.findExecution(branchId, userId, today);
     const latestExecution = await this.findLatestExecution(branchId, userId);
-    const incompleteEod = Boolean(latestExecution && !latestExecution.eodAt);
-    const currentBusinessDate = incompleteEod ? latestExecution!.businessDate : today;
+    const workflow = this.getWorkflowStateForExecution(today, todayExecution, latestExecution);
     const activeMonthlyLock = await this.monthlyLocksService.getActiveMonthlyLock(branchId, userId);
+    const suggestedTransactionDate = this.resolveSuggestedTransactionDate(
+      workflow.currentBusinessDate,
+      activeMonthlyLock,
+    );
 
     return {
       userId,
       branchId,
       counterId,
-      currentBusinessDate,
-      transactionDate: currentBusinessDate,
-      eodIncomplete: incompleteEod,
-      bodCompleted: Boolean(latestExecution?.bodAt),
+      currentBusinessDate: workflow.currentBusinessDate,
+      transactionDate: suggestedTransactionDate,
+      eodIncomplete: workflow.eodIncomplete,
+      bodCompleted: workflow.bodCompleted,
+      canStartDay: workflow.canStartDay,
+      canCompleteDayEnd: workflow.canCompleteDayEnd,
+      openBusinessDate: workflow.openBusinessDate,
+      workflowState: workflow.workflowState,
       activeMonthlyLock,
       activeBackdateWindow: activeMonthlyLock,
       checklist: await this.getPolicyChecklist(),
@@ -174,15 +300,23 @@ export class DayEndStartProcessService {
       false,
     );
     const allowedDate = context.transactionDate;
+    const activeWindow = context.activeMonthlyLock;
+    const hasMonthlyLockOverride = Boolean(activeWindow);
 
-    if (!context.bodCompleted) {
+    if (!transactionDate) {
+      if (hasMonthlyLockOverride || context.workflowState === "PENDING_EOD") {
+        return { allowedDate, context };
+      }
+
+      if (context.workflowState === "CLOSED_TODAY") {
+        throw new BadRequestException(
+          `Day end is already completed for ${context.openBusinessDate}`,
+        );
+      }
+
       throw new BadRequestException(
         'Day start is required before punching transactions',
       );
-    }
-
-    if (!transactionDate) {
-      return { allowedDate, context };
     }
 
     const requestedDate = normalizeDateOnly(transactionDate);
@@ -194,20 +328,31 @@ export class DayEndStartProcessService {
       throw new BadRequestException("Transaction date cannot be in the future");
     }
 
-    if (context.eodIncomplete && requestedDate !== context.currentBusinessDate) {
-      throw new BadRequestException(
-        `EOD is pending for this branch/user. Allowed transaction date is ${context.currentBusinessDate}`,
-      );
-    }
-
-    const activeWindow = context.activeMonthlyLock;
-    if (activeWindow) {
+    if (hasMonthlyLockOverride) {
       if (requestedDate < activeWindow.fromDate || requestedDate > activeWindow.toDate) {
         throw new BadRequestException(
           `Transaction date must be between ${activeWindow.fromDate} and ${activeWindow.toDate}`,
         );
       }
       return { allowedDate, context };
+    }
+
+    if (context.workflowState === "CLOSED_TODAY") {
+      throw new BadRequestException(
+        `Day end is already completed for ${context.openBusinessDate}`,
+      );
+    }
+
+    if (context.workflowState === "PENDING_BOD" || context.workflowState === "READY_TO_START") {
+      throw new BadRequestException(
+        'Day start is required before punching transactions',
+      );
+    }
+
+    if (context.workflowState === "PENDING_EOD" && requestedDate !== context.openBusinessDate) {
+      throw new BadRequestException(
+        `EOD is pending for this branch/user. Allowed transaction date is ${context.openBusinessDate}`,
+      );
     }
 
     if (requestedDate !== allowedDate) {
@@ -232,10 +377,15 @@ export class DayEndStartProcessService {
     }, false);
     const latest = await this.findLatestExecution(resolvedBranchId, resolvedUserId);
     const today = this.getTodayBusinessDate();
-    const businessDate = latest && !latest.eodAt ? latest.businessDate : today;
+    const todayExecution = await this.findExecution(resolvedBranchId, resolvedUserId, today);
+    const businessDate = todayExecution && !todayExecution.eodAt
+      ? todayExecution.businessDate
+      : latest && !latest.eodAt
+        ? latest.businessDate
+        : today;
     const row = await this.findExecution(resolvedBranchId, resolvedUserId, businessDate);
 
-    if (!row || !row.bodAt) {
+    if (!row || !row.bodAt || row.eodAt) {
       throw new BadRequestException('Day start is required before completing day end');
     }
 
@@ -259,8 +409,26 @@ export class DayEndStartProcessService {
     }, false);
     const latest = await this.findLatestExecution(resolvedBranchId, resolvedUserId);
     const today = this.getTodayBusinessDate();
-    const businessDate = latest && !latest.eodAt ? latest.businessDate : today;
+    const todayExecution = await this.findExecution(resolvedBranchId, resolvedUserId, today);
 
-    return this.upsertBodRow(resolvedBranchId, resolvedUserId, businessDate, actorUserId, answers ?? {});
+    if (todayExecution?.bodAt && todayExecution.eodAt) {
+      throw new BadRequestException(
+        `Day end is already completed for ${todayExecution.businessDate}`,
+      );
+    }
+
+    if (todayExecution?.bodAt && !todayExecution.eodAt) {
+      throw new BadRequestException(
+        `Day start is already completed for ${todayExecution.businessDate}`,
+      );
+    }
+
+    if (latest && !latest.eodAt && latest.businessDate !== today) {
+      throw new BadRequestException(
+        `Complete EOD for ${latest.businessDate} before starting the next day`,
+      );
+    }
+
+    return this.upsertBodRow(resolvedBranchId, resolvedUserId, today, actorUserId, answers ?? {});
   }
 }
