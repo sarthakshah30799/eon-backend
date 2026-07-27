@@ -100,13 +100,14 @@ export class ManualBillBookService {
     const numBooks = bookNoTo - bookNoFrom + 1;
     const mvNoTo = mvNoFrom + numBooks * vouchersPerBook - 1;
 
-    // Check for overlapping book number ranges (global)
+    // Check for overlapping book number ranges scoped to transaction type
     const overlappingBookNo = await this.manualBookRepository
       .createQueryBuilder('book')
       .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
         bookNoFrom,
         bookNoTo,
       })
+      .andWhere('book.transactionType = :transactionType', { transactionType })
       .getOne();
 
     if (overlappingBookNo) {
@@ -115,13 +116,14 @@ export class ManualBillBookService {
       );
     }
 
-    // Check for overlapping page number ranges
+    // Check for overlapping page number ranges scoped to transaction type
     const overlapping = await this.manualBookRepository
       .createQueryBuilder('book')
       .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
         mvNoFrom,
         mvNoTo,
       })
+      .andWhere('book.transactionType = :transactionType', { transactionType })
       .getOne();
 
     if (overlapping) {
@@ -1251,15 +1253,21 @@ export class ManualBillBookService {
   async validateBookRange(
     bookNoFrom: number,
     bookNoTo: number,
+    transactionType?: string,
   ): Promise<{ valid: boolean; error?: string }> {
-    const overlappingBookNo = await this.manualBookRepository
+    const query = this.manualBookRepository
       .createQueryBuilder('book')
       .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
         bookNoFrom,
         bookNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
-      .getOne();
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT });
+
+    if (transactionType) {
+      query.andWhere('book.transactionType = :transactionType', { transactionType });
+    }
+
+    const overlappingBookNo = await query.getOne();
 
     if (overlappingBookNo) {
       return {
@@ -1273,15 +1281,21 @@ export class ManualBillBookService {
   async validatePageRange(
     mvNoFrom: number,
     mvNoTo: number,
+    transactionType?: string,
   ): Promise<{ valid: boolean; error?: string }> {
-    const overlapping = await this.manualBookRepository
+    const query = this.manualBookRepository
       .createQueryBuilder('book')
       .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
         mvNoFrom,
         mvNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
-      .getOne();
+      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT });
+
+    if (transactionType) {
+      query.andWhere('book.transactionType = :transactionType', { transactionType });
+    }
+
+    const overlapping = await query.getOne();
 
     if (overlapping) {
       return {
