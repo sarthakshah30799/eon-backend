@@ -53,14 +53,13 @@ export class ManualBillBookController {
   async validateBookRange(
     @Query("bookNoFrom") bookNoFromStr: string,
     @Query("bookNoTo") bookNoToStr: string,
-    @Query("transactionType") transactionType?: string,
   ) {
     const bookNoFrom = parseInt(bookNoFromStr, 10);
     const bookNoTo = parseInt(bookNoToStr, 10);
     if (isNaN(bookNoFrom) || isNaN(bookNoTo)) {
       return { valid: true };
     }
-    return this.service.validateBookRange(bookNoFrom, bookNoTo, transactionType);
+    return this.service.validateBookRange(bookNoFrom, bookNoTo);
   }
 
   @Get("validate-page-range")
@@ -68,14 +67,13 @@ export class ManualBillBookController {
   async validatePageRange(
     @Query("mvNoFrom") mvNoFromStr: string,
     @Query("mvNoTo") mvNoToStr: string,
-    @Query("transactionType") transactionType?: string,
   ) {
     const mvNoFrom = parseInt(mvNoFromStr, 10);
     const mvNoTo = parseInt(mvNoToStr, 10);
     if (isNaN(mvNoFrom) || isNaN(mvNoTo)) {
       return { valid: true };
     }
-    return this.service.validatePageRange(mvNoFrom, mvNoTo, transactionType);
+    return this.service.validatePageRange(mvNoFrom, mvNoTo);
   }
 
   @Get("next-number")
