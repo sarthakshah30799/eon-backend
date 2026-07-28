@@ -62,4 +62,22 @@ export class CountryListQueryDto {
   @IsBoolean()
   @IsOptional()
   baseCountry?: boolean;
+
+  @ApiPropertyOptional({ description: "Hide blocked countries unless an override exists" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  hideBlockedCountry?: boolean;
+
+  @ApiPropertyOptional({ description: "Hide restricted countries" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  hideRestrictedCountry?: boolean;
+
+  @ApiPropertyOptional({ description: "Hide base countries" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  hideBaseCountry?: boolean;
 }

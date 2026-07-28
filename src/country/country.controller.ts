@@ -41,8 +41,11 @@ export class CountryController {
   @ApiQuery({ name: "baseCountry", required: false, type: Boolean })
   @ApiResponse({ status: 200, description: "Paginated list of countries", type: CountryListResponseDto })
   @ApiResponse({ status: 401, description: "Unauthorized" })
-  async findAll(@Query() query: CountryListQueryDto): Promise<CountryListResponseDto> {
-    return this.countryService.findAll(query);
+  async findAll(
+    @Query() query: CountryListQueryDto,
+    @Session() session: any,
+  ): Promise<CountryListResponseDto> {
+    return this.countryService.findAll(query, session);
   }
 
   @Get(":id")

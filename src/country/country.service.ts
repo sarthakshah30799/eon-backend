@@ -125,7 +125,7 @@ export class CountryService {
     return CountryResponseDto.fromEntity(country);
   }
 
-  async findAll(query: CountryListQueryDto): Promise<CountryListResponseDto> {
+  async findAll(query: CountryListQueryDto, session?: { userId?: string; activeBranchId?: string | null }): Promise<CountryListResponseDto> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -180,6 +180,40 @@ export class CountryService {
       });
     }
 
+    if (query.hideRestrictedCountry) {
+      qb.andWhere('country.restricted_country = false');
+    }
+
+    if (query.hideBaseCountry) {
+      qb.andWhere('country.base_country = false');
+    }
+
+    if (query.hideBlockedCountry) {
+      const userId = String(session?.userId ?? '').trim();
+      const activeBranchId = String(session?.activeBranchId ?? '').trim();
+      if (!userId || !activeBranchId) {
+        qb.andWhere('country.is_blocked = false');
+      } else {
+        qb.andWhere(
+          new Brackets((blockedQb) => {
+            blockedQb
+              .where('country.is_blocked = false')
+              .orWhere(
+                `EXISTS (
+                  SELECT 1
+                  FROM unblock_country_access access
+                  WHERE access.country_id = country.id
+                    AND access.branch_id = :activeBranchId
+                    AND access.user_id = :userId
+                    AND access.is_active = true
+                )`,
+                { activeBranchId, userId },
+              );
+          }),
+        );
+      }
+    }
+
     qb.orderBy('country.createdAt', 'DESC').skip(skip).take(limit);
 
     const [countries, totalItems] = await qb.getManyAndCount();
@@ -197,6 +231,33 @@ export class CountryService {
     const country = await this.countryRepository.findOne({ where: { id: countryId } });
     if (!country) {
       throw new NotFoundException(`Country with id ${countryId} not found`);
+    }
+
+    if (!country.isBlocked) {
+      return;
+    }
+
+    const activeRule = await this.unblockCountryAccessRepository.findOne({
+      where: { countryId, branchId, userId, isActive: true },
+    });
+
+    if (!activeRule) {
+      throw new BadRequestException(`Country ${country.name} is blocked for this branch/user`);
+    }
+  }
+
+  async assertTravelCountryAllowed(countryId: string, branchId: string, userId: string): Promise<void> {
+    const country = await this.countryRepository.findOne({ where: { id: countryId } });
+    if (!country) {
+      throw new NotFoundException(`Country with id ${countryId} not found`);
+    }
+
+    if (country.baseCountry) {
+      throw new BadRequestException(`Country ${country.name} cannot be used as a travel country`);
+    }
+
+    if (country.restrictedCountry) {
+      throw new BadRequestException(`Country ${country.name} is restricted and cannot be used as a travel country`);
     }
 
     if (!country.isBlocked) {

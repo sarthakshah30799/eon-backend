@@ -123,6 +123,22 @@ type TransactionPassengerTravelPayload = {
   isCisCountry?: boolean | null;
 };
 
+const parseDateValue = (value?: string | null) => {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const addMonthsUtc = (date: Date, months: number) => {
+  const next = new Date(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+};
+
 type TransactionItemPayload = {
   currencyId: string;
   productId: string;
@@ -1063,13 +1079,36 @@ export class TransactionsService {
     let passengerId: string | null = null;
     let passengerSnapshot: TransactionPassengerSnapshotValue = null;
     let passengerTravelSnapshot: TransactionPassengerTravelSnapshotValue = null;
+    const passengerTransactionDate = parseDateValue(resolvedTransactionDate) ?? now;
 
     if (passengerPayload) {
-      await this.countryService.assertCountryAllowed(
-        String(passengerPayload.countryId),
-        resolvedBranchId,
-        performedById,
-      );
+      if (passengerPayload.countryId) {
+        await this.countryService.assertCountryAllowed(
+          String(passengerPayload.countryId),
+          resolvedBranchId,
+          performedById,
+        );
+      }
+
+      const passengerPassportExpiryDate = parseDateValue(passengerPayload.passportExpiryDate);
+      if (
+        passengerPassportExpiryDate &&
+        passengerPassportExpiryDate <= addMonthsUtc(passengerTransactionDate, 3)
+      ) {
+        throw new BadRequestException(
+          'Passport expiry date must be more than 3 months after the transaction date',
+        );
+      }
+
+      const passengerArrivalDate = parseDateValue(passengerPayload.arrivalDate);
+      if (
+        passengerArrivalDate &&
+        passengerArrivalDate > passengerTransactionDate
+      ) {
+        throw new BadRequestException(
+          'Arrival date cannot be after the transaction date',
+        );
+      }
 
       const passengerLookup = [
         passengerPayload.panNumber
@@ -1184,6 +1223,26 @@ export class TransactionsService {
           throw new NotFoundException(
             `Travel country with id ${passengerTravelPayload.travellingCountryId} not found`,
           );
+        }
+
+        if (passengerTravelPayload.travellingCountryId) {
+          await this.countryService.assertTravelCountryAllowed(
+            String(passengerTravelPayload.travellingCountryId),
+            resolvedBranchId,
+            performedById,
+          );
+        }
+
+        if (passengerTravelPayload.departureDate) {
+          const departureDate = parseDateValue(passengerTravelPayload.departureDate);
+          if (
+            departureDate &&
+            departureDate < passengerTransactionDate
+          ) {
+            throw new BadRequestException(
+              'Departure date cannot be before the transaction date',
+            );
+          }
         }
 
         passengerTravelSnapshot = {
