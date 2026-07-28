@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Session, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Session, UseGuards } from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
@@ -16,6 +16,10 @@ import { CountryResponseDto } from "./dto/country-response.dto";
 import { CountryListQueryDto } from "./dto/country-list-query.dto";
 import { CountryListResponseDto } from "./dto/country-list-response.dto";
 import { CountryRiskCategory } from "./country.entity";
+import {
+  CreateCountryAccessRulesDto,
+  CreateCountryBlockDto,
+} from "./dto/country-access-rule.dto";
 
 @ApiTags("countries")
 @ApiCookieAuth("sessionId")
@@ -37,8 +41,11 @@ export class CountryController {
   @ApiQuery({ name: "baseCountry", required: false, type: Boolean })
   @ApiResponse({ status: 200, description: "Paginated list of countries", type: CountryListResponseDto })
   @ApiResponse({ status: 401, description: "Unauthorized" })
-  async findAll(@Query() query: CountryListQueryDto): Promise<CountryListResponseDto> {
-    return this.countryService.findAll(query);
+  async findAll(
+    @Query() query: CountryListQueryDto,
+    @Session() session: any,
+  ): Promise<CountryListResponseDto> {
+    return this.countryService.findAll(query, session);
   }
 
   @Get(":id")
@@ -77,5 +84,44 @@ export class CountryController {
     @Session() session: any,
   ): Promise<CountryResponseDto> {
     return this.countryService.update(id, dto, session.userId);
+  }
+
+  @Patch(":id/block")
+  @ApiOperation({ summary: "Block or unblock a country" })
+  async setBlockedState(
+    @Param("id") id: string,
+    @Body() dto: CreateCountryBlockDto,
+    @Session() session: any,
+  ): Promise<CountryResponseDto> {
+    return this.countryService.update(
+      id,
+      {
+        isBlocked: dto.isBlocked,
+        blockedReason: dto.blockedReason ?? null,
+      },
+      session.userId,
+    );
+  }
+
+  @Post(":id/unblock-access")
+  @ApiOperation({ summary: "Create unblock access rules for a country" })
+  async createUnblockAccessRules(
+    @Param("id") id: string,
+    @Body() dto: CreateCountryAccessRulesDto,
+    @Session() session: any,
+  ) {
+    return this.countryService.createCountryAccessRules(id, dto, session.userId);
+  }
+
+  @Get(":id/unblock-access")
+  @ApiOperation({ summary: "List unblock access rules for a country" })
+  async listUnblockAccessRules(@Param("id") id: string) {
+    return this.countryService.listCountryAccessRules(id);
+  }
+
+  @Delete("unblock-access/:ruleId")
+  @ApiOperation({ summary: "Revoke an unblock access rule" })
+  async revokeUnblockAccessRule(@Param("ruleId") ruleId: string, @Session() session: any) {
+    return this.countryService.revokeCountryAccessRule(ruleId, session.userId);
   }
 }

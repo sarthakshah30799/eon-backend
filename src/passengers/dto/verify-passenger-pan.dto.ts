@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional } from 'class-validator';
 import {
   PassengerEntityType,
   PassengerNationalityType,
@@ -25,9 +25,4 @@ export class VerifyPassengerPanDto {
   @ApiPropertyOptional({ example: '1990-01-31' })
   @IsOptional()
   panDob?: string;
-
-  @ApiPropertyOptional({ example: 'Company', description: 'Dynamic category option value' })
-  @IsOptional()
-  @IsString()
-  panHolderRelationType?: string;
 }

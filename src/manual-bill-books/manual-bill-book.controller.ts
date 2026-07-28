@@ -127,10 +127,13 @@ export class ManualBillBookController {
   @ApiOperation({ summary: "Get branch managers for a branch" })
   async getBranchManagers(
     @Session() session: any,
+    @Query("branchId") branchId?: string,
   ) {
-    const effectiveBranchId = session.activeBranchId;
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
+      ? branchId?.trim() || session?.activeBranchId
+      : session?.activeBranchId;
     this.logger.log(
-      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
+      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} queryBranchId=${branchId?.trim() ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
     );
     return this.service.getBranchManagers(effectiveBranchId);
   }

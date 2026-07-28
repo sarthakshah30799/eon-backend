@@ -10,6 +10,7 @@ import { ForgotPasswordDto, ResetPasswordDto, SetupPasswordDto } from './dto/pas
 import { UserService } from '../users/user.service';
 import { AuthenticatedGuard } from './guards/authenticated.guard';
 import { SetWorkplaceDto } from './dto/set-workplace.dto';
+import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -17,6 +18,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly userService: UserService,
+    private readonly dayEndStartProcessService: DayEndStartProcessService,
   ) {}
 
   @Post('register')
@@ -172,6 +174,15 @@ export class AuthController {
       activeBranchId: session?.activeBranchId ?? null,
       activeCounterId: session?.activeCounterId ?? null,
     });
+  }
+
+  @Get('policy-context')
+  @UseGuards(AuthenticatedGuard)
+  @ApiCookieAuth('sessionId')
+  @ApiOperation({ summary: 'Get the current EOD/BOD and back-date policy context' })
+  @ApiResponse({ status: 200, description: 'Current policy context' })
+  async getPolicyContext(@Session() session: any) {
+    return this.dayEndStartProcessService.getPolicyContext(session);
   }
 
   @Get('check')

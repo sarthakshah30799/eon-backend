@@ -46,7 +46,6 @@ export class TransactionPassengerOtherDocument extends BaseEntity {
   @Column({
     type: "enum",
     enum: PassengerOtherIdProofType,
-    enumName: "transaction_passenger_other_documents_document_type_enum",
     name: "document_type",
   })
   documentType: PassengerOtherIdProofType;

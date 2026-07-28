@@ -60,4 +60,14 @@ export class CreateCountryDto {
   @IsUUID()
   @IsOptional()
   countryGroupId?: string;
+
+  @ApiPropertyOptional({ description: "Blocked country flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  isBlocked?: boolean;
+
+  @ApiPropertyOptional({ description: "Blocked reason" })
+  @IsString()
+  @IsOptional()
+  blockedReason?: string | null;
 }

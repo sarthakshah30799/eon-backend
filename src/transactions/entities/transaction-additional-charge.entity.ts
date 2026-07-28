@@ -1,10 +1,4 @@
-import {
-  Column,
-  Entity,
-  Index,
-  JoinColumn,
-  ManyToOne,
-} from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "./transaction.entity";
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
@@ -28,7 +22,8 @@ export class TransactionAdditionalCharge extends BaseEntity {
   )
   @JoinColumn({
     name: "transaction_id",
-    foreignKeyConstraintName: "FK_transaction_additional_charges_transaction_id",
+    foreignKeyConstraintName:
+      "FK_transaction_additional_charges_transaction_id",
   })
   transaction: Transaction;
 
@@ -41,17 +36,23 @@ export class TransactionAdditionalCharge extends BaseEntity {
   @Column({ type: "jsonb", name: "account_snapshot", nullable: true })
   accountSnapshot: TransactionReferenceSnapshotValue;
 
-  @Column({ type: "numeric", precision: 18, scale: 4 })
+  @Column({ type: "numeric", precision: 18, scale: 2 })
   amount: string;
 
-  @Column({ type: "numeric", name: "gst_rate", precision: 18, scale: 4, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "gst_rate",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   gstRate: string | null;
 
   @Column({
     type: "numeric",
     name: "gst_amount",
     precision: 18,
-    scale: 4,
+    scale: 2,
     nullable: true,
   })
   gstAmount: string | null;
@@ -60,7 +61,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "tax_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   taxRatePercent: string;
@@ -69,7 +70,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "igst_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   igstRatePercent: string;
@@ -78,7 +79,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "cgst_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   cgstRatePercent: string;
@@ -87,7 +88,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "sgst_rate_percent",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   sgstRatePercent: string;
@@ -96,7 +97,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "igst_amount",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   igstAmount: string;
@@ -105,7 +106,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "cgst_amount",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   cgstAmount: string;
@@ -114,7 +115,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
     type: "numeric",
     name: "sgst_amount",
     precision: 18,
-    scale: 4,
+    scale: 2,
     default: 0,
   })
   sgstAmount: string;
@@ -122,6 +123,7 @@ export class TransactionAdditionalCharge extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionTaxSplitMode,
+    enumName: "transaction_tax_split_mode_enum",
     name: "split_mode",
     nullable: true,
   })

@@ -6,6 +6,8 @@ import { VerifyPassengerOtherDocumentDto } from './dto/verify-passenger-other-do
 import { VerifyPassengerPanDto } from './dto/verify-passenger-pan.dto';
 import { VerifyPassengerPassportDto } from './dto/verify-passenger-passport.dto';
 import { PassengerAmlVerificationResponseDto } from './dto/passenger-aml-verification-response.dto';
+import { LookupPassengerPassportDto } from './dto/lookup-passenger-passport.dto';
+import { PassengerPassportLookupResponseDto } from './dto/passenger-passport-lookup-response.dto';
 import { PassengerOtherIdProofType } from './passenger.entity';
 import { PassengerService } from './passenger.service';
 
@@ -65,6 +67,20 @@ export class PassengerController {
     @Body() dto: VerifyPassengerPassportDto,
   ): PassengerAmlVerificationResponseDto {
     return this.passengerService.verifyPassport(dto);
+  }
+
+  @Post('lookup-passport')
+  @ApiOperation({ summary: 'Lookup passenger by passport number' })
+  @ApiBody({ type: LookupPassengerPassportDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Passenger lookup result',
+    type: PassengerPassportLookupResponseDto,
+  })
+  lookupPassport(
+    @Body() dto: LookupPassengerPassportDto,
+  ): Promise<PassengerPassportLookupResponseDto> {
+    return this.passengerService.lookupByPassportNumber(dto);
   }
 
   @Post('verify-other-document')

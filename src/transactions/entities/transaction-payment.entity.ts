@@ -85,7 +85,7 @@ export class TransactionPayment extends BaseEntity {
   @Column({ type: "varchar", length: 255, name: "drawn_on", nullable: true })
   drawnOn: string | null;
 
-  @Column({ type: "numeric", precision: 18, scale: 4 })
+  @Column({ type: "numeric", precision: 18, scale: 2 })
   amount: string;
 
   @Column({ type: "text", nullable: true })

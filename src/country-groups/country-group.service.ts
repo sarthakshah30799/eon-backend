@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CountryGroup } from "./country-group.entity";
@@ -12,10 +17,55 @@ export class CountryGroupService {
   constructor(
     @InjectRepository(CountryGroup)
     private readonly countryGroupRepository: Repository<CountryGroup>,
+    @InjectRepository(Currency)
+    private readonly currencyRepository: Repository<Currency>,
   ) {}
 
   private generateCode(name: string): string {
     return name.trim().toUpperCase().replace(/\s+/g, "_");
+  }
+
+  private validateLimitPair(
+    sellLimitAmount: number | null,
+    sellLimitCurrencyId: string | null,
+  ) {
+    const hasAmount = sellLimitAmount !== null && sellLimitAmount !== undefined;
+    const hasCurrency = Boolean(sellLimitCurrencyId);
+
+    if (hasAmount !== hasCurrency) {
+      throw new BadRequestException(
+        "Sell limit amount and sell limit currency must be provided together",
+      );
+    }
+  }
+
+  private validateTravelDays(
+    minTravelDays: number | null,
+    maxTravelDays: number | null,
+  ) {
+    if (
+      minTravelDays !== null &&
+      minTravelDays !== undefined &&
+      maxTravelDays !== null &&
+      maxTravelDays !== undefined &&
+      minTravelDays > maxTravelDays
+    ) {
+      throw new BadRequestException(
+        "Minimum travel days cannot be greater than maximum travel days",
+      );
+    }
+  }
+
+  private async validateActiveCurrency(currencyId: string): Promise<void> {
+    const currency = await this.currencyRepository.findOne({
+      where: { id: currencyId, active: true },
+    });
+
+    if (!currency) {
+      throw new BadRequestException(
+        `Active currency with id ${currencyId} not found`,
+      );
+    }
   }
 
   async findAll(): Promise<CountryGroupResponseDto[]> {
@@ -44,6 +94,16 @@ export class CountryGroupService {
   async create(dto: CreateCountryGroupDto, userId: string): Promise<CountryGroupResponseDto> {
     const name = dto.name.trim();
     const code = dto.code ? dto.code.trim().toUpperCase() : this.generateCode(name);
+    const sellLimitAmount = dto.sellLimitAmount ?? null;
+    const sellLimitCurrencyId = dto.sellLimitCurrencyId ?? null;
+    const minTravelDays = dto.minTravelDays ?? null;
+    const maxTravelDays = dto.maxTravelDays ?? null;
+
+    this.validateLimitPair(sellLimitAmount, sellLimitCurrencyId);
+    this.validateTravelDays(minTravelDays, maxTravelDays);
+    if (sellLimitCurrencyId) {
+      await this.validateActiveCurrency(sellLimitCurrencyId);
+    }
 
     // Validate uniqueness of code
     const existingCode = await this.countryGroupRepository.findOne({
@@ -64,10 +124,16 @@ export class CountryGroupService {
     const group = this.countryGroupRepository.create({
       name,
       code,
-      sellLimitAmount: dto.sellLimitAmount !== undefined ? String(dto.sellLimitAmount) : null,
-      sellLimitCurrency: dto.sellLimitCurrencyId ? ({ id: dto.sellLimitCurrencyId } as Currency) : null,
-      minTravelDays: dto.minTravelDays ?? null,
-      maxTravelDays: dto.maxTravelDays ?? null,
+      sellLimitAmount:
+        sellLimitAmount !== null && sellLimitAmount !== undefined
+          ? String(sellLimitAmount)
+          : null,
+      sellLimitCurrency: sellLimitCurrencyId
+        ? ({ id: sellLimitCurrencyId } as Currency)
+        : null,
+      sellLimitCurrencyId,
+      minTravelDays,
+      maxTravelDays,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -82,25 +148,45 @@ export class CountryGroupService {
       throw new NotFoundException(`Country Group with id ${id} not found`);
     }
 
+    const nextName = dto.name !== undefined ? dto.name.trim() : group.name;
+    const nextSellLimitAmount =
+      dto.sellLimitAmount !== undefined ? dto.sellLimitAmount : (group.sellLimitAmount === null ? null : Number(group.sellLimitAmount));
+    const nextSellLimitCurrencyId =
+      dto.sellLimitCurrencyId !== undefined
+        ? dto.sellLimitCurrencyId ?? null
+        : group.sellLimitCurrencyId;
+    const nextMinTravelDays =
+      dto.minTravelDays !== undefined ? dto.minTravelDays ?? null : group.minTravelDays;
+    const nextMaxTravelDays =
+      dto.maxTravelDays !== undefined ? dto.maxTravelDays ?? null : group.maxTravelDays;
+
+    this.validateLimitPair(nextSellLimitAmount, nextSellLimitCurrencyId);
+    this.validateTravelDays(nextMinTravelDays, nextMaxTravelDays);
+    if (nextSellLimitCurrencyId) {
+      await this.validateActiveCurrency(nextSellLimitCurrencyId);
+    }
+
     if (dto.name !== undefined) {
-      const name = dto.name.trim();
-      if (name.toLowerCase() !== group.name.toLowerCase()) {
+      if (nextName.toLowerCase() !== group.name.toLowerCase()) {
         const existingName = await this.countryGroupRepository.findOne({
-          where: { name },
+          where: { name: nextName },
         });
         if (existingName) {
-          throw new ConflictException(`Country Group with name "${name}" already exists`);
+          throw new ConflictException(`Country Group with name "${nextName}" already exists`);
         }
       }
-      group.name = name;
+      group.name = nextName;
     }
 
     if (dto.sellLimitAmount !== undefined) {
-      group.sellLimitAmount = dto.sellLimitAmount === null ? null : String(dto.sellLimitAmount);
+      group.sellLimitAmount =
+        dto.sellLimitAmount === null ? null : String(dto.sellLimitAmount);
     }
 
     if (dto.sellLimitCurrencyId !== undefined) {
-      group.sellLimitCurrency = dto.sellLimitCurrencyId ? ({ id: dto.sellLimitCurrencyId } as Currency) : null;
+      group.sellLimitCurrency = dto.sellLimitCurrencyId
+        ? ({ id: dto.sellLimitCurrencyId } as Currency)
+        : null;
       group.sellLimitCurrencyId = dto.sellLimitCurrencyId ?? null;
     }
 

@@ -119,6 +119,8 @@ export class PermissionsGuard implements CanActivate {
       menuPath = '/user-profile';
     } else if (path.includes('/countries')) {
       menuPath = '/admin/country-profile';
+    } else if (path.includes('/country-groups')) {
+      menuPath = '/admin/country-group';
     } else if (path.includes('/states')) {
       // States are reference data - allow all authenticated users to GET
       if (method === 'GET') {

@@ -42,9 +42,9 @@ const TRANSACTION_NUMBERING_CODE_LIST = Object.values(
 const TRANSACTION_NUMBERING_CODES = new Set<TransactionTypeProfile>(
   TRANSACTION_NUMBERING_CODE_LIST
 );
-const COMMON_PURCHASE_NUMBER_SERIES_CODES = [
-  'PURCHASE_CORPORATE',
-  'PURCHASE_INDIVIDUAL',
+const COMMON_CORPORATE_NUMBER_SERIES_CODES = [
+  'PURCHASE_CORPORATE_INDIVIDUAL',
+  'SALE_CORPORATE_INDIVIDUAL',
 ] as const;
 
 const isTransactionTypeProfile = (
@@ -141,12 +141,10 @@ export class AdditionalSettingService {
     const normalizedSeriesCode = normalizeCode(seriesCode);
 
     if (
-      normalizedSeriesCode === 'PURCHASE_CORPORATE' ||
-      normalizedSeriesCode === 'PURCHASE_INDIVIDUAL' ||
-      normalizedSeriesCode === 'SALE_CORPORATE' ||
-      normalizedSeriesCode === 'SALE_INDIVIDUAL'
+      normalizedSeriesCode === 'PURCHASE_CORPORATE_INDIVIDUAL' ||
+      normalizedSeriesCode === 'SALE_CORPORATE_INDIVIDUAL'
     ) {
-      return [...COMMON_PURCHASE_NUMBER_SERIES_CODES];
+      return [...COMMON_CORPORATE_NUMBER_SERIES_CODES];
     }
 
     return [normalizedSeriesCode];
