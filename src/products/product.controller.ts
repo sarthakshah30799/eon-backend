@@ -32,11 +32,13 @@ async findAll(
   @Query('bulkBuying') bulkBuying?: string,
   @Query('bulkSelling') bulkSelling?: string,
   @Query('search') search?: string,
+  @Query('activeOnly') activeOnly?: string,
 ): Promise<ProductResponseDto[]> {
   return this.productService.findAll({
     bulkBuying: bulkBuying === 'true',
     bulkSelling: bulkSelling === 'true',
     search,
+    activeOnly: activeOnly !== 'false',
   });
 }
 

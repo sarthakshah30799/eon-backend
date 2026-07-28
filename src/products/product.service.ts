@@ -43,10 +43,11 @@ export class ProductService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
   ) {}
 
-async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean; search?: string }): Promise<ProductResponseDto[]> {
+async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean; search?: string; activeOnly?: boolean }): Promise<ProductResponseDto[]> {
   const where: any = {};
   if (filter?.bulkBuying) where.availableInBulkBuying = true;
   if (filter?.bulkSelling) where.availableInBulkSelling = true;
+  if (filter?.activeOnly !== false) where.isActiveProduct = true;
 
   const searchStr = filter?.search?.trim();
   const findOptions: any = {
