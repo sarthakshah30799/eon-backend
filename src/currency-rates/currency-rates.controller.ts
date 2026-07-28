@@ -23,9 +23,12 @@ export class CurrencyRatesController {
 
   @Get('groups')
   @ApiOperation({ summary: 'Get all currency rate groups' })
+  @ApiQuery({ name: 'search', required: false })
   @ApiResponse({ status: 200, type: [CurrencyRateGroupResponseDto] })
-  async getGroups(): Promise<CurrencyRateGroupResponseDto[]> {
-    const groups = await this.service.findGroups();
+  async getGroups(
+    @Query('search') search?: string,
+  ): Promise<CurrencyRateGroupResponseDto[]> {
+    const groups = await this.service.findGroups(search);
     return groups.map(CurrencyRateGroupResponseDto.fromEntity);
   }
 

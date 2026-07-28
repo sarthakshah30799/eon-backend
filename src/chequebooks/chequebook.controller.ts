@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { ChequeBookService } from './chequebook.service';
 import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAssignmentsDto, UpdatePageStatusDto, ReturnPagesDto, ReassignChequeBookDto, AuthorizedUserRole } from './dto/chequebook.dto';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
@@ -82,19 +82,22 @@ export class ChequeBookController {
   async getAuthorizedUsers(
     @Session() session: any,
     @Query('role') role?: AuthorizedUserRole,
+    @Query('search') search?: string,
   ) {
     const effectiveBranchId = session.activeBranchId;
     this.logger.log(
       `[DEBUG] users request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'} role=${role ?? 'all'}`
     );
-    return this.service.getAuthorizedUsers(effectiveBranchId, role);
+    return this.service.getAuthorizedUsers(effectiveBranchId, role, search);
   }
 
   @Get('branch-managers')
   @ApiOperation({ summary: 'Get branch managers for a branch' })
+  @ApiQuery({ name: 'search', required: false })
   async getBranchManagers(
     @Session() session: any,
     @Query('branchId') branchId?: string,
+    @Query('search') search?: string,
   ) {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
       ? branchId?.trim() || session?.activeBranchId
@@ -102,7 +105,7 @@ export class ChequeBookController {
     this.logger.log(
       `[DEBUG] branch-managers request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? 'null'} queryBranchId=${branchId?.trim() ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'}`
     );
-    return this.service.getBranchManagers(effectiveBranchId);
+    return this.service.getBranchManagers(effectiveBranchId, search);
   }
 
   @Get('dispatches/:id')

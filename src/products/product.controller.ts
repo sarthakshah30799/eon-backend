@@ -28,15 +28,17 @@ export class ProductController {
   @Get()
   @ApiOperation({ summary: 'Get all products' })
   @ApiResponse({ status: 200, description: 'List of products', type: [ProductResponseDto] })
-  async findAll(
-    @Query('bulkBuying') bulkBuying?: string,
-    @Query('bulkSelling') bulkSelling?: string,
-  ): Promise<ProductResponseDto[]> {
-    return this.productService.findAll({
-      bulkBuying: bulkBuying === 'true',
-      bulkSelling: bulkSelling === 'true',
-    });
-  }
+async findAll(
+  @Query('bulkBuying') bulkBuying?: string,
+  @Query('bulkSelling') bulkSelling?: string,
+  @Query('search') search?: string,
+): Promise<ProductResponseDto[]> {
+  return this.productService.findAll({
+    bulkBuying: bulkBuying === 'true',
+    bulkSelling: bulkSelling === 'true',
+    search,
+  });
+}
 
   @Get(':id')
   @ApiOperation({ summary: 'Get product by ID' })

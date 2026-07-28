@@ -16,6 +16,7 @@ import {
   ApiResponse,
   ApiCookieAuth,
   ApiParam,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { ManualBillBookService } from "./manual-bill-book.service";
 import {
@@ -113,29 +114,33 @@ export class ManualBillBookController {
   @ApiOperation({
     summary: "Get authorized users for manual bill book allocation",
   })
+  @ApiQuery({ name: "search", required: false })
   async getAuthorizedUsers(
     @Session() session: any,
+    @Query("search") search?: string,
   ) {
     const effectiveBranchId = session.activeBranchId;
     console.log(
       `[DEBUG] users request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
     );
-    return this.service.getAuthorizedUsers(effectiveBranchId);
+    return this.service.getAuthorizedUsers(effectiveBranchId, search);
   }
 
   @Get("branch-managers")
   @ApiOperation({ summary: "Get branch managers for a branch" })
+  @ApiQuery({ name: "search", required: false })
   async getBranchManagers(
     @Session() session: any,
     @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
   ) {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
       ? branchId?.trim() || session?.activeBranchId
       : session?.activeBranchId;
     this.logger.log(
-      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} queryBranchId=${branchId?.trim() ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
+      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} queryBranchId=${branchId?.trim() ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} search=${search ?? "null"}`,
     );
-    return this.service.getBranchManagers(effectiveBranchId);
+    return this.service.getBranchManagers(effectiveBranchId, search);
   }
 
   @Put("dispatches/bulk-review")

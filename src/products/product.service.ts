@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeepPartial, In, Repository } from 'typeorm';
+import { DeepPartial, ILike, In, Repository } from 'typeorm';
 import { Product } from './product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -43,18 +43,28 @@ export class ProductService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
   ) {}
 
-  async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean }): Promise<ProductResponseDto[]> {
-    const where: Record<string, boolean> = {};
-    if (filter?.bulkBuying) where.availableInBulkBuying = true;
-    if (filter?.bulkSelling) where.availableInBulkSelling = true;
+async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean; search?: string }): Promise<ProductResponseDto[]> {
+  const where: any = {};
+  if (filter?.bulkBuying) where.availableInBulkBuying = true;
+  if (filter?.bulkSelling) where.availableInBulkSelling = true;
 
-    const products = await this.productRepository.find({
-      where: Object.keys(where).length ? where : undefined,
-      relations: [...ACCOUNT_PROFILE_RELATION_FIELDS],
-      order: { createdAt: 'DESC' },
-    });
-    return products.map(ProductResponseDto.fromEntity);
+  const searchStr = filter?.search?.trim();
+  const findOptions: any = {
+    where,
+    relations: [...ACCOUNT_PROFILE_RELATION_FIELDS],
+    order: { createdAt: 'DESC' },
+  };
+
+  if (searchStr) {
+    findOptions.where = [
+      { ...where, productCode: ILike(`%${searchStr}%`) },
+      { ...where, productDescription: ILike(`%${searchStr}%`) },
+    ];
   }
+
+  const products = await this.productRepository.find(findOptions);
+  return products.map(ProductResponseDto.fromEntity);
+}
 
   async findById(id: string): Promise<ProductResponseDto> {
     const product = await this.productRepository.findOne({
