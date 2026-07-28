@@ -27,6 +27,10 @@ export class VerifyPassengerPassportDto {
   @IsOptional()
   arrivalDate?: string;
 
+  @ApiPropertyOptional({ example: '2026-07-21' })
+  @IsOptional()
+  transactionDate?: string;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()

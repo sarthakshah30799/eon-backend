@@ -21,6 +21,22 @@ const isBlank = (value?: string | null) => !String(value ?? '').trim();
 const containsInvalidVerificationToken = (value?: string | null) =>
   INVALID_VERIFICATION_TOKEN.test(String(value ?? '').trim());
 
+const parseDate = (value?: string | null) => {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const addMonths = (date: Date, months: number) => {
+  const next = new Date(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+};
+
 @Injectable()
 export class PassengerService {
   constructor(
@@ -176,6 +192,20 @@ export class PassengerService {
       return this.buildFailure('Passport expiry date must be after issue date');
     }
 
+    const transactionDate = parseDate(dto.transactionDate);
+    const passportExpiryDate = parseDate(dto.passportExpiryDate);
+    if (transactionDate && passportExpiryDate) {
+      const minimumValidExpiryDate = addMonths(transactionDate, 3);
+      if (passportExpiryDate <= minimumValidExpiryDate) {
+        return this.buildFailure('Passport expiry date must be more than 3 months after the transaction date');
+      }
+    }
+
+    const arrivalDate = parseDate(dto.arrivalDate);
+    if (transactionDate && arrivalDate && arrivalDate > transactionDate) {
+      return this.buildFailure('Arrival date cannot be after the transaction date');
+    }
+
     if (
       this.hasInvalidVerificationToken([
         dto.passportNumber,
@@ -183,6 +213,7 @@ export class PassengerService {
         dto.passportIssueDate,
         dto.passportExpiryDate,
         dto.arrivalDate,
+        dto.transactionDate,
       ])
     ) {
       return this.buildFailure('Verification failed. Please review the entered details.');
