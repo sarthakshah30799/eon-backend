@@ -43,10 +43,11 @@ export class ProductService {
     private readonly accountProfileRepository: Repository<AccountProfile>,
   ) {}
 
-  async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean }): Promise<ProductResponseDto[]> {
+  async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean; otherTransaction?: boolean }): Promise<ProductResponseDto[]> {
     const where: Record<string, boolean> = {};
     if (filter?.bulkBuying) where.availableInBulkBuying = true;
     if (filter?.bulkSelling) where.availableInBulkSelling = true;
+    if (filter?.otherTransaction) where.availableInOtherTransaction = true;
 
     const products = await this.productRepository.find({
       where: Object.keys(where).length ? where : undefined,
