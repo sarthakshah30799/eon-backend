@@ -48,7 +48,8 @@ export class TransactionsController {
     @Session() session: any,
     @Query('search') search?: string,
   ): Promise<any[]> {
-    return this.transactionsService.getAd1Agents(session?.activeBranchId, search);
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff ? undefined : session?.activeBranchId;
+    return this.transactionsService.getAd1Agents(effectiveBranchId, search);
   }
 
   @Get()
