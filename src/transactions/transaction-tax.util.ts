@@ -247,7 +247,10 @@ export function calculateTransactionTaxSummary(
     gstRatePercent,
   );
 
-  const totalBaseAmount = toMoney(itemBaseAmount + additionalChargeBaseAmount);
+  const totalBaseAmount =
+    input.transactionType === TransactionType.PURCHASE
+      ? toMoney(itemBaseAmount - additionalChargeBaseAmount)
+      : toMoney(itemBaseAmount + additionalChargeBaseAmount);
   const finalAmount =
     input.transactionType === TransactionType.SALE
       ? toMoney(totalBaseAmount + totalTaxAmount)

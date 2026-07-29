@@ -6,6 +6,7 @@ import { TransactionDocument } from "./entities/transaction-document.entity";
 import { TransactionAdditionalCharge } from "./entities/transaction-additional-charge.entity";
 import { TransactionPayment } from "./entities/transaction-payment.entity";
 import { TransactionAccountPosting } from "./entities/transaction-account-posting.entity";
+import { TransactionBalanceCurrency } from "./entities/transaction-balance-currency.entity";
 import { TransactionLog } from "./entities/transaction-log.entity";
 import { TransactionEvent } from "./entities/transaction-event.entity";
 import { TransactionAd1 } from "./entities/transaction-ad1.entity";
@@ -16,6 +17,7 @@ import { TransactionsService } from "./transactions.service";
 import { TransactionAd1Service } from "./transaction-ad1.service";
 import { TransactionAd1Controller } from "./transaction-ad1.controller";
 import { TransactionAccountPostingWorker } from "./transaction-account-posting.worker";
+import { TransactionBalanceCurrencyWorker } from "./transaction-balance-currency.worker";
 import { MailModule } from "../mail/mail.module";
 import { StorageModule } from "../storage/storage.module";
 import { Currency } from "../currencies/currency.entity";
@@ -71,6 +73,7 @@ import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start
         TransactionAdditionalCharge,
         TransactionPayment,
         TransactionAccountPosting,
+        TransactionBalanceCurrency,
         TransactionLog,
         TransactionEvent,
         TransactionPassengerOtherDocument,
@@ -82,7 +85,13 @@ import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start
     ),
   ],
   controllers: [TransactionAd1Controller, TransactionsController],
-  providers: [TransactionsService, TransactionAd1Service, TransactionAccountPostingWorker, PurchaseRuleService],
+  providers: [
+    TransactionsService,
+    TransactionAd1Service,
+    TransactionAccountPostingWorker,
+    TransactionBalanceCurrencyWorker,
+    PurchaseRuleService,
+  ],
   exports: [
     TypeOrmModule,
     TransactionsService,
