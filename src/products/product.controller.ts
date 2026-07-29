@@ -32,11 +32,15 @@ export class ProductController {
     @Query('bulkBuying') bulkBuying?: string,
     @Query('bulkSelling') bulkSelling?: string,
     @Query('otherTransaction') otherTransaction?: string,
+    @Query('search') search?: string,
+    @Query('activeOnly') activeOnly?: string,
   ): Promise<ProductResponseDto[]> {
     return this.productService.findAll({
       bulkBuying: bulkBuying === 'true',
       bulkSelling: bulkSelling === 'true',
       otherTransaction: otherTransaction === 'true',
+      search,
+      activeOnly: activeOnly !== 'false',
     });
   }
 

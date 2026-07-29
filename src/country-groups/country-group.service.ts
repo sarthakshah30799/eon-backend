@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { ILike, Repository } from "typeorm";
 import { CountryGroup } from "./country-group.entity";
 import { CreateCountryGroupDto } from "./dto/create-country-group.dto";
 import { UpdateCountryGroupDto } from "./dto/update-country-group.dto";
@@ -68,8 +68,15 @@ export class CountryGroupService {
     }
   }
 
-  async findAll(): Promise<CountryGroupResponseDto[]> {
+  async findAll(search?: string): Promise<CountryGroupResponseDto[]> {
+    const where = search?.trim()
+      ? [
+          { name: ILike(`%${search.trim()}%`) },
+          { code: ILike(`%${search.trim()}%`) },
+        ]
+      : undefined;
     const groups = await this.countryGroupRepository.find({
+      where,
       relations: {
         sellLimitCurrency: true,
       },

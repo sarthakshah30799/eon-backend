@@ -423,7 +423,7 @@ export class ManualBillBookService {
     return this.manualBookRepository.save(book);
   }
 
-  async getAuthorizedUsers(branchId: string): Promise<any[]> {
+  async getAuthorizedUsers(branchId: string, search?: string): Promise<any[]> {
     this.logger.log(`[DEBUG] getAuthorizedUsers called with branchId=${branchId ?? 'null'}`);
     const diagnostics = await this.branchRepository.manager.query(
       `
@@ -446,6 +446,10 @@ export class ManualBillBookService {
     this.logger.log(
       `[DEBUG] getAuthorizedUsers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
     );
+    const searchFilter = search?.trim()
+      ? ` AND u.name ILIKE $2`
+      : '';
+    const params = search?.trim() ? [branchId, `%${search.trim()}%`] : [branchId];
     const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
@@ -455,8 +459,9 @@ export class ManualBillBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true
         AND (r.is_cashier = true OR r.is_delivery_boy = true)
+        ${searchFilter}
     `,
-      [branchId],
+      params,
     );
     this.logger.log(
       `[DEBUG] getAuthorizedUsers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`

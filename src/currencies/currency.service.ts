@@ -53,6 +53,10 @@ export class CurrencyService {
       );
     }
 
+    if (query?.activeOnly !== false) {
+      qb.andWhere('currency.active = :active', { active: true });
+    }
+
     const currencies = await qb.getMany();
     return currencies.map(CurrencyResponseDto.fromEntity);
   }
