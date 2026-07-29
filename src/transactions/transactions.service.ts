@@ -1650,10 +1650,12 @@ export class TransactionsService {
       );
     }
 
-    await this.transactionRepository.query(
-      'SELECT public.refresh_transaction_tcs($1::uuid)',
-      [transaction.id],
-    );
+    if (transactionPayload.transactionType === TransactionType.SALE) {
+      await this.transactionRepository.query(
+        'SELECT public.refresh_transaction_tcs($1::uuid)',
+        [transaction.id],
+      );
+    }
 
     const refreshedTransaction = await this.transactionRepository.findOne({
       where: { id: transaction.id },
@@ -1701,6 +1703,7 @@ export class TransactionsService {
       const row = paymentRows[index];
       const account = await resolveAccount(String(row.accountId));
       const paymentMethod = this.resolvePaymentMethod(row.paymentMethod);
+      const chequePageId = normalizeNullableString(row.chequePageId);
       const amount = this.toNumber(row.amount);
       if (amount <= 0) {
         throw new BadRequestException('Payment amount must be greater than zero');
@@ -1734,7 +1737,7 @@ export class TransactionsService {
       if (
         paymentMethod === TransactionPaymentMethod.CHEQUE &&
         transactionPayload.transactionType === TransactionType.SALE &&
-        row.chequePageId
+        chequePageId
       ) {
         throw new BadRequestException(
           'Cheque page lookup is not allowed for sale cheque payments',
@@ -1744,21 +1747,21 @@ export class TransactionsService {
       if (
         paymentMethod === TransactionPaymentMethod.CHEQUE &&
         transactionPayload.transactionType === TransactionType.PURCHASE &&
-        !row.chequePageId
+        !chequePageId
       ) {
         throw new BadRequestException('Cheque page is required for purchase payments');
       }
 
-      const chequePageSnapshot = row.chequePageId
+      const chequePageSnapshot = chequePageId
         ? ((await loadEntitySnapshot(
             this.chequeBookPageTrackingRepository,
-            String(row.chequePageId),
+            String(chequePageId),
           )) as TransactionReferenceSnapshotValue)
         : null;
 
-      if (row.chequePageId && !chequePageSnapshot) {
+      if (chequePageId && !chequePageSnapshot) {
         throw new NotFoundException(
-          `Cheque page with id ${row.chequePageId} not found`,
+          `Cheque page with id ${chequePageId} not found`,
         );
       }
 
@@ -1769,7 +1772,7 @@ export class TransactionsService {
           lineNo: index + 1,
           accountId: String(account.id),
           accountSnapshot: account as TransactionReferenceSnapshotValue,
-          chequePageId: row.chequePageId ?? null,
+          chequePageId,
           chequePageSnapshot,
           paymentMethod,
           paymentDirection,
