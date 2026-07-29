@@ -28,19 +28,21 @@ export class ProductController {
   @Get()
   @ApiOperation({ summary: 'Get all products' })
   @ApiResponse({ status: 200, description: 'List of products', type: [ProductResponseDto] })
-async findAll(
-  @Query('bulkBuying') bulkBuying?: string,
-  @Query('bulkSelling') bulkSelling?: string,
-  @Query('search') search?: string,
-  @Query('activeOnly') activeOnly?: string,
-): Promise<ProductResponseDto[]> {
-  return this.productService.findAll({
-    bulkBuying: bulkBuying === 'true',
-    bulkSelling: bulkSelling === 'true',
-    search,
-    activeOnly: activeOnly !== 'false',
-  });
-}
+  async findAll(
+    @Query('bulkBuying') bulkBuying?: string,
+    @Query('bulkSelling') bulkSelling?: string,
+    @Query('otherTransaction') otherTransaction?: string,
+    @Query('search') search?: string,
+    @Query('activeOnly') activeOnly?: string,
+  ): Promise<ProductResponseDto[]> {
+    return this.productService.findAll({
+      bulkBuying: bulkBuying === 'true',
+      bulkSelling: bulkSelling === 'true',
+      otherTransaction: otherTransaction === 'true',
+      search,
+      activeOnly: activeOnly !== 'false',
+    });
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get product by ID' })

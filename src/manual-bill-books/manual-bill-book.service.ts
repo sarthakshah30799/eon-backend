@@ -158,7 +158,7 @@ export class ManualBillBookService {
     const numBooks = bookNoTo - bookNoFrom + 1;
     const mvNoTo = mvNoFrom + numBooks * vouchersPerBook - 1;
 
-    // Check for overlapping book number ranges (global)
+    // Check for overlapping book number ranges
     const overlappingBookNo = await this.manualBookRepository
       .createQueryBuilder('book')
       .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
@@ -470,7 +470,7 @@ export class ManualBillBookService {
   }
 
   async getBranchManagers(branchId: string, search?: string): Promise<UserLookup[]> {
-    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'}`);
+    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'} search=${search ?? 'null'}`);
     const diagnostics = await this.branchRepository.manager.query(
       `
       SELECT
@@ -491,22 +491,19 @@ export class ManualBillBookService {
     this.logger.log(
       `[DEBUG] getBranchManagers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
     );
-    const searchFilter = search?.trim()
-      ? ` AND u.name ILIKE $2`
-      : '';
-    const params = search?.trim() ? [branchId, `%${search.trim()}%`] : [branchId];
     const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
       JOIN roles r ON ur.role_id = r.id
-      WHERE ur.branch_id = $1 
+      WHERE ur.branch_id = $1
         AND u.is_active = true
         AND r.is_brn_mgr = true
-        ${searchFilter}
+        ${search ? `AND u.name ILIKE $2` : ''}
+      ORDER BY u.name ASC
       `,
-      params,
+      search ? [branchId, `%${search}%`] : [branchId],
     );
     this.logger.log(
       `[DEBUG] getBranchManagers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
