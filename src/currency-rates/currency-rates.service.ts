@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
 import { CurrencyRateGroup } from './currency-rate-group.entity';
@@ -152,8 +152,14 @@ export class CurrencyRatesService {
     return this.groupRepository.save(group);
   }
 
-  async findGroups(): Promise<CurrencyRateGroup[]> {
-    return this.groupRepository.find({ order: { createdAt: 'DESC' } });
+  async findGroups(search?: string): Promise<CurrencyRateGroup[]> {
+    const where = search?.trim()
+      ? [
+          { code: ILike(`%${search.trim()}%`) },
+          { name: ILike(`%${search.trim()}%`) },
+        ]
+      : undefined;
+    return this.groupRepository.find({ where, order: { createdAt: 'DESC' } });
   }
 
   async createRateEntry(dto: CreateCurrencyRateDto, userId: string): Promise<CurrencyRate> {

@@ -273,6 +273,11 @@ export class CreateProductDto {
   @IsOptional()
   bulkSellingSeriesApplicable?: boolean;
 
+  @ApiProperty({ description: 'Available in Other Transactions (AD1)', required: false, default: false })
+  @IsBoolean()
+  @IsOptional()
+  availableInOtherTransaction?: boolean;
+
   @ApiProperty({ description: 'Allow Product Cancellation', required: false, default: false })
   @IsBoolean()
   @IsOptional()

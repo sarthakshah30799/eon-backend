@@ -422,7 +422,25 @@ export class TransactionsService {
   ): Promise<Record<string, unknown>> {
     const purposeId = String(body.purposeId ?? '').trim();
     if (!purposeId) {
-      throw new BadRequestException('Purpose is required for TCS preview');
+      return {
+        transactionType: body.transactionType,
+        purposeId: null,
+        preTcsFinalAmount: this.toNumber(body.preTcsFinalAmount),
+        effectiveAmount: this.toNumber(body.preTcsFinalAmount),
+        threshold: 0,
+        effectiveThreshold: 0,
+        loanAmount: this.toNumber(body.loanAmount),
+        declaredAmount: this.toNumber(body.declaredAmount),
+        taxableAmount: this.toNumber(body.preTcsFinalAmount),
+        tcsRatePercent: 0,
+        tcsRateType: null,
+        tcsAmount: 0,
+        finalAmount: this.toNumber(body.preTcsFinalAmount),
+        tcsDeclarationAccepted: Boolean(body.tcsDeclarationAccepted),
+        itrFiled: Boolean(body.itrFiled),
+        isProprietorship: Boolean(body.isProprietorship),
+        breakdowns: [],
+      };
     }
 
     const purpose = await this.purposeRepository.findOne({

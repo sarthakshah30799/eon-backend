@@ -296,11 +296,18 @@ export class ChequeBookService {
     return results;
   }
 
-  async getAuthorizedUsers(branchId: string, role?: AuthorizedUserRole): Promise<any[]> {
+  async getAuthorizedUsers(branchId: string, role?: AuthorizedUserRole, search?: string): Promise<any[]> {
     const allowedColumns = Object.values(AuthorizedUserRole) as string[];
     const roleFilter = role && allowedColumns.includes(role)
       ? `r.${role} = true`
       : `r.${AuthorizedUserRole.CASHIER} = true`;
+
+    const params: any[] = [branchId];
+    let searchClause = '';
+    if (search?.trim()) {
+      params.push(`%${search.trim()}%`);
+      searchClause = ` AND u.name ILIKE $${params.length}`;
+    }
 
     return this.branchRepository.manager.query(
       `
@@ -311,12 +318,14 @@ export class ChequeBookService {
       WHERE ur.branch_id = $1
         AND u.is_active = true
         AND ${roleFilter}
+        ${searchClause}
+      ORDER BY u.name
     `,
-      [branchId],
+      params,
     );
   }
 
-  async getBranchManagers(branchId: string): Promise<UserLookup[]> {
+  async getBranchManagers(branchId: string, search?: string): Promise<UserLookup[]> {
     this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'}`);
     const diagnostics = await this.branchRepository.manager.query(
       `
@@ -338,6 +347,10 @@ export class ChequeBookService {
     this.logger.log(
       `[DEBUG] getBranchManagers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
     );
+    const searchFilter = search?.trim()
+      ? ` AND u.name ILIKE $2`
+      : '';
+    const params = search?.trim() ? [branchId, `%${search.trim()}%`] : [branchId];
     const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
@@ -347,8 +360,9 @@ export class ChequeBookService {
       WHERE ur.branch_id = $1 
         AND u.is_active = true
         AND r.is_brn_mgr = true
+        ${searchFilter}
       `,
-      [branchId],
+      params,
     );
     this.logger.log(
       `[DEBUG] getBranchManagers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`

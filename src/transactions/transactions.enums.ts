@@ -121,6 +121,7 @@ export type TransactionTaxSplitMode =
 
 export const TransactionEventType = {
   ACCOUNT_POSTINGS_REBUILD: "ACCOUNT_POSTINGS_REBUILD",
+  BALANCE_CURRENCIES_REBUILD: "BALANCE_CURRENCIES_REBUILD",
 } as const;
 
 export type TransactionEventType =

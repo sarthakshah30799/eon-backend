@@ -170,6 +170,9 @@ export class Product extends BaseEntity {
   bulkSellingSeriesApplicable: boolean;
 
   @Column({ type: 'boolean', default: false })
+  availableInOtherTransaction: boolean;
+
+  @Column({ type: 'boolean', default: false })
   allowProductCancellation: boolean;
 
   @Column({ type: 'boolean', default: false })

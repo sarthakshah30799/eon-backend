@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Session, UseGuards } from "@nestjs/common";
-import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Session, UseGuards } from "@nestjs/common";
+import { ApiCookieAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CountryGroupService } from "./country-group.service";
@@ -20,10 +20,13 @@ export class CountryGroupController {
 
   @Get()
   @ApiOperation({ summary: "Get all country groups" })
+  @ApiQuery({ name: "search", required: false })
   @ApiResponse({ status: 200, description: "List of country groups", type: [CountryGroupResponseDto] })
   @ApiResponse({ status: 401, description: "Unauthorized" })
-  async findAll(): Promise<CountryGroupResponseDto[]> {
-    return this.countryGroupService.findAll();
+  async findAll(
+    @Query("search") search?: string,
+  ): Promise<CountryGroupResponseDto[]> {
+    return this.countryGroupService.findAll(search);
   }
 
   @Get(":id")
