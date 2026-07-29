@@ -128,14 +128,15 @@ export class ManualBillBookController {
   async getBranchManagers(
     @Session() session: any,
     @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
   ) {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
       ? branchId?.trim() || session?.activeBranchId
       : session?.activeBranchId;
     this.logger.log(
-      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} queryBranchId=${branchId?.trim() ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
+      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} queryBranchId=${branchId?.trim() ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} search=${search ?? "null"}`,
     );
-    return this.service.getBranchManagers(effectiveBranchId);
+    return this.service.getBranchManagers(effectiveBranchId, search);
   }
 
   @Put("dispatches/bulk-review")

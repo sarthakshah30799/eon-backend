@@ -464,8 +464,8 @@ export class ManualBillBookService {
     return rows;
   }
 
-  async getBranchManagers(branchId: string): Promise<UserLookup[]> {
-    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'}`);
+  async getBranchManagers(branchId: string, search?: string): Promise<UserLookup[]> {
+    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'} search=${search ?? 'null'}`);
     const diagnostics = await this.branchRepository.manager.query(
       `
       SELECT
@@ -492,11 +492,13 @@ export class ManualBillBookService {
       FROM users u
       JOIN user_roles ur ON ur.user_id = u.id
       JOIN roles r ON ur.role_id = r.id
-      WHERE ur.branch_id = $1 
+      WHERE ur.branch_id = $1
         AND u.is_active = true
         AND r.is_brn_mgr = true
+        ${search ? `AND u.name ILIKE $2` : ''}
+      ORDER BY u.name ASC
       `,
-      [branchId],
+      search ? [branchId, `%${search}%`] : [branchId],
     );
     this.logger.log(
       `[DEBUG] getBranchManagers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
