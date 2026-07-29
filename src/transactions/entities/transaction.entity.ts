@@ -417,6 +417,24 @@ export class Transaction extends BaseEntity {
   })
   isProprietorship: boolean | null;
 
+  @Column({ type: "citext", name: "cdf_no", nullable: true })
+  cdfNo: string | null;
+
+  @Column({ type: "citext", name: "cdf_issuing_authority", nullable: true })
+  cdfIssuingAuthority: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "cdf_approved_usd",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  cdfApprovedUsd: string | null;
+
+  @Column({ type: "date", name: "cdf_arrival_date", nullable: true })
+  cdfArrivalDate: string | null;
+
   @Column({
     type: "enum",
     enum: TransactionTaxSplitMode,

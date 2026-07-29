@@ -214,6 +214,10 @@ type TransactionDraftPayload = {
   tcsAmount?: string | number | null;
   loanAmount?: string | number | null;
   declaredAmount?: string | number | null;
+  cdfNo?: string | null;
+  cdfIssuingAuthority?: string | null;
+  cdfApprovedUsd?: string | number | null;
+  cdfArrivalDate?: string | null;
   itrFiled?: boolean | null;
   tcsDeclarationAccepted?: boolean | null;
   isProprietorship?: boolean | null;
@@ -1340,6 +1344,16 @@ export class TransactionsService {
         transactionPayload.tcsAmount !== null
           ? roundMoney(this.toNumber(transactionPayload.tcsAmount))
           : roundMoney(0),
+      cdfNo: normalizeNullableString(transactionPayload.cdfNo),
+      cdfIssuingAuthority: normalizeNullableString(
+        transactionPayload.cdfIssuingAuthority,
+      ),
+      cdfApprovedUsd:
+        transactionPayload.cdfApprovedUsd !== undefined &&
+        transactionPayload.cdfApprovedUsd !== null
+          ? roundMoney(this.toNumber(transactionPayload.cdfApprovedUsd))
+          : null,
+      cdfArrivalDate: normalizeNullableString(transactionPayload.cdfArrivalDate),
       loanAmount:
         transactionPayload.loanAmount !== undefined &&
         transactionPayload.loanAmount !== null
