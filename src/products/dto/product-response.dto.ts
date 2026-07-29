@@ -149,6 +149,9 @@ export class ProductResponseDto {
   @ApiProperty({ description: 'Series Applicable for Bulk Selling' })
   bulkSellingSeriesApplicable: boolean;
 
+  @ApiProperty({ description: 'Available in Other Transactions (AD1)' })
+  availableInOtherTransaction: boolean;
+
   @ApiProperty({ description: 'Allow Product Cancellation' })
   allowProductCancellation: boolean;
 
@@ -226,6 +229,7 @@ export class ProductResponseDto {
     dto.bulkBuyingSeriesApplicable = entity.bulkBuyingSeriesApplicable;
     dto.availableInBulkSelling = entity.availableInBulkSelling;
     dto.bulkSellingSeriesApplicable = entity.bulkSellingSeriesApplicable;
+    dto.availableInOtherTransaction = entity.availableInOtherTransaction;
     dto.allowProductCancellation = entity.allowProductCancellation;
     dto.maintainBlankStockOfProduct = entity.maintainBlankStockOfProduct;
     dto.denominationApplicable = entity.denominationApplicable;

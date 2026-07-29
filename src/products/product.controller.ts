@@ -31,10 +31,12 @@ export class ProductController {
   async findAll(
     @Query('bulkBuying') bulkBuying?: string,
     @Query('bulkSelling') bulkSelling?: string,
+    @Query('otherTransaction') otherTransaction?: string,
   ): Promise<ProductResponseDto[]> {
     return this.productService.findAll({
       bulkBuying: bulkBuying === 'true',
       bulkSelling: bulkSelling === 'true',
+      otherTransaction: otherTransaction === 'true',
     });
   }
 
