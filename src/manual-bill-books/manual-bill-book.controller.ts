@@ -120,9 +120,6 @@ export class ManualBillBookController {
     @Query("search") search?: string,
   ) {
     const effectiveBranchId = session.activeBranchId;
-    console.log(
-      `[DEBUG] users request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"}`,
-    );
     return this.service.getAuthorizedUsers(effectiveBranchId, search);
   }
 
