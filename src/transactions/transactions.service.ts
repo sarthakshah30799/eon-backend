@@ -1654,13 +1654,6 @@ export class TransactionsService {
       );
     }
 
-    if (transactionPayload.transactionType === TransactionType.SALE) {
-      await this.transactionRepository.query(
-        'SELECT public.refresh_transaction_tcs($1::uuid)',
-        [transaction.id],
-      );
-    }
-
     const refreshedTransaction = await this.transactionRepository.findOne({
       where: { id: transaction.id },
     });

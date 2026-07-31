@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
@@ -95,8 +95,6 @@ const toNumber = (value: unknown) => {
 };
 @Injectable()
 export class PurchaseRuleService {
-  private readonly logger = new Logger(PurchaseRuleService.name);
-
   constructor(
     private readonly additionalSettingService: AdditionalSettingService,
     @InjectRepository(Currency)
@@ -425,58 +423,88 @@ export class PurchaseRuleService {
     }
 
     const referenceRatePer = await this.resolveReferenceRatePer(config.referenceCurrencyCode);
-    const rawRows = await this.transactionRepository.query(
-      `
-        WITH tx_item_totals AS (
-          SELECT
-            ti.transaction_id AS transaction_id,
-            COALESCE(SUM(COALESCE(ti.quantity, 0) * COALESCE(ti.rate, 0) / NULLIF(COALESCE(ti.per, 1), 0)), 0) AS item_amount,
-            COALESCE(MIN(COALESCE(c.rate_per, 1)), 1) AS currency_rate_per
-          FROM transaction_items ti
-          LEFT JOIN currencies c ON c.id = ti.currency_id
-          GROUP BY ti.transaction_id
-        ),
-        tx_charge_totals AS (
-          SELECT
-            tac.transaction_id AS transaction_id,
-            COALESCE(SUM(COALESCE(tac.amount, 0)), 0) AS charge_amount
-          FROM transaction_additional_charges tac
-          GROUP BY tac.transaction_id
-        )
-        SELECT
-          COALESCE(
-            SUM(
-              (
-                (COALESCE(it.item_amount, 0) + COALESCE(ct.charge_amount, 0)) * $1
-              ) / NULLIF(COALESCE(it.currency_rate_per, 1), 0)
-            ),
-            0
-          ) AS amount
-        FROM transactions tx
-        LEFT JOIN tx_item_totals it ON it.transaction_id = tx.id
-        LEFT JOIN tx_charge_totals ct ON ct.transaction_id = tx.id
-        WHERE tx.is_latest = true
-          AND tx.status = $2
-          AND tx.passenger_id = ANY($3::uuid[])
-          AND tx.created_at BETWEEN $4 AND $5
-      `,
-      [referenceRatePer, TransactionStatus.APPROVED, candidatePassengerIds, windowStart, windowEnd],
-    );
+    const transactions = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .leftJoinAndSelect('transaction.items', 'item')
+      .leftJoinAndSelect('transaction.additionalCharges', 'charge')
+      .where('transaction.isLatest = true')
+      .andWhere('transaction.status = :status', { status: TransactionStatus.APPROVED })
+      .andWhere('transaction.passengerId = ANY(:passengerIds)', {
+        passengerIds: candidatePassengerIds,
+      })
+      .andWhere('transaction.createdAt BETWEEN :windowStart AND :windowEnd', {
+        windowStart,
+        windowEnd,
+      })
+      .getMany();
 
-    const amount = toNumber(rawRows?.[0]?.amount ?? 0);
+    if (!transactions.length) {
+      return 0;
+    }
+
+    const currencyRateCache = new Map<string, number>();
+
+    const resolveCurrencyRatePer = async (currencyId?: string | null) => {
+      const normalizedCurrencyId = normalize(currencyId);
+      if (!normalizedCurrencyId) {
+        return 1;
+      }
+
+      const cachedRate = currencyRateCache.get(normalizedCurrencyId);
+      if (cachedRate !== undefined) {
+        return cachedRate;
+      }
+
+      const currency = await this.currencyRepository.findOne({
+        where: { id: normalizedCurrencyId },
+        select: { id: true, ratePer: true },
+      });
+
+      const ratePer = Math.max(1, toNumber(currency?.ratePer || 1) || 1);
+      currencyRateCache.set(normalizedCurrencyId, ratePer);
+      return ratePer;
+    };
+
+    let amount = 0;
+
+    for (const transaction of transactions) {
+      const itemAmount = (transaction.items ?? []).reduce((sum, item) => {
+        const quantity = toNumber(item.quantity);
+        const rate = toNumber(item.rate);
+        const per = Math.max(1, toNumber(item.per) || 1);
+        return sum + quantity * rate / per;
+      }, 0);
+
+      const chargeAmount = (transaction.additionalCharges ?? []).reduce(
+        (sum, charge) => sum + toNumber(charge.amount),
+        0,
+      );
+
+      const itemCurrencies = [...new Set(
+        (transaction.items ?? [])
+          .map((item) => normalize(item.currencyId))
+          .filter(Boolean),
+      )];
+
+      let currencyRatePer = Number.POSITIVE_INFINITY;
+      for (const currencyId of itemCurrencies) {
+        currencyRatePer = Math.min(
+          currencyRatePer,
+          await resolveCurrencyRatePer(currencyId),
+        );
+      }
+
+      amount += ((itemAmount + chargeAmount) * referenceRatePer) / Math.max(
+        1,
+        Number.isFinite(currencyRatePer) ? currencyRatePer : 1,
+      );
+    }
+
     return amount;
   }
 
   async preview(body: PurchaseRuleTransactionInput): Promise<PurchaseRulePreviewResponse> {
     const transactionType = this.resolveTransactionType(body);
-    this.logger.debug(
-      `preview-start ${JSON.stringify({
-        transactionType,
-        hasTransactionBlock: Boolean(body.transaction),
-        transactionBlockType: body.transaction?.transactionType ?? null,
-        transactionTypeBody: body.transactionType ?? null,
-      })}`,
-    );
 
     if (transactionType === TransactionType.SALE) {
       return {
@@ -541,17 +569,6 @@ export class PurchaseRuleService {
       ...config,
       referenceCurrencyCode,
     });
-    this.logger.debug(
-      `preview-amounts ${JSON.stringify({
-        referenceCurrencyCode,
-        referenceRatePer,
-        transactionAmount,
-        referenceAmount,
-        itemCount: this.getItems(body).length,
-        chargeCount: this.getAdditionalCharges(body).length,
-        paymentCount: payments.length,
-      })}`,
-    );
     const candidate = await this.findPassengerCandidate(body);
     const candidatePassengerIds = candidate ? [candidate.passenger.id] : [];
     const now = new Date();
@@ -579,18 +596,6 @@ export class PurchaseRuleService {
         .filter((payment: PurchaseRulePaymentInput) => normalizeUpper(payment.paymentMethod) === TransactionPaymentMethod.CHEQUE)
         .reduce((sum: number, payment: PurchaseRulePaymentInput) => sum + toNumber(payment.amount), 0),
       referenceRatePer,
-    );
-    this.logger.debug(
-      `preview-payments ${JSON.stringify({
-        cashTotalAmount,
-        chequeTotalAmount,
-        rawCashTotalAmount: payments
-          .filter((payment: PurchaseRulePaymentInput) => normalizeUpper(payment.paymentMethod) === TransactionPaymentMethod.CASH)
-          .reduce((sum: number, payment: PurchaseRulePaymentInput) => sum + toNumber(payment.amount), 0),
-        rawChequeTotalAmount: payments
-          .filter((payment: PurchaseRulePaymentInput) => normalizeUpper(payment.paymentMethod) === TransactionPaymentMethod.CHEQUE)
-          .reduce((sum: number, payment: PurchaseRulePaymentInput) => sum + toNumber(payment.amount), 0),
-      })}`,
     );
 
     const paymentMethodsAllowed: Array<'CASH' | 'CHEQUE'> = [];

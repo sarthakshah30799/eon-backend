@@ -508,6 +508,12 @@ export class TransactionAccountPostingWorker
     let cgstAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let sgstAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let handlingFeeAccountId: string | null = null;
+    let agentControlAccountId: string | null = null;
+    let agentControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let tdsControlAccountId: string | null = null;
+    let tdsControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let commissionControlAccountId: string | null = null;
+    let commissionControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
 
     if (isFinalStandardTransaction) {
       const settingCode =
@@ -559,6 +565,18 @@ export class TransactionAccountPostingWorker
         "TRANSACTION_ACCOUNTING",
         "HANDLING_CHARGE_ACCOUNT",
       );
+      const agentControlAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "AGENT_CRDAGT",
+      );
+      const tdsControlAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "TDSFXCOM",
+      );
+      const commissionControlAccountText = await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "COMGCN",
+      );
 
       if (!igstAccountText || !cgstAccountText || !sgstAccountText) {
         throw new BadRequestException(
@@ -574,6 +592,24 @@ export class TransactionAccountPostingWorker
       sgstAccountSnapshot = await resolveAccountSnapshot(sgstAccountText);
       if (handlingFeeAccountText) {
         handlingFeeAccountId = handlingFeeAccountText;
+      }
+      if (agentControlAccountText) {
+        agentControlAccountId = agentControlAccountText;
+        agentControlAccountSnapshot = await resolveAccountSnapshot(
+          agentControlAccountText,
+        );
+      }
+      if (tdsControlAccountText) {
+        tdsControlAccountId = tdsControlAccountText;
+        tdsControlAccountSnapshot = await resolveAccountSnapshot(
+          tdsControlAccountText,
+        );
+      }
+      if (commissionControlAccountText) {
+        commissionControlAccountId = commissionControlAccountText;
+        commissionControlAccountSnapshot = await resolveAccountSnapshot(
+          commissionControlAccountText,
+        );
       }
 
       controlDirection =
@@ -752,6 +788,113 @@ export class TransactionAccountPostingWorker
       );
 
       itemUpdates.push(item);
+    }
+
+    const commissionTotal = Number(
+      roundMoney(Number(transaction.commissionAmount ?? 0)),
+    );
+    const tdsAmount = Number(roundMoney(Number(transaction.tdsAmount ?? 0)));
+    const hasAgentCommission = commissionTotal > 0;
+    const hasTdsAmount = tdsAmount > 0;
+
+    if ((hasAgentCommission || hasTdsAmount) && !transaction.agentProfileId) {
+      throw new BadRequestException(
+        "Agent profile is required when commission or TDS postings are present",
+      );
+    }
+
+    if (hasAgentCommission) {
+      if (!commissionControlAccountId || !commissionControlAccountSnapshot) {
+        throw new BadRequestException(
+          "Missing COMMISSION control account additional setting",
+        );
+      }
+      if (!agentControlAccountId || !agentControlAccountSnapshot) {
+        throw new BadRequestException(
+          "Missing AGENT control account additional setting",
+        );
+      }
+
+      addPosting(
+        {
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: "AGENT_COMMISSION",
+          sourceId: null,
+          accountId: commissionControlAccountId,
+          accountSnapshot: commissionControlAccountSnapshot,
+          profileId: null,
+          direction: TransactionPostingDirection.DEBIT,
+          amount: roundMoney(commissionTotal),
+          remarks: "Agent commission expense",
+        },
+        false,
+      );
+
+      addPosting(
+        {
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: "AGENT_COMMISSION",
+          sourceId: null,
+          accountId: agentControlAccountId,
+          accountSnapshot: agentControlAccountSnapshot,
+          profileId: transaction.agentProfileId,
+          direction: TransactionPostingDirection.CREDIT,
+          amount: roundMoney(commissionTotal),
+          remarks: "Agent commission payable",
+        },
+        false,
+      );
+    }
+
+    if (hasTdsAmount) {
+      if (!agentControlAccountId || !agentControlAccountSnapshot) {
+        throw new BadRequestException(
+          "Missing AGENT control account additional setting",
+        );
+      }
+      if (!tdsControlAccountId || !tdsControlAccountSnapshot) {
+        throw new BadRequestException(
+          "Missing TDS control account additional setting",
+        );
+      }
+
+      addPosting(
+        {
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: "TDS",
+          sourceId: null,
+          accountId: agentControlAccountId,
+          accountSnapshot: agentControlAccountSnapshot,
+          profileId: transaction.agentProfileId,
+          direction: TransactionPostingDirection.DEBIT,
+          amount: roundMoney(tdsAmount),
+          remarks: "Agent TDS deduction",
+        },
+        false,
+      );
+
+      addPosting(
+        {
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: "TDS",
+          sourceId: null,
+          accountId: tdsControlAccountId,
+          accountSnapshot: tdsControlAccountSnapshot,
+          profileId: null,
+          direction: TransactionPostingDirection.CREDIT,
+          amount: roundMoney(tdsAmount),
+          remarks: "TDS payable",
+        },
+        false,
+      );
     }
 
     const chargeRows = [...(transaction.additionalCharges ?? [])].sort(
