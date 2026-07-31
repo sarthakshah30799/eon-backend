@@ -294,6 +294,24 @@ export class Transaction extends BaseEntity {
 
   @Column({
     type: "numeric",
+    name: "commission_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  commissionAmount: string;
+
+  @Column({
+    type: "numeric",
+    name: "tds_amount",
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
+  tdsAmount: string;
+
+  @Column({
+    type: "numeric",
     name: "taxable_amount",
     precision: 18,
     scale: 2,
