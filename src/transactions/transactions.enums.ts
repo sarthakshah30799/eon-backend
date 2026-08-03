@@ -44,6 +44,8 @@ export const TransactionPartyProfileTypeEnum = {
   FRANCHISE: "FRANCHISE",
   FOREX: "FOREX",
   MISC: "MISC",
+  BRANCH: "BRANCH",
+  COUNTER: "COUNTER",
 } as const;
 
 export type TransactionPartyProfileType =

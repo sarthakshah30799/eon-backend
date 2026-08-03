@@ -19,7 +19,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         autoLoadEntities: true,
         entities: [
           __dirname +
-            "/../!(manual-bill-books|chequebooks|transactions)/**/*.entity{.ts,.js}",
+            "/../!(manual-bill-books|chequebooks|transactions|transfers)/**/*.entity{.ts,.js}",
         ],
         migrations: [__dirname + "/../migrations/*{.ts,.js}"],
         synchronize: false, // Ensure you handle schema changes properly
@@ -45,6 +45,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
           __dirname + "/../manual-bill-books/**/*.entity{.ts,.js}",
           __dirname + "/../chequebooks/**/*.entity{.ts,.js}",
           __dirname + "/../transactions/**/*.entity{.ts,.js}",
+          __dirname + "/../transfers/**/*.entity{.ts,.js}",
         ],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,

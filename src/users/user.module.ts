@@ -5,10 +5,11 @@ import { UserController } from './user.controller';
 import { User } from './user.entity';
 import { UserRole } from '../user-roles/user-role.entity';
 import { Role } from '../roles/role.entity';
+import { CounterMenuRestriction } from '../counter-menu-restrictions/counter-menu-restriction.entity';
 import { PasswordPolicyModule } from '../password-policy/password-policy.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, UserRole, Role]), PasswordPolicyModule],
+  imports: [TypeOrmModule.forFeature([User, UserRole, Role, CounterMenuRestriction]), PasswordPolicyModule],
   controllers: [UserController],
   providers: [UserService],
   exports: [UserService],

@@ -23,6 +23,7 @@ import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
 import { TransactionTcsBreakdown } from "./transaction-tcs-breakdown.entity";
 import { TransactionPassengerOtherDocument } from "./transaction-passenger-other-document.entity";
+import { TransferRequest } from "../../transfers/entities/transfer-request.entity";
 import {
   TransactionPassengerSnapshotValue,
   TransactionPassengerTravelSnapshotValue,
@@ -52,6 +53,7 @@ import {
 @Index("IDX_transactions_passenger_id", ["passengerId"])
 @Index("IDX_transactions_purpose_id", ["purposeId"])
 @Index("IDX_transactions_passenger_travel_id", ["passengerTravelId"])
+@Index("IDX_transactions_transfer_request_id", ["transferRequestId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
 @Index("IDX_transactions_transaction_date", ["transactionDate"])
@@ -139,6 +141,16 @@ export class Transaction extends BaseEntity {
     nullable: true,
   })
   passengerTravelSnapshot: TransactionPassengerTravelSnapshotValue;
+
+  @Column({ type: "uuid", name: "transfer_request_id", nullable: true })
+  transferRequestId: string | null;
+
+  @ManyToOne(() => TransferRequest, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({
+    name: "transfer_request_id",
+    foreignKeyConstraintName: "FK_transactions_transfer_request_id",
+  })
+  transferRequest: TransferRequest | null;
 
   @Column({ type: "uuid", name: "agent_profile_id", nullable: true })
   agentProfileId: string | null;

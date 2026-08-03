@@ -19,6 +19,7 @@ import {
   TransactionPostingSourceType,
   TransactionEventType,
   TransactionEventStatus,
+  TransactionPartyProfileTypeEnum,
 } from "./transactions.enums";
 import { Transaction } from "./entities/transaction.entity";
 import { TransactionItem } from "./entities/transaction-item.entity";
@@ -324,10 +325,14 @@ export class TransactionAccountPostingWorker
         relations: [
           "bulkPurAc",
           "purchaseAc",
+          "commissionAc",
           "bulkSaleAc",
           "saleAc",
           "bulkProficAc",
           "profitAc",
+          "branchPurAc",
+          "branchSaleAc",
+          "profitAcBrnSale",
         ],
       });
 
@@ -418,12 +423,18 @@ export class TransactionAccountPostingWorker
               TransactionType.SALE,
               transaction.tradeMode as TradeMode,
               kind,
+              {
+                useBranchAccounts: Boolean(transaction.transferRequestId),
+              },
             )
           : resolveProductTransactionAccount(
               product,
               transaction.transactionType as TransactionType,
               transaction.tradeMode as TradeMode,
               kind,
+              {
+                useBranchAccounts: Boolean(transaction.transferRequestId),
+              },
             );
 
       if (!account) {
@@ -512,8 +523,8 @@ export class TransactionAccountPostingWorker
     let agentControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let tdsControlAccountId: string | null = null;
     let tdsControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
-    let commissionControlAccountId: string | null = null;
-    let commissionControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let transferControlAccountId: string | null = null;
+    let transferControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
 
     if (isFinalStandardTransaction) {
       const settingCode =
@@ -573,10 +584,6 @@ export class TransactionAccountPostingWorker
         "TRANSACTION_ACCOUNTING",
         "TDSFXCOM",
       );
-      const commissionControlAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "COMGCN",
-      );
 
       if (!igstAccountText || !cgstAccountText || !sgstAccountText) {
         throw new BadRequestException(
@@ -605,10 +612,32 @@ export class TransactionAccountPostingWorker
           tdsControlAccountText,
         );
       }
-      if (commissionControlAccountText) {
-        commissionControlAccountId = commissionControlAccountText;
-        commissionControlAccountSnapshot = await resolveAccountSnapshot(
-          commissionControlAccountText,
+
+      if (transaction.transferRequestId) {
+        const transferControlAccountText =
+          transaction.transactionPartyProfileType ===
+          TransactionPartyProfileTypeEnum.BRANCH
+            ? await this.additionalSettingService.getSettingTextValue(
+                "TRANSACTION_ACCOUNTING",
+                "BRANCH_CONTROL_ACCOUNT",
+              )
+            : transaction.transactionPartyProfileType ===
+                TransactionPartyProfileTypeEnum.COUNTER
+              ? await this.additionalSettingService.getSettingTextValue(
+                  "TRANSACTION_ACCOUNTING",
+                  "COUNTER_CONTROL_ACCOUNT",
+                )
+              : null;
+
+        if (!transferControlAccountText) {
+          throw new BadRequestException(
+            "Missing transfer control account additional setting",
+          );
+        }
+
+        transferControlAccountId = transferControlAccountText;
+        transferControlAccountSnapshot = await resolveAccountSnapshot(
+          transferControlAccountText,
         );
       }
 
@@ -628,12 +657,18 @@ export class TransactionAccountPostingWorker
               transaction.transactionType,
               transaction.tradeMode as TradeMode,
               "sale",
+              {
+                useBranchAccounts: Boolean(transaction.transferRequestId),
+              },
             )
           : resolveProductTransactionAccount(
               product,
               transaction.transactionType,
               transaction.tradeMode as TradeMode,
               "purchase",
+              {
+                useBranchAccounts: Boolean(transaction.transferRequestId),
+              },
             );
 
       if (!itemAccount) {
@@ -706,147 +741,151 @@ export class TransactionAccountPostingWorker
             false,
           );
         }
-        continue;
-      }
+      } else {
+        const averageCost = await resolveAveragePurchaseCost(
+          item.productId,
+          item.currencyId,
+          item.productCurrencyRateId,
+        );
+        const holdCost = averageCost > 0 ? averageCost : unitRate;
+        const profitRate = unitRate - holdCost;
+        const signedProfitAmount = Number(roundMoney(quantity * profitRate));
+        const saleAmount = Number(roundMoney(itemTotalAmount - signedProfitAmount));
+        const profitAccount = determineAccount(product, "profit");
+        const saleAccount = determineAccount(product, "sale");
+        const profitAccountSnapshot = await resolveAccountSnapshot(profitAccount.id);
+        const saleAccountSnapshot = await resolveAccountSnapshot(saleAccount.id);
 
-      const averageCost = await resolveAveragePurchaseCost(
-        item.productId,
-        item.currencyId,
-        item.productCurrencyRateId,
-      );
-      const holdCost = averageCost > 0 ? averageCost : unitRate;
-      const profitRate = unitRate - holdCost;
-      const signedProfitAmount = Number(roundMoney(quantity * profitRate));
-      const profitAmount = Math.abs(signedProfitAmount);
-      const saleAmount = Number(roundMoney(itemTotalAmount - signedProfitAmount));
-      const profitAccount = determineAccount(product, "profit");
-      const saleAccount = determineAccount(product, "sale");
-      const profitAccountSnapshot = await resolveAccountSnapshot(profitAccount.id);
-      const saleAccountSnapshot = await resolveAccountSnapshot(saleAccount.id);
+        item.holdCost = roundToScale(holdCost, 7);
+        item.profit = roundToScale(profitRate, 2);
 
-      item.holdCost = roundToScale(holdCost, 7);
-      item.profit = roundToScale(profitRate, 2);
-
-      addPosting(
-        {
-          transactionId: transaction.id,
-          createdBy: postingActorId,
-          updatedBy: postingActorId,
-          sourceType: "ITEM_PROFIT",
-          sourceId: item.id,
-          accountId: profitAccount.id,
-          accountSnapshot: profitAccountSnapshot,
-          profileId: null,
-          direction:
-            signedProfitAmount >= 0
-              ? TransactionPostingDirection.CREDIT
-              : TransactionPostingDirection.DEBIT,
-          amount: toPositiveAmount(signedProfitAmount),
-          remarks: `Sale profit item ${item.lineNo}`,
-        },
-        true,
-      );
-
-      const roundOffDirection = resolveRoundOffDirection(
-        roundOffAmount,
-        transaction.transactionType as TransactionType,
-      );
-      if (roundOffDirection) {
         addPosting(
           {
             transactionId: transaction.id,
             createdBy: postingActorId,
             updatedBy: postingActorId,
-            sourceType: TransactionPostingSourceType.ROUND_OFF,
+            sourceType: "ITEM_PROFIT",
             sourceId: item.id,
-            accountId: roundOffAccountId as string,
-            accountSnapshot: roundOffAccountSnapshot,
+            accountId: profitAccount.id,
+            accountSnapshot: profitAccountSnapshot,
             profileId: null,
-            direction: roundOffDirection,
-            amount: roundMoney(Math.abs(roundOffAmount)),
-            remarks: `Sale round off item ${item.lineNo}`,
+            direction:
+              signedProfitAmount >= 0
+                ? TransactionPostingDirection.CREDIT
+                : TransactionPostingDirection.DEBIT,
+            amount: toPositiveAmount(signedProfitAmount),
+            remarks: `Sale profit item ${item.lineNo}`,
+          },
+          true,
+        );
+
+        const roundOffDirection = resolveRoundOffDirection(
+          roundOffAmount,
+          transaction.transactionType as TransactionType,
+        );
+        if (roundOffDirection) {
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ROUND_OFF,
+              sourceId: item.id,
+              accountId: roundOffAccountId as string,
+              accountSnapshot: roundOffAccountSnapshot,
+              profileId: null,
+              direction: roundOffDirection,
+              amount: roundMoney(Math.abs(roundOffAmount)),
+              remarks: `Sale round off item ${item.lineNo}`,
+            },
+            false,
+          );
+        }
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: "ITEM_SALE",
+            sourceId: item.id,
+            accountId: saleAccount.id,
+            accountSnapshot: saleAccountSnapshot,
+            profileId: null,
+            direction: TransactionPostingDirection.CREDIT,
+            amount: roundMoney(saleAmount),
+            remarks: `Sale amount item ${item.lineNo}`,
+          },
+          true,
+        );
+      }
+
+      const itemCommission = Number(roundMoney(Number(item.commission ?? 0)));
+      if (itemCommission > 0) {
+        if (!transaction.agentProfileId) {
+          throw new BadRequestException(
+            "Agent profile is required when commission postings are present",
+          );
+        }
+        if (!agentControlAccountId || !agentControlAccountSnapshot) {
+          throw new BadRequestException(
+            "Missing AGENT control account additional setting",
+          );
+        }
+        if (!product.commissionAc) {
+          throw new BadRequestException(
+            `Product commission account is not configured for item ${item.id}`,
+          );
+        }
+
+        const commissionAccountSnapshot = await resolveAccountSnapshot(
+          product.commissionAc.id,
+        );
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: "AGENT_COMMISSION",
+            sourceId: item.id,
+            accountId: product.commissionAc.id,
+            accountSnapshot: commissionAccountSnapshot,
+            profileId: null,
+            direction: TransactionPostingDirection.DEBIT,
+            amount: roundMoney(itemCommission),
+            remarks: `Item commission expense item ${item.lineNo}`,
+          },
+          false,
+        );
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: "AGENT_COMMISSION",
+            sourceId: item.id,
+            accountId: agentControlAccountId,
+            accountSnapshot: agentControlAccountSnapshot,
+            profileId: transaction.agentProfileId,
+            direction: TransactionPostingDirection.CREDIT,
+            amount: roundMoney(itemCommission),
+            remarks: `Item commission payable item ${item.lineNo}`,
           },
           false,
         );
       }
 
-      addPosting(
-        {
-          transactionId: transaction.id,
-          createdBy: postingActorId,
-          updatedBy: postingActorId,
-          sourceType: "ITEM_SALE",
-          sourceId: item.id,
-          accountId: saleAccount.id,
-          accountSnapshot: saleAccountSnapshot,
-          profileId: null,
-          direction: TransactionPostingDirection.CREDIT,
-          amount: roundMoney(saleAmount),
-          remarks: `Sale amount item ${item.lineNo}`,
-        },
-        true,
-      );
-
       itemUpdates.push(item);
     }
 
-    const commissionTotal = Number(
-      roundMoney(Number(transaction.commissionAmount ?? 0)),
-    );
     const tdsAmount = Number(roundMoney(Number(transaction.tdsAmount ?? 0)));
-    const hasAgentCommission = commissionTotal > 0;
     const hasTdsAmount = tdsAmount > 0;
 
-    if ((hasAgentCommission || hasTdsAmount) && !transaction.agentProfileId) {
+    if (hasTdsAmount && !transaction.agentProfileId) {
       throw new BadRequestException(
         "Agent profile is required when commission or TDS postings are present",
-      );
-    }
-
-    if (hasAgentCommission) {
-      if (!commissionControlAccountId || !commissionControlAccountSnapshot) {
-        throw new BadRequestException(
-          "Missing COMMISSION control account additional setting",
-        );
-      }
-      if (!agentControlAccountId || !agentControlAccountSnapshot) {
-        throw new BadRequestException(
-          "Missing AGENT control account additional setting",
-        );
-      }
-
-      addPosting(
-        {
-          transactionId: transaction.id,
-          createdBy: postingActorId,
-          updatedBy: postingActorId,
-          sourceType: "AGENT_COMMISSION",
-          sourceId: null,
-          accountId: commissionControlAccountId,
-          accountSnapshot: commissionControlAccountSnapshot,
-          profileId: null,
-          direction: TransactionPostingDirection.DEBIT,
-          amount: roundMoney(commissionTotal),
-          remarks: "Agent commission expense",
-        },
-        false,
-      );
-
-      addPosting(
-        {
-          transactionId: transaction.id,
-          createdBy: postingActorId,
-          updatedBy: postingActorId,
-          sourceType: "AGENT_COMMISSION",
-          sourceId: null,
-          accountId: agentControlAccountId,
-          accountSnapshot: agentControlAccountSnapshot,
-          profileId: transaction.agentProfileId,
-          direction: TransactionPostingDirection.CREDIT,
-          amount: roundMoney(commissionTotal),
-          remarks: "Agent commission payable",
-        },
-        false,
       );
     }
 
@@ -892,6 +931,40 @@ export class TransactionAccountPostingWorker
           direction: TransactionPostingDirection.CREDIT,
           amount: roundMoney(tdsAmount),
           remarks: "TDS payable",
+        },
+        false,
+      );
+    }
+
+    const transferAmount = Number(
+      roundMoney(Number(transaction.byTransfer ?? 0)),
+    );
+    if (transferAmount > 0 && transaction.transferRequestId) {
+      if (!transferControlAccountId || !transferControlAccountSnapshot) {
+        throw new BadRequestException(
+          "Missing transfer control account additional setting",
+        );
+      }
+
+      addPosting(
+        {
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: TransactionPostingSourceType.PARTY_CONTROL,
+          sourceId: transaction.transferRequestId,
+          accountId: transferControlAccountId,
+          accountSnapshot: transferControlAccountSnapshot,
+          profileId: transaction.partyProfileId,
+          direction:
+            transaction.transactionType === TransactionType.PURCHASE
+              ? TransactionPostingDirection.CREDIT
+              : TransactionPostingDirection.DEBIT,
+          amount: roundMoney(transferAmount),
+          remarks:
+            transaction.transactionType === TransactionType.PURCHASE
+              ? "Transfer receipt control"
+              : "Transfer issue control",
         },
         false,
       );

@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionType } from "../transactions/transactions.enums";
+import { TransactionPartyProfileTypeEnum } from "../transactions/transactions.enums";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { TransactionAdditionalCharge } from "../transactions/entities/transaction-additional-charge.entity";
@@ -228,12 +229,25 @@ const buildColumns = (maxPayments: number, maxCharges: number) => [
 ];
 
 const formatTransactionTypeLabel = (transaction: Transaction) =>
-  [
-    toText(transaction.slug) || transaction.transactionType.toLowerCase(),
-    transaction.tradeMode.toLowerCase(),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  transaction.transferRequestId
+    ? [
+        transaction.transactionPartyProfileType ===
+        TransactionPartyProfileTypeEnum.BRANCH
+          ? "branch transfer"
+          : transaction.transactionPartyProfileType ===
+              TransactionPartyProfileTypeEnum.COUNTER
+            ? "counter transfer"
+            : toText(transaction.slug) || transaction.transactionType.toLowerCase(),
+        transaction.tradeMode.toLowerCase(),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : [
+        toText(transaction.slug) || transaction.transactionType.toLowerCase(),
+        transaction.tradeMode.toLowerCase(),
+      ]
+        .filter(Boolean)
+        .join(" ");
 
 const compareIsoDateStrings = (
   left: string,

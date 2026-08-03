@@ -35,6 +35,7 @@
 --     ├─ User Profile
 --     ├─ Financial Profile
 --     ├─ Currency Profile
+--     ├─ Transfer
 --     ├─ Expense Booking Master
 --     └─ Income Booking Master
 --
@@ -158,10 +159,13 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'Currency Profile', '/currency-profile', 'dollar-sign', NULL, 4, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Expense Booking Master', '/expense-booking', 'receipt', NULL, 5, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Transfer', '/transfer', 'arrow-left-right', NULL, 5, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
-  VALUES (uuid_generate_v4(), false, 'Income Booking Master', '/income-booking', 'credit-card', NULL, 6, true, v_system_user, v_system_user);
+  VALUES (uuid_generate_v4(), false, 'Expense Booking Master', '/expense-booking', 'receipt', NULL, 6, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Income Booking Master', '/income-booking', 'credit-card', NULL, 7, true, v_system_user, v_system_user);
 
   RAISE NOTICE 'Menu seed completed. Admin ID: %, Party Profiles ID: %', v_admin_id, v_party_profiles_id;
 END $$;

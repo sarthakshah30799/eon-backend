@@ -23,10 +23,15 @@ import {
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
-  private getBranchContext(session: any): { branchId?: string; isAdminOrHo: boolean } {
+  private getBranchContext(session: any): {
+    branchId?: string;
+    counterId?: string;
+    isAdminOrHo: boolean;
+  } {
     const isAdminOrHo = !!(session?.isAdmin || session?.isHo || session?.isHoStaff);
     return {
       branchId: isAdminOrHo ? undefined : session?.activeBranchId,
+      counterId: isAdminOrHo ? undefined : session?.activeCounterId,
       isAdminOrHo,
     };
   }
@@ -35,7 +40,7 @@ export class DashboardController {
   @ApiOperation({ summary: "Get dashboard stats" })
   async getStats(@Session() session: any): Promise<DashboardStatsDto> {
     const ctx = this.getBranchContext(session);
-    return this.dashboardService.getStats(ctx.branchId, ctx.isAdminOrHo);
+    return this.dashboardService.getStats(ctx.branchId, ctx.counterId, ctx.isAdminOrHo);
   }
 
   @Get("volume-by-currency")
@@ -84,6 +89,7 @@ export class DashboardController {
       session.userId,
       ctx.isAdminOrHo,
       ctx.branchId,
+      ctx.counterId,
       limit ? parseInt(limit, 10) : 20,
     );
   }

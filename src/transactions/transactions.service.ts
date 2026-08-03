@@ -797,11 +797,13 @@ export class TransactionsService {
 
   async getQuantityAvailability(
     branchId: string,
+    counterId: string,
     currencyId: string,
     productId: string,
     excludeTransactionId?: string,
   ): Promise<{
     branchId: string;
+    counterId: string;
     currencyId: string;
     productId: string;
     purchasedQuantity: string;
@@ -810,6 +812,10 @@ export class TransactionsService {
   }> {
     if (!branchId) {
       throw new BadRequestException('Branch is required');
+    }
+
+    if (!counterId) {
+      throw new BadRequestException('Counter is required');
     }
 
     if (!currencyId) {
@@ -836,6 +842,7 @@ export class TransactionsService {
         approvedStatus: TransactionStatus.APPROVED,
       })
       .andWhere('tx.branchId = :branchId', { branchId })
+      .andWhere('tx.counterId = :counterId', { counterId })
       .andWhere('item.currencyId = :currencyId', { currencyId })
       .andWhere('item.productId = :productId', { productId })
       .setParameters({
@@ -860,6 +867,7 @@ export class TransactionsService {
 
     return {
       branchId,
+      counterId,
       currencyId,
       productId,
       purchasedQuantity,
