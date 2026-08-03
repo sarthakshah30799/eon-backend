@@ -15,7 +15,11 @@ export class CounterService {
     private readonly counterRepository: Repository<Counter>,
   ) {}
 
-  async findAll(activeOnly = true, search?: string): Promise<CounterResponseDto[]> {
+  async findAll(
+    activeOnly = true,
+    search?: string,
+    branchId?: string,
+  ): Promise<CounterResponseDto[]> {
     const qb = this.counterRepository
       .createQueryBuilder('counter')
       .leftJoinAndSelect('counter.branch', 'branch')
@@ -27,6 +31,10 @@ export class CounterService {
 
     if (search) {
       qb.andWhere('counter.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    if (branchId?.trim()) {
+      qb.andWhere('branch.id = :branchId', { branchId: branchId.trim() });
     }
 
     const counters = await qb.getMany();

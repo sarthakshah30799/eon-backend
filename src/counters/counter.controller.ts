@@ -20,8 +20,9 @@ export class CounterController {
   async findAll(
     @Query('activeOnly') activeOnly = 'false',
     @Query('search') search?: string,
+    @Query('branchId') branchId?: string,
   ): Promise<CounterResponseDto[]> {
-    return this.counterService.findAll(activeOnly !== 'false', search);
+    return this.counterService.findAll(activeOnly !== 'false', search, branchId);
   }
 
   @Get(':id')

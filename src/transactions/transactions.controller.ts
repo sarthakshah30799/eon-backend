@@ -81,11 +81,13 @@ export class TransactionsController {
   async getQuantityAvailability(
     @Session() session: any,
     @Query('branchId') branchId?: string,
+    @Query('counterId') counterId?: string,
     @Query('currencyId') currencyId?: string,
     @Query('productId') productId?: string,
     @Query('excludeTransactionId') excludeTransactionId?: string,
   ): Promise<{
     branchId: string;
+    counterId: string;
     currencyId: string;
     productId: string;
     purchasedQuantity: string;
@@ -95,12 +97,20 @@ export class TransactionsController {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
       ? branchId?.trim() || undefined
       : session?.activeBranchId;
+    const effectiveCounterId = session?.isAdmin || session?.isHoStaff
+      ? counterId?.trim() || undefined
+      : session?.activeCounterId;
     if (!effectiveBranchId) {
       throw new BadRequestException('Branch is required');
     }
 
+    if (!effectiveCounterId) {
+      throw new BadRequestException('Counter is required');
+    }
+
     return this.transactionsService.getQuantityAvailability(
       effectiveBranchId,
+      effectiveCounterId,
       String(currencyId ?? ''),
       String(productId ?? ''),
       excludeTransactionId ?? undefined,

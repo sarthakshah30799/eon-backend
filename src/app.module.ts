@@ -39,6 +39,7 @@ import { ReportsModule } from "./reports/reports.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { PassengerModule } from "./passengers/passenger.module";
 import { PurposeModule } from "./purpose/purpose.module";
+import { TransfersModule } from "./transfers/transfers.module";
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { PurposeModule } from "./purpose/purpose.module";
     TransactionsModule,
     PassengerModule,
     PurposeModule,
+    TransfersModule,
     MigrationToolModule,
     ReportsModule,
     DashboardModule,

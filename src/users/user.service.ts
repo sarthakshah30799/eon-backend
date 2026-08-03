@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from './user.entity';
 import { Role } from '../roles/role.entity';
 import { UserRole } from '../user-roles/user-role.entity';
+import { CounterMenuRestriction } from '../counter-menu-restrictions/counter-menu-restriction.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -12,6 +13,7 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { UserAssignmentDto } from './dto/user-assignment.dto';
 import { uppercaseFields } from '../utils/uppercase.util';
 import { PasswordPolicyService } from '../password-policy/password-policy.service';
+import { normalizeMenuPath } from '../menu/menu-path.util';
 
 const USER_RELATIONS = [
   'userRoles',
@@ -40,8 +42,63 @@ export class UserService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(CounterMenuRestriction)
+    private readonly counterMenuRestrictionRepository: Repository<CounterMenuRestriction>,
     private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
+
+  private async applyCounterRestrictions(
+    userDto: UserResponseDto,
+    workplace?: WorkplaceSelection,
+  ): Promise<UserResponseDto> {
+    if (!workplace?.activeCounterId || !userDto.permissions) {
+      return userDto;
+    }
+
+    const counterRestrictions = await this.counterMenuRestrictionRepository.find({
+      where: {
+        counter: {
+          id: workplace.activeCounterId,
+        } as CounterMenuRestriction['counter'],
+      },
+      relations: ['menu', 'permission'],
+    });
+
+    if (counterRestrictions.length === 0) {
+      return userDto;
+    }
+
+    const nextPermissions: Record<string, string[]> = {};
+    for (const [path, codes] of Object.entries(userDto.permissions)) {
+      nextPermissions[path] = [...codes];
+    }
+
+    for (const restriction of counterRestrictions) {
+      const menuPath = normalizeMenuPath(restriction.menu?.path) || restriction.menu?.name;
+      const permissionCode = restriction.permission?.code;
+
+      if (!menuPath || !permissionCode || !nextPermissions[menuPath]) {
+        continue;
+      }
+
+      nextPermissions[menuPath] = nextPermissions[menuPath].filter(code => code !== permissionCode);
+
+      if (nextPermissions[menuPath].length === 0) {
+        delete nextPermissions[menuPath];
+      }
+    }
+
+    userDto.permissions = nextPermissions;
+    return userDto;
+  }
+
+  private async buildEffectiveUserResponse(
+    user: User,
+    workplace?: WorkplaceSelection,
+  ): Promise<UserResponseDto> {
+    const dto = UserResponseDto.fromEntity(user, workplace);
+    return this.applyCounterRestrictions(dto, workplace);
+  }
 
   private async isRequesterAdmin(userId?: string): Promise<boolean> {
     if (!userId) {
@@ -427,7 +484,7 @@ export class UserService {
 
     if (!(await this.isRequesterAdmin(currentUserId))) {
       if (currentUserId === id) {
-        return UserResponseDto.fromEntity(user, workplace);
+        return this.buildEffectiveUserResponse(user, workplace);
       }
 
       const activeBranchId = workplace?.activeBranchId ?? null;
@@ -448,7 +505,7 @@ export class UserService {
       }
     }
 
-    return UserResponseDto.fromEntity(user, workplace);
+    return this.buildEffectiveUserResponse(user, workplace);
   }
 
   async findByEmail(email: string): Promise<User | null> {

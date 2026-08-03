@@ -8,6 +8,7 @@ export class DashboardStatsDto {
   pendingTransactions: number;
   pendingChequeBooks: number;
   pendingManualBooks: number;
+  pendingTransfers: number;
   activeAlerts: number;
 }
 

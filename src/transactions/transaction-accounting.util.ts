@@ -2,7 +2,20 @@ import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { Product } from "../products/product.entity";
 import { TradeMode, TransactionType } from "./transactions.enums";
 
-type ProductAccountKey = "bulkPurAc" | "purchaseAc" | "bulkSaleAc" | "saleAc" | "bulkProficAc" | "profitAc";
+type ProductAccountKey =
+  | "bulkPurAc"
+  | "purchaseAc"
+  | "branchPurAc"
+  | "bulkSaleAc"
+  | "saleAc"
+  | "branchSaleAc"
+  | "bulkProficAc"
+  | "profitAc"
+  | "profitAcBrnSale";
+
+type ProductAccountResolveOptions = {
+  useBranchAccounts?: boolean;
+};
 
 const ACCOUNT_KEY_PRIORITY: Record<
   TransactionType,
@@ -18,9 +31,28 @@ const ACCOUNT_KEY_PRIORITY: Record<
   },
 };
 
+const BRANCH_ACCOUNT_KEY_PRIORITY: Record<
+  TransactionType,
+  Record<TradeMode, readonly ProductAccountKey[]>
+> = {
+  [TransactionType.PURCHASE]: {
+    [TradeMode.BULK]: ["branchPurAc", "bulkPurAc", "purchaseAc"],
+    [TradeMode.RETAIL]: ["branchPurAc", "purchaseAc", "bulkPurAc"],
+  },
+  [TransactionType.SALE]: {
+    [TradeMode.BULK]: ["branchSaleAc", "bulkSaleAc", "saleAc"],
+    [TradeMode.RETAIL]: ["branchSaleAc", "saleAc", "bulkSaleAc"],
+  },
+};
+
 const PROFIT_ACCOUNT_PRIORITY: Record<TradeMode, readonly ProductAccountKey[]> = {
   [TradeMode.BULK]: ["bulkProficAc", "profitAc"],
   [TradeMode.RETAIL]: ["profitAc", "bulkProficAc"],
+};
+
+const BRANCH_PROFIT_ACCOUNT_PRIORITY: Record<TradeMode, readonly ProductAccountKey[]> = {
+  [TradeMode.BULK]: ["profitAcBrnSale", "bulkProficAc", "profitAc"],
+  [TradeMode.RETAIL]: ["profitAcBrnSale", "profitAc", "bulkProficAc"],
 };
 
 const ACCOUNT_KIND_LABEL: Record<"purchase" | "sale" | "profit", string> = {
@@ -48,11 +80,16 @@ export function resolveProductTransactionAccount(
   transactionType: TransactionType,
   tradeMode: TradeMode,
   kind: "purchase" | "sale" | "profit",
+  options: ProductAccountResolveOptions = {},
 ): AccountProfile | null {
   const keys =
     kind === "profit"
-      ? PROFIT_ACCOUNT_PRIORITY[tradeMode]
-      : ACCOUNT_KEY_PRIORITY[transactionType][tradeMode];
+      ? options.useBranchAccounts
+        ? BRANCH_PROFIT_ACCOUNT_PRIORITY[tradeMode]
+        : PROFIT_ACCOUNT_PRIORITY[tradeMode]
+      : options.useBranchAccounts
+        ? BRANCH_ACCOUNT_KEY_PRIORITY[transactionType][tradeMode]
+        : ACCOUNT_KEY_PRIORITY[transactionType][tradeMode];
 
   return firstDefinedAccount(product, keys);
 }
@@ -61,11 +98,16 @@ export function resolveProductTransactionAccountField(
   transactionType: TransactionType,
   tradeMode: TradeMode,
   kind: "purchase" | "sale" | "profit",
+  options: ProductAccountResolveOptions = {},
 ): ProductAccountKey {
   const keys =
     kind === "profit"
-      ? PROFIT_ACCOUNT_PRIORITY[tradeMode]
-      : ACCOUNT_KEY_PRIORITY[transactionType][tradeMode];
+      ? options.useBranchAccounts
+        ? BRANCH_PROFIT_ACCOUNT_PRIORITY[tradeMode]
+        : PROFIT_ACCOUNT_PRIORITY[tradeMode]
+      : options.useBranchAccounts
+        ? BRANCH_ACCOUNT_KEY_PRIORITY[transactionType][tradeMode]
+        : ACCOUNT_KEY_PRIORITY[transactionType][tradeMode];
 
   return keys[0];
 }
@@ -85,4 +127,3 @@ export function toPositiveAmount(value: number): string {
 export function roundMoney(value: number): string {
   return Number.isFinite(value) ? value.toFixed(2) : "0.00";
 }
-

@@ -6,6 +6,8 @@ import { TransactionItem } from "../transactions/entities/transaction-item.entit
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { ChequeBook } from "../chequebooks/entities/cheque-book.entity";
 import { ManualBook } from "../manual-bill-books/entities/manual-book.entity";
+import { TransferRequest } from "../transfers/entities/transfer-request.entity";
+import { TransferRequestStatus } from "../transfers/transfers.enums";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import {
   DashboardStatsDto,
@@ -28,6 +30,8 @@ export class DashboardService {
     private readonly chequeBookRepository: Repository<ChequeBook>,
     @InjectRepository(ManualBook, "database2")
     private readonly manualBookRepository: Repository<ManualBook>,
+    @InjectRepository(TransferRequest, "database2")
+    private readonly transferRequestRepository: Repository<TransferRequest>,
   ) {}
 
   private dateRange(key: string): { from: Date; to: Date } {
@@ -84,6 +88,7 @@ export class DashboardService {
 
   async getStats(
     branchId?: string,
+    counterId?: string,
     isAdminOrHo?: boolean,
   ): Promise<DashboardStatsDto> {
     const today = this.dateRange("today");
@@ -116,6 +121,12 @@ export class DashboardService {
     this.branchFilter(pendingMB, branchId, isAdminOrHo);
     const pendingManualBooks = await pendingMB.getCount();
 
+    const pendingTransfers = await this.getPendingTransferCount(
+      branchId,
+      counterId,
+      isAdminOrHo,
+    );
+
     const flaggedTxns = await this.transactionRepository
       .createQueryBuilder("t")
       .where("t.isLatest = true")
@@ -128,11 +139,13 @@ export class DashboardService {
       yesterdayVolume: yesterdayVol.toFixed(2),
       todayTransactionCount: todayCount,
       yesterdayTransactionCount: yesterdayCount,
-      pendingApprovals: pendingTxns + pendingPP + pendingChequeBooks + pendingManualBooks,
+      pendingApprovals:
+        pendingTxns + pendingPP + pendingChequeBooks + pendingManualBooks + pendingTransfers,
       pendingPartyProfileReviews: pendingPP,
       pendingTransactions: pendingTxns,
       pendingChequeBooks,
       pendingManualBooks,
+      pendingTransfers,
       activeAlerts: flaggedTxns,
     };
   }
@@ -332,6 +345,7 @@ export class DashboardService {
     userId: string,
     isAdminOrHo: boolean,
     branchId?: string,
+    counterId?: string,
     limit: number = 20,
   ): Promise<PendingApprovalDto[]> {
     const results: PendingApprovalDto[] = [];
@@ -414,7 +428,77 @@ export class DashboardService {
       });
     }
 
+    const transferQB = this.transferRequestRepository
+      .createQueryBuilder("transfer")
+      .where("transfer.status = :status", { status: TransferRequestStatus.HELD })
+      .orderBy("transfer.createdAt", "ASC")
+      .take(limit);
+
+    // A normal user may approve only requests addressed to the active workplace.
+    // Admin/HO users can review all held transfer requests.
+    if (!isAdminOrHo) {
+      if (!branchId || !counterId) {
+        return results
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          .slice(0, limit);
+      }
+      transferQB
+        .andWhere("transfer.destinationBranchId = :destinationBranchId", {
+          destinationBranchId: branchId,
+        })
+        .andWhere("transfer.destinationCounterId = :destinationCounterId", {
+          destinationCounterId: counterId,
+        });
+    }
+
+    const transfers = await transferQB.getMany();
+    for (const transfer of transfers) {
+      const sourceBranch = transfer.sourceBranchSnapshot as Record<string, string> | null;
+      const sourceCounter = transfer.sourceCounterSnapshot as Record<string, string> | null;
+      const destinationBranch = transfer.destinationBranchSnapshot as Record<string, string> | null;
+      const destinationCounter = transfer.destinationCounterSnapshot as Record<string, string> | null;
+      const source = sourceBranch?.label ?? sourceBranch?.name ?? transfer.sourceBranchId;
+      const sourceWorkplace = sourceCounter?.label ?? sourceCounter?.name ?? transfer.sourceCounterId;
+      const destination =
+        destinationBranch?.label ?? destinationBranch?.name ?? transfer.destinationBranchId;
+      const destinationWorkplace =
+        destinationCounter?.label ?? destinationCounter?.name ?? transfer.destinationCounterId;
+
+      results.push({
+        id: transfer.id,
+        entityType: "transfer",
+        code: transfer.number ?? transfer.id.slice(0, 8),
+        name: `${source} / ${sourceWorkplace} -> ${destination} / ${destinationWorkplace}`,
+        type: "transfer",
+        subType: transfer.transferType,
+        createdAt: transfer.createdAt.toISOString(),
+      });
+    }
+
     results.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return results.slice(0, limit);
+  }
+
+  private async getPendingTransferCount(
+    branchId?: string,
+    counterId?: string,
+    isAdminOrHo?: boolean,
+  ): Promise<number> {
+    const qb = this.transferRequestRepository
+      .createQueryBuilder("transfer")
+      .where("transfer.status = :status", { status: TransferRequestStatus.HELD });
+
+    if (!isAdminOrHo) {
+      if (!branchId || !counterId) {
+        return 0;
+      }
+      qb.andWhere("transfer.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      }).andWhere("transfer.destinationCounterId = :destinationCounterId", {
+        destinationCounterId: counterId,
+      });
+    }
+
+    return qb.getCount();
   }
 }

@@ -7,10 +7,14 @@ import { TransactionItem } from "../transactions/entities/transaction-item.entit
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { ChequeBook } from "../chequebooks/entities/cheque-book.entity";
 import { ManualBook } from "../manual-bill-books/entities/manual-book.entity";
+import { TransferRequest } from "../transfers/entities/transfer-request.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, TransactionItem, ChequeBook, ManualBook], "database2"),
+    TypeOrmModule.forFeature(
+      [Transaction, TransactionItem, ChequeBook, ManualBook, TransferRequest],
+      "database2",
+    ),
     TypeOrmModule.forFeature([PartyProfile]),
   ],
   controllers: [DashboardController],
