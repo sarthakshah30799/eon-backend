@@ -28,4 +28,5 @@ export enum CategoryOptionCodeEnum {
   PassengerNationality = "NATIONALITY",
   PassengerResidentStatus = "RESIDENT",
   PassengerPanHolderRelation = "RELATION",
+  FakeCurrencyReason = "FAKE_CURRENCY_REASON",
 }

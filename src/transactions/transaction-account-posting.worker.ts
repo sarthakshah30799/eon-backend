@@ -306,8 +306,13 @@ export class TransactionAccountPostingWorker
     const isFinalStandardTransaction =
       transaction.isLatest &&
       transaction.status === "APPROVED" &&
+      transaction.slug !== "FAKE_CURRENCY" &&
       (transaction.transactionType === TransactionType.PURCHASE ||
         transaction.transactionType === TransactionType.SALE);
+    const isFinalFakeCurrencyTransaction =
+      transaction.isLatest &&
+      transaction.status === "APPROVED" &&
+      transaction.slug === "FAKE_CURRENCY";
 
     const productSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
     const accountSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
@@ -326,6 +331,8 @@ export class TransactionAccountPostingWorker
           "bulkPurAc",
           "purchaseAc",
           "commissionAc",
+          "fakeAccount",
+          "lossAccount",
           "bulkSaleAc",
           "saleAc",
           "bulkProficAc",
@@ -650,8 +657,9 @@ export class TransactionAccountPostingWorker
     for (const item of sortedItems) {
       const product = await loadProduct(item.productId);
       const productSnapshot = await resolveProductSnapshot(item.productId);
-      const itemAccount =
-        transaction.transactionType === TransactionType.SALE
+      const itemAccount = isFinalFakeCurrencyTransaction
+        ? product.fakeAccount
+        : transaction.transactionType === TransactionType.SALE
           ? resolveProductTransactionAccount(
               product,
               transaction.transactionType,
@@ -671,15 +679,23 @@ export class TransactionAccountPostingWorker
               },
             );
 
-      if (!itemAccount) {
+      if (!itemAccount && !isFinalFakeCurrencyTransaction) {
         throw new BadRequestException(
           `Product account is not configured for item ${item.id}`,
         );
       }
 
-      const accountSnapshot = await resolveAccountSnapshot(itemAccount.id);
+      if (isFinalFakeCurrencyTransaction && !itemAccount) {
+        throw new BadRequestException(
+          `Fake account is not configured for item ${item.id}`,
+        );
+      }
 
-      item.accountId = itemAccount.id;
+      const accountSnapshot = itemAccount
+        ? await resolveAccountSnapshot(itemAccount.id)
+        : null;
+
+      item.accountId = itemAccount?.id ?? null;
       item.accountSnapshot = accountSnapshot;
       item.productSnapshot = productSnapshot;
       item.updatedBy = transaction.updatedBy;
@@ -690,6 +706,46 @@ export class TransactionAccountPostingWorker
       const unitRate = rate / per;
       const itemTotalAmount = Number(roundMoney(quantity * unitRate));
       const roundOffAmount = Number(item.roundOff ?? 0);
+
+      if (isFinalFakeCurrencyTransaction) {
+        if (!product.fakeAccount || !product.lossAccount) {
+          throw new BadRequestException(
+            `Fake and loss accounts are required for fake currency item ${item.id}`,
+          );
+        }
+        const fakeAccountSnapshot = await resolveAccountSnapshot(product.fakeAccount.id);
+        const lossAccountSnapshot = await resolveAccountSnapshot(product.lossAccount.id);
+        addPosting({
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: TransactionPostingSourceType.FAKE_CURRENCY,
+          sourceId: item.id,
+          accountId: product.lossAccount.id,
+          accountSnapshot: lossAccountSnapshot,
+          profileId: null,
+          direction: TransactionPostingDirection.DEBIT,
+          amount: roundMoney(itemTotalAmount),
+          remarks: `Fake currency loss item ${item.lineNo}`,
+        }, true);
+        addPosting({
+          transactionId: transaction.id,
+          createdBy: postingActorId,
+          updatedBy: postingActorId,
+          sourceType: TransactionPostingSourceType.FAKE_CURRENCY,
+          sourceId: item.id,
+          accountId: product.fakeAccount.id,
+          accountSnapshot: fakeAccountSnapshot,
+          profileId: null,
+          direction: TransactionPostingDirection.CREDIT,
+          amount: roundMoney(itemTotalAmount),
+          remarks: `Fake currency stock removal item ${item.lineNo}`,
+        }, true);
+        item.holdCost = null;
+        item.profit = null;
+        itemUpdates.push(item);
+        continue;
+      }
 
       if (!isFinalStandardTransaction) {
         item.holdCost = null;

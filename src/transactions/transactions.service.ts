@@ -197,7 +197,9 @@ type TransactionDraftPayload = {
   transactionDate?: string | null;
   branchSnapshot?: TransactionReferenceSnapshotValue;
   requiresApproval?: boolean;
-  partyProfileId: string;
+  partyProfileId?: string | null;
+  reasonId?: string | null;
+  reasonSnapshot?: Record<string, unknown> | null;
   transactionPartyProfileType?: PurposePartyProfileType | null;
   purposeId?: string | null;
   agentProfileId?: string | null;
@@ -405,6 +407,32 @@ export class TransactionsService {
     }
 
     return parsedRate;
+  }
+
+  private async getAverageSellPrice(
+    productId: string,
+    currencyId: string,
+  ): Promise<number> {
+    const rows = await this.transactionRepository.query(
+      `SELECT public.calculate_average_sell_price($1::uuid, $2::uuid) AS average_rate`,
+      [productId, currencyId],
+    );
+
+    return Number(rows?.[0]?.average_rate ?? 0);
+  }
+
+  async getAverageSellPricePreview(
+    productId: string,
+    currencyId: string,
+  ): Promise<{ productId: string; currencyId: string; averageSellRate: string }> {
+    if (!productId || !currencyId) {
+      throw new BadRequestException('Product and currency are required');
+    }
+    return {
+      productId,
+      currencyId,
+      averageSellRate: roundMoney(await this.getAverageSellPrice(productId, currencyId)),
+    };
   }
 
   private async runGstPreview(body: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -946,8 +974,73 @@ export class TransactionsService {
     const resolvedBranchId = activeBranchId || '';
     const resolvedCounterId = activeCounterId || '';
 
-    if (!resolvedBranchId || !resolvedCounterId || !transactionPayload.partyProfileId) {
+    const isFakeCurrency = String(transactionPayload.slug ?? '').trim().toUpperCase() === 'FAKE_CURRENCY';
+
+    if (!resolvedBranchId || !resolvedCounterId || (!isFakeCurrency && !transactionPayload.partyProfileId)) {
       throw new BadRequestException('Branch, counter, and party profile are required');
+    }
+
+    if (isFakeCurrency) {
+      const reasonId = String(transactionPayload.reasonId ?? '').trim();
+      if (!reasonId) {
+        throw new BadRequestException('Fake currency reason is required');
+      }
+      const reason = await this.selectOptionRepository.findOne({
+        where: { id: reasonId, code: 'FAKE_CURRENCY_REASON', isActive: true },
+      });
+      if (!reason) {
+        throw new BadRequestException('Selected fake currency reason is invalid');
+      }
+      transactionPayload.reasonSnapshot = (await loadEntitySnapshot(
+        this.selectOptionRepository,
+        reason.id,
+      )) as Record<string, unknown>;
+
+      const fakeItems = Array.isArray(transactionPayload.items)
+        ? transactionPayload.items
+        : [];
+      if (fakeItems.length === 0) {
+        throw new BadRequestException('At least one fake currency item is required');
+      }
+      const rateEditable = String(
+        await this.additionalSettingService.getSettingTextValue(
+          'FAKE_CURRENCY_SETTINGS',
+          'FAKE_CURRENCY_RATE_EDITABLE',
+        ) ?? '',
+      ).toLowerCase() === 'yes' || String(
+        await this.additionalSettingService.getSettingTextValue(
+          'FAKE_CURRENCY_SETTINGS',
+          'FAKE_CURRENCY_RATE_EDITABLE',
+        ) ?? '',
+      ).toLowerCase() === 'true';
+
+      for (const item of fakeItems) {
+        const quantity = Number(item.quantity);
+        const productId = String(item.productId ?? '').trim();
+        const currencyId = String(item.currencyId ?? '').trim();
+        if (!productId || !currencyId || !Number.isFinite(quantity) || quantity <= 0) {
+          throw new BadRequestException('Fake currency item currency, product, and positive quantity are required');
+        }
+        const availability = await this.getQuantityAvailability(
+          resolvedBranchId,
+          resolvedCounterId,
+          currencyId,
+          productId,
+        );
+        if (quantity > Number(availability.availableQuantity)) {
+          throw new BadRequestException(
+            `Fake currency quantity exceeds available quantity for product ${productId}`,
+          );
+        }
+        if (!rateEditable) {
+          const averageSellRate = await this.getAverageSellPrice(productId, currencyId);
+          if (averageSellRate > 0 && Math.abs(Number(item.rate) - averageSellRate) > 0.0000001) {
+            throw new BadRequestException(
+              `Rate must match the average sell rate of ${averageSellRate.toFixed(7)}`,
+            );
+          }
+        }
+      }
     }
 
     const filesByIndex = new Map<number, UploadedDraftFile>();
@@ -959,7 +1052,9 @@ export class TransactionsService {
     }
 
     const shouldRequireApproval = Boolean(transactionPayload.requiresApproval);
-    const transactionStatus = shouldRequireApproval
+    const transactionStatus = isFakeCurrency
+      ? TransactionStatus.APPROVED
+      : shouldRequireApproval
       ? TransactionStatus.DRAFT
       : TransactionStatus.APPROVED;
     const now = new Date();
@@ -1020,14 +1115,11 @@ export class TransactionsService {
           branchSnapshot,
         );
 
-    const partyProfileSnapshot = await loadEntitySnapshot(
-      this.partyProfileRepository,
-      String(transactionPayload.partyProfileId),
-    );
-    if (!partyProfileSnapshot) {
-      throw new NotFoundException(
-        `Party profile with id ${transactionPayload.partyProfileId} not found`,
-      );
+    const partyProfileSnapshot = isFakeCurrency
+      ? null
+      : await loadEntitySnapshot(this.partyProfileRepository, String(transactionPayload.partyProfileId));
+    if (!isFakeCurrency && !partyProfileSnapshot) {
+      throw new NotFoundException(`Party profile with id ${transactionPayload.partyProfileId} not found`);
     }
 
     const agentProfileSnapshot = transactionPayload.agentProfileId
@@ -1099,7 +1191,9 @@ export class TransactionsService {
         )) as TransactionReferenceSnapshotValue)
       : null;
 
-    await this.purchaseRuleService.validate(transactionPayload);
+    if (!isFakeCurrency) {
+      await this.purchaseRuleService.validate(transactionPayload);
+    }
 
     const passengerPayload = transactionPayload.passenger ?? null;
     const passengerTravelPayload =
@@ -1306,10 +1400,12 @@ export class TransactionsService {
       counterSnapshot,
       companyId: currentCompany.id,
       companySnapshot: currentCompanySnapshot,
-      partyProfileId: String(transactionPayload.partyProfileId),
+      partyProfileId: isFakeCurrency ? null : String(transactionPayload.partyProfileId),
       transactionPartyProfileType:
         transactionPayload.transactionPartyProfileType ?? null,
       partyProfileSnapshot,
+      reasonId: isFakeCurrency ? normalizeNullableString(transactionPayload.reasonId) : null,
+      reasonSnapshot: isFakeCurrency ? transactionPayload.reasonSnapshot ?? null : null,
       purposeId,
       purposeSnapshot,
       passengerId,
@@ -1328,9 +1424,9 @@ export class TransactionsService {
       status: transactionStatus,
       remarks: transactionPayload.remarks ?? null,
       submittedAt: shouldRequireApproval ? now : now,
-      approvedAt: shouldRequireApproval ? null : now,
+      approvedAt: isFakeCurrency || !shouldRequireApproval ? now : null,
       rejectedAt: null,
-      approvedById: shouldRequireApproval ? null : performedById,
+      approvedById: isFakeCurrency || !shouldRequireApproval ? performedById : null,
       rejectedById: null,
       approvalRemarks: null,
       rejectionReason: null,
@@ -1487,6 +1583,7 @@ export class TransactionsService {
           'saleAc',
           'bulkProficAc',
           'profitAc',
+          'fakeAccount',
         ],
       });
 
@@ -1523,8 +1620,9 @@ export class TransactionsService {
       const currency = await resolveCurrency(String(row.currencyId));
       const product = await resolveProduct(String(row.productId));
       const productEntity = await resolveProductEntity(String(row.productId));
-      const itemAccount =
-        resolveProductTransactionAccount(
+      const itemAccount = isFakeCurrency
+        ? productEntity.fakeAccount
+        : resolveProductTransactionAccount(
           productEntity,
           transactionPayload.transactionType,
           transactionPayload.tradeMode,
@@ -1535,7 +1633,7 @@ export class TransactionsService {
 
       if (!itemAccount) {
         throw new NotFoundException(
-          `Product account is not configured for product ${row.productId}`,
+          `${isFakeCurrency ? 'Fake account' : 'Product account'} is not configured for product ${row.productId}`,
         );
       }
 

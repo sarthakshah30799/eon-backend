@@ -26,6 +26,10 @@ export class Product extends BaseEntity {
   fakeAccount: AccountProfile | null;
 
   @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'loss_account_id' })
+  lossAccount: AccountProfile | null;
+
+  @ManyToOne(() => AccountProfile, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'bulk_pur_ac_id' })
   bulkPurAc: AccountProfile | null;
 

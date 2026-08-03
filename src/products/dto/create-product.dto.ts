@@ -40,6 +40,12 @@ export class CreateProductDto {
   @MaxLength(100)
   fakeAccount?: string;
 
+  @ApiProperty({ description: 'Loss Account', required: false, maxLength: 100 })
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  lossAccount?: string;
+
   @ApiProperty({ description: 'Bulk Pur. A/C', required: false, maxLength: 100 })
   @IsString()
   @IsOptional()

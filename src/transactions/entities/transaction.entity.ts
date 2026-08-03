@@ -61,6 +61,10 @@ import {
   "CHK_transactions_number_required_when_approved",
   `"status" <> 'APPROVED' OR "number" IS NOT NULL`,
 )
+@Check(
+  "CHK_transactions_party_profile_required",
+  `UPPER("slug") = 'FAKE_CURRENCY' OR "party_profile_id" IS NOT NULL`,
+)
 @Entity("transactions")
 export class Transaction extends BaseEntity {
   @Column({ type: "uuid", name: "root_transaction_id", nullable: true })
@@ -106,8 +110,8 @@ export class Transaction extends BaseEntity {
   @Column({ type: "citext", name: "sac_code", nullable: true })
   sacCode: string | null;
 
-  @Column({ type: "uuid", name: "party_profile_id" })
-  partyProfileId: string;
+  @Column({ type: "uuid", name: "party_profile_id", nullable: true })
+  partyProfileId: string | null;
 
   @Column({ type: "jsonb", name: "party_profile_snapshot", nullable: true })
   partyProfileSnapshot: TransactionReferenceSnapshotValue;
@@ -125,6 +129,12 @@ export class Transaction extends BaseEntity {
 
   @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
   purposeSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "reason_id", nullable: true })
+  reasonId: string | null;
+
+  @Column({ type: "jsonb", name: "reason_snapshot", nullable: true })
+  reasonSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: "uuid", name: "passenger_id", nullable: true })
   passengerId: string | null;
