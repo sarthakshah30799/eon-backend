@@ -17,6 +17,7 @@ export type TransactionType =
   (typeof TransactionType)[keyof typeof TransactionType];
 
 export const TransactionTypeProfileEnum = {
+  FAKE_CURRENCY: "FAKE_CURRENCY",
   PURCHASE_FFMC: "PURCHASE_FFMC",
   PURCHASE_CORPORATE_INDIVIDUAL: "PURCHASE_CORPORATE_INDIVIDUAL",
   SALE_CORPORATE_INDIVIDUAL: "SALE_CORPORATE_INDIVIDUAL",
@@ -110,6 +111,7 @@ export const TransactionPostingSourceType = {
   AGENT_COMMISSION: "AGENT_COMMISSION",
   TDS: "TDS",
   PAYMENT: "PAYMENT",
+  FAKE_CURRENCY: "FAKE_CURRENCY",
 } as const;
 
 export type TransactionPostingSourceType =

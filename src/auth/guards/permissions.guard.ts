@@ -105,7 +105,30 @@ export class PermissionsGuard implements CanActivate {
     // 4. Role-Based Access Control for other profiles
     let menuPath = '';
     let allowedMenuPaths: string[] | null = null;
-    if (path.includes('/roles')) {
+    const transactionBody = request.body?.transaction;
+    let transactionPayload: { slug?: unknown } | null =
+      transactionBody && typeof transactionBody === 'object'
+        ? transactionBody
+        : null;
+
+    if (!transactionPayload && typeof transactionBody === 'string') {
+      try {
+        transactionPayload = JSON.parse(transactionBody) as { slug?: unknown };
+      } catch {
+        transactionPayload = null;
+      }
+    }
+
+    const isFakeCurrencyDraft =
+      method === 'POST' &&
+      path.includes('/transactions/drafts') &&
+      String(transactionPayload?.slug ?? '').toUpperCase() === 'FAKE_CURRENCY';
+
+    if (isFakeCurrencyDraft) {
+      menuPath = '/fake-currencies';
+    } else if (path.includes('/stock-revaluations')) {
+      menuPath = '/stock-revaluations';
+    } else if (path.includes('/roles')) {
       menuPath = '/admin/user-role';
     } else if (path.includes('/manual-bill-books')) {
       menuPath = '/manual-bill-books';

@@ -40,6 +40,7 @@ import { Counter } from "../counters/counter.entity";
 import { PurchaseRuleService } from "./purchase-rule.service";
 import { CountryModule } from "../country/country.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
+import { UserModule } from "../users/user.module";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start
     AdditionalSettingModule,
     CountryModule,
     DayEndStartProcessModule,
+    UserModule,
     MailModule,
     StorageModule,
     TypeOrmModule.forFeature([

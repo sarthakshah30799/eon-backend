@@ -162,6 +162,12 @@ BEGIN
   VALUES (uuid_generate_v4(), false, 'Transfer', '/transfer', 'arrow-left-right', NULL, 5, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Fake Currencies', '/fake-currencies', 'ban', NULL, 6, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
+  VALUES (uuid_generate_v4(), false, 'Stock Revaluation', '/stock-revaluations', 'scale', NULL, 7, true, v_system_user, v_system_user);
+
+  INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)
   VALUES (uuid_generate_v4(), false, 'Expense Booking Master', '/expense-booking', 'receipt', NULL, 6, true, v_system_user, v_system_user);
 
   INSERT INTO menus (id, is_admin, name, path, icon, parent_id, sort_order, is_active, created_by, updated_by)

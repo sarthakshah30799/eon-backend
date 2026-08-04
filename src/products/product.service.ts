@@ -16,6 +16,7 @@ const ACCOUNT_PROFILE_RELATION_FIELDS = [
   'acOfIssuer',
   'commissionAc',
   'fakeAccount',
+  'lossAccount',
   'bulkPurAc',
   'openAc',
   'closingAc',

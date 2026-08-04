@@ -18,6 +18,7 @@ import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { ParseUUIDPipe } from '@nestjs/common';
 import { Response } from 'express';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RecordTransactionPrintDto } from './dto/record-transaction-print.dto';
 import { TransactionsService } from './transactions.service';
 import { PurchaseRuleService } from './purchase-rule.service';
@@ -34,7 +35,7 @@ type UploadedDraftFile = {
 
 @ApiTags('transactions')
 @ApiCookieAuth('sessionId')
-@UseGuards(AuthenticatedGuard)
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller('transactions')
 export class TransactionsController {
   constructor(
@@ -118,6 +119,17 @@ export class TransactionsController {
       String(currencyId ?? ''),
       String(productId ?? ''),
       excludeTransactionId ?? undefined,
+    );
+  }
+
+  @Get('average-sell-price')
+  async getAverageSellPrice(
+    @Query('productId') productId?: string,
+    @Query('currencyId') currencyId?: string,
+  ) {
+    return this.transactionsService.getAverageSellPricePreview(
+      String(productId ?? ''),
+      String(currencyId ?? ''),
     );
   }
 

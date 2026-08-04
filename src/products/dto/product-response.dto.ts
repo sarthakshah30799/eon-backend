@@ -20,6 +20,8 @@ export class ProductResponseDto {
 
   @ApiProperty({ description: 'Fake Account', required: false })
   fakeAccount: string;
+  @ApiProperty({ description: 'Loss Account', required: false })
+  lossAccount: string;
 
   @ApiProperty({ description: 'Bulk Pur. A/C', required: false })
   bulkPurAc: string;
@@ -183,6 +185,7 @@ export class ProductResponseDto {
     dto.acOfIssuer = entity.acOfIssuer?.id ?? '';
     dto.commissionAc = entity.commissionAc?.id ?? '';
     dto.fakeAccount = entity.fakeAccount?.id ?? '';
+    dto.lossAccount = entity.lossAccount?.id ?? '';
     dto.bulkPurAc = entity.bulkPurAc?.id ?? '';
     dto.openAc = entity.openAc?.id ?? '';
     dto.closingAc = entity.closingAc?.id ?? '';
