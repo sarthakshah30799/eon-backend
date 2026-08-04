@@ -19,6 +19,7 @@ import { SessionMiddleware } from "./auth/session.middleware";
 import { SilentEmptyListInterceptor } from "./auth/interceptors/silent-empty-list.interceptor";
 import { FinancialCodeModule } from "./financial-codes/financial-code.module";
 import { FinancialSubProfileModule } from "./financial-sub-profiles/financial-sub-profile.module";
+import { StockRevaluationModule } from './stock-revaluation/stock-revaluation.module';
 import { AccountProfileModule } from "./account-profiles/account-profile.module";
 import { CountryGroupModule } from "./country-groups/country-group.module";
 import { PartyProfileModule } from "./party-profiles/party-profile.module";
@@ -62,6 +63,7 @@ import { TransfersModule } from "./transfers/transfers.module";
     SessionPolicyModule,
     FinancialCodeModule,
     FinancialSubProfileModule,
+    StockRevaluationModule,
     AccountProfileModule,
     CountryGroupModule,
     PartyProfileModule,
