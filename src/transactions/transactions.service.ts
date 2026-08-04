@@ -985,9 +985,14 @@ export class TransactionsService {
       if (!reasonId) {
         throw new BadRequestException('Fake currency reason is required');
       }
-      const reason = await this.selectOptionRepository.findOne({
-        where: { id: reasonId, code: 'FAKE_CURRENCY_REASON', isActive: true },
-      });
+      const reason = await this.selectOptionRepository
+        .createQueryBuilder('selectOption')
+        .where('selectOption.id = :reasonId', { reasonId })
+        .andWhere("REPLACE(UPPER(selectOption.code), '_', '') = :reasonCode", {
+          reasonCode: 'FAKECURRENCYREASON',
+        })
+        .andWhere('selectOption.isActive = true')
+        .getOne();
       if (!reason) {
         throw new BadRequestException('Selected fake currency reason is invalid');
       }
@@ -1034,9 +1039,12 @@ export class TransactionsService {
         }
         if (!rateEditable) {
           const averageSellRate = await this.getAverageSellPrice(productId, currencyId);
-          if (averageSellRate > 0 && Math.abs(Number(item.rate) - averageSellRate) > 0.0000001) {
+          const submittedRate = Number(item.rate);
+          const roundedAverageSellRate = Number(roundMoney(averageSellRate));
+          const roundedSubmittedRate = Number(roundMoney(submittedRate));
+          if (averageSellRate > 0 && (!Number.isFinite(submittedRate) || roundedSubmittedRate !== roundedAverageSellRate)) {
             throw new BadRequestException(
-              `Rate must match the average sell rate of ${averageSellRate.toFixed(7)}`,
+              `Rate must match the average sell rate of ${roundedAverageSellRate.toFixed(2)}`,
             );
           }
         }
@@ -1763,18 +1771,22 @@ export class TransactionsService {
       throw new BadRequestException('Failed to calculate transaction tax');
     }
 
-    const paymentRows = Array.isArray(transactionPayload.payments)
-      ? transactionPayload.payments
-      : [];
+    const paymentRows = isFakeCurrency
+      ? []
+      : Array.isArray(transactionPayload.payments)
+        ? transactionPayload.payments
+        : [];
     const payableTotal = String(refreshedTransaction.finalAmount ?? '0');
     const payableTotalAmount = Number(payableTotal || 0);
-    if (payableTotalAmount > 0 && paymentRows.length === 0) {
+    if (!isFakeCurrency && payableTotalAmount > 0 && paymentRows.length === 0) {
       throw new BadRequestException('At least one payment row is required');
     }
 
-    const paymentMethods = paymentRows.map(row =>
+    const paymentMethods = isFakeCurrency
+      ? []
+      : paymentRows.map(row =>
       this.resolvePaymentMethod(row.paymentMethod),
-    );
+        );
     if (new Set(paymentMethods).size > 1) {
       throw new BadRequestException(
         'All payment rows must use the same payment method',
@@ -1888,7 +1900,7 @@ export class TransactionsService {
     }
 
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
-    if (Number(payableTotal.toString()) !== totalPaid) {
+    if (!isFakeCurrency && Number(payableTotal.toString()) !== totalPaid) {
       throw new BadRequestException(
         `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
       );
