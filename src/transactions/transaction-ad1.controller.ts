@@ -46,9 +46,13 @@ export class TransactionAd1Controller {
   @ApiOperation({ summary: 'List agents available for AD1' })
   async getAgents(
     @Session() session: any,
+    @Query('branchId') branchId?: string,
     @Query('search') search?: string,
   ) {
-    return this.ad1Service.getAgents({ branchId: session?.activeBranchId, search });
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
+      ? branchId?.trim() || undefined
+      : session?.activeBranchId;
+    return this.ad1Service.getAgents({ branchId: effectiveBranchId, search });
   }
 
   @Get(':id')

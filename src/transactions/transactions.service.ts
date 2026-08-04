@@ -307,19 +307,18 @@ export class TransactionsService {
   ) { }
 
   async getAd1Agents(
-    branchId: string,
+    branchId: string | null | undefined,
     search?: string,
   ): Promise<PartyProfile[]> {
-    if (!branchId) {
-      return [];
-    }
-
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.commissionRules", "commissionRules")
-      .where("pp.branchId = :branchId", { branchId })
-      .andWhere("pp.type = :type", { type: 'AGENT' })
+      .where("pp.type = :type", { type: 'AGENT' })
       .andWhere("pp.active = :active", { active: true });
+
+    if (branchId) {
+      qb.andWhere("pp.branchId = :branchId", { branchId });
+    }
 
     if (search) {
       qb.andWhere(
@@ -554,17 +553,22 @@ export class TransactionsService {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
-  private async isRequesterAdmin(userId: string | null | undefined): Promise<boolean> {
+  private async isRequesterAdminOrHoStaff(userId: string | null | undefined): Promise<boolean> {
     if (!userId) {
       return false;
     }
 
     const user = await this.userRepository.findOne({
       where: { id: userId },
+      relations: ['userRoles', 'userRoles.role'],
       select: { id: true, isAdmin: true },
     });
 
-    return user?.isAdmin === true;
+    if (user?.isAdmin) {
+      return true;
+    }
+
+    return user?.userRoles?.some(ur => ur.role?.isHoStaff) === true;
   }
 
   private async canAccessTransaction(
@@ -572,7 +576,7 @@ export class TransactionsService {
     userId: string | null | undefined,
     activeBranchId: string | null | undefined,
   ): Promise<boolean> {
-    if (await this.isRequesterAdmin(userId)) {
+    if (await this.isRequesterAdminOrHoStaff(userId)) {
       return true;
     }
 
