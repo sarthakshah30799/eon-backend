@@ -420,6 +420,42 @@ export class TransactionsService {
     return Number(rows?.[0]?.average_rate ?? 0);
   }
 
+  async getCounterHoldCost(
+    branchId: string,
+    counterId: string,
+    currencyId: string,
+  ): Promise<{ branchId: string; counterId: string; currencyId: string; closingQuantity: string; closingInrAmount: string; holdCostRate: string | null }> {
+    const rows = await this.transactionRepository.query(
+      `WITH latest AS (
+        SELECT DISTINCT ON (profiletype)
+          closing, closingrs
+        FROM transaction_balance_currencies
+        WHERE branch_id = $1::uuid
+          AND counter_id = $2::uuid
+          AND currency_id = $3::uuid
+          AND date <= now()
+        ORDER BY profiletype, date DESC, updated_at DESC
+      )
+      SELECT
+        COALESCE(SUM(closing), 0) AS closing_quantity,
+        COALESCE(SUM(closingrs), 0) AS closing_inr_amount
+      FROM latest`,
+      [branchId, counterId, currencyId],
+    );
+    const closingQuantity = Number(rows?.[0]?.closing_quantity ?? 0);
+    const closingInrAmount = Number(rows?.[0]?.closing_inr_amount ?? 0);
+    return {
+      branchId,
+      counterId,
+      currencyId,
+      closingQuantity: closingQuantity.toFixed(7),
+      closingInrAmount: closingInrAmount.toFixed(2),
+      holdCostRate: closingQuantity > 0 && closingInrAmount > 0
+        ? (closingInrAmount / closingQuantity).toFixed(7)
+        : null,
+    };
+  }
+
   async getAverageSellPricePreview(
     productId: string,
     currencyId: string,

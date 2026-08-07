@@ -133,6 +133,21 @@ export class TransactionsController {
     );
   }
 
+  @Get('counter-hold-cost')
+  async getCounterHoldCost(
+    @Query('branchId') branchId?: string,
+    @Query('counterId') counterId?: string,
+    @Query('currencyId') currencyId?: string,
+    @Session() session?: any,
+  ) {
+    const effectiveBranchId = session?.isAdmin || session?.isHoStaff ? branchId : session?.activeBranchId;
+    const effectiveCounterId = session?.isAdmin || session?.isHoStaff ? counterId : session?.activeCounterId;
+    if (!effectiveBranchId || !effectiveCounterId || !currencyId) {
+      throw new BadRequestException('Branch, counter, and currency are required');
+    }
+    return this.transactionsService.getCounterHoldCost(effectiveBranchId, effectiveCounterId, currencyId);
+  }
+
   @Post(':id/account-postings/rebuild')
   @ApiOperation({ summary: 'Queue a manual account posting rebuild for a transaction' })
   async requestAccountPostingRebuild(

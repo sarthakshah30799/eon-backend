@@ -27,3 +27,13 @@ export class ProcessStockRevaluationDto {
   @Type(() => StockRevaluationRateDto)
   rates: StockRevaluationRateDto[];
 }
+
+export class UploadStockRevaluationDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  branchIds: string[];
+
+  @IsEnum(StockRevaluationFrequency)
+  frequency: StockRevaluationFrequency;
+}
