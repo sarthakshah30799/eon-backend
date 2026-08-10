@@ -15,8 +15,10 @@ export class DayEndStartProcessController {
   @Post("start")
   @ApiOperation({ summary: "Start the current day and save the checklist answers" })
   async startDay(@Body() dto: CompleteDayEndDto, @Session() session: any) {
+    const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
     return this.dayEndStartProcessService.startDay(
-      session?.activeBranchId ?? "",
+      canSelectWorkplace ? dto.branchId ?? "" : session?.activeBranchId ?? "",
+      canSelectWorkplace ? dto.counterId ?? "" : session?.activeCounterId ?? "",
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",
@@ -26,8 +28,10 @@ export class DayEndStartProcessController {
   @Post("complete")
   @ApiOperation({ summary: "Complete the current day-end checklist" })
   async completeDayEnd(@Body() dto: CompleteDayEndDto, @Session() session: any) {
+    const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
     return this.dayEndStartProcessService.completeDayEnd(
-      session?.activeBranchId ?? "",
+      canSelectWorkplace ? dto.branchId ?? "" : session?.activeBranchId ?? "",
+      canSelectWorkplace ? dto.counterId ?? "" : session?.activeCounterId ?? "",
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Req, Res, UseGuards, Session, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Req, Res, UseGuards, Session, NotFoundException, UnauthorizedException, Query } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -181,8 +181,16 @@ export class AuthController {
   @ApiCookieAuth('sessionId')
   @ApiOperation({ summary: 'Get the current EOD/BOD and back-date policy context' })
   @ApiResponse({ status: 200, description: 'Current policy context' })
-  async getPolicyContext(@Session() session: any) {
-    return this.dayEndStartProcessService.getPolicyContext(session);
+  async getPolicyContext(
+    @Session() session: any,
+    @Query('branchId') branchId?: string,
+    @Query('counterId') counterId?: string,
+  ) {
+    const canSelectBranch = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
+    const effectiveSession = canSelectBranch && branchId?.trim()
+      ? { ...session, activeBranchId: branchId.trim(), activeCounterId: counterId?.trim() || session.activeCounterId }
+      : session;
+    return this.dayEndStartProcessService.getPolicyContext(effectiveSession, Boolean(!canSelectBranch || !branchId?.trim() || !counterId?.trim()));
   }
 
   @Get('check')

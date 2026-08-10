@@ -1119,6 +1119,7 @@ export class TransactionsService {
       resolvedBranchId,
       performedById,
       resolvedTransactionDate,
+      resolvedCounterId,
     );
 
     const currentCompany = await this.companyService.getCurrentCompany(now);

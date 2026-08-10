@@ -1,8 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional } from "class-validator";
+import { IsOptional, IsUUID } from "class-validator";
 import { MonthlyLockWindowResponseDto } from "../../monthly-locks/dto/monthly-lock-window.dto";
 
 export class CompleteDayEndDto {
+  @ApiPropertyOptional({ description: "Target branch for Admin/HO operations" })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: "Target counter for Admin/HO operations" })
+  @IsOptional()
+  @IsUUID()
+  counterId?: string;
+
   @ApiPropertyOptional({ description: "Checklist answers as a JSON object" })
   @IsOptional()
   answers?: Record<string, unknown>;

@@ -2,6 +2,7 @@ import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany } from 'typeorm
 import { BaseEntity } from '../base/base.entity';
 import { ProductCurrencyRate } from '../currency-rates/product-currency-rate.entity';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
+import { ProductCardIssuer } from './entities/product-card-issuer.entity';
 
 @Entity('products')
 export class Product extends BaseEntity {
@@ -193,4 +194,7 @@ export class Product extends BaseEntity {
 
   @OneToMany(() => ProductCurrencyRate, rate => rate.product)
   currencyRates: ProductCurrencyRate[];
+
+  @OneToMany(() => ProductCardIssuer, cardIssuerLink => cardIssuerLink.product)
+  cardIssuerLinks: ProductCardIssuer[];
 }

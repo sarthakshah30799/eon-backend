@@ -18,7 +18,7 @@ import { Transaction } from "./transaction.entity";
   ["documentNumber"]
 )
 @Check(
-  "CHK_transaction_passenger_other_documents_document_number_present",
+  "CHK_transaction_passenger_other_documents_document_number_prese",
   `"document_number" IS NOT NULL`
 )
 @Check(

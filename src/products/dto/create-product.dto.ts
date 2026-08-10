@@ -5,10 +5,24 @@ import {
   IsBoolean,
   MaxLength,
   Length,
+  IsArray,
+  ArrayUnique,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProductDto {
+  @ApiProperty({
+    description: 'Card issuer party-profile IDs',
+    type: [String],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  cardIssuerProfileIds?: string[];
+
   @ApiProperty({ description: 'Unique product code', example: 'PR', maxLength: 2 })
   @IsString()
   @IsNotEmpty()

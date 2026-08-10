@@ -30,7 +30,9 @@ export class ManualBook {
   @Column({
     name: "transaction_type",
     type: "enum",
-    enum: TransactionTypeProfileEnum,
+    enum: Object.values(TransactionTypeProfileEnum).filter(
+      value => value !== TransactionTypeProfileEnum.CARD_STOCK_RECEIPT,
+    ),
   })
   transactionType: TransactionTypeProfile;
 

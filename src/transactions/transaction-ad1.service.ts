@@ -199,6 +199,7 @@ export class TransactionAd1Service {
     payload: Ad1Payload,
     performedById: string,
     activeBranchId: string | null,
+    activeCounterId: string | null,
   ): Promise<TransactionAd1> {
     const resolvedBranchId = activeBranchId || '';
     if (!payload.docNo || !resolvedBranchId) {
@@ -214,8 +215,9 @@ export class TransactionAd1Service {
       {
         userId: performedById,
         activeBranchId: resolvedBranchId,
+        activeCounterId,
       },
-      false,
+      true,
     );
     const resolvedTransactionDate = payload.transactionDate?.trim()
       ? payload.transactionDate
@@ -224,6 +226,7 @@ export class TransactionAd1Service {
       resolvedBranchId,
       performedById,
       resolvedTransactionDate,
+      activeCounterId,
     );
 
     const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
@@ -314,6 +317,7 @@ export class TransactionAd1Service {
     payload: Ad1Payload,
     performedById: string,
     activeBranchId: string | null,
+    activeCounterId: string | null,
   ): Promise<TransactionAd1> {
     const ad1 = await this.findOne(id);
     const branchId = ad1.branchId || activeBranchId || '';
@@ -330,14 +334,16 @@ export class TransactionAd1Service {
           {
             userId: performedById,
             activeBranchId: branchId,
+            activeCounterId,
           },
-          false,
+          true,
         );
         const effectiveTransactionDate = resolvedTransactionDate || policyContext.transactionDate;
         await this.dayEndStartProcessService.assertTransactionDateAllowed(
           branchId,
           performedById,
           effectiveTransactionDate,
+          activeCounterId,
         );
       }
     }

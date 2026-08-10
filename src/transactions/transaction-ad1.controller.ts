@@ -24,7 +24,7 @@ export class TransactionAd1Controller {
   @ApiOperation({ summary: 'Create an AD1 transaction' })
   async create(@Body() body: Record<string, any>, @Session() session: any) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.create(body, performedById, session?.activeBranchId ?? null);
+    return this.ad1Service.create(body, performedById, session?.activeBranchId ?? null, session?.activeCounterId ?? null);
   }
 
   @Get()
@@ -69,6 +69,6 @@ export class TransactionAd1Controller {
     @Session() session: any,
   ) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.update(id, body, performedById, session?.activeBranchId ?? null);
+    return this.ad1Service.update(id, body, performedById, session?.activeBranchId ?? null, session?.activeCounterId ?? null);
   }
 }

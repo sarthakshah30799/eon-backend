@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
 import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 import { ClientType } from "../party-profile.entity";
+import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 
 const parseBooleanQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
@@ -64,6 +65,11 @@ export class PartyProfileListQueryDto {
   @IsOptional()
   @Transform(parseBooleanQuery)
   activeOnly?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by workflow status", enum: WorkflowStatus })
+  @IsEnum(WorkflowStatus)
+  @IsOptional()
+  status?: WorkflowStatus;
 
   @ApiPropertyOptional({ description: "Filter by individual party profile flag" })
   @IsBoolean()
