@@ -1,6 +1,7 @@
 const PARTY_PROFILE_ROUTE_TYPE_MAP: Record<string, string> = {
   FOREIGN_CORRESPONDENT: 'foreign-correspondent',
   FOREX_CORRESPONDENT: 'forex-correspondent',
+  CARD_ISSUER_PROFILE: 'card-issuer-profile',
   MISC_PROFILE: 'misc-supplier-profile',
 };
 

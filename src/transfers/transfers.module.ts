@@ -6,6 +6,7 @@ import { User } from '../users/user.entity';
 import { UserRole } from '../user-roles/user-role.entity';
 import { Product } from '../products/product.entity';
 import { Currency } from '../currencies/currency.entity';
+import { ProductCurrencyRate } from '../currency-rates/product-currency-rate.entity';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { AdditionalSettingModule } from '../additional-settings/additional-setting.module';
 import { MailModule } from '../mail/mail.module';
@@ -21,7 +22,7 @@ import { TransfersService } from './transfers.service';
     AdditionalSettingModule,
     MailModule,
     TransactionsModule,
-    TypeOrmModule.forFeature([Branch, Counter, User, UserRole, Product, Currency, AccountProfile]),
+    TypeOrmModule.forFeature([Branch, Counter, User, UserRole, Product, Currency, ProductCurrencyRate, AccountProfile]),
     TypeOrmModule.forFeature([CurrencyTransfer, CurrencyTransferItem, Transaction, TransactionItem], 'database2'),
   ],
   controllers: [TransfersController],

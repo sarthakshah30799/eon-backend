@@ -41,6 +41,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { PassengerModule } from "./passengers/passenger.module";
 import { PurposeModule } from "./purpose/purpose.module";
 import { TransfersModule } from "./transfers/transfers.module";
+import { CardStockModule } from './card-stock/card-stock.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { TransfersModule } from "./transfers/transfers.module";
     PassengerModule,
     PurposeModule,
     TransfersModule,
+    CardStockModule,
     MigrationToolModule,
     ReportsModule,
     DashboardModule,

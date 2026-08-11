@@ -46,6 +46,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
           __dirname + "/../chequebooks/**/*.entity{.ts,.js}",
           __dirname + "/../transactions/**/*.entity{.ts,.js}",
           __dirname + "/../transfers/**/*.entity{.ts,.js}",
+          __dirname + "/../card-stock/**/*.entity{.ts,.js}",
         ],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,

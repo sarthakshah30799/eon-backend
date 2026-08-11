@@ -1,7 +1,7 @@
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../base/base.entity';
 import { StockRevaluationItem } from './stock-revaluation-item.entity';
-import { StockRevaluationFrequency } from '../stock-revaluation.enums';
+import { StockRevaluationFrequency, StockRevaluationStatus } from '../stock-revaluation.enums';
 
 @Index('IDX_stock_revaluations_branch_counter_period', ['branchId', 'counterId', 'frequency', 'valuationDate'], {
   unique: true,
@@ -29,6 +29,12 @@ export class StockRevaluation extends BaseEntity {
 
   @Column({ type: 'date', name: 'uploaded_date' })
   uploadedDate: string;
+
+  @Column({ type: 'enum', enum: StockRevaluationStatus, enumName: 'stock_revaluation_status_enum', default: StockRevaluationStatus.PENDING })
+  status: StockRevaluationStatus;
+
+  @Column({ type: 'jsonb', name: 'uploaded_rates', nullable: true })
+  uploadedRates: Array<{ currencyId: string; currencyCode: string; currencyName: string; rate: string }> | null;
 
   @OneToMany(() => StockRevaluationItem, (item) => item.revaluation, { cascade: true })
   items: StockRevaluationItem[];

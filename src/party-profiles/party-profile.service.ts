@@ -1099,6 +1099,10 @@ export class PartyProfileService {
       qb.andWhere("pp.purchase = :purchase", { purchase: query.purchase });
     }
 
+    if (query.status !== undefined) {
+      qb.andWhere("pp.status = :status", { status: query.status });
+    }
+
     if (query.search) {
       qb.andWhere(
         new Brackets((searchQb) => {

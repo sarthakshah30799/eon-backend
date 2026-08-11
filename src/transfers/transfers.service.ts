@@ -16,6 +16,7 @@ import { AdditionalSettingService } from '../additional-settings/additional-sett
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { Product } from '../products/product.entity';
 import { Currency } from '../currencies/currency.entity';
+import { ProductCurrencyRate } from '../currency-rates/product-currency-rate.entity';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 import { toUtcDateOnly } from '../common/date/date.util';
 import { TransactionReferenceSnapshotValue } from '../transactions/types/transaction-snapshot.types';
@@ -94,6 +95,8 @@ export class TransfersService {
     private readonly productRepository: Repository<Product>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
+    @InjectRepository(ProductCurrencyRate)
+    private readonly productCurrencyRateRepository: Repository<ProductCurrencyRate>,
     @InjectRepository(AccountProfile)
     private readonly accountProfileRepository: Repository<AccountProfile>,
     private readonly transactionsService: TransactionsService,
@@ -282,6 +285,49 @@ export class TransfersService {
         throw new BadRequestException(
           `Requested quantity exceeds available counter stock of ${roundToScale(availableQuantity, 7)}`,
         );
+      }
+    }
+  }
+
+  private async validateTransferRates(
+    items: Array<{ currencyId: string; productId: string; quantity: number; per: number; rate: number }>,
+    branchId: string,
+    counterId: string,
+  ) {
+    const configured = String(
+      await this.additionalSettingService.getSettingTextValue('TRANSFER_SETTINGS', 'TRANSFER_RATE_EDITABLE') ?? '',
+    ).trim().toLowerCase();
+    const rateEditable = configured === 'true' || configured === 'yes';
+
+    for (const [index, item] of items.entries()) {
+      const holdCost = await this.transactionsService.getCounterHoldCost(branchId, counterId, item.currencyId);
+      const holdCostRate = Number(holdCost.holdCostRate ?? 0);
+      if (!Number.isFinite(holdCostRate) || holdCostRate <= 0) {
+        throw new BadRequestException(`Item ${index + 1}: source counter hold cost is unavailable`);
+      }
+
+      if (!Number.isFinite(item.rate) || item.rate <= 0) {
+        throw new BadRequestException(`Item ${index + 1}: rate must be greater than zero`);
+      }
+
+      if (!rateEditable) {
+        const expectedRate = holdCostRate * item.per;
+        if (Math.abs(item.rate - expectedRate) > 0.0000001) {
+          throw new BadRequestException(`Item ${index + 1}: rate must match the source counter hold cost of ${(expectedRate).toFixed(7)}`);
+        }
+        continue;
+      }
+
+      const rule = await this.productCurrencyRateRepository.findOne({
+        where: { productId: item.productId, currencyId: item.currencyId, isActive: true },
+      });
+      const minRate = Number(rule?.saleMinRate ?? 0);
+      const maxRate = Number(rule?.saleMaxRate ?? 0);
+      if (rule?.saleMinRate && Number.isFinite(minRate) && item.rate < minRate) {
+        throw new BadRequestException(`Item ${index + 1}: rate cannot be lower than ${minRate.toFixed(7)}`);
+      }
+      if (rule?.saleMaxRate && Number.isFinite(maxRate) && item.rate > maxRate) {
+        throw new BadRequestException(`Item ${index + 1}: rate cannot be higher than ${maxRate.toFixed(7)}`);
       }
     }
   }
@@ -627,6 +673,7 @@ export class TransfersService {
     }
 
     const items = this.normalizeTransferItems(body.items);
+    await this.validateTransferRates(items, sourceBranchId, sourceCounterId);
     await this.assertAvailableCounterQuantity({
       branchId: sourceBranchId,
       counterId: sourceCounterId,
@@ -927,6 +974,7 @@ export class TransfersService {
       counterId: transfer.sourceCounterId,
       items: sourceItems,
     });
+    await this.validateTransferRates(sourceItems, transfer.sourceBranchId, transfer.sourceCounterId);
 
     const acceptedAt = new Date();
     const transactionDate = toUtcDateOnly(transfer.transactionDate);

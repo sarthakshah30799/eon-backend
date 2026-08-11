@@ -104,16 +104,16 @@ export class DayEndStartProcessService {
     );
   }
 
-  private async findLatestExecution(branchId: string, userId: string) {
+  private async findLatestExecution(branchId: string, counterId: string | null) {
     return this.dayEndExecutionRepository.findOne({
-      where: { branchId, userId },
+      where: { branchId, counterId },
       order: { businessDate: "DESC", createdAt: "DESC" },
     });
   }
 
-  private async findExecution(branchId: string, userId: string, businessDate: string) {
+  private async findExecution(branchId: string, counterId: string | null, businessDate: string) {
     return this.dayEndExecutionRepository.findOne({
-      where: { branchId, userId, businessDate },
+      where: { branchId, counterId, businessDate },
     });
   }
 
@@ -213,17 +213,18 @@ export class DayEndStartProcessService {
 
   private async upsertBodRow(
     branchId: string,
-    userId: string,
+    counterId: string,
     businessDate: string,
     actorUserId: string,
     answers: Record<string, unknown>,
   ) {
-    let row = await this.findExecution(branchId, userId, businessDate);
+    let row = await this.findExecution(branchId, counterId, businessDate);
 
     if (!row) {
       row = this.dayEndExecutionRepository.create({
         branchId,
-        userId,
+        counterId,
+        userId: actorUserId,
         businessDate,
         bodAt: new Date(),
         eodAt: null,
@@ -259,8 +260,8 @@ export class DayEndStartProcessService {
   ): Promise<DayEndStartProcessContextDto> {
     const { userId, branchId, counterId } = this.assertSessionContext(session, requireCounter);
     const today = this.getTodayBusinessDate();
-    const todayExecution = await this.findExecution(branchId, userId, today);
-    const latestExecution = await this.findLatestExecution(branchId, userId);
+    const todayExecution = await this.findExecution(branchId, counterId || null, today);
+    const latestExecution = await this.findLatestExecution(branchId, counterId || null);
     const workflow = this.getWorkflowStateForExecution(today, todayExecution, latestExecution);
     const activeMonthlyLock = await this.monthlyLocksService.getActiveMonthlyLock(branchId, userId);
     const suggestedTransactionDate = this.resolveSuggestedTransactionDate(
@@ -286,18 +287,19 @@ export class DayEndStartProcessService {
     };
   }
 
-  async getPolicyContext(session: SessionContext) {
-    return this.getDayEndContext(session);
+  async getPolicyContext(session: SessionContext, requireCounter = true) {
+    return this.getDayEndContext(session, requireCounter);
   }
 
   async assertTransactionDateAllowed(
     branchId: string,
     userId: string,
     transactionDate: Date | string | null | undefined,
+    counterId?: string | null,
   ): Promise<{ allowedDate: string; context: DayEndStartProcessContextDto }> {
     const context = await this.getDayEndContext(
-      { userId, activeBranchId: branchId },
-      false,
+      { userId, activeBranchId: branchId, activeCounterId: counterId },
+      true,
     );
     const allowedDate = context.transactionDate;
     const activeWindow = context.activeMonthlyLock;
@@ -366,6 +368,7 @@ export class DayEndStartProcessService {
 
   async completeDayEnd(
     branchId: string,
+    counterId: string,
     userId: string,
     answers: Record<string, unknown>,
     actorUserId: string,
@@ -373,17 +376,17 @@ export class DayEndStartProcessService {
     const { branchId: resolvedBranchId, userId: resolvedUserId } = this.assertSessionContext({
       activeBranchId: branchId,
       userId,
-      activeCounterId: null,
-    }, false);
-    const latest = await this.findLatestExecution(resolvedBranchId, resolvedUserId);
+      activeCounterId: counterId,
+    });
+    const latest = await this.findLatestExecution(resolvedBranchId, counterId);
     const today = this.getTodayBusinessDate();
-    const todayExecution = await this.findExecution(resolvedBranchId, resolvedUserId, today);
+    const todayExecution = await this.findExecution(resolvedBranchId, counterId, today);
     const businessDate = todayExecution && !todayExecution.eodAt
       ? todayExecution.businessDate
       : latest && !latest.eodAt
         ? latest.businessDate
         : today;
-    const row = await this.findExecution(resolvedBranchId, resolvedUserId, businessDate);
+    const row = await this.findExecution(resolvedBranchId, counterId, businessDate);
 
     if (!row || !row.bodAt || row.eodAt) {
       throw new BadRequestException('Day start is required before completing day end');
@@ -398,6 +401,7 @@ export class DayEndStartProcessService {
 
   async startDay(
     branchId: string,
+    counterId: string,
     userId: string,
     answers: Record<string, unknown>,
     actorUserId: string,
@@ -405,11 +409,11 @@ export class DayEndStartProcessService {
     const { branchId: resolvedBranchId, userId: resolvedUserId } = this.assertSessionContext({
       activeBranchId: branchId,
       userId,
-      activeCounterId: null,
-    }, false);
-    const latest = await this.findLatestExecution(resolvedBranchId, resolvedUserId);
+      activeCounterId: counterId,
+    });
+    const latest = await this.findLatestExecution(resolvedBranchId, counterId);
     const today = this.getTodayBusinessDate();
-    const todayExecution = await this.findExecution(resolvedBranchId, resolvedUserId, today);
+    const todayExecution = await this.findExecution(resolvedBranchId, counterId, today);
 
     if (todayExecution?.bodAt && todayExecution.eodAt) {
       throw new BadRequestException(
@@ -429,6 +433,6 @@ export class DayEndStartProcessService {
       );
     }
 
-    return this.upsertBodRow(resolvedBranchId, resolvedUserId, today, actorUserId, answers ?? {});
+    return this.upsertBodRow(resolvedBranchId, counterId, today, actorUserId, answers ?? {});
   }
 }

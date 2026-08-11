@@ -4,7 +4,8 @@ export class StockRevaluation1785786974950 implements MigrationInterface {
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`CREATE TYPE "public"."stock_revaluation_frequency_enum" AS ENUM('MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY')`);
-        await queryRunner.query(`CREATE TABLE "stock_revaluations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb, "frequency" "public"."stock_revaluation_frequency_enum" NOT NULL, "valuation_date" date NOT NULL, "uploaded_date" date NOT NULL, CONSTRAINT "PK_stock_revaluations" PRIMARY KEY ("id"))`);
+        await queryRunner.query(`CREATE TYPE "public"."stock_revaluation_status_enum" AS ENUM('PENDING', 'PROCESSED')`);
+        await queryRunner.query(`CREATE TABLE "stock_revaluations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb, "frequency" "public"."stock_revaluation_frequency_enum" NOT NULL, "valuation_date" date NOT NULL, "uploaded_date" date NOT NULL, "status" "public"."stock_revaluation_status_enum" NOT NULL DEFAULT 'PENDING', "uploaded_rates" jsonb, CONSTRAINT "PK_stock_revaluations" PRIMARY KEY ("id"))`);
         await queryRunner.query(`ALTER TABLE "stock_revaluations" ADD "counter_id" uuid NOT NULL`);
         await queryRunner.query(`ALTER TABLE "stock_revaluations" ADD "counter_snapshot" jsonb`);
         await queryRunner.query(`CREATE UNIQUE INDEX "IDX_stock_revaluations_branch_counter_period" ON "stock_revaluations" ("branch_id", "counter_id", "frequency", "valuation_date")`);
@@ -56,6 +57,7 @@ export class StockRevaluation1785786974950 implements MigrationInterface {
         await queryRunner.query(`DROP INDEX "public"."IDX_stock_revaluations_branch_counter_period"`);
         await queryRunner.query(`DROP TABLE "stock_revaluations"`);
         await queryRunner.query(`DROP TYPE "public"."stock_revaluation_frequency_enum"`);
+        await queryRunner.query(`DROP TYPE "public"."stock_revaluation_status_enum"`);
     }
 
 }

@@ -9,7 +9,7 @@ import { AdditionalSettingService } from '../additional-settings/additional-sett
 import { StockRevaluation } from './entities/stock-revaluation.entity';
 import { StockRevaluationItem } from './entities/stock-revaluation-item.entity';
 import { ProcessStockRevaluationDto } from './dto/stock-revaluation.dto';
-import { StockRevaluationFrequency } from './stock-revaluation.enums';
+import { StockRevaluationFrequency, StockRevaluationStatus } from './stock-revaluation.enums';
 
 type UploadedRate = { date: string; currencyCode: string; rate: string };
 type StockRevaluationTarget = { branchId: string; counterId: string };
@@ -184,8 +184,13 @@ export class StockRevaluationService {
       const repository = manager.getRepository(StockRevaluation);
       const itemRepository = manager.getRepository(StockRevaluationItem);
       const existing = await repository.findOne({ where: { branchId, counterId, frequency: dto.frequency, valuationDate: periodEnd } });
-      if (existing) throw new BadRequestException(`Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`);
-      let revaluation = repository.create({ branchId, counterId, branchSnapshot, counterSnapshot, frequency: dto.frequency, valuationDate: periodEnd, uploadedDate: rates[0].date, createdBy: userId, updatedBy: userId });
+      if (existing?.status === StockRevaluationStatus.PROCESSED) throw new BadRequestException(`Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`);
+      let revaluation = existing ?? repository.create({ branchId, counterId, branchSnapshot, counterSnapshot, frequency: dto.frequency, valuationDate: periodEnd, uploadedDate: rates[0].date, createdBy: userId, updatedBy: userId });
+      revaluation.branchSnapshot = branchSnapshot;
+      revaluation.counterSnapshot = counterSnapshot;
+      revaluation.status = StockRevaluationStatus.PROCESSED;
+      revaluation.uploadedRates = requested;
+      revaluation.updatedBy = userId;
       revaluation = await repository.save(revaluation);
       const items = calculated.map((row: Record<string, unknown>, index: number) => itemRepository.create({
         revaluationId: revaluation!.id,
@@ -206,10 +211,48 @@ export class StockRevaluationService {
     });
   }
 
-  async process(dto: ProcessStockRevaluationDto, file: { buffer: Buffer }, userId: string, targets: StockRevaluationTarget[]) {
+  async upload(dto: ProcessStockRevaluationDto, file: { buffer: Buffer }, userId: string, targets: StockRevaluationTarget[]) {
     const rates = this.parseWorkbook(file);
+    const configuredFrequency = await this.getConfiguredFrequency();
+    if (!configuredFrequency) throw new BadRequestException('Stock revaluation frequency is not configured in Additional Settings');
+    if (configuredFrequency !== dto.frequency) throw new BadRequestException(`Stock revaluation frequency must be ${configuredFrequency}`);
+    const periodEnd = latestCompletedPeriodEnd(dto.frequency);
+    const currencies = await this.currencyRepository.find({ where: rates.map((rate) => ({ currencyCode: rate.currencyCode, active: true })) });
+    const currencyMap = new Map(currencies.map((currency) => [currency.currencyCode.toUpperCase(), currency]));
+    const missing = rates.filter((rate) => !currencyMap.has(rate.currencyCode)).map((rate) => rate.currencyCode);
+    if (missing.length) throw new BadRequestException(`Unknown or inactive currency codes: ${missing.join(', ')}`);
+    const uploadedRates = rates.map((rate) => {
+      const currency = currencyMap.get(rate.currencyCode)!;
+      return { currencyId: currency.id, currencyCode: currency.currencyCode, currencyName: currency.currencyName, rate: rate.rate };
+    });
     const results = [];
-    for (const target of targets) results.push(await this.processTarget(target, dto, rates, userId));
+    for (const target of targets) {
+      const branch = await this.branchRepository.findOne({ where: { id: target.branchId, isActive: true } });
+      if (!branch) throw new NotFoundException(`Active branch ${target.branchId} was not found`);
+      const counter = await this.counterRepository.findOne({ where: { id: target.counterId, branch: { id: target.branchId }, isActive: true } });
+      if (!counter) throw new NotFoundException(`Active counter ${target.counterId} was not found on branch ${target.branchId}`);
+      const existing = await this.revaluationRepository.findOne({ where: { branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd } });
+      if (existing?.status === StockRevaluationStatus.PROCESSED) throw new BadRequestException(`Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`);
+      const pending = existing ?? this.revaluationRepository.create({ branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd, createdBy: userId, updatedBy: userId });
+      pending.status = StockRevaluationStatus.PENDING;
+      pending.uploadedDate = rates[0].date;
+      pending.uploadedRates = uploadedRates;
+      pending.branchSnapshot = { id: branch.id, code: branch.code, name: branch.name, label: `${branch.code} - ${branch.name}` };
+      pending.counterSnapshot = { id: counter.id, counterNo: counter.counterNo, name: counter.name, label: `${counter.counterNo} - ${counter.name}` };
+      pending.updatedBy = userId;
+      results.push(await this.revaluationRepository.save(pending));
+    }
+    return results;
+  }
+
+  async process(dto: ProcessStockRevaluationDto, userId: string, targets: StockRevaluationTarget[]) {
+    const results = [];
+    const periodEnd = latestCompletedPeriodEnd(dto.frequency);
+    for (const target of targets) {
+      const pending = await this.revaluationRepository.findOne({ where: { branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd, status: StockRevaluationStatus.PENDING } });
+      if (!pending?.uploadedRates?.length) throw new BadRequestException(`No uploaded stock revaluation rates are available for ${target.branchId}/${target.counterId}. Ask Admin or HO to upload them first.`);
+      results.push(await this.processTarget(target, dto, pending.uploadedRates.map(rate => ({ date: pending.uploadedDate, currencyCode: rate.currencyCode, rate: rate.rate })), userId));
+    }
     return results;
   }
 

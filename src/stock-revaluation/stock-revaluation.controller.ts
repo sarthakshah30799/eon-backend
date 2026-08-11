@@ -15,7 +15,8 @@ export class StockRevaluationController {
   constructor(private readonly service: StockRevaluationService) {}
 
   @Get('template')
-  async template(@Res() response: Response) {
+  async template(@Res() response: Response, @Session() session: any) {
+    this.requireManager(session);
     response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     response.setHeader('Content-Disposition', 'attachment; filename="stock-revaluation-template.xlsx"');
     response.send(await this.service.getTemplate());
@@ -34,31 +35,40 @@ export class StockRevaluationController {
   }
 
   @Post('process')
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
-  async process(@UploadedFile() file: { buffer: Buffer } | undefined, @Body('targets') targets: string, @Body('frequency') frequency: string, @Session() session: any) {
-    if (!file) throw new BadRequestException('Stock revaluation template file is required');
+  async process(@Body() body: { targets?: string; frequency?: string }, @Session() session: any) {
     const canSelectAllBranches = Boolean(session?.isAdmin || session?.isHoStaff);
-    const parsedTargets = this.parseTargets(targets);
+    const parsedTargets = this.parseTargets(body.targets ?? '');
     const effectiveTargets = canSelectAllBranches
       ? parsedTargets
       : [{ branchId: session?.activeBranchId, counterId: session?.activeCounterId }];
     if (effectiveTargets.some((target) => !target.branchId || !target.counterId)) throw new BadRequestException('Active branch and counter are required');
 
-    if (!Object.values(StockRevaluationFrequency).includes(frequency as StockRevaluationFrequency)) {
+    if (!Object.values(StockRevaluationFrequency).includes(body.frequency as StockRevaluationFrequency)) {
       throw new BadRequestException('Stock revaluation frequency is invalid');
     }
-    return this.service.process({ branchIds: [], frequency: frequency as StockRevaluationFrequency, rates: [] }, file, session.userId, effectiveTargets);
+    return this.service.process({ branchIds: [], frequency: body.frequency as StockRevaluationFrequency, rates: [] }, session.userId, effectiveTargets);
+  }
+
+  @Post('upload')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async upload(@UploadedFile() file: { buffer: Buffer } | undefined, @Body('targets') targets: string, @Body('frequency') frequency: string, @Session() session: any) {
+    this.requireManager(session);
+    if (!file) throw new BadRequestException('Stock revaluation template file is required');
+    const parsedTargets = this.parseTargets(targets);
+    if (!Object.values(StockRevaluationFrequency).includes(frequency as StockRevaluationFrequency)) throw new BadRequestException('Stock revaluation frequency is invalid');
+    return this.service.upload({ branchIds: [], frequency: frequency as StockRevaluationFrequency, rates: [] }, file, session.userId, parsedTargets);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @Session() session: any) {
+    this.requireManager(session);
     const revaluation = await this.service.findOne(id);
-    const isAdminOrHo = Boolean(session?.isAdmin || session?.isHoStaff);
-    if (!isAdminOrHo && (revaluation.branchId !== session?.activeBranchId || revaluation.counterId !== session?.activeCounterId)) {
-      throw new ForbiddenException('You can delete only the current branch and counter revaluation');
-    }
     return this.service.delete(id, session.userId);
+  }
+
+  private requireManager(session: any) {
+    if (!session?.isAdmin && !session?.isHoStaff) throw new ForbiddenException('Only Admin, HO, and HO Staff can upload, download, or remove stock revaluation rates');
   }
 
   private parseTargets(value: string): Array<{ branchId: string; counterId: string }> {

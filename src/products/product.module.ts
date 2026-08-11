@@ -5,10 +5,12 @@ import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
 import { UserModule } from '../users/user.module';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
+import { ProductCardIssuer } from './entities/product-card-issuer.entity';
+import { PartyProfile } from '../party-profiles/party-profile.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, AccountProfile]),
+    TypeOrmModule.forFeature([Product, AccountProfile, ProductCardIssuer, PartyProfile]),
     UserModule,
   ],
   controllers: [ProductController],

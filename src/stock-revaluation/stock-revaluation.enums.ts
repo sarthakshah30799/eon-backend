@@ -5,3 +5,7 @@ export enum StockRevaluationFrequency {
   YEARLY = 'YEARLY',
 }
 
+export enum StockRevaluationStatus {
+  PENDING = 'PENDING',
+  PROCESSED = 'PROCESSED',
+}
