@@ -3,6 +3,7 @@ import { BaseEntity } from '../../base/base.entity';
 import { CardTransferRequest } from './card-transfer-request.entity';
 import { CardTransferRequestCard } from './card-transfer-request-card.entity';
 
+@Index('IDX_card_transfer_request_items_transfer_id', ['transferId'])
 @Index('IDX_card_transfer_request_items_transfer_line', ['transferId', 'lineNo'], {
   unique: true,
 })

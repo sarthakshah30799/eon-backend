@@ -9,6 +9,8 @@ import { ManualBook } from "../manual-bill-books/entities/manual-book.entity";
 import { TransferRequest } from "../transfers/entities/transfer-request.entity";
 import { TransferRequestStatus } from "../transfers/transfers.enums";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
+import { CardTransferRequest } from "../card-stock/entities/card-transfer-request.entity";
+import { CardTransferStatus } from "../card-stock/card-stock.enums";
 import {
   DashboardStatsDto,
   VolumeByCurrencyDto,
@@ -32,6 +34,8 @@ export class DashboardService {
     private readonly manualBookRepository: Repository<ManualBook>,
     @InjectRepository(TransferRequest, "database2")
     private readonly transferRequestRepository: Repository<TransferRequest>,
+    @InjectRepository(CardTransferRequest, "database2")
+    private readonly cardTransferRequestRepository: Repository<CardTransferRequest>,
   ) {}
 
   private dateRange(key: string): { from: Date; to: Date } {
@@ -126,6 +130,7 @@ export class DashboardService {
       counterId,
       isAdminOrHo,
     );
+    const pendingCardTransfers = await this.getPendingCardTransferCount(branchId, isAdminOrHo);
 
     const flaggedTxns = await this.transactionRepository
       .createQueryBuilder("t")
@@ -140,12 +145,12 @@ export class DashboardService {
       todayTransactionCount: todayCount,
       yesterdayTransactionCount: yesterdayCount,
       pendingApprovals:
-        pendingTxns + pendingPP + pendingChequeBooks + pendingManualBooks + pendingTransfers,
+        pendingTxns + pendingPP + pendingChequeBooks + pendingManualBooks + pendingTransfers + pendingCardTransfers,
       pendingPartyProfileReviews: pendingPP,
       pendingTransactions: pendingTxns,
       pendingChequeBooks,
       pendingManualBooks,
-      pendingTransfers,
+      pendingTransfers: pendingTransfers + pendingCardTransfers,
       activeAlerts: flaggedTxns,
     };
   }
@@ -346,14 +351,14 @@ export class DashboardService {
     isAdminOrHo: boolean,
     branchId?: string,
     counterId?: string,
-    limit: number = 20,
+    limit: number = 100,
   ): Promise<PendingApprovalDto[]> {
     const results: PendingApprovalDto[] = [];
 
     if (isAdminOrHo) {
       const partyProfiles = await this.partyProfileRepository.find({
         where: { status: WorkflowStatus.PENDING },
-        order: { createdAt: "ASC" },
+        order: { createdAt: "DESC" },
         take: limit,
       });
       for (const p of partyProfiles) {
@@ -372,7 +377,7 @@ export class DashboardService {
         .createQueryBuilder("t")
         .where("t.isLatest = true")
         .andWhere("t.status = 'PENDING'")
-        .orderBy("t.createdAt", "ASC")
+        .orderBy("t.createdAt", "DESC")
         .take(limit)
         .getMany();
       for (const t of transactions) {
@@ -391,7 +396,7 @@ export class DashboardService {
     const chequeQB = this.chequeBookRepository
       .createQueryBuilder("t")
       .where("t.status = :status", { status: WorkflowStatus.PENDING })
-      .orderBy("t.createdAt", "ASC")
+      .orderBy("t.createdAt", "DESC")
       .take(limit);
     if (!isAdminOrHo && branchId) {
       chequeQB.andWhere("t.branchId = :branchId", { branchId });
@@ -411,7 +416,7 @@ export class DashboardService {
     const manualQB = this.manualBookRepository
       .createQueryBuilder("t")
       .where("t.status = :status", { status: WorkflowStatus.PENDING })
-      .orderBy("t.createdAt", "ASC")
+      .orderBy("t.createdAt", "DESC")
       .take(limit);
     if (!isAdminOrHo && branchId) {
       manualQB.andWhere("t.branchId = :branchId", { branchId });
@@ -431,7 +436,7 @@ export class DashboardService {
     const transferQB = this.transferRequestRepository
       .createQueryBuilder("transfer")
       .where("transfer.status = :status", { status: TransferRequestStatus.HELD })
-      .orderBy("transfer.createdAt", "ASC")
+      .orderBy("transfer.createdAt", "DESC")
       .take(limit);
 
     // A normal user may approve only requests addressed to the active workplace.
@@ -439,7 +444,7 @@ export class DashboardService {
     if (!isAdminOrHo) {
       if (!branchId || !counterId) {
         return results
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .slice(0, limit);
       }
       transferQB
@@ -475,7 +480,41 @@ export class DashboardService {
       });
     }
 
-    results.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const cardTransferQB = this.cardTransferRequestRepository
+      .createQueryBuilder("transfer")
+      .where("transfer.status = :status", { status: CardTransferStatus.HELD })
+      .orderBy("transfer.createdAt", "DESC")
+      .take(limit);
+    if (!isAdminOrHo) {
+      if (!branchId) {
+        return results
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, limit);
+      }
+      cardTransferQB.andWhere("transfer.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      });
+    }
+    const cardTransfers = await cardTransferQB.getMany();
+    for (const transfer of cardTransfers) {
+      const source = (transfer.sourceBranchSnapshot as Record<string, string> | null)?.label
+        ?? (transfer.sourceBranchSnapshot as Record<string, string> | null)?.name
+        ?? transfer.sourceBranchId;
+      const destination = (transfer.destinationBranchSnapshot as Record<string, string> | null)?.label
+        ?? (transfer.destinationBranchSnapshot as Record<string, string> | null)?.name
+        ?? transfer.destinationBranchId;
+      results.push({
+        id: transfer.id,
+        entityType: "card-transfer",
+        code: transfer.transactionNumber,
+        name: `${source} -> ${destination}`,
+        type: "CARD_TRANSFER_SELL",
+        subType: "CARD",
+        createdAt: transfer.createdAt.toISOString(),
+      });
+    }
+
+    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return results.slice(0, limit);
   }
 
@@ -499,6 +538,17 @@ export class DashboardService {
       });
     }
 
+    return qb.getCount();
+  }
+
+  private async getPendingCardTransferCount(branchId?: string, isAdminOrHo?: boolean): Promise<number> {
+    const qb = this.cardTransferRequestRepository
+      .createQueryBuilder("transfer")
+      .where("transfer.status = :status", { status: CardTransferStatus.HELD });
+    if (!isAdminOrHo) {
+      if (!branchId) return 0;
+      qb.andWhere("transfer.destinationBranchId = :destinationBranchId", { destinationBranchId: branchId });
+    }
     return qb.getCount();
   }
 }

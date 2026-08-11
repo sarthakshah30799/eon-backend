@@ -5,6 +5,8 @@ declare module 'express-session' {
     userId?: string;
     email?: string;
     isAdmin?: boolean;
+    isHo?: boolean;
+    isHoStaff?: boolean;
     activeBranchId?: string | null;
     activeCounterId?: string | null;
     pendingPasswordSetupUserId?: string | null;

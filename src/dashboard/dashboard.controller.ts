@@ -90,7 +90,7 @@ export class DashboardController {
       ctx.isAdminOrHo,
       ctx.branchId,
       ctx.counterId,
-      limit ? parseInt(limit, 10) : 20,
+      limit ? parseInt(limit, 10) : 100,
     );
   }
 }

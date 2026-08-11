@@ -1,10 +1,12 @@
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../base/base.entity';
 import { CardTransferStatus } from '../card-stock.enums';
+import { CardTransferRequestCard } from './card-transfer-request-card.entity';
 import { CardTransferRequestItem } from './card-transfer-request-item.entity';
 
 @Index('IDX_card_transfer_requests_transaction_number', ['transactionNumber'], { unique: true })
 @Index('IDX_card_transfer_requests_status', ['status'])
+@Index('IDX_card_transfer_requests_transaction_date', ['transactionDate'])
 @Index('IDX_card_transfer_requests_source_branch', ['sourceBranchId'])
 @Index('IDX_card_transfer_requests_destination_branch', ['destinationBranchId'])
 @Entity('card_transfer_requests')
@@ -36,6 +38,15 @@ export class CardTransferRequest extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
 
+  @Column({ type: 'text', name: 'acceptance_remarks', nullable: true })
+  acceptanceRemarks: string | null;
+
+  @Column({ type: 'text', name: 'rejection_reason', nullable: true })
+  rejectionReason: string | null;
+
+  @Column({ type: 'text', name: 'cancellation_reason', nullable: true })
+  cancellationReason: string | null;
+
   @Column({ type: 'timestamptz', name: 'held_at', nullable: true })
   heldAt: Date | null;
 
@@ -44,6 +55,9 @@ export class CardTransferRequest extends BaseEntity {
 
   @Column({ type: 'timestamptz', name: 'rejected_at', nullable: true })
   rejectedAt: Date | null;
+
+  @Column({ type: 'timestamptz', name: 'cancelled_at', nullable: true })
+  cancelledAt: Date | null;
 
   @Column({ type: 'uuid', name: 'held_by_id', nullable: true })
   heldById: string | null;
@@ -54,8 +68,16 @@ export class CardTransferRequest extends BaseEntity {
   @Column({ type: 'uuid', name: 'rejected_by_id', nullable: true })
   rejectedById: string | null;
 
+  @Column({ type: 'uuid', name: 'cancelled_by_id', nullable: true })
+  cancelledById: string | null;
+
   @OneToMany(() => CardTransferRequestItem, item => item.transfer, {
     cascade: true,
   })
   items: CardTransferRequestItem[];
+
+  @OneToMany(() => CardTransferRequestCard, selection => selection.transfer, {
+    cascade: true,
+  })
+  selectedCards: CardTransferRequestCard[];
 }
