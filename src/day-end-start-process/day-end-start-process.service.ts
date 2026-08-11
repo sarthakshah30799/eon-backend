@@ -10,12 +10,7 @@ import {
   DayEndStartProcessContextDto,
   PolicyChecklistItemDto,
 } from "./dto/day-end-start-process.dto";
-
-type SessionContext = {
-  userId?: string | null;
-  activeBranchId?: string | null;
-  activeCounterId?: string | null;
-};
+import { SessionContext } from "../auth/types/session-context";
 
 const POLICY_CATEGORY_CODE = "DAY_END_POLICY";
 
