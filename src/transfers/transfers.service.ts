@@ -40,6 +40,7 @@ import {
   TransactionType,
 } from '../transactions/transactions.enums';
 import { resolveProductTransactionAccount, roundMoney } from '../transactions/transaction-accounting.util';
+import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
 
 type TransferSeriesMapping = {
   source: string;
@@ -100,6 +101,7 @@ export class TransfersService {
     @InjectRepository(AccountProfile)
     private readonly accountProfileRepository: Repository<AccountProfile>,
     private readonly transactionsService: TransactionsService,
+    private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly mailService: MailService,
   ) {}
@@ -631,6 +633,20 @@ export class TransfersService {
       throw new BadRequestException('Source branch, source counter, destination branch, and destination counter are required');
     }
 
+    const requestedTransactionDate = normalizeString(body.transactionDate) || undefined;
+    const sourceDatePolicy = await this.dayEndStartProcessService.assertTransactionDateAllowed(
+      sourceBranchId,
+      performedById,
+      requestedTransactionDate,
+      sourceCounterId,
+    );
+    await this.dayEndStartProcessService.assertTransactionDateAllowed(
+      destinationBranchId,
+      performedById,
+      sourceDatePolicy.allowedDate,
+      destinationCounterId,
+    );
+
     await this.assertBranchCounterAccess({
       transferType,
       sourceBranchId,
@@ -694,7 +710,7 @@ export class TransfersService {
         number: transferNumber,
         transferType,
         status: CurrencyTransferStatus.HELD,
-        transactionDate: body.transactionDate ? new Date(body.transactionDate) : new Date(),
+        transactionDate: new Date(`${sourceDatePolicy.allowedDate}T00:00:00.000Z`),
         billReference: normalizeString(body.billReference) || null,
         sourceBranchId,
         sourceBranchSnapshot: snapshots.sourceBranchSnapshot,
@@ -978,6 +994,19 @@ export class TransfersService {
 
     const acceptedAt = new Date();
     const transactionDate = toUtcDateOnly(transfer.transactionDate);
+
+    await this.dayEndStartProcessService.assertTransactionDateAllowed(
+      transfer.sourceBranchId,
+      performedById,
+      transactionDate,
+      transfer.sourceCounterId,
+    );
+    await this.dayEndStartProcessService.assertTransactionDateAllowed(
+      transfer.destinationBranchId,
+      performedById,
+      transactionDate,
+      transfer.destinationCounterId,
+    );
 
     await this.transferRepository.manager.transaction(async (manager) => {
       const sourceCounterpartySnapshot = this.buildTransferPartySnapshot({

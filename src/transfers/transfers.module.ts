@@ -16,12 +16,14 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionItem } from '../transactions/entities/transaction-item.entity';
 import { TransfersController } from './transfers.controller';
 import { TransfersService } from './transfers.service';
+import { DayEndStartProcessModule } from '../day-end-start-process/day-end-start-process.module';
 
 @Module({
   imports: [
     AdditionalSettingModule,
     MailModule,
     TransactionsModule,
+    DayEndStartProcessModule,
     TypeOrmModule.forFeature([Branch, Counter, User, UserRole, Product, Currency, ProductCurrencyRate, AccountProfile]),
     TypeOrmModule.forFeature([CurrencyTransfer, CurrencyTransferItem, Transaction, TransactionItem], 'database2'),
   ],

@@ -8,11 +8,6 @@ export class CompleteDayEndDto {
   @IsUUID()
   branchId?: string;
 
-  @ApiPropertyOptional({ description: "Target counter for Admin/HO operations" })
-  @IsOptional()
-  @IsUUID()
-  counterId?: string;
-
   @ApiPropertyOptional({ description: "Checklist answers as a JSON object" })
   @IsOptional()
   answers?: Record<string, unknown>;
