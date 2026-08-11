@@ -190,7 +190,7 @@ export class AuthController {
     const effectiveSession = canSelectBranch && branchId?.trim()
       ? { ...session, activeBranchId: branchId.trim(), activeCounterId: counterId?.trim() || session.activeCounterId }
       : session;
-    return this.dayEndStartProcessService.getPolicyContext(effectiveSession, Boolean(!canSelectBranch || !branchId?.trim() || !counterId?.trim()));
+    return this.dayEndStartProcessService.getPolicyContext(effectiveSession, false);
   }
 
   @Get('check')

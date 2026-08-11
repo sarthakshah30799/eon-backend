@@ -27,7 +27,6 @@ export class CreateCardStockReceiptDto {
   @ApiProperty() @IsDateString() receiptDate: string;
   @ApiProperty() @IsUUID() issuerPartyProfileId: string;
   @ApiProperty() @IsUUID() hoBranchId: string;
-  @ApiProperty() @IsUUID() counterId: string;
   @ApiProperty() @IsNumberString() totalFeAmount: string;
   @ApiProperty({ type: [CardStockReceiptItemDto] }) @ValidateNested({ each: true }) @Type(() => CardStockReceiptItemDto) items: CardStockReceiptItemDto[];
 }

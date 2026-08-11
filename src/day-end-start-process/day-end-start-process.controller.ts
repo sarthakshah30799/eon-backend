@@ -18,7 +18,6 @@ export class DayEndStartProcessController {
     const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
     return this.dayEndStartProcessService.startDay(
       canSelectWorkplace ? dto.branchId ?? "" : session?.activeBranchId ?? "",
-      canSelectWorkplace ? dto.counterId ?? "" : session?.activeCounterId ?? "",
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",
@@ -31,7 +30,6 @@ export class DayEndStartProcessController {
     const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
     return this.dayEndStartProcessService.completeDayEnd(
       canSelectWorkplace ? dto.branchId ?? "" : session?.activeBranchId ?? "",
-      canSelectWorkplace ? dto.counterId ?? "" : session?.activeCounterId ?? "",
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",

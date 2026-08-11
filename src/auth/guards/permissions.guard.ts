@@ -42,6 +42,7 @@ export class PermissionsGuard implements CanActivate {
 
     const path = request.route?.path || request.url;
     const method = request.method;
+    const isDayEndProcessRoute = path.includes('/day-end-start-process');
 
     // 1. Allow profile/me and register to bypass
     if (path.endsWith('/register') || path.endsWith('/profile/me')) {
@@ -104,6 +105,9 @@ export class PermissionsGuard implements CanActivate {
 
     // 4. Role-Based Access Control for other profiles
     let menuPath = '';
+    if (isDayEndProcessRoute) {
+      menuPath = '/day-end-start-process';
+    }
     let allowedMenuPaths: string[] | null = null;
     const transactionBody = request.body?.transaction;
     let transactionPayload: { slug?: unknown } | null =

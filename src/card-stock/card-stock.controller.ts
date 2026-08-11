@@ -26,7 +26,6 @@ export class CardStockController {
   @ApiOperation({ summary: 'Create CARD stock receipt' })
   create(@Body() dto: CreateCardStockReceiptDto, @Session() session: any) {
     if (!session?.userId || (!session?.isAdmin && !session?.isHo && !session?.isHoStaff)) throw new ForbiddenException('Only HO/Admin users can create CARD stock receipts');
-    if (!dto.counterId) dto.counterId = session?.activeCounterId ?? '';
     return this.cardStockService.create(dto, session.userId);
   }
 }

@@ -4,7 +4,6 @@ import { DataSource, Repository } from 'typeorm';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
 import { Branch } from '../branches/branch.entity';
-import { Counter } from '../counters/counter.entity';
 import { Currency } from '../currencies/currency.entity';
 import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
 import { WorkflowStatus } from '../common/enums/workflow-status.enum';
@@ -26,7 +25,6 @@ export class CardStockService {
     @InjectDataSource('database2') private readonly database2: DataSource,
     @InjectRepository(CardStockReceipt, 'database2') private readonly receiptRepository: Repository<CardStockReceipt>,
     @InjectRepository(Branch) private readonly branchRepository: Repository<Branch>,
-    @InjectRepository(Counter) private readonly counterRepository: Repository<Counter>,
     @InjectRepository(Currency) private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product) private readonly productRepository: Repository<Product>,
     @InjectRepository(ProductCardIssuer) private readonly productIssuerRepository: Repository<ProductCardIssuer>,
@@ -54,10 +52,8 @@ export class CardStockService {
 
   async create(dto: CreateCardStockReceiptDto, userId: string): Promise<CardStockReceipt> {
     const branch = await this.requireHoBranch(dto.hoBranchId);
-    const counter = await this.counterRepository.findOne({ where: { id: dto.counterId, branch: { id: branch.id }, isActive: true } });
-    if (!counter) throw new BadRequestException('A valid active counter for the selected HO branch is required');
     const requestedReceiptDate = dto.receiptDate?.trim() || undefined;
-    const datePolicy = await this.dayEndStartProcessService.assertTransactionDateAllowed(dto.hoBranchId, userId, requestedReceiptDate, counter.id);
+    const datePolicy = await this.dayEndStartProcessService.assertTransactionDateAllowed(dto.hoBranchId, userId, requestedReceiptDate);
     const receiptDate = requestedReceiptDate || datePolicy.allowedDate;
     const headerIssuer = await this.requireIssuer(dto.issuerPartyProfileId);
     if (!dto.items?.length) throw new BadRequestException('At least one stock item is required');
