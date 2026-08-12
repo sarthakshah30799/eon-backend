@@ -15,6 +15,7 @@ import {
   TransactionReferenceSnapshotValue,
 } from "../types/transaction-snapshot.types";
 import { TransactionTaxSplitMode } from "../transactions.enums";
+import { CardStockCard } from "../../card-stock/entities/card-stock-card.entity";
 
 @Index("IDX_transaction_items_transaction_id", ["transactionId"])
 @Index("IDX_transaction_items_transaction_line", ["transactionId", "lineNo"], {
@@ -46,6 +47,25 @@ export class TransactionItem extends BaseEntity {
 
   @Column({ type: "uuid", name: "account_id", nullable: true })
   accountId: string | null;
+
+  @Column({ type: "uuid", name: "card_id", nullable: true })
+  cardId: string | null;
+
+  @ManyToOne(() => CardStockCard, { nullable: true, onDelete: "RESTRICT" })
+  @JoinColumn({ name: "card_id", foreignKeyConstraintName: "FK_transaction_items_card_id" })
+  card: CardStockCard | null;
+
+  @Column({ type: "uuid", name: "issuer_party_profile_id", nullable: true })
+  issuerPartyProfileId: string | null;
+
+  @Column({ type: "jsonb", name: "issuer_party_profile_snapshot", nullable: true })
+  issuerPartyProfileSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "jsonb", name: "card_snapshot", nullable: true })
+  cardSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "boolean", name: "is_reload", default: false })
+  isReload: boolean;
 
   @Column({ type: "jsonb", name: "account_snapshot", nullable: true })
   accountSnapshot: TransactionReferenceSnapshotValue;

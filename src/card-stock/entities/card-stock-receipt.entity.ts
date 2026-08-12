@@ -2,6 +2,7 @@ import { Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../base/base.entity';
 import { CardStockReceiptStatus } from '../card-stock.enums';
 import { CardStockReceiptItem } from './card-stock-receipt-item.entity';
+import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
 
 @Index('IDX_card_stock_receipts_transaction_number', ['transactionNumber'], { unique: true })
 @Index('IDX_card_stock_receipts_date', ['receiptDate'])
@@ -17,13 +18,13 @@ export class CardStockReceipt extends BaseEntity {
   hoBranchId: string;
 
   @Column({ type: 'jsonb', name: 'ho_branch_snapshot' })
-  hoBranchSnapshot: Record<string, unknown>;
+  hoBranchSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'uuid', name: 'issuer_party_profile_id' })
   issuerPartyProfileId: string;
 
   @Column({ type: 'jsonb', name: 'issuer_party_profile_snapshot' })
-  issuerPartyProfileSnapshot: Record<string, unknown>;
+  issuerPartyProfileSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({
     type: 'enum',
@@ -35,6 +36,10 @@ export class CardStockReceipt extends BaseEntity {
 
   @Column({ type: 'numeric', precision: 18, scale: 2, name: 'total_fe_amount' })
   totalFeAmount: string;
+
+  @Column({ type: 'uuid', name: 'transaction_id', nullable: true })
+  transactionId: string | null;
+
 
   @OneToMany(() => CardStockReceiptItem, item => item.receipt, {
     cascade: true,

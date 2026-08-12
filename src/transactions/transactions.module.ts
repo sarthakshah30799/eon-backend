@@ -22,6 +22,7 @@ import { MailModule } from "../mail/mail.module";
 import { StorageModule } from "../storage/storage.module";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
+import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { Purpose } from "../purpose/purpose.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
@@ -41,6 +42,8 @@ import { PurchaseRuleService } from "./purchase-rule.service";
 import { CountryModule } from "../country/country.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
 import { UserModule } from "../users/user.module";
+import { CardStockModule } from "../card-stock/card-stock.module";
+import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 
 @Module({
   imports: [
@@ -49,11 +52,13 @@ import { UserModule } from "../users/user.module";
     CountryModule,
     DayEndStartProcessModule,
     UserModule,
+    CardStockModule,
     MailModule,
     StorageModule,
     TypeOrmModule.forFeature([
       Currency,
       Product,
+      ProductCardIssuer,
       SelectOption,
       Purpose,
       DocumentProfile,
@@ -82,6 +87,7 @@ import { UserModule } from "../users/user.module";
         TransactionTcsBreakdown,
         ManualBookPageTracking,
         ChequeBookPageTracking,
+        CardStockCard,
       ],
       "database2",
     ),
@@ -95,7 +101,7 @@ import { UserModule } from "../users/user.module";
     PurchaseRuleService,
   ],
   exports: [
-    TypeOrmModule,
+      TypeOrmModule,
     TransactionsService,
   ],
 })

@@ -3,6 +3,9 @@ import { BaseEntity } from '../../base/base.entity';
 import { CardStockCardStatus } from '../card-stock.enums';
 import { CardStockReceiptItem } from './card-stock-receipt-item.entity';
 import { CardTransferRequestCard } from './card-transfer-request-card.entity';
+import { CardStockTransactionEntry } from './card-stock-transaction-entry.entity';
+import { CardStockBalance } from './card-stock-balance.entity';
+import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
 
 @Index('IDX_card_stock_cards_receipt_item', ['receiptItemId'])
 @Index('IDX_card_stock_cards_branch_status', ['currentBranchId', 'status'])
@@ -47,7 +50,7 @@ export class CardStockCard extends BaseEntity {
   currentBranchId: string;
 
   @Column({ type: 'jsonb', name: 'current_branch_snapshot' })
-  currentBranchSnapshot: Record<string, unknown>;
+  currentBranchSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({
     type: 'enum',
@@ -64,4 +67,10 @@ export class CardStockCard extends BaseEntity {
 
   @OneToMany(() => CardTransferRequestCard, selection => selection.card)
   transferSelections: CardTransferRequestCard[];
+
+  @OneToMany(() => CardStockTransactionEntry, entry => entry.card)
+  transactionEntries: CardStockTransactionEntry[];
+
+  @OneToMany(() => CardStockBalance, balance => balance.card)
+  balances: CardStockBalance[];
 }
