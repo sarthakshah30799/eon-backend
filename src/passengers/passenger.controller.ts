@@ -10,6 +10,7 @@ import { LookupPassengerPassportDto } from './dto/lookup-passenger-passport.dto'
 import { PassengerPassportLookupResponseDto } from './dto/passenger-passport-lookup-response.dto';
 import { PassengerOtherIdProofType } from './passenger.entity';
 import { PassengerService } from './passenger.service';
+import { LookupPassengerIdentityDto } from './dto/lookup-passenger-identity.dto';
 
 @ApiTags('passengers')
 @ApiCookieAuth('sessionId')
@@ -81,6 +82,12 @@ export class PassengerController {
     @Body() dto: LookupPassengerPassportDto,
   ): Promise<PassengerPassportLookupResponseDto> {
     return this.passengerService.lookupByPassportNumber(dto);
+  }
+
+  @Post('lookup-identity')
+  @ApiOperation({ summary: 'Resolve an existing passenger by PAN or passport' })
+  lookupIdentity(@Body() dto: LookupPassengerIdentityDto) {
+    return this.passengerService.lookupByIdentity(dto);
   }
 
   @Post('verify-other-document')

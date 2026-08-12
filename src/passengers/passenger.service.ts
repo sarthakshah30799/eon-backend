@@ -13,10 +13,15 @@ import {
   Passenger,
 } from './passenger.entity';
 import { PassengerPassportLookupResponseDto } from './dto/passenger-passport-lookup-response.dto';
+import { LookupPassengerIdentityDto } from './dto/lookup-passenger-identity.dto';
 
 const INVALID_VERIFICATION_TOKEN = /test/i;
 
 const isBlank = (value?: string | null) => !String(value ?? '').trim();
+const normalizeIdentity = (value?: string | null) => {
+  const normalized = String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
+  return normalized || null;
+};
 
 const containsInvalidVerificationToken = (value?: string | null) =>
   INVALID_VERIFICATION_TOKEN.test(String(value ?? '').trim());
@@ -228,7 +233,7 @@ export class PassengerService {
   async lookupByPassportNumber(
     dto: LookupPassengerPassportDto,
   ): Promise<PassengerPassportLookupResponseDto> {
-    const passportNumber = String(dto.passportNumber ?? '').trim();
+    const passportNumber = normalizeIdentity(dto.passportNumber);
 
     if (!passportNumber) {
       return {
@@ -266,6 +271,21 @@ export class PassengerService {
       message: 'Passenger found',
       passenger: this.buildPassengerLookupPayload(passenger),
     };
+  }
+
+  async lookupByIdentity(dto: LookupPassengerIdentityDto) {
+    const panNumber = normalizeIdentity(dto.panNumber);
+    const passportNumber = normalizeIdentity(dto.passportNumber);
+    if (!panNumber && !passportNumber) return { found: false, message: 'PAN or passport number is required', passenger: null };
+    const passenger = await this.passengerRepository.findOne({
+      where: [
+        ...(panNumber ? [{ panNumber }] : []),
+        ...(passportNumber ? [{ passportNumber }] : []),
+      ] as never,
+      relations: { country: true, state: true, gstState: true, residentStatus: true, location: true },
+      order: { updatedAt: 'DESC', createdAt: 'DESC' },
+    });
+    return passenger ? { found: true, message: 'Passenger found', passenger: this.buildPassengerLookupPayload(passenger) } : { found: false, message: 'No passenger found for the supplied identity', passenger: null };
   }
 
   verifyOtherDocument(

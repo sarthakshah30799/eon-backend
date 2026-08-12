@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Session, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Session, UseGuards } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CreateCardStockReceiptDto } from './dto/card-stock-receipt.dto';
@@ -16,6 +16,20 @@ export class CardStockController {
   findAll(@Session() session: any) {
     const branchId = session?.isAdmin || session?.isHo || session?.isHoStaff ? undefined : session?.activeBranchId;
     return this.cardStockService.findAll(branchId);
+  }
+
+  @Get('cards/available')
+  @ApiOperation({ summary: 'List available CARDs for a normal sale' })
+  findAvailableCards(@Query('branchId') branchId: string, @Query('currencyId') currencyId: string, @Query('productId') productId: string, @Query('issuerPartyProfileId') issuerPartyProfileId: string, @Session() session: any) {
+    const effectiveBranchId = session?.isAdmin || session?.isHo || session?.isHoStaff ? branchId : session?.activeBranchId;
+    return this.cardStockService.findAvailableCards(effectiveBranchId, currencyId, productId, issuerPartyProfileId);
+  }
+
+  @Get('cards/reload')
+  @ApiOperation({ summary: 'List CARDs previously sold to a passenger for reload' })
+  findReloadCards(@Query('branchId') branchId: string, @Query('passengerId') passengerId: string, @Query('currencyId') currencyId: string, @Query('productId') productId: string, @Query('issuerPartyProfileId') issuerPartyProfileId: string, @Session() session: any) {
+    const effectiveBranchId = session?.isAdmin || session?.isHo || session?.isHoStaff ? branchId : session?.activeBranchId;
+    return this.cardStockService.findReloadCards(effectiveBranchId, passengerId, currencyId, productId, issuerPartyProfileId);
   }
 
   @Get(':id')

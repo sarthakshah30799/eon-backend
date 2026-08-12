@@ -34,6 +34,7 @@ import {
   TransactionPartyProfileType,
   TransactionPartyProfileTypeEnum,
 } from "../transactions.enums";
+import { CardStockReferenceType } from "../../card-stock/card-stock.enums";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
 @Index(
@@ -63,7 +64,7 @@ import {
 )
 @Check(
   "CHK_transactions_party_profile_required",
-  `UPPER("slug") = 'FAKE_CURRENCY' OR "party_profile_id" IS NOT NULL`,
+  `UPPER("slug") IN ('FAKE_CURRENCY', 'CARD_STOCK', 'CARD_TRANSFER_OUT', 'CARD_TRANSFER_IN', 'CARD_STOCK_LOAD', 'CARD_SELL', 'CARD_SETTLE', 'CARD_RETURN', 'CARD_VOID') OR "party_profile_id" IS NOT NULL`,
 )
 @Entity("transactions")
 export class Transaction extends BaseEntity {
@@ -95,11 +96,17 @@ export class Transaction extends BaseEntity {
   @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
   branchSnapshot: TransactionReferenceSnapshotValue;
 
-  @Column({ type: "uuid", name: "counter_id", nullable: false })
-  counterId: string;
+  @Column({ type: "uuid", name: "counter_id", nullable: true })
+  counterId: string | null;
 
   @Column({ type: "jsonb", name: "counter_snapshot", nullable: true })
   counterSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "enum", enum: CardStockReferenceType, name: "card_stock_reference_type", nullable: true })
+  cardStockReferenceType: CardStockReferenceType | null;
+
+  @Column({ type: "uuid", name: "card_stock_reference_id", nullable: true })
+  cardStockReferenceId: string | null;
 
   @Column({ type: "uuid", name: "company_id", nullable: true })
   companyId: string | null;

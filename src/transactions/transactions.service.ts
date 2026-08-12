@@ -22,6 +22,7 @@ import { TransactionPassengerOtherDocument } from './entities/transaction-passen
 import { PassengerOtherIdProofType } from '../passengers/passenger.entity';
 import { Currency } from '../currencies/currency.entity';
 import { Product } from '../products/product.entity';
+import { ProductCardIssuer } from '../products/entities/product-card-issuer.entity';
 import { DocumentProfile } from '../document-profiles/document-profile.entity';
 import { StorageService } from '../storage/storage.service';
 import { Purpose } from '../purpose/purpose.entity';
@@ -32,6 +33,7 @@ import {
   TransactionPassengerTravelSnapshotValue,
   TransactionReferenceSnapshotValue,
 } from './types/transaction-snapshot.types';
+import { CardStockReferenceType } from '../card-stock/card-stock.enums';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { Passenger } from '../passengers/passenger.entity';
@@ -60,6 +62,9 @@ import { TransactionEventStatus, TransactionEventType } from './transactions.enu
 import { DeepPartial } from 'typeorm';
 import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
 import { CountryService } from '../country/country.service';
+import { CardStockTechnicalTransactionService } from '../card-stock/card-stock-technical-transaction.service';
+import { CardStockCard } from '../card-stock/entities/card-stock-card.entity';
+import { TransactionTypeProfileEnum } from './transactions.enums';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -133,6 +138,11 @@ const parseDateValue = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const normalizePassengerIdentity = (value?: string | null) => {
+  const normalized = String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
+  return normalized || null;
+};
+
 const addMonthsUtc = (date: Date, months: number) => {
   const next = new Date(date);
   next.setUTCMonth(next.getUTCMonth() + months);
@@ -153,6 +163,12 @@ type TransactionItemPayload = {
   productCurrencyRateSnapshot?: Record<string, unknown> | null;
   pricingRuleSnapshot?: Record<string, unknown> | null;
   remarks?: string | null;
+  cardId?: string | null;
+  issuerPartyProfileId?: string | null;
+  issuerPartyProfileSnapshot?: Record<string, unknown> | null;
+  cardSnapshot?: Record<string, unknown> | null;
+  isReload?: boolean;
+  passengerId?: string | null;
 };
 
 type TransactionDocumentPayload = {
@@ -204,6 +220,7 @@ type TransactionDraftPayload = {
   purposeId?: string | null;
   agentProfileId?: string | null;
   passenger?: TransactionPassengerPayload | null;
+  passengerId?: string | null;
   passengerTravel?: TransactionPassengerTravelPayload | null;
   manualBookPageId?: string | null;
   manualBookPageSnapshot?: Record<string, unknown> | null;
@@ -255,6 +272,8 @@ export class TransactionsService {
     private readonly transactionAd1Repository: Repository<TransactionAd1>,
     @InjectRepository(TransactionItem, 'database2')
     private readonly transactionItemRepository: Repository<TransactionItem>,
+    @InjectRepository(CardStockCard, 'database2')
+    private readonly cardStockCardRepository: Repository<CardStockCard>,
     @InjectRepository(TransactionDocument, 'database2')
     private readonly transactionDocumentRepository: Repository<TransactionDocument>,
     @InjectRepository(TransactionAdditionalCharge, 'database2')
@@ -271,6 +290,8 @@ export class TransactionsService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    @InjectRepository(ProductCardIssuer)
+    private readonly productCardIssuerRepository: Repository<ProductCardIssuer>,
     @InjectRepository(DocumentProfile)
     private readonly documentProfileRepository: Repository<DocumentProfile>,
     @InjectRepository(AccountProfile)
@@ -301,6 +322,7 @@ export class TransactionsService {
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly countryService: CountryService,
+    private readonly cardStockTechnicalTransactionService: CardStockTechnicalTransactionService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
@@ -1283,18 +1305,16 @@ export class TransactionsService {
         );
       }
 
-      const passengerLookup = [
-        passengerPayload.panNumber
-          ? { panNumber: String(passengerPayload.panNumber).trim() }
-          : null,
-        passengerPayload.passportNumber
-          ? { passportNumber: String(passengerPayload.passportNumber).trim() }
-          : null,
-      ].filter(Boolean) as Array<Record<string, string>>;
-
-      const existingPassenger = passengerLookup.length
-        ? await this.passengerRepository.findOne({ where: passengerLookup as never })
-        : null;
+      const normalizedPanNumber = normalizePassengerIdentity(passengerPayload.panNumber);
+      const normalizedPassportNumber = normalizePassengerIdentity(passengerPayload.passportNumber);
+      const [passengerByPan, passengerByPassport] = await Promise.all([
+        normalizedPanNumber ? this.passengerRepository.findOne({ where: { panNumber: normalizedPanNumber } }) : null,
+        normalizedPassportNumber ? this.passengerRepository.findOne({ where: { passportNumber: normalizedPassportNumber } }) : null,
+      ]);
+      if (passengerByPan && passengerByPassport && passengerByPan.id !== passengerByPassport.id) {
+        throw new BadRequestException('PAN and passport belong to different passenger records');
+      }
+      const existingPassenger = passengerByPan ?? passengerByPassport ?? null;
 
       const residentStatusOption = passengerPayload.residentStatus
         ? await this.selectOptionRepository.findOne({
@@ -1315,7 +1335,7 @@ export class TransactionsService {
           locationId: passengerPayload.locationId ?? null,
           email: passengerPayload.email ?? null,
           contactNo: passengerPayload.contactNo ?? null,
-          panNumber: passengerPayload.panNumber ?? null,
+          panNumber: normalizedPanNumber,
           panHolderName: passengerPayload.panHolderName ?? null,
           panDob: passengerPayload.panDob ?? null,
           panHolderRelationType: passengerPayload.panHolderRelationType ?? null,
@@ -1328,7 +1348,7 @@ export class TransactionsService {
           address2: passengerPayload.address2 ?? null,
           city: passengerPayload.city ?? null,
           stateId: passengerPayload.stateId ?? null,
-          passportNumber: passengerPayload.passportNumber ?? null,
+          passportNumber: normalizedPassportNumber,
           passportIssueAt: passengerPayload.passportIssueAt ?? null,
           passportIssueDate: passengerPayload.passportIssueDate ?? null,
           passportExpiryDate: passengerPayload.passportExpiryDate ?? null,
@@ -1664,11 +1684,58 @@ export class TransactionsService {
     const itemRows = Array.isArray(transactionPayload.items)
       ? transactionPayload.items
       : [];
+    const cardSaleItems: TransactionItem[] = [];
+    const selectedCardIds = new Set<string>();
     for (let index = 0; index < itemRows.length; index += 1) {
       const row = itemRows[index];
       const currency = await resolveCurrency(String(row.currencyId));
       const product = await resolveProduct(String(row.productId));
       const productEntity = await resolveProductEntity(String(row.productId));
+      const isCardItem = String(productEntity.productCode ?? '').toUpperCase() === 'CC';
+      if (isCardItem) {
+        if (transactionPayload.transactionType !== TransactionType.SALE) {
+          throw new BadRequestException('CARD products can only be sold through the CARD sale flow');
+        }
+        if (!row.cardId || !row.issuerPartyProfileId) {
+          throw new BadRequestException(`CARD item ${index + 1} requires issuer and card selection`);
+        }
+        if (selectedCardIds.has(String(row.cardId))) {
+          throw new BadRequestException(`CARD ${row.cardId} cannot be selected more than once in one transaction`);
+        }
+        selectedCardIds.add(String(row.cardId));
+        const selectedCard = await this.cardStockCardRepository.findOne({ where: { id: row.cardId }, relations: ['receiptItem'] });
+        if (!selectedCard || selectedCard.currentBranchId !== resolvedBranchId) {
+          throw new BadRequestException(`CARD item ${index + 1} is not available at the current branch`);
+        }
+        if (!row.isReload && selectedCard.status === 'SOLD') {
+          throw new BadRequestException(`CARD item ${index + 1} has already been sold; use reload`);
+        }
+        if (row.isReload && selectedCard.status !== 'SOLD') {
+          throw new BadRequestException(`CARD item ${index + 1} is not eligible for reload`);
+        }
+        if (row.isReload) {
+          if (!passengerId) {
+            throw new BadRequestException('CARD reload requires an existing matched passenger');
+          }
+          const priorPassengerSale = await this.transactionItemRepository
+            .createQueryBuilder('item')
+            .innerJoin('item.transaction', 'priorTransaction')
+            .where('item.card_id = :cardId', { cardId: String(row.cardId) })
+            .andWhere('priorTransaction.passenger_id = :passengerId', { passengerId })
+            .andWhere('priorTransaction.transaction_type = :transactionType', { transactionType: TransactionType.SALE })
+            .andWhere('priorTransaction.status = :status', { status: TransactionStatus.APPROVED })
+            .andWhere('priorTransaction.id <> :currentTransactionId', { currentTransactionId: transaction.id })
+            .getOne();
+          if (!priorPassengerSale) {
+            throw new BadRequestException(`CARD item ${index + 1} was not previously sold to this passenger`);
+          }
+        }
+        if (selectedCard.receiptItem?.issuerPartyProfileId !== row.issuerPartyProfileId) {
+          throw new BadRequestException(`CARD item ${index + 1} issuer does not match the selected CARD`);
+        }
+        const issuerLink = await this.productCardIssuerRepository.findOne({ where: { productId: String(product.id), partyProfileId: String(row.issuerPartyProfileId) } });
+        if (!issuerLink) throw new BadRequestException(`Issuer is not linked to CARD product for item ${index + 1}`);
+      }
       const itemAccount = isFakeCurrency
         ? productEntity.fakeAccount
         : resolveProductTransactionAccount(
@@ -1711,14 +1778,26 @@ export class TransactionsService {
           productCurrencyRateSnapshot: row.productCurrencyRateSnapshot ?? null,
           pricingRuleSnapshot: row.pricingRuleSnapshot ?? null,
           commissionSnapshot: row.commissionSnapshot ?? null,
+          cardId: row.cardId ?? null,
+          issuerPartyProfileId: row.issuerPartyProfileId ?? null,
+          issuerPartyProfileSnapshot: row.issuerPartyProfileSnapshot ?? null,
+          cardSnapshot: row.cardSnapshot ?? null,
+          isReload: Boolean(row.isReload),
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
         };
 
-      await this.transactionItemRepository.save(
+      const savedItem = await this.transactionItemRepository.save(
         this.transactionItemRepository.create(transactionItemToSave),
       );
+      if (savedItem.cardId && transaction.transactionType === TransactionType.SALE) {
+        cardSaleItems.push(savedItem);
+      }
+    }
+
+    if (transaction.status === TransactionStatus.APPROVED && cardSaleItems.length) {
+      await this.createCardStockSaleLoads(transaction, cardSaleItems, performedById);
     }
 
     const documentRows = Array.isArray(transactionPayload.documents)
@@ -2068,6 +2147,13 @@ export class TransactionsService {
 
     const saved = await this.transactionRepository.save(transaction);
 
+    const approvedItems = await this.transactionItemRepository.find({
+      where: { transactionId: saved.id },
+    });
+    if (approvedItems.some(item => item.cardId)) {
+      await this.createCardStockSaleLoads(saved, approvedItems.filter(item => Boolean(item.cardId)), performedById);
+    }
+
     await this.transactionLogRepository.save(
       this.transactionLogRepository.create({
         transactionId: saved.id,
@@ -2090,6 +2176,38 @@ export class TransactionsService {
     await this.hydrateCounterSnapshot(approvedTransaction);
 
     return approvedTransaction;
+  }
+
+  private async createCardStockSaleLoads(
+    transaction: Transaction,
+    items: TransactionItem[],
+    actorId: string,
+  ) {
+    const branch = await this.branchRepository.findOne({ where: { id: transaction.branchId, isActive: true } });
+    if (!branch) throw new NotFoundException(`Branch ${transaction.branchId} not found for CARD sale`);
+    for (const item of items) {
+      if (!item.cardId) continue;
+      const card = await this.cardStockCardRepository.findOne({ where: { id: item.cardId } });
+      if (!card) throw new NotFoundException(`CARD ${item.cardId} not found`);
+      await this.cardStockTechnicalTransactionService.create({
+        manager: this.transactionItemRepository.manager,
+        operationCode: TransactionTypeProfileEnum.CARD_STOCK_LOAD,
+        branch,
+        transactionDate: transaction.transactionDate ?? new Date(),
+        referenceType: CardStockReferenceType.CARD_SALE,
+        referenceId: transaction.id,
+        actorId,
+        items: [{
+          cardId: card.id,
+          currencyId: item.currencyId,
+          productId: item.productId,
+          quantity: item.quantity,
+          per: item.per ?? '1',
+          cardSnapshot: item.cardSnapshot ?? { id: card.id, series: card.series, kitNumber: card.kitNumber, denomination: card.denomination, amount: card.amount, expirationDate: card.expirationDate },
+        }],
+      });
+      await this.transactionItemRepository.save({ ...item, updatedBy: actorId });
+    }
   }
 
   async getTransactionById(

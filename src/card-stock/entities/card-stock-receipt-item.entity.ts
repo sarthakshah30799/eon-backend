@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from 'typeorm
 import { BaseEntity } from '../../base/base.entity';
 import { CardStockReceipt } from './card-stock-receipt.entity';
 import { CardStockCard } from './card-stock-card.entity';
+import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
 
 @Index('IDX_card_stock_receipt_items_receipt_line', ['receiptId', 'lineNo'], { unique: true })
 @Index('IDX_card_stock_receipt_items_currency', ['currencyId'])
@@ -23,7 +24,7 @@ export class CardStockReceiptItem extends BaseEntity {
   currencyId: string;
 
   @Column({ type: 'jsonb', name: 'currency_snapshot' })
-  currencySnapshot: Record<string, unknown>;
+  currencySnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'numeric', precision: 18, scale: 7 })
   per: string;
@@ -32,13 +33,13 @@ export class CardStockReceiptItem extends BaseEntity {
   productId: string;
 
   @Column({ type: 'jsonb', name: 'product_snapshot' })
-  productSnapshot: Record<string, unknown>;
+  productSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'uuid', name: 'issuer_party_profile_id' })
   issuerPartyProfileId: string;
 
   @Column({ type: 'jsonb', name: 'issuer_party_profile_snapshot' })
-  issuerPartyProfileSnapshot: Record<string, unknown>;
+  issuerPartyProfileSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'numeric', precision: 18, scale: 2, name: 'fe_amount' })
   feAmount: string;

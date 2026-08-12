@@ -3,6 +3,7 @@ import { BaseEntity } from '../../base/base.entity';
 import { CardTransferStatus } from '../card-stock.enums';
 import { CardTransferRequestCard } from './card-transfer-request-card.entity';
 import { CardTransferRequestItem } from './card-transfer-request-item.entity';
+import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
 
 @Index('IDX_card_transfer_requests_transaction_number', ['transactionNumber'], { unique: true })
 @Index('IDX_card_transfer_requests_status', ['status'])
@@ -21,13 +22,13 @@ export class CardTransferRequest extends BaseEntity {
   sourceBranchId: string;
 
   @Column({ type: 'jsonb', name: 'source_branch_snapshot' })
-  sourceBranchSnapshot: Record<string, unknown>;
+  sourceBranchSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'uuid', name: 'destination_branch_id' })
   destinationBranchId: string;
 
   @Column({ type: 'jsonb', name: 'destination_branch_snapshot' })
-  destinationBranchSnapshot: Record<string, unknown>;
+  destinationBranchSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'enum', enum: CardTransferStatus, default: CardTransferStatus.HELD })
   status: CardTransferStatus;
@@ -46,6 +47,12 @@ export class CardTransferRequest extends BaseEntity {
 
   @Column({ type: 'text', name: 'cancellation_reason', nullable: true })
   cancellationReason: string | null;
+
+  @Column({ type: 'uuid', name: 'source_transaction_id', nullable: true })
+  sourceTransactionId: string | null;
+
+  @Column({ type: 'uuid', name: 'destination_transaction_id', nullable: true })
+  destinationTransactionId: string | null;
 
   @Column({ type: 'timestamptz', name: 'held_at', nullable: true })
   heldAt: Date | null;

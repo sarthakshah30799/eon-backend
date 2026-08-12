@@ -14,8 +14,9 @@ import { DayEndStartProcessService } from '../day-end-start-process/day-end-star
 import { CardStockCard } from './entities/card-stock-card.entity';
 import { CardStockReceipt } from './entities/card-stock-receipt.entity';
 import { CardStockReceiptItem } from './entities/card-stock-receipt-item.entity';
-import { CardStockReceiptStatus, CardStockCardStatus } from './card-stock.enums';
+import { CardStockReceiptStatus, CardStockCardStatus, CardStockReferenceType } from './card-stock.enums';
 import { CreateCardStockReceiptDto } from './dto/card-stock-receipt.dto';
+import { CardStockTechnicalTransactionService } from './card-stock-technical-transaction.service';
 
 const CARD_PRODUCT_CODE = 'CC';
 
@@ -31,6 +32,7 @@ export class CardStockService {
     @InjectRepository(PartyProfile) private readonly partyProfileRepository: Repository<PartyProfile>,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
+    private readonly technicalTransactionService: CardStockTechnicalTransactionService,
   ) {}
 
   async findAll(branchId?: string): Promise<CardStockReceipt[]> {
@@ -48,6 +50,32 @@ export class CardStockService {
     const receipt = await this.receiptRepository.findOne({ where: { id }, relations: ['items', 'items.cards'] });
     if (!receipt) throw new NotFoundException('Card stock receipt not found');
     return (await this.withMaskedCards([receipt]))[0];
+  }
+
+  async findAvailableCards(branchId: string, currencyId: string, productId: string, issuerPartyProfileId: string) {
+    if (!branchId || !currencyId || !productId || !issuerPartyProfileId) return [];
+    const rows = await this.database2.query(`
+      SELECT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
+             i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
+             CASE WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0)) ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4) END AS "maskedCardNumber"
+      FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+      CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
+      WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
+      ORDER BY c.series, c.kit_number`, [branchId, currencyId, productId, issuerPartyProfileId]);
+    return rows;
+  }
+
+  async findReloadCards(branchId: string, passengerId: string, currencyId: string, productId: string, issuerPartyProfileId: string) {
+    if (!branchId || !passengerId || !currencyId || !productId || !issuerPartyProfileId) return [];
+    return this.database2.query(`
+      SELECT DISTINCT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
+        i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
+        CASE WHEN length(decoded.clear_number) <= 8 THEN left(decoded.clear_number, 4) || repeat('X', greatest(length(decoded.clear_number) - 4, 0)) ELSE left(decoded.clear_number, 4) || repeat('X', length(decoded.clear_number) - 8) || right(decoded.clear_number, 4) END AS "maskedCardNumber"
+      FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+      CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
+      WHERE c.current_branch_id=$1 AND c.status='SOLD' AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
+        AND EXISTS (SELECT 1 FROM transaction_items ti JOIN transactions t ON t.id=ti.transaction_id WHERE ti.card_id=c.id AND t.passenger_id=$5 AND t.transaction_type='SALE' AND t.status='APPROVED')
+      ORDER BY c.series, c.kit_number`, [branchId, currencyId, productId, issuerPartyProfileId, passengerId]);
   }
 
   async create(dto: CreateCardStockReceiptDto, userId: string): Promise<CardStockReceipt> {
@@ -71,6 +99,9 @@ export class CardStockService {
       const cardRepo = manager.getRepository(CardStockCard);
       const seenCards = new Set<string>();
       const savedReceipt = await receiptRepo.save(receiptRepo.create({ transactionNumber, receiptDate, hoBranchId: branch.id, hoBranchSnapshot: branchSnapshot ?? {}, issuerPartyProfileId: headerIssuer.id, issuerPartyProfileSnapshot: issuerSnapshot ?? {}, status: CardStockReceiptStatus.POSTED, totalFeAmount: calculatedTotal.toFixed(2), createdBy: userId, updatedBy: userId }));
+    const technicalTransaction = await this.technicalTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_STOCK, branch, transactionDate: receiptDate, referenceType: CardStockReferenceType.CARD_STOCK_RECEIPT, referenceId: savedReceipt.id, actorId: userId });
+      savedReceipt.transactionId = technicalTransaction.id;
+      await receiptRepo.save(savedReceipt);
       for (const item of normalizedItems) {
         const savedItem = await itemRepo.save(itemRepo.create({ receiptId: savedReceipt.id, lineNo: item.lineNo, currencyId: item.currencyId, currencySnapshot: item.currencySnapshot, per: item.per.toString(), productId: item.productId, productSnapshot: item.productSnapshot, issuerPartyProfileId: item.issuerPartyProfileId, issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot, feAmount: item.feAmount.toFixed(2), createdBy: userId, updatedBy: userId }));
         for (const card of item.cards) {
@@ -80,7 +111,7 @@ export class CardStockService {
           const existing = await manager.query('SELECT id FROM card_stock_cards WHERE kit_number = $1 AND public.decrypt_card_number(card_number) = $2 LIMIT 1', [card.kitNumber, card.cardNumber]);
           if (existing.length) throw new BadRequestException(`Card already exists for kit number ${card.kitNumber}`);
           const encrypted = await manager.query('SELECT public.encrypt_card_number($1) AS "cardNumber"', [card.cardNumber]);
-          await cardRepo.save(cardRepo.create({ receiptItemId: savedItem.id, series: card.series, quantity: card.quantity, kitNumber: card.kitNumber, cardNumber: encrypted[0].cardNumber, denomination: card.denomination, amount: card.amount, expirationDate: card.expirationDate, currentBranchId: branch.id, currentBranchSnapshot: branchSnapshot ?? {}, status: CardStockCardStatus.AVAILABLE, reservedByTransferId: null, reservedAt: null, createdBy: userId, updatedBy: userId } as any));
+          await cardRepo.save(cardRepo.create({ receiptItemId: savedItem.id, series: card.series, quantity: 1, kitNumber: card.kitNumber, cardNumber: encrypted[0].cardNumber, denomination: card.denomination, amount: card.amount, expirationDate: card.expirationDate, currentBranchId: branch.id, currentBranchSnapshot: branchSnapshot ?? {}, status: CardStockCardStatus.AVAILABLE, reservedByTransferId: null, reservedAt: null, createdBy: userId, updatedBy: userId } as any));
         }
       }
       return savedReceipt;
@@ -112,12 +143,12 @@ export class CardStockService {
     if (!link) throw new BadRequestException(`Issuer ${issuer.code} is not configured for product CC`);
     if (!item.cards?.length) throw new BadRequestException(`Item ${item.lineNo} must contain at least one card`);
     const cards = item.cards.map(card => {
-      if (card.quantity !== 1) throw new BadRequestException(`Item ${item.lineNo}: card quantity must be 1`);
-      if (!/^[A-Za-z0-9]{6}$/.test(card.series)) throw new BadRequestException(`Item ${item.lineNo}: series must be exactly 6 alphanumeric characters (for example, CC0000)`);
+      if (!/^[A-Za-z0-9]{1,4}$/.test(card.series)) throw new BadRequestException(`Item ${item.lineNo}: series prefix must be 1 to 4 alphanumeric characters (for example, CC)`);
       if (!/^(\d{8}|\d{16}|\d{4}X+\d{4})$/.test(card.cardNumber.replace(/\s/g, '').toUpperCase())) throw new BadRequestException(`Item ${item.lineNo}: card number must be 8/16 digits or a valid mask`);
-      if (Number(card.amount) !== Number(card.denomination) * card.quantity) throw new BadRequestException(`Item ${item.lineNo}: card amount is invalid`);
+      if (Number(card.amount) !== Number(card.denomination)) throw new BadRequestException(`Item ${item.lineNo}: card amount is invalid`);
       if (new Date(`${card.expirationDate}T00:00:00`) <= new Date()) throw new BadRequestException(`Item ${item.lineNo}: expiration date must be in the future`);
-      return { ...card, cardNumber: card.cardNumber.replace(/\s/g, ''), denomination: Number(card.denomination), amount: Number(card.amount) };
+      const seriesPrefix = card.series.toUpperCase();
+      return { ...card, series: `${seriesPrefix}0000`, cardNumber: card.cardNumber.replace(/\s/g, ''), denomination: Number(card.denomination), amount: Number(card.amount) };
     });
     const feAmount = cards.reduce((sum, card) => sum + card.amount, 0);
     if (Math.abs(feAmount - Number(item.feAmount)) > 0.005) throw new BadRequestException(`Item ${item.lineNo}: FE amount does not match card totals`);

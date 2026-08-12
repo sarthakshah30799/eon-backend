@@ -291,6 +291,7 @@ export class ProductProfitReportService {
       .leftJoinAndSelect("transaction.additionalCharges", "charge")
       .where("transaction.isLatest = true")
       .andWhere("transaction.status = :status", { status: "APPROVED" });
+    qb.andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", { technicalSlugs: ['CARD_STOCK','CARD_TRANSFER_OUT','CARD_TRANSFER_IN','CARD_STOCK_LOAD','CARD_SELL','CARD_SETTLE','CARD_RETURN','CARD_VOID'] });
 
     if (filters.startDate && filters.endDate) {
       qb.andWhere("transaction.approvedAt >= :startDate", {

@@ -17,15 +17,19 @@ import {
   CardTransferRequest,
   CardTransferRequestCard,
   CardTransferRequestItem,
+  CardStockTransactionEntry,
+  CardStockBalance,
 } from './entities';
 import { CardStockController } from './card-stock.controller';
 import { CardStockService } from './card-stock.service';
 import { CardTransferController } from './card-transfer.controller';
 import { CardTransferService } from './card-transfer.service';
+import { CardStockTechnicalTransactionService } from './card-stock-technical-transaction.service';
 
 @Module({
-  imports: [AdditionalSettingModule, DayEndStartProcessModule, MailModule, TypeOrmModule.forFeature([Branch, Currency, PartyProfile, Product, ProductCardIssuer, User, UserRole]), TypeOrmModule.forFeature([CardStockReceipt, CardStockReceiptItem, CardStockCard, CardTransferRequest, CardTransferRequestItem, CardTransferRequestCard], 'database2')],
+  imports: [AdditionalSettingModule, DayEndStartProcessModule, MailModule, TypeOrmModule.forFeature([Branch, Currency, PartyProfile, Product, ProductCardIssuer, User, UserRole]), TypeOrmModule.forFeature([CardStockReceipt, CardStockReceiptItem, CardStockCard, CardTransferRequest, CardTransferRequestItem, CardTransferRequestCard, CardStockTransactionEntry, CardStockBalance], 'database2')],
   controllers: [CardStockController, CardTransferController],
-  providers: [CardStockService, CardTransferService],
+  providers: [CardStockService, CardTransferService, CardStockTechnicalTransactionService],
+  exports: [CardStockTechnicalTransactionService],
 })
 export class CardStockModule {}

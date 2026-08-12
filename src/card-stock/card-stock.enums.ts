@@ -8,10 +8,37 @@ export type CardStockReceiptStatus =
 export const CardStockCardStatus = {
   AVAILABLE: 'AVAILABLE',
   RESERVED: 'RESERVED',
+  SOLD: 'SOLD',
 } as const;
 
 export type CardStockCardStatus =
   (typeof CardStockCardStatus)[keyof typeof CardStockCardStatus];
+
+export const CardStockOperationType = {
+  STOCK: 'STOCK',
+  TRANSFER_OUT: 'TRANSFER_OUT',
+  TRANSFER_IN: 'TRANSFER_IN',
+  CARD_STOCK_LOAD: 'CARD_STOCK_LOAD',
+  SELL: 'SELL',
+  SETTLE: 'SETTLE',
+  RETURN: 'RETURN',
+  VOID: 'VOID',
+} as const;
+
+export type CardStockOperationType =
+  (typeof CardStockOperationType)[keyof typeof CardStockOperationType];
+
+export const CardStockReferenceType = {
+  CARD_STOCK_RECEIPT: 'CARD_STOCK_RECEIPT',
+  CARD_TRANSFER_REQUEST: 'CARD_TRANSFER_REQUEST',
+  CARD_SALE: 'CARD_SALE',
+  CARD_SETTLEMENT: 'CARD_SETTLEMENT',
+  CARD_RETURN: 'CARD_RETURN',
+  CARD_VOID: 'CARD_VOID',
+} as const;
+
+export type CardStockReferenceType =
+  (typeof CardStockReferenceType)[keyof typeof CardStockReferenceType];
 
 export const CardTransferStatus = {
   HELD: 'HELD',

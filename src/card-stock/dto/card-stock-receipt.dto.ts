@@ -3,8 +3,7 @@ import { IsAlphanumeric, IsDateString, IsInt, IsNumberString, IsOptional, IsStri
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CardStockCardDto {
-  @ApiProperty({ example: 'CC0000' }) @IsString() @IsAlphanumeric() @Length(6, 6) series: string;
-  @ApiProperty({ example: 1 }) @Type(() => Number) @IsInt() @Min(1) quantity: number;
+  @ApiProperty({ example: 'CC', description: '1–4 character alphanumeric series prefix. The system appends 0000 for the initial stock cycle.' }) @IsString() @IsAlphanumeric() @Length(1, 4) series: string;
   @ApiProperty() @IsString() kitNumber: string;
   @ApiProperty() @IsString() cardNumber: string;
   @ApiProperty() @IsNumberString() denomination: string;
