@@ -38,8 +38,9 @@ type PolicyHandler = {
 const normalizeCode = (code?: string | null) => String(code ?? '').trim().toUpperCase();
 const TRANSACTION_NUMBERING_CODE_LIST = Object.values(
   TransactionTypeProfileEnum
-) as TransactionTypeProfile[];
-const TRANSACTION_NUMBERING_CODES = new Set<TransactionTypeProfile>(
+) as string[];
+TRANSACTION_NUMBERING_CODE_LIST.push('RECEIPT_VOUCHER', 'PAYMENT_VOUCHER', 'JOURNAL_VOUCHER');
+const TRANSACTION_NUMBERING_CODES = new Set<string>(
   TRANSACTION_NUMBERING_CODE_LIST
 );
 const COMMON_CORPORATE_NUMBER_SERIES_CODES = [
@@ -49,8 +50,7 @@ const COMMON_CORPORATE_NUMBER_SERIES_CODES = [
 
 const isTransactionTypeProfile = (
   code: string
-): code is TransactionTypeProfile =>
-  TRANSACTION_NUMBERING_CODES.has(code as TransactionTypeProfile);
+): code is TransactionTypeProfile => TRANSACTION_NUMBERING_CODES.has(code);
 
 @Injectable()
 export class AdditionalSettingService {

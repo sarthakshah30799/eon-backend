@@ -139,6 +139,12 @@ export class PermissionsGuard implements CanActivate {
     } else if (path.includes('/chequebooks')) {
       menuPath = '/cheque-books';
       allowedMenuPaths = ['/cheque-books', '/admin/chequebooks'];
+    } else if (path.includes('/journal-vouchers')) {
+      menuPath = '/journal-vouchers';
+    } else if (path.includes('/receipts')) {
+      menuPath = '/receipts';
+    } else if (path.includes('/payments')) {
+      menuPath = '/payments';
     } else if (path.includes('/users')) {
       // Allow self-lookup (GET /users/:id matching logged-in user id)
       const isSelf = method === 'GET' && request.params.id === userId;

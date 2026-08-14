@@ -60,7 +60,8 @@ export class CardStockService {
              CASE WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0)) ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4) END AS "maskedCardNumber"
       FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
-      WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
+      WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND c.reserved_by_transfer_id IS NULL AND c.reserved_at IS NULL
+        AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
       ORDER BY c.series, c.kit_number`, [branchId, currencyId, productId, issuerPartyProfileId]);
     return rows;
   }
@@ -73,8 +74,11 @@ export class CardStockService {
         CASE WHEN length(decoded.clear_number) <= 8 THEN left(decoded.clear_number, 4) || repeat('X', greatest(length(decoded.clear_number) - 4, 0)) ELSE left(decoded.clear_number, 4) || repeat('X', length(decoded.clear_number) - 8) || right(decoded.clear_number, 4) END AS "maskedCardNumber"
       FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
-      WHERE c.current_branch_id=$1 AND c.status='SOLD' AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
-        AND EXISTS (SELECT 1 FROM transaction_items ti JOIN transactions t ON t.id=ti.transaction_id WHERE ti.card_id=c.id AND t.passenger_id=$5 AND t.transaction_type='SALE' AND t.status='APPROVED')
+      WHERE c.current_branch_id=$1 AND c.status='SOLD' AND c.reserved_by_transfer_id IS NULL
+        AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
+        AND EXISTS (SELECT 1 FROM transaction_items ti JOIN transactions t ON t.id=ti.transaction_id
+          JOIN card_stock_settlements settlement ON settlement.transaction_item_id=ti.id AND settlement.branch_settlement_entry_id IS NOT NULL
+          WHERE ti.card_id=c.id AND t.passenger_id=$5 AND t.transaction_type='SALE' AND t.status='APPROVED')
       ORDER BY c.series, c.kit_number`, [branchId, currencyId, productId, issuerPartyProfileId, passengerId]);
   }
 

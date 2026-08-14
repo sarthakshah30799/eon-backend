@@ -532,6 +532,21 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
     editPath: '/sale/:slug/edit/:id',
   }),
   ...buildCrudMenuSeeds({
+    basePath: '/receipts',
+    name: 'Receipts',
+    isAdmin: false,
+  }),
+  ...buildCrudMenuSeeds({
+    basePath: '/payments',
+    name: 'Payments',
+    isAdmin: false,
+  }),
+  ...buildCrudMenuSeeds({
+    basePath: '/journal-vouchers',
+    name: 'Journal Vouchers',
+    isAdmin: false,
+  }),
+  ...buildCrudMenuSeeds({
     basePath: '/admin/country-profile',
     name: 'Country Profile',
     isAdmin: true,

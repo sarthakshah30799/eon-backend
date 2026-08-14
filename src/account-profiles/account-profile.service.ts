@@ -338,6 +338,10 @@ export class AccountProfileService {
       qb.andWhere("ap.bulkSale = :bulkSale", { bulkSale: query.bulkSale });
     }
 
+    if (query.receipt !== undefined) qb.andWhere("ap.receipt = :receipt", { receipt: query.receipt });
+    if (query.payment !== undefined) qb.andWhere("ap.payment = :payment", { payment: query.payment });
+    if (query.journalVoucher !== undefined) qb.andWhere("ap.journalVoucher = :journalVoucher", { journalVoucher: query.journalVoucher });
+
     qb.orderBy("ap.createdAt", "DESC").skip(skip).take(limit);
 
     const [data, totalItems] = await qb.getManyAndCount();

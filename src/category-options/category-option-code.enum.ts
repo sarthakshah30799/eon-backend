@@ -29,4 +29,7 @@ export enum CategoryOptionCodeEnum {
   PassengerResidentStatus = "RESIDENT",
   PassengerPanHolderRelation = "RELATION",
   FakeCurrencyReason = "FAKE_CURRENCY_REASON",
+  VoucherAccountType = "VOUCHER_ACCOUNT_TYPE",
+  VoucherItemType = "VOUCHER_ITEM_TYPE",
+  VoucherRemark = "VOUCHER_REMARK",
 }

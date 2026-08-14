@@ -44,6 +44,7 @@ import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start
 import { UserModule } from "../users/user.module";
 import { CardStockModule } from "../card-stock/card-stock.module";
 import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
+import { VoucherModule } from "../vouchers/voucher.module";
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
     DayEndStartProcessModule,
     UserModule,
     CardStockModule,
+    VoucherModule,
     MailModule,
     StorageModule,
     TypeOrmModule.forFeature([

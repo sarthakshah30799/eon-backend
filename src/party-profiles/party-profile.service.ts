@@ -1099,6 +1099,9 @@ export class PartyProfileService {
       qb.andWhere("pp.purchase = :purchase", { purchase: query.purchase });
     }
 
+    if (query.entityTypeId) qb.andWhere("entityTypeOption.id = :entityTypeId", { entityTypeId: query.entityTypeId });
+    if (query.groupId) qb.andWhere("groupOption.id = :groupId", { groupId: query.groupId });
+
     if (query.status !== undefined) {
       qb.andWhere("pp.status = :status", { status: query.status });
     }

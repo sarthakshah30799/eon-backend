@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID } from "class-validator";
 import { ClientType } from "../party-profile.entity";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 
@@ -135,4 +135,14 @@ export class PartyProfileListQueryDto {
   @IsOptional()
   @Transform(parseNumberQuery)
   limit?: number;
+
+  @ApiPropertyOptional({ description: "Filter by Entity Type category option id" })
+  @IsUUID()
+  @IsOptional()
+  entityTypeId?: string;
+
+  @ApiPropertyOptional({ description: "Filter by Group category option id" })
+  @IsUUID()
+  @IsOptional()
+  groupId?: string;
 }

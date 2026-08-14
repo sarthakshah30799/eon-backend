@@ -4,6 +4,7 @@ import {
   Index,
   JoinColumn,
   ManyToOne,
+  OneToOne,
 } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "./transaction.entity";
@@ -12,6 +13,8 @@ import {
   TransactionPaymentMethod,
 } from "../transactions.enums";
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
+import { TransactionSettlementSource } from "../../vouchers/voucher.enums";
+import { VoucherAdvanceApplication } from "../../vouchers/entities/voucher-advance-application.entity";
 
 @Index("IDX_transaction_payments_transaction_id", ["transactionId"])
 @Index("IDX_transaction_payments_transaction_line", ["transactionId", "lineNo"], {
@@ -40,6 +43,15 @@ export class TransactionPayment extends BaseEntity {
 
   @Column({ type: "jsonb", name: "account_snapshot", nullable: true })
   accountSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "enum", enum: TransactionSettlementSource, name: "settlement_source", default: TransactionSettlementSource.NORMAL })
+  settlementSource: TransactionSettlementSource;
+
+  @Column({ type: "uuid", name: "advance_voucher_id", nullable: true })
+  advanceVoucherId: string | null;
+
+  @OneToOne(() => VoucherAdvanceApplication, application => application.transactionPayment)
+  advanceApplication?: VoucherAdvanceApplication | null;
 
   @Column({ type: "uuid", name: "cheque_page_id", nullable: true })
   chequePageId: string | null;

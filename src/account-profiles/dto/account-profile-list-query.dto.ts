@@ -71,4 +71,22 @@ export class AccountProfileListQueryDto {
   @IsBoolean()
   @IsOptional()
   bulkSale?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by receipt voucher support" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  receipt?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by payment voucher support" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  payment?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by journal voucher support" })
+  @Transform(parseBoolean)
+  @IsBoolean()
+  @IsOptional()
+  journalVoucher?: boolean;
 }

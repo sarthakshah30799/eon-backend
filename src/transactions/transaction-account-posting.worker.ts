@@ -230,6 +230,20 @@ export class TransactionAccountPostingWorker
         return;
       }
 
+      if (transaction.transactionType === TransactionType.SALE && transaction.items.some(item => Boolean(item.cardId))) {
+        const readiness: Array<{ incomplete_count: string }> = await this.database2.query(`
+          SELECT count(*)::text AS incomplete_count
+          FROM transaction_items item
+          WHERE item.transaction_id=$1 AND item.card_id IS NOT NULL AND (
+            NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries entry WHERE entry.card_id=item.card_id AND entry.reference_id=$1 AND entry.operation_type='SELL')
+            OR NOT EXISTS (SELECT 1 FROM card_stock_settlements settlement WHERE settlement.transaction_item_id=item.id AND settlement.branch_settlement_entry_id IS NOT NULL)
+            OR NOT EXISTS (SELECT 1 FROM card_stock_settlements settlement JOIN card_stock_balance balance ON balance.card_id=item.card_id AND balance.branch_id=$2 AND balance.series=settlement.series AND balance.settle_entry_id=settlement.branch_settlement_entry_id WHERE settlement.transaction_item_id=item.id)
+          )`, [transaction.id, transaction.branchId]);
+        if (Number(readiness[0]?.incomplete_count ?? 0) > 0) {
+          throw new BadRequestException('CARD sale lifecycle is not complete; account posting will retry');
+        }
+      }
+
       await this.rebuildTransaction(transaction);
 
       await this.finishEvent(event.id, {
@@ -1085,7 +1099,7 @@ export class TransactionAccountPostingWorker
     }
 
     for (const payment of paymentRows) {
-      const accountSnapshot = await resolveAccountSnapshot(payment.accountId);
+      const accountSnapshot = payment.accountSnapshot ?? await resolveAccountSnapshot(payment.accountId);
       const amount = roundMoney(Number(payment.amount));
       const paymentDirection =
         payment.paymentDirection === TransactionPaymentDirection.RECEIPT

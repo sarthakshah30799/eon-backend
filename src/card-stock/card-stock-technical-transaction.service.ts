@@ -19,7 +19,7 @@ export interface CardTechnicalTransactionInput {
   referenceId: string;
   actorId: string;
   transactionType?: TransactionType;
-  items?: Array<{ cardId?: string; currencyId: string; productId: string; quantity?: string | number; per?: string | number; cardSnapshot?: Record<string, unknown> }>;
+  items?: Array<{ cardId?: string; currencyId: string; productId: string; quantity?: string | number; per?: string | number; rate?: string | number; cardSnapshot?: Record<string, unknown> }>;
 }
 
 @Injectable()
@@ -36,6 +36,7 @@ export class CardStockTechnicalTransactionService {
       new Date(input.transactionDate),
     );
     const transactionRepository = input.manager.getRepository(Transaction);
+    await input.manager.query(`SELECT set_config('app.skip_transaction_account_postings_enqueue', 'true', true)`);
     const transaction = await transactionRepository.save(transactionRepository.create({
       number,
       slug: input.operationCode,
@@ -72,12 +73,14 @@ export class CardStockTechnicalTransactionService {
         productId: item.productId,
         quantity: String(item.quantity ?? 1),
         per: String(item.per ?? 1),
-        rate: '0',
+        rate: String(item.rate ?? 0),
         cardSnapshot: item.cardSnapshot ?? null,
         createdBy: input.actorId,
         updatedBy: input.actorId,
       })));
     }
+    await input.manager.query(`DELETE FROM transaction_events WHERE transaction_id = $1`, [transaction.id]);
+    await input.manager.query(`SELECT set_config('app.skip_transaction_account_postings_enqueue', 'false', true)`);
     return transaction;
   }
 }
