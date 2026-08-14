@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, ObjectLiteral, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, ObjectLiteral, Repository } from 'typeorm';
 import { MailService } from '../mail/mail.service';
 import { TransactionLog } from './entities/transaction-log.entity';
 import { Transaction } from './entities/transaction.entity';
@@ -33,7 +33,6 @@ import {
   TransactionPassengerTravelSnapshotValue,
   TransactionReferenceSnapshotValue,
 } from './types/transaction-snapshot.types';
-import { CardStockReferenceType } from '../card-stock/card-stock.enums';
 import { AccountProfile } from '../account-profiles/account-profile.entity';
 import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { Passenger } from '../passengers/passenger.entity';
@@ -62,9 +61,11 @@ import { TransactionEventStatus, TransactionEventType } from './transactions.enu
 import { DeepPartial } from 'typeorm';
 import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
 import { CountryService } from '../country/country.service';
-import { CardStockTechnicalTransactionService } from '../card-stock/card-stock-technical-transaction.service';
 import { CardStockCard } from '../card-stock/entities/card-stock-card.entity';
-import { TransactionTypeProfileEnum } from './transactions.enums';
+import { CardStockSaleLifecycleService } from '../card-stock/card-stock-sale-lifecycle.service';
+import { VoucherService } from '../vouchers/voucher.service';
+import { AdvanceApplicationPayloadDto } from '../vouchers/dto/voucher.dto';
+import { TransactionSettlementSource } from '../vouchers/voucher.enums';
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -198,6 +199,8 @@ type TransactionPaymentPayload = {
   chequePageSnapshot?: Record<string, unknown> | null;
   amount: string | number;
   remarks?: string | null;
+  settlementSource?: TransactionSettlementSource | null;
+  advanceVoucherId?: string | null;
 };
 
 const normalizeNullableString = (value?: string | null) => {
@@ -266,6 +269,7 @@ type TransactionTcsPreviewRequestPayload = {
 @Injectable()
 export class TransactionsService {
   constructor(
+    @InjectDataSource('database2') private readonly database2: DataSource,
     @InjectRepository(Transaction, 'database2')
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(TransactionAd1, 'database2')
@@ -322,10 +326,11 @@ export class TransactionsService {
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly countryService: CountryService,
-    private readonly cardStockTechnicalTransactionService: CardStockTechnicalTransactionService,
+    private readonly cardStockSaleLifecycleService: CardStockSaleLifecycleService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
+    private readonly voucherService: VoucherService,
   ) { }
 
   async getAd1Agents(
@@ -1122,11 +1127,15 @@ export class TransactionsService {
     }
 
     const shouldRequireApproval = Boolean(transactionPayload.requiresApproval);
+    const requestedItemRows = Array.isArray(transactionPayload.items) ? transactionPayload.items : [];
+    const hasRequestedCardItems = requestedItemRows.some(item => Boolean(item.cardId));
     const transactionStatus = isFakeCurrency
       ? TransactionStatus.APPROVED
       : shouldRequireApproval
       ? TransactionStatus.DRAFT
       : TransactionStatus.APPROVED;
+    const shouldAutoFinalizeCardSale = transactionStatus === TransactionStatus.APPROVED && hasRequestedCardItems;
+    const persistedTransactionStatus = shouldAutoFinalizeCardSale ? TransactionStatus.DRAFT : transactionStatus;
     const now = new Date();
     const policyContext = await this.dayEndStartProcessService.getPolicyContext({
       userId: performedById,
@@ -1272,6 +1281,7 @@ export class TransactionsService {
         ? (transactionPayload.passengerTravel ?? null)
         : null;
     let passengerId: string | null = null;
+    let matchedExistingPassenger = false;
     let passengerSnapshot: TransactionPassengerSnapshotValue = null;
     let passengerTravelSnapshot: TransactionPassengerTravelSnapshotValue = null;
     const passengerTransactionDate = parseDateValue(resolvedTransactionDate) ?? now;
@@ -1315,6 +1325,7 @@ export class TransactionsService {
         throw new BadRequestException('PAN and passport belong to different passenger records');
       }
       const existingPassenger = passengerByPan ?? passengerByPassport ?? null;
+      matchedExistingPassenger = Boolean(existingPassenger);
 
       const residentStatusOption = passengerPayload.residentStatus
         ? await this.selectOptionRepository.findOne({
@@ -1458,6 +1469,16 @@ export class TransactionsService {
       }
     }
 
+    const hasReloadCardItem = requestedItemRows.some(item => Boolean(item.cardId && item.isReload));
+    if (hasReloadCardItem) {
+      if (!passengerId || !matchedExistingPassenger) {
+        throw new BadRequestException('CARD reload requires an existing matched passenger');
+      }
+      if (!String(passengerTravelPayload?.travellingCountryId ?? '').trim()) {
+        throw new BadRequestException('Travel country is required for CARD reload');
+      }
+    }
+
     const transactionToSave: DeepPartial<Transaction> = {
       rootTransactionId: transactionPayload.rootTransactionId ?? null,
       revisionNo: Number(transactionPayload.revisionNo ?? 1) || 1,
@@ -1490,12 +1511,12 @@ export class TransactionsService {
         : null,
       transactionType: transactionPayload.transactionType,
       tradeMode: transactionPayload.tradeMode,
-      status: transactionStatus,
+      status: persistedTransactionStatus,
       remarks: transactionPayload.remarks ?? null,
       submittedAt: shouldRequireApproval ? now : now,
-      approvedAt: isFakeCurrency || !shouldRequireApproval ? now : null,
+      approvedAt: persistedTransactionStatus === TransactionStatus.APPROVED ? now : null,
       rejectedAt: null,
-      approvedById: isFakeCurrency || !shouldRequireApproval ? performedById : null,
+      approvedById: persistedTransactionStatus === TransactionStatus.APPROVED ? performedById : null,
       rejectedById: null,
       approvalRemarks: null,
       rejectionReason: null,
@@ -1681,9 +1702,7 @@ export class TransactionsService {
       );
     };
 
-    const itemRows = Array.isArray(transactionPayload.items)
-      ? transactionPayload.items
-      : [];
+    const itemRows = requestedItemRows;
     const cardSaleItems: TransactionItem[] = [];
     const selectedCardIds = new Set<string>();
     for (let index = 0; index < itemRows.length; index += 1) {
@@ -1707,19 +1726,20 @@ export class TransactionsService {
         if (!selectedCard || selectedCard.currentBranchId !== resolvedBranchId) {
           throw new BadRequestException(`CARD item ${index + 1} is not available at the current branch`);
         }
-        if (!row.isReload && selectedCard.status === 'SOLD') {
-          throw new BadRequestException(`CARD item ${index + 1} has already been sold; use reload`);
+        if (!row.isReload && (selectedCard.status !== 'AVAILABLE' || selectedCard.reservedByTransferId || selectedCard.reservedAt)) {
+          throw new BadRequestException(`CARD item ${index + 1} is not available for sale`);
         }
-        if (row.isReload && selectedCard.status !== 'SOLD') {
+        if (row.isReload && (selectedCard.status !== 'SOLD' || selectedCard.reservedByTransferId)) {
           throw new BadRequestException(`CARD item ${index + 1} is not eligible for reload`);
         }
         if (row.isReload) {
-          if (!passengerId) {
+          if (!passengerId || !matchedExistingPassenger) {
             throw new BadRequestException('CARD reload requires an existing matched passenger');
           }
           const priorPassengerSale = await this.transactionItemRepository
             .createQueryBuilder('item')
             .innerJoin('item.transaction', 'priorTransaction')
+            .innerJoin('card_stock_settlements', 'priorSettlement', 'priorSettlement.transaction_item_id = item.id AND priorSettlement.branch_settlement_entry_id IS NOT NULL')
             .where('item.card_id = :cardId', { cardId: String(row.cardId) })
             .andWhere('priorTransaction.passenger_id = :passengerId', { passengerId })
             .andWhere('priorTransaction.transaction_type = :transactionType', { transactionType: TransactionType.SALE })
@@ -1794,10 +1814,6 @@ export class TransactionsService {
       if (savedItem.cardId && transaction.transactionType === TransactionType.SALE) {
         cardSaleItems.push(savedItem);
       }
-    }
-
-    if (transaction.status === TransactionStatus.APPROVED && cardSaleItems.length) {
-      await this.createCardStockSaleLoads(transaction, cardSaleItems, performedById);
     }
 
     const documentRows = Array.isArray(transactionPayload.documents)
@@ -1930,10 +1946,31 @@ export class TransactionsService {
         : TransactionPaymentDirection.PAYMENT;
     let cashTotal = 0;
     let chequeTotal = 0;
+    const savedPaymentRows: TransactionPayment[] = [];
+    const advanceRequests: Array<AdvanceApplicationPayloadDto | null> = [];
     for (let index = 0; index < paymentRows.length; index += 1) {
       const row = paymentRows[index];
-      const account = await resolveAccount(String(row.accountId));
       const paymentMethod = this.resolvePaymentMethod(row.paymentMethod);
+      const advanceVoucherId = normalizeNullableString(row.advanceVoucherId);
+      const isAdvance = Boolean(advanceVoucherId || row.settlementSource === TransactionSettlementSource.ADVANCE);
+      if (isAdvance && !advanceVoucherId) throw new BadRequestException('Advance voucher is required for an advance settlement row');
+      const preparedAdvance = advanceVoucherId
+        ? await this.voucherService.prepareAdvancePayment({
+            voucherId: advanceVoucherId,
+            amount: row.amount,
+            transactionType: transactionPayload.transactionType,
+            paymentMethod,
+            partyProfileId: String(transactionPayload.partyProfileId),
+            branchId: String(resolvedBranchId),
+            transactionDate: resolvedTransactionDate,
+          })
+        : null;
+      const accountId = preparedAdvance
+        ? String(preparedAdvance.voucher.advanceControlAccountId)
+        : String(row.accountId);
+      const account = preparedAdvance
+        ? preparedAdvance.voucher.advanceControlAccountSnapshot
+        : await resolveAccount(accountId);
       const chequePageId = normalizeNullableString(row.chequePageId);
       const amount = this.toNumber(row.amount);
       if (amount <= 0) {
@@ -1941,7 +1978,7 @@ export class TransactionsService {
       }
 
       if (paymentMethod === TransactionPaymentMethod.CASH) {
-        if (cashControlAccountId && String(account.id) !== cashControlAccountId) {
+        if (!isAdvance && cashControlAccountId && accountId !== cashControlAccountId) {
           throw new BadRequestException(
             'Cash payments must use the configured cash control account',
           );
@@ -1953,14 +1990,14 @@ export class TransactionsService {
 
       if (
         paymentMethod === TransactionPaymentMethod.CHEQUE &&
-        !String(row.referenceNumber ?? '').trim()
+        !String(preparedAdvance?.voucher.chequeNumber ?? row.referenceNumber ?? '').trim()
       ) {
         throw new BadRequestException('Cheque reference number is required');
       }
 
       if (
         paymentMethod === TransactionPaymentMethod.CHEQUE &&
-        !String(row.referenceDate ?? '').trim()
+        !String(preparedAdvance?.voucher.chequeDate ?? row.referenceDate ?? '').trim()
       ) {
         throw new BadRequestException('Cheque date is required');
       }
@@ -1978,7 +2015,7 @@ export class TransactionsService {
       if (
         paymentMethod === TransactionPaymentMethod.CHEQUE &&
         transactionPayload.transactionType === TransactionType.PURCHASE &&
-        !chequePageId
+        !chequePageId && !isAdvance
       ) {
         throw new BadRequestException('Cheque page is required for purchase payments');
       }
@@ -1996,27 +2033,31 @@ export class TransactionsService {
         );
       }
 
-      await this.transactionPaymentRepository.save(
+      const savedPayment = await this.transactionPaymentRepository.save(
         this.transactionPaymentRepository.create({
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          accountId: String(account.id),
+          accountId,
           accountSnapshot: account as TransactionReferenceSnapshotValue,
+          settlementSource: isAdvance ? TransactionSettlementSource.ADVANCE : TransactionSettlementSource.NORMAL,
+          advanceVoucherId,
           chequePageId,
           chequePageSnapshot,
           paymentMethod,
           paymentDirection,
-          referenceNumber: normalizeNullableString(row.referenceNumber),
-          referenceDate: normalizeNullableString(row.referenceDate),
-          branchName: normalizeNullableString(row.branchName),
-          drawnOn: normalizeNullableString(row.drawnOn),
+          referenceNumber: normalizeNullableString(preparedAdvance?.voucher.chequeNumber ?? row.referenceNumber),
+          referenceDate: normalizeNullableString(preparedAdvance?.voucher.chequeDate ?? row.referenceDate),
+          branchName: normalizeNullableString(preparedAdvance?.voucher.chequeBranch ?? row.branchName),
+          drawnOn: normalizeNullableString(preparedAdvance?.voucher.drawnOn ?? row.drawnOn),
           amount: String(row.amount),
           remarks: normalizeNullableString(row.remarks),
           createdBy: performedById,
           updatedBy: performedById,
         }),
       );
+      savedPaymentRows.push(savedPayment);
+      advanceRequests.push(preparedAdvance ? { voucherId: preparedAdvance.voucher.id, amount: String(row.amount) } : null);
     }
 
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
@@ -2030,6 +2071,40 @@ export class TransactionsService {
     transaction.byCheque = chequeTotal.toFixed(2);
     transaction.updatedBy = performedById;
     await this.transactionRepository.save(transaction);
+
+    if (advanceRequests.some(Boolean)) {
+      try {
+        await this.database2.transaction(manager =>
+          this.voucherService.reserveApplications(manager, transaction, savedPaymentRows, advanceRequests, performedById),
+        );
+      } catch (error) {
+        await this.transactionRepository.delete(transaction.id);
+        throw error;
+      }
+    }
+
+    if (shouldAutoFinalizeCardSale && cardSaleItems.length) {
+      const finalized = await this.database2.transaction(async manager => {
+        const transactionRepo = manager.getRepository(Transaction);
+        const locked = await transactionRepo.createQueryBuilder('transaction')
+          .where('transaction.id = :id', { id: transaction.id })
+          .setLock('pessimistic_write')
+          .getOne();
+        if (!locked || locked.status !== TransactionStatus.DRAFT) {
+          throw new BadRequestException('CARD sale is no longer available for automatic approval');
+        }
+        locked.status = TransactionStatus.APPROVED;
+        locked.approvedAt = now;
+        locked.approvedById = performedById;
+        locked.updatedBy = performedById;
+        const approved = await transactionRepo.save(locked);
+        await this.voucherService.applyReservations(manager, approved.id, performedById);
+        const approvedItems = await manager.getRepository(TransactionItem).find({ where: { transactionId: approved.id } });
+        await this.cardStockSaleLifecycleService.finalizeApprovedSale(manager, approved, approvedItems.filter(item => Boolean(item.cardId)), performedById);
+        return approved;
+      });
+      Object.assign(transaction, finalized);
+    }
 
     await this.transactionLogRepository.save(
       this.transactionLogRepository.create({
@@ -2138,25 +2213,31 @@ export class TransactionsService {
       transaction.counterSnapshot = counterSnapshot as TransactionReferenceSnapshotValue;
     }
 
-    transaction.status = TransactionStatus.APPROVED;
-    transaction.submittedAt = transaction.submittedAt ?? new Date();
-    transaction.approvedAt = new Date();
-    transaction.approvedById = performedById;
-    transaction.approvalRemarks = approvalRemarks;
-    transaction.updatedBy = performedById;
-
-    const saved = await this.transactionRepository.save(transaction);
-
-    const approvedItems = await this.transactionItemRepository.find({
-      where: { transactionId: saved.id },
-    });
-    if (approvedItems.some(item => item.cardId)) {
-      await this.createCardStockSaleLoads(saved, approvedItems.filter(item => Boolean(item.cardId)), performedById);
-    }
-
-    await this.transactionLogRepository.save(
-      this.transactionLogRepository.create({
-        transactionId: saved.id,
+    const saved = await this.database2.transaction(async manager => {
+      const transactionRepo = manager.getRepository(Transaction);
+      const itemRepo = manager.getRepository(TransactionItem);
+      const logRepo = manager.getRepository(TransactionLog);
+      const locked = await transactionRepo.createQueryBuilder('transaction')
+        .where('transaction.id = :id', { id: transaction.id })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!locked || locked.status !== TransactionStatus.DRAFT) throw new BadRequestException('Only draft transactions can be approved');
+      locked.number = transaction.number;
+      locked.counterId = transaction.counterId;
+      locked.counterSnapshot = transaction.counterSnapshot;
+      locked.status = TransactionStatus.APPROVED;
+      locked.submittedAt = locked.submittedAt ?? new Date();
+      locked.approvedAt = new Date();
+      locked.approvedById = performedById;
+      locked.approvalRemarks = approvalRemarks;
+      locked.updatedBy = performedById;
+      const approved = await transactionRepo.save(locked);
+      await this.voucherService.applyReservations(manager, approved.id, performedById);
+      const approvedItems = await itemRepo.find({ where: { transactionId: approved.id } });
+      const cardItems = approvedItems.filter(item => Boolean(item.cardId));
+      if (cardItems.length) await this.cardStockSaleLifecycleService.finalizeApprovedSale(manager, approved, cardItems, performedById);
+      await logRepo.save(logRepo.create({
+        transactionId: approved.id,
         action: TransactionLogAction.APPROVE,
         message: 'Transaction approved',
         metadata: {
@@ -2166,8 +2247,9 @@ export class TransactionsService {
         performedById,
         createdBy: performedById,
         updatedBy: performedById,
-      }),
-    );
+      }));
+      return approved;
+    });
 
     const approvedTransaction = await this.transactionRepository.findOne({
       where: { id: saved.id },
@@ -2176,38 +2258,6 @@ export class TransactionsService {
     await this.hydrateCounterSnapshot(approvedTransaction);
 
     return approvedTransaction;
-  }
-
-  private async createCardStockSaleLoads(
-    transaction: Transaction,
-    items: TransactionItem[],
-    actorId: string,
-  ) {
-    const branch = await this.branchRepository.findOne({ where: { id: transaction.branchId, isActive: true } });
-    if (!branch) throw new NotFoundException(`Branch ${transaction.branchId} not found for CARD sale`);
-    for (const item of items) {
-      if (!item.cardId) continue;
-      const card = await this.cardStockCardRepository.findOne({ where: { id: item.cardId } });
-      if (!card) throw new NotFoundException(`CARD ${item.cardId} not found`);
-      await this.cardStockTechnicalTransactionService.create({
-        manager: this.transactionItemRepository.manager,
-        operationCode: TransactionTypeProfileEnum.CARD_STOCK_LOAD,
-        branch,
-        transactionDate: transaction.transactionDate ?? new Date(),
-        referenceType: CardStockReferenceType.CARD_SALE,
-        referenceId: transaction.id,
-        actorId,
-        items: [{
-          cardId: card.id,
-          currencyId: item.currencyId,
-          productId: item.productId,
-          quantity: item.quantity,
-          per: item.per ?? '1',
-          cardSnapshot: item.cardSnapshot ?? { id: card.id, series: card.series, kitNumber: card.kitNumber, denomination: card.denomination, amount: card.amount, expirationDate: card.expirationDate },
-        }],
-      });
-      await this.transactionItemRepository.save({ ...item, updatedBy: actorId });
-    }
   }
 
   async getTransactionById(
@@ -2221,7 +2271,7 @@ export class TransactionsService {
         items: true,
         documents: true,
         additionalCharges: true,
-        payments: true,
+        payments: { advanceApplication: { voucher: true } },
         postings: true,
         logs: true,
       },

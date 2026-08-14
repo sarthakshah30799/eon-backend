@@ -19,17 +19,22 @@ import {
   CardTransferRequestItem,
   CardStockTransactionEntry,
   CardStockBalance,
+  CardStockSettlement,
 } from './entities';
 import { CardStockController } from './card-stock.controller';
 import { CardStockService } from './card-stock.service';
 import { CardTransferController } from './card-transfer.controller';
 import { CardTransferService } from './card-transfer.service';
 import { CardStockTechnicalTransactionService } from './card-stock-technical-transaction.service';
+import { CardStockSettlementService } from './card-stock-settlement.service';
+import { CardStockSettlementWorker } from './card-stock-settlement.worker';
+import { CardStockSettlementController } from './card-stock-settlement.controller';
+import { CardStockSaleLifecycleService } from './card-stock-sale-lifecycle.service';
 
 @Module({
-  imports: [AdditionalSettingModule, DayEndStartProcessModule, MailModule, TypeOrmModule.forFeature([Branch, Currency, PartyProfile, Product, ProductCardIssuer, User, UserRole]), TypeOrmModule.forFeature([CardStockReceipt, CardStockReceiptItem, CardStockCard, CardTransferRequest, CardTransferRequestItem, CardTransferRequestCard, CardStockTransactionEntry, CardStockBalance], 'database2')],
-  controllers: [CardStockController, CardTransferController],
-  providers: [CardStockService, CardTransferService, CardStockTechnicalTransactionService],
-  exports: [CardStockTechnicalTransactionService],
+  imports: [AdditionalSettingModule, DayEndStartProcessModule, MailModule, TypeOrmModule.forFeature([Branch, Currency, PartyProfile, Product, ProductCardIssuer, User, UserRole]), TypeOrmModule.forFeature([CardStockReceipt, CardStockReceiptItem, CardStockCard, CardTransferRequest, CardTransferRequestItem, CardTransferRequestCard, CardStockTransactionEntry, CardStockBalance, CardStockSettlement], 'database2')],
+  controllers: [CardStockController, CardTransferController, CardStockSettlementController],
+  providers: [CardStockService, CardTransferService, CardStockTechnicalTransactionService, CardStockSettlementService, CardStockSaleLifecycleService, CardStockSettlementWorker],
+  exports: [CardStockTechnicalTransactionService, CardStockSettlementService, CardStockSaleLifecycleService],
 })
 export class CardStockModule {}

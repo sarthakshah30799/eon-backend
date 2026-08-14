@@ -42,6 +42,7 @@ import { PassengerModule } from "./passengers/passenger.module";
 import { PurposeModule } from "./purpose/purpose.module";
 import { TransfersModule } from "./transfers/transfers.module";
 import { CardStockModule } from './card-stock/card-stock.module';
+import { VoucherModule } from "./vouchers/voucher.module";
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { CardStockModule } from './card-stock/card-stock.module';
     PurposeModule,
     TransfersModule,
     CardStockModule,
+    VoucherModule,
     MigrationToolModule,
     ReportsModule,
     DashboardModule,

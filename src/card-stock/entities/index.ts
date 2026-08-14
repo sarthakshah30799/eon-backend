@@ -6,3 +6,4 @@ export * from './card-transfer-request-item.entity';
 export * from './card-transfer-request-card.entity';
 export * from './card-stock-transaction-entry.entity';
 export * from './card-stock-balance.entity';
+export * from './card-stock-settlement.entity';

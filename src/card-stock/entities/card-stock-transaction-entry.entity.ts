@@ -1,13 +1,14 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, Unique } from 'typeorm';
 import { BaseEntity } from '../../base/base.entity';
 import { CardStockCard } from './card-stock-card.entity';
 import { CardStockOperationType, CardStockReferenceType } from '../card-stock.enums';
 import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
+import { Transaction } from '../../transactions/entities/transaction.entity';
 
 @Index('IDX_card_stock_entries_card_date', ['cardId', 'date'])
 @Index('IDX_card_stock_entries_branch_date', ['branchId', 'date'])
 @Index('IDX_card_stock_entries_reference', ['referenceType', 'referenceId'])
-@Index('UQ_card_stock_entries_card_operation_reference', ['cardId', 'operationType', 'referenceType', 'referenceId'], { unique: true })
+@Unique('UQ_card_stock_entries_card_operation_reference', ['cardId', 'referenceType', 'referenceId', 'operationType'])
 @Entity('card_stock_transaction_entries')
 export class CardStockTransactionEntry extends BaseEntity {
   @Column({ type: 'uuid', name: 'card_id' })
@@ -19,6 +20,10 @@ export class CardStockTransactionEntry extends BaseEntity {
 
   @Column({ type: 'uuid', name: 'transaction_id' })
   transactionId: string;
+
+  @ManyToOne(() => Transaction, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'transaction_id', foreignKeyConstraintName: 'FK_card_stock_entries_transaction' })
+  transaction: Transaction;
 
   @Column({ type: 'enum', enum: CardStockReferenceType, enumName: 'card_stock_reference_type_enum', name: 'reference_type' })
   referenceType: CardStockReferenceType;

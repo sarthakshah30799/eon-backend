@@ -102,7 +102,7 @@ export class Transaction extends BaseEntity {
   @Column({ type: "jsonb", name: "counter_snapshot", nullable: true })
   counterSnapshot: TransactionReferenceSnapshotValue;
 
-  @Column({ type: "enum", enum: CardStockReferenceType, name: "card_stock_reference_type", nullable: true })
+  @Column({ type: "enum", enum: CardStockReferenceType, enumName: "card_stock_reference_type_enum", name: "card_stock_reference_type", nullable: true })
   cardStockReferenceType: CardStockReferenceType | null;
 
   @Column({ type: "uuid", name: "card_stock_reference_id", nullable: true })
