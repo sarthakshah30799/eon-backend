@@ -7,7 +7,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionItem } from '../transactions/entities/transaction-item.entity';
 import { TransactionStatus, TransactionType, TransactionTypeProfileEnum } from '../transactions/transactions.enums';
 import { CardStockCardStatus, CardStockReferenceType } from './card-stock.enums';
-import { CardStockTechnicalTransactionService } from './card-stock-technical-transaction.service';
+import { CardStockTransactionService } from './card-stock-transaction.service';
 import { CardStockSettlementService } from './card-stock-settlement.service';
 import { CardStockCard } from './entities/card-stock-card.entity';
 
@@ -16,7 +16,7 @@ export class CardStockSaleLifecycleService {
   constructor(
     @InjectRepository(Branch) private readonly branchRepository: Repository<Branch>,
     @InjectRepository(ProductCardIssuer) private readonly productIssuerRepository: Repository<ProductCardIssuer>,
-    private readonly technicalTransactionService: CardStockTechnicalTransactionService,
+    private readonly cardStockTransactionService: CardStockTransactionService,
     private readonly settlementService: CardStockSettlementService,
   ) {}
 
@@ -71,7 +71,7 @@ export class CardStockSaleLifecycleService {
           throw new BadRequestException(`CARD item ${item.lineNo} is not eligible for reload`);
         }
         if (item.isReload) await this.assertReloadPassenger(manager, transaction, item);
-        await this.technicalTransactionService.create({
+        await this.cardStockTransactionService.create({
           manager,
           operationCode: TransactionTypeProfileEnum.CARD_STOCK_LOAD,
           branch,

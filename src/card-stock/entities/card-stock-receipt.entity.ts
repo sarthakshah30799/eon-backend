@@ -14,11 +14,11 @@ export class CardStockReceipt extends BaseEntity {
   @Column({ type: 'date', name: 'receipt_date' })
   receiptDate: string;
 
-  @Column({ type: 'uuid', name: 'ho_branch_id' })
-  hoBranchId: string;
+  @Column({ type: 'uuid', name: 'branch_id' })
+  branchId: string;
 
-  @Column({ type: 'jsonb', name: 'ho_branch_snapshot' })
-  hoBranchSnapshot: TransactionReferenceSnapshotValue;
+  @Column({ type: 'jsonb', name: 'branch_snapshot' })
+  branchSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: 'uuid', name: 'issuer_party_profile_id' })
   issuerPartyProfileId: string;

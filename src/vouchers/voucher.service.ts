@@ -202,10 +202,10 @@ export class VoucherService implements OnModuleInit {
       if (!Object.values(VoucherAccountMode).includes(accountMode)) throw new BadRequestException("Unsupported voucher A/C Type");
       if (party.entityType?.id !== entityType.id) throw new BadRequestException("Party Profile does not match selected Entity Type");
       await this.assertPartyVisible(party, actorId, workplace.branch.id);
-      const cashControlId = normalize(await this.additionalSettings.getSettingTextValue("TRANSACTION_ACCOUNTING", "CASH_CONTROL_ACCOUNT"));
-      if (accountMode === VoucherAccountMode.CASH && partyDto.headerAccountId !== cashControlId) throw new BadRequestException("Cash vouchers must use the configured Cash Control Account");
       headerAccount = await this.account(partyDto.headerAccountId);
-      if (accountMode === VoucherAccountMode.BANK_CHEQUE && normalizeUpper(headerAccount.accountType?.value) !== "BANK_LEDGER") throw new BadRequestException("Bank / Cheque vouchers require a BANK LEDGER account");
+      const headerLedgerTypes = [headerAccount.accountType?.value, headerAccount.accountType?.label].map(normalizeUpper);
+      if (accountMode === VoucherAccountMode.CASH && !headerLedgerTypes.includes("CASH_LEDGER")) throw new BadRequestException("Cash vouchers require a CASH LEDGER account");
+      if (accountMode === VoucherAccountMode.BANK_CHEQUE && !headerLedgerTypes.includes("BANK_LEDGER")) throw new BadRequestException("Bank / Cheque vouchers require a BANK LEDGER account");
       const hasCheque = [partyDto.chequeNumber, partyDto.chequeDate, partyDto.chequeBranch, partyDto.drawnOn].every(value => normalize(value));
       if (accountMode === VoucherAccountMode.BANK_CHEQUE && !hasCheque) throw new BadRequestException("Cheque Number, Cheque Date, Branch, and Drawn On are required");
       if (accountMode !== VoucherAccountMode.BANK_CHEQUE && [partyDto.chequeNumber, partyDto.chequeDate, partyDto.chequeBranch, partyDto.drawnOn].some(value => normalize(value))) throw new BadRequestException("Cheque fields are only allowed for Bank / Cheque vouchers");

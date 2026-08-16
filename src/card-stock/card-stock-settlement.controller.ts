@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Session, UseGuards } from '@
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { AuthenticatedSession } from '../auth/types/session-context';
-import { BulkSettleCardStockDto, CancelCardStockSettlementDto, CardStockSettlementQueryDto } from './dto/card-stock-settlement.dto';
+import { AcceptBranchCardSettlementDto, BulkSettleCardStockDto, CancelCardStockSettlementDto, CardStockSettlementQueryDto, RejectBranchCardSettlementDto, SubmitBranchCardSettlementDto } from './dto/card-stock-settlement.dto';
 import { CardStockSettlementService } from './card-stock-settlement.service';
 
 @ApiTags('card-stock-settlements')
@@ -22,6 +22,24 @@ export class CardStockSettlementController {
   @ApiOperation({ summary: 'Settle selected CARD items with issuers' })
   bulkSettle(@Body() dto: BulkSettleCardStockDto, @Session() session: AuthenticatedSession) {
     return this.settlementService.bulkSettle(dto, session);
+  }
+
+  @Post('branch-submit')
+  @ApiOperation({ summary: 'Submit selected CARD items for branch-to-HO settlement' })
+  submitBranch(@Body() dto: SubmitBranchCardSettlementDto, @Session() session: AuthenticatedSession) {
+    return this.settlementService.submitBranch(dto, session);
+  }
+
+  @Post('branch-accept')
+  @ApiOperation({ summary: 'Accept selected branch CARD settlement requests' })
+  acceptBranch(@Body() dto: AcceptBranchCardSettlementDto, @Session() session: AuthenticatedSession) {
+    return this.settlementService.acceptBranch(dto, session);
+  }
+
+  @Post('branch-reject')
+  @ApiOperation({ summary: 'Reject selected branch CARD settlement requests' })
+  rejectBranch(@Body() dto: RejectBranchCardSettlementDto, @Session() session: AuthenticatedSession) {
+    return this.settlementService.rejectBranch(dto, session);
   }
 
   @Get(':id')

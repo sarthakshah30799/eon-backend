@@ -22,22 +22,22 @@ export class StockRevaluationItem extends BaseEntity {
   @Column({ type: 'jsonb', name: 'currency_snapshot', nullable: true })
   currencySnapshot: Record<string, unknown> | null;
 
-  @Column({ type: 'numeric', precision: 18, scale: 7, name: 'closing_quantity' })
+  @Column({ type: 'numeric', precision: 18, scale: 7, name: 'closing_quantity', default: 0 })
   closingQuantity: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 7, name: 'awp' })
+  @Column({ type: 'numeric', precision: 18, scale: 7, name: 'awp', default: 0 })
   awp: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'closing_inr_amount' })
+  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'closing_inr_amount', default: 0 })
   closingInrAmount: string;
 
   @Column({ type: 'numeric', precision: 18, scale: 7, name: 'new_rate' })
   newRate: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'new_inr_amount' })
+  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'new_inr_amount', default: 0 })
   newInrAmount: string;
 
-  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'difference_inr' })
+  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'difference_inr', default: 0 })
   differenceInr: string;
 }
 

@@ -139,6 +139,12 @@ export class PermissionsGuard implements CanActivate {
     } else if (path.includes('/chequebooks')) {
       menuPath = '/cheque-books';
       allowedMenuPaths = ['/cheque-books', '/admin/chequebooks'];
+    } else if (path.includes('/card-stock/settlements')) {
+      menuPath = '/card-settlement';
+    } else if (path.includes('/card-stock/transfers')) {
+      menuPath = '/card-transfer';
+    } else if (path.includes('/card-stock/receipts')) {
+      menuPath = '/card-stock';
     } else if (path.includes('/journal-vouchers')) {
       menuPath = '/journal-vouchers';
     } else if (path.includes('/receipts')) {

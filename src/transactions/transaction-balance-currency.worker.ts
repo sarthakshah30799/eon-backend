@@ -21,9 +21,7 @@ import {
   TransactionType,
 } from "./transactions.enums";
 import { roundMoney, roundToScale } from "./transaction-accounting.util";
-import {
-  normalizeBalanceProfileType,
-} from "./transaction-balance-profile.util";
+import { normalizeBalanceProfileType } from "./transaction-balance-profile.util";
 import { TransactionReferenceSnapshotValue } from "./types/transaction-snapshot.types";
 
 const RETRY_DELAY_MS = 30_000;
@@ -138,7 +136,11 @@ function normalizeCurrencyIds(value: unknown): string[] {
     return single ? [single] : [];
   }
 
-  return [...new Set(value.map((entry) => String(entry ?? "").trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value.map((entry) => String(entry ?? "").trim()).filter(Boolean),
+    ),
+  ];
 }
 
 @Injectable()
@@ -297,7 +299,9 @@ export class TransactionBalanceCurrencyWorker
           ...(changes.availableAt !== undefined
             ? { availableAt: changes.availableAt }
             : {}),
-          ...(changes.lockedAt !== undefined ? { lockedAt: changes.lockedAt } : {}),
+          ...(changes.lockedAt !== undefined
+            ? { lockedAt: changes.lockedAt }
+            : {}),
           ...(changes.lockedById !== undefined
             ? { lockedById: changes.lockedById }
             : {}),
@@ -344,15 +348,18 @@ export class TransactionBalanceCurrencyWorker
         processedAt: shouldFailPermanently ? new Date() : null,
         lockedAt: null,
         lockedById: null,
-        errorMessage:
-          error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
-  private async resolveContext(event: TransactionEvent): Promise<RebuildContext> {
+  private async resolveContext(
+    event: TransactionEvent,
+  ): Promise<RebuildContext> {
     const payload = (event.payload ?? {}) as BalanceEventPayload;
-    const transactionId = String(payload.transactionId ?? event.transactionId ?? "").trim();
+    const transactionId = String(
+      payload.transactionId ?? event.transactionId ?? "",
+    ).trim();
     const transaction = transactionId
       ? await this.transactionRepository.findOne({
           where: { id: transactionId },
@@ -366,14 +373,19 @@ export class TransactionBalanceCurrencyWorker
         (await loadEntitySnapshot(this.branchRepository, transaction.branchId));
       const counterSnapshot =
         (transaction.counterSnapshot as TransactionReferenceSnapshotValue) ??
-        (await loadEntitySnapshot(this.counterRepository, transaction.counterId));
+        (await loadEntitySnapshot(
+          this.counterRepository,
+          transaction.counterId,
+        ));
       const profileType = normalizeBalanceProfileType(
         transaction.partyProfileSnapshot?.type ??
           transaction.transactionPartyProfileType ??
           (await this.resolvePartyProfileType(transaction.partyProfileId)),
       );
       const currencyIds = normalizeCurrencyIds(
-        transaction.items?.map((item) => item.currencyId) ?? payload.currencyIds,
+        transaction.items
+          ?.filter((item) => !item.cardId)
+          .map((item) => item.currencyId) ?? payload.currencyIds,
       );
 
       if (!currencyIds.length) {
@@ -452,7 +464,9 @@ export class TransactionBalanceCurrencyWorker
       .andWhere("balance.profileType = :profileType", {
         profileType: context.profileType,
       })
-      .andWhere("balance.date < :cutoff", { cutoff: context.transactionCreatedAt })
+      .andWhere("balance.date < :cutoff", {
+        cutoff: context.transactionCreatedAt,
+      })
       .orderBy("balance.date", "DESC")
       .addOrderBy("balance.updatedAt", "DESC")
       .getOne();
@@ -496,6 +510,7 @@ export class TransactionBalanceCurrencyWorker
           AND t.branch_id = $4
           AND t.counter_id = $5
           AND ti.currency_id = $6
+          AND ti.card_id IS NULL
           AND t.created_at >= $7
         ORDER BY t.created_at ASC, t.id ASC, ti.line_no ASC
       `,
@@ -561,7 +576,9 @@ export class TransactionBalanceCurrencyWorker
         sellQty: row.transaction_type === TransactionType.SALE ? quantity : 0,
         sellRs: 0,
         saleHoldCostAmount:
-          row.transaction_type === TransactionType.SALE ? saleHoldCostAmount : 0,
+          row.transaction_type === TransactionType.SALE
+            ? saleHoldCostAmount
+            : 0,
       });
     }
 
@@ -575,9 +592,10 @@ export class TransactionBalanceCurrencyWorker
     let runningQty = Number(previousRow?.closing ?? 0);
     let runningRs = Number(previousRow?.closingRs ?? 0);
     const currencySnapshot =
-      ((await loadEntitySnapshot(this.currencyRepository, currencyId)) as
-        | TransactionReferenceSnapshotValue
-        | null) ?? null;
+      ((await loadEntitySnapshot(
+        this.currencyRepository,
+        currencyId,
+      )) as TransactionReferenceSnapshotValue | null) ?? null;
     const seeds: BalanceRowSeed[] = [];
 
     for (const row of orderedRows) {

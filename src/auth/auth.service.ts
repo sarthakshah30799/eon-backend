@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { UserService } from '../users/user.service';
 import { LoginUserDto } from '../users/dto/login-user.dto';
 import { User } from '../users/user.entity';
@@ -10,6 +12,7 @@ import { SessionPolicyService } from '../session-policy/session-policy.service';
 import { MailService } from '../mail/mail.service';
 import { SetWorkplaceDto } from './dto/set-workplace.dto';
 import { ConfigService } from '../config/config.service';
+import { Counter } from '../counters/counter.entity';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +23,8 @@ export class AuthService {
     private readonly sessionPolicyService: SessionPolicyService,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
+    @InjectRepository(Counter)
+    private readonly counterRepository: Repository<Counter>,
   ) { }
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
@@ -72,7 +77,26 @@ export class AuthService {
       if (!hasAssignment) {
         throw new BadRequestException('Selected branch and counter are not assigned to this user');
       }
+
+      const selectedCounter = await this.counterRepository.findOne({
+        where: { id: dto.counterId },
+        relations: ['branch'],
+      });
+
+      if (!selectedCounter?.branch?.id || selectedCounter.branch.id !== dto.branchId) {
+        throw new BadRequestException('Selected counter does not belong to the selected branch');
+      }
     }
+
+    console.log('[workplace-debug] setWorkplace', {
+      userId: session.userId,
+      isAdmin: user.isAdmin === true,
+      isHoStaff,
+      requestedBranchId: dto.branchId,
+      requestedCounterId: dto.counterId,
+      previousSessionBranchId: session.activeBranchId ?? null,
+      previousSessionCounterId: session.activeCounterId ?? null,
+    });
 
     session.activeBranchId = dto.branchId;
     session.activeCounterId = dto.counterId;

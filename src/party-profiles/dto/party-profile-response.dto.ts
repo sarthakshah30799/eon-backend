@@ -213,6 +213,12 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Division Factor" })
   divisionFactor?: number;
 
+  @ApiPropertyOptional({ description: "Allowed CARD number length for this issuer" })
+  cardNumberLength?: number | null;
+
+  @ApiPropertyOptional({ description: "Whether masked CARD numbers are accepted for this issuer" })
+  allowCardNumberMasking?: boolean;
+
   @ApiProperty({ description: "Party profile type", enum: ClientType })
   type: ClientType;
 
@@ -311,6 +317,8 @@ export class PartyProfileResponseDto {
     dto.bankBranchName = entity.bankBranchName;
     dto.ffmcRegNo = entity.ffmcRegNo;
     dto.ffmcRegDate = entity.ffmcRegDate;
+    dto.cardNumberLength = entity.cardNumberLength ?? null;
+    dto.allowCardNumberMasking = Boolean(entity.allowCardNumberMasking);
     dto.divisionFactor = entity.divisionFactor !== null && entity.divisionFactor !== undefined
       ? Number(entity.divisionFactor)
       : undefined;

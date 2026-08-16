@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../base/base.entity';
 import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
-import { CardStockSettlementStatus } from '../card-stock.enums';
+import { CardStockSettlementMode, CardStockSettlementStatus } from '../card-stock.enums';
 import { CardStockCard } from './card-stock-card.entity';
 import { CardStockTransactionEntry } from './card-stock-transaction-entry.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
@@ -86,8 +86,41 @@ export class CardStockSettlement extends BaseEntity {
   @Column({ type: 'numeric', precision: 18, scale: 2, name: 'settlement_amount' })
   settlementAmount: string;
 
-  @Column({ type: 'date', name: 'sale_date' })
-  saleDate: string;
+  @Column({ type: 'timestamptz', name: 'sale_date' })
+  saleDate: Date;
+
+  @Column({ type: 'enum', enum: CardStockSettlementMode, name: 'settlement_mode' })
+  settlementMode: CardStockSettlementMode;
+
+  @Column({ type: 'timestamptz', name: 'branch_requested_date', nullable: true })
+  branchRequestedDate: Date | null;
+
+  @Column({ type: 'citext', name: 'branch_reference', nullable: true })
+  branchReference: string | null;
+
+  @Column({ type: 'text', name: 'branch_remarks', nullable: true })
+  branchRemarks: string | null;
+
+  @Column({ type: 'timestamptz', name: 'branch_requested_at', nullable: true })
+  branchRequestedAt: Date | null;
+
+  @Column({ type: 'uuid', name: 'branch_requested_by_id', nullable: true })
+  branchRequestedById: string | null;
+
+  @Column({ type: 'timestamptz', name: 'ho_accepted_at', nullable: true })
+  hoAcceptedAt: Date | null;
+
+  @Column({ type: 'uuid', name: 'ho_accepted_by_id', nullable: true })
+  hoAcceptedById: string | null;
+
+  @Column({ type: 'timestamptz', name: 'ho_rejected_at', nullable: true })
+  hoRejectedAt: Date | null;
+
+  @Column({ type: 'uuid', name: 'ho_rejected_by_id', nullable: true })
+  hoRejectedById: string | null;
+
+  @Column({ type: 'text', name: 'ho_rejection_reason', nullable: true })
+  hoRejectionReason: string | null;
 
   @Column({ type: 'timestamptz', name: 'branch_settlement_date', nullable: true })
   branchSettlementDate: Date | null;
@@ -99,11 +132,14 @@ export class CardStockSettlement extends BaseEntity {
   @JoinColumn({ name: 'branch_settlement_entry_id', foreignKeyConstraintName: 'FK_card_stock_settlements_branch_entry' })
   branchSettlementEntry: CardStockTransactionEntry | null;
 
-  @Column({ type: 'date', name: 'issuer_settlement_date', nullable: true })
-  issuerSettlementDate: string | null;
+  @Column({ type: 'timestamptz', name: 'issuer_settlement_date', nullable: true })
+  issuerSettlementDate: Date | null;
 
   @Column({ type: 'citext', name: 'issuer_reference', nullable: true })
   issuerReference: string | null;
+
+  @Column({ type: 'text', name: 'issuer_remarks', nullable: true })
+  issuerRemarks: string | null;
 
   @Column({ type: 'uuid', name: 'issuer_settlement_entry_id', nullable: true })
   issuerSettlementEntryId: string | null;

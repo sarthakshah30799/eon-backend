@@ -43,6 +43,8 @@ export type CardStockReferenceType =
   (typeof CardStockReferenceType)[keyof typeof CardStockReferenceType];
 
 export const CardStockSettlementStatus = {
+  PENDING_BRANCH_SETTLEMENT: 'PENDING_BRANCH_SETTLEMENT',
+  PENDING_HO_ACCEPTANCE: 'PENDING_HO_ACCEPTANCE',
   PENDING_ISSUER_SETTLEMENT: 'PENDING_ISSUER_SETTLEMENT',
   ISSUER_SETTLED: 'ISSUER_SETTLED',
   CANCELLED: 'CANCELLED',
@@ -50,6 +52,14 @@ export const CardStockSettlementStatus = {
 
 export type CardStockSettlementStatus =
   (typeof CardStockSettlementStatus)[keyof typeof CardStockSettlementStatus];
+
+export const CardStockSettlementMode = {
+  AUTO: 'AUTO',
+  MANUAL: 'MANUAL',
+} as const;
+
+export type CardStockSettlementMode =
+  (typeof CardStockSettlementMode)[keyof typeof CardStockSettlementMode];
 
 export const CardTransferStatus = {
   HELD: 'HELD',
