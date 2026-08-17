@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type, Transform } from "class-transformer";
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from "class-validator";
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUUID, Matches, Max, Min, ValidateNested } from "class-validator";
+import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
 import { VoucherEntryDirection } from "../voucher.enums";
 
 export class CreateVoucherItemDto {
@@ -19,6 +20,9 @@ export class CreatePartyVoucherDto {
   @ApiProperty() @IsUUID() headerAccountId: string;
   @ApiProperty() @IsUUID() entityTypeOptionId: string;
   @ApiProperty() @IsUUID() partyProfileId: string;
+  @ApiPropertyOptional() @EmptyStringToUndefined() @IsOptional() @IsString() @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]$/i, { message: "PAN Number must be a valid 10-character Indian PAN" }) panNumber?: string;
+  @ApiPropertyOptional() @EmptyStringToUndefined() @IsOptional() @IsString() panName?: string;
+  @ApiPropertyOptional() @EmptyStringToUndefined() @IsOptional() @IsDateString() panDob?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() chequeNumber?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() chequeDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() chequeBranch?: string;

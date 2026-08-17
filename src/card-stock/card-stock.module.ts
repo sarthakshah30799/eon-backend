@@ -10,6 +10,7 @@ import { PartyProfile } from '../party-profiles/party-profile.entity';
 import { Product } from '../products/product.entity';
 import { ProductCardIssuer } from '../products/entities/product-card-issuer.entity';
 import { User } from '../users/user.entity';
+import { UserModule } from '../users/user.module';
 import { UserRole } from '../user-roles/user-role.entity';
 import {
   CardStockCard,
@@ -21,6 +22,7 @@ import {
   CardStockTransactionEntry,
   CardStockBalance,
   CardStockSettlement,
+  CardStockSettlementDocument,
 } from './entities';
 import { CardStockController } from './card-stock.controller';
 import { CardStockService } from './card-stock.service';
@@ -33,7 +35,7 @@ import { CardStockSettlementController } from './card-stock-settlement.controlle
 import { CardStockSaleLifecycleService } from './card-stock-sale-lifecycle.service';
 
 @Module({
-  imports: [AdditionalSettingModule, DayEndStartProcessModule, MailModule, SpreadsheetUploadModule, TypeOrmModule.forFeature([Branch, Currency, PartyProfile, Product, ProductCardIssuer, User, UserRole]), TypeOrmModule.forFeature([CardStockReceipt, CardStockReceiptItem, CardStockCard, CardTransferRequest, CardTransferRequestItem, CardTransferRequestCard, CardStockTransactionEntry, CardStockBalance, CardStockSettlement], 'database2')],
+  imports: [AdditionalSettingModule, DayEndStartProcessModule, MailModule, SpreadsheetUploadModule, UserModule, TypeOrmModule.forFeature([Branch, Currency, PartyProfile, Product, ProductCardIssuer, User, UserRole]), TypeOrmModule.forFeature([CardStockReceipt, CardStockReceiptItem, CardStockCard, CardTransferRequest, CardTransferRequestItem, CardTransferRequestCard, CardStockTransactionEntry, CardStockBalance, CardStockSettlement, CardStockSettlementDocument], 'database2')],
   controllers: [CardStockController, CardTransferController, CardStockSettlementController],
   providers: [CardStockService, CardTransferService, CardStockTransactionService, CardStockSettlementService, CardStockSaleLifecycleService, CardStockSettlementWorker],
   exports: [CardStockTransactionService, CardStockSettlementService, CardStockSaleLifecycleService],

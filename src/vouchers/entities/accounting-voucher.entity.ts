@@ -34,6 +34,8 @@ export class AccountingVoucher extends BaseEntity {
   @Column({ type: "uuid", name: "party_profile_id", nullable: true }) partyProfileId: string | null;
   @Column({ type: "jsonb", name: "party_profile_snapshot", nullable: true }) partyProfileSnapshot: TransactionReferenceSnapshotValue;
   @Column({ type: "citext", name: "pan_number", nullable: true }) panNumber: string | null;
+  @Column({ type: "citext", name: "pan_name", nullable: true }) panName: string | null;
+  @Column({ type: "date", name: "pan_dob", nullable: true }) panDob: string | null;
 
   @Column({ type: "citext", name: "cheque_number", nullable: true }) chequeNumber: string | null;
   @Column({ type: "citext", name: "normalized_cheque_number", nullable: true }) normalizedChequeNumber: string | null;

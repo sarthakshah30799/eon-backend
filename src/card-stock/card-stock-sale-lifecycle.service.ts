@@ -110,7 +110,6 @@ export class CardStockSaleLifecycleService {
     if (!transaction.passengerId) throw new BadRequestException('CARD reload requires an existing matched passenger');
     const rows: Array<{ id: string }> = await manager.query(
       `SELECT ti.id FROM transaction_items ti JOIN transactions t ON t.id=ti.transaction_id
-       JOIN card_stock_settlements settlement ON settlement.transaction_item_id=ti.id AND settlement.branch_settlement_entry_id IS NOT NULL
        WHERE ti.card_id=$1 AND t.passenger_id=$2 AND t.transaction_type='SALE' AND t.status='APPROVED' AND t.id<>$3 LIMIT 1`,
       [item.cardId, transaction.passengerId, transaction.id],
     );

@@ -434,6 +434,7 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
   { path: '/reports', name: 'Reports', parentPath: null, isAdmin: false, sortOrder: 43 },
   { path: '/reports/:slug', name: 'Report Detail', parentPath: '/reports', isAdmin: false, sortOrder: 1 },
   { path: '/reports/currency-balance-report', name: 'Currency Balance', parentPath: '/reports', isAdmin: false, sortOrder: 2 },
+  { path: '/reports/stock-revaluations', name: 'Stock Revaluation', parentPath: '/reports', isAdmin: false, sortOrder: 3 },
   ...buildCrudMenuSeeds({
     basePath: '/admin/manual-bill-books',
     name: 'Manual Bill Books',

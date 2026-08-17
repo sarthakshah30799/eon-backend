@@ -131,7 +131,8 @@ export class PermissionsGuard implements CanActivate {
     if (isFakeCurrencyDraft) {
       menuPath = '/fake-currencies';
     } else if (path.includes('/stock-revaluations')) {
-      menuPath = '/stock-revaluations';
+      menuPath = '/reports/stock-revaluations';
+      allowedMenuPaths = ['/reports/stock-revaluations', '/stock-revaluations'];
     } else if (path.includes('/roles')) {
       menuPath = '/admin/user-role';
     } else if (path.includes('/manual-bill-books')) {

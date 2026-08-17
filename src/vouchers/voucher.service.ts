@@ -31,6 +31,37 @@ const REQUIRED_OPTIONS = [
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) => normalize(value).replace(/[\s-]+/g, "_").toUpperCase();
+const isInrCurrencyCode = (value: unknown) => normalizeUpper(value) === "INR";
+const isIndividualToken = (value: unknown) => normalizeUpper(value) === "INDIVIDUAL";
+const normalizePan = (value: unknown) => normalize(value).toUpperCase();
+const toDateOnly = (value: unknown) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const raw = normalize(value);
+  return raw ? raw.slice(0, 10) : null;
+};
+const isIndividualVoucherParty = (party: PartyProfile, entityType: SelectOption) =>
+  Boolean(party.isIndividual) ||
+  isIndividualToken(entityType.value) ||
+  isIndividualToken(entityType.label) ||
+  isIndividualToken(party.entityType?.value) ||
+  isIndividualToken(party.entityType?.label);
+const resolveVoucherPan = (party: PartyProfile, entityType: SelectOption, dto: CreatePartyVoucherDto) => {
+  if (!isIndividualVoucherParty(party, entityType)) {
+    return {
+      panNumber: party.panNo ?? null,
+      panName: party.panName ?? null,
+      panDob: toDateOnly(party.panDob),
+    };
+  }
+
+  return {
+    panNumber: normalizePan(dto.panNumber) || party.panNo || null,
+    panName: normalize(dto.panName) || party.panName || null,
+    panDob: toDateOnly(dto.panDob) || toDateOnly(party.panDob),
+  };
+};
 const money = (cents: number) => (cents / 100).toFixed(2);
 const cents = (value: unknown) => {
   const numeric = Number(value);
@@ -101,10 +132,32 @@ export class VoucherService implements OnModuleInit {
     return option;
   }
 
-  private async account(id: string, usage?: VoucherType) {
-    const account = await this.accountRepository.findOne({ where: { id, active: true }, relations: ["currency", "accountType"] });
+  private async accountCurrencyCode(accountId: string) {
+    const rows = await this.accountRepository.query(
+      `SELECT c.currency_code AS "currencyCode"
+       FROM account_profiles ap
+       INNER JOIN currencies c ON c.id = ap.currency_id
+       WHERE ap.id = $1
+         AND ap.deleted_at IS NULL
+         AND c.deleted_at IS NULL`,
+      [accountId],
+    ) as Array<{ currencyCode?: string }>;
+    return rows[0]?.currencyCode ?? null;
+  }
+
+  private async account(id: string, usage?: VoucherType, role: "header" | "item" | "advance" = "item") {
+    const account = await this.accountRepository.findOne({
+      where: { id, active: true },
+      relations: ["accountType"],
+    });
     if (!account) throw new NotFoundException(`Active Account Profile ${id} not found`);
-    if (normalizeUpper(account.currency?.currencyCode) !== "INR") throw new BadRequestException("Voucher accounts must use INR currency");
+    const currencyCode = await this.accountCurrencyCode(account.id);
+    if (!isInrCurrencyCode(currencyCode)) {
+      if (role === "advance") {
+        throw new BadRequestException("ADVANCE_CONTROL_ACCOUNT additional setting must point to an INR Account Profile");
+      }
+      throw new BadRequestException(`Voucher account ${account.accountCode} must use INR currency`);
+    }
     if (usage === VoucherType.RECEIPT && !account.receipt) throw new BadRequestException("Item account is not enabled for Receipt vouchers");
     if (usage === VoucherType.PAYMENT && !account.payment) throw new BadRequestException("Item account is not enabled for Payment vouchers");
     if (usage === VoucherType.JOURNAL && !account.journalVoucher) throw new BadRequestException("Item account is not enabled for Journal vouchers");
@@ -150,7 +203,7 @@ export class VoucherService implements OnModuleInit {
   private async resolveAdvanceAccount() {
     const id = normalize(await this.additionalSettings.getSettingTextValue("TRANSACTION_ACCOUNTING", "ADVANCE_CONTROL_ACCOUNT"));
     if (!id) throw new BadRequestException("Missing ADVANCE_CONTROL_ACCOUNT additional setting");
-    return this.account(id);
+    return this.account(id, undefined, "advance");
   }
 
   private calculate(type: VoucherType, items: CreateVoucherItemDto[]) {
@@ -202,7 +255,7 @@ export class VoucherService implements OnModuleInit {
       if (!Object.values(VoucherAccountMode).includes(accountMode)) throw new BadRequestException("Unsupported voucher A/C Type");
       if (party.entityType?.id !== entityType.id) throw new BadRequestException("Party Profile does not match selected Entity Type");
       await this.assertPartyVisible(party, actorId, workplace.branch.id);
-      headerAccount = await this.account(partyDto.headerAccountId);
+      headerAccount = await this.account(partyDto.headerAccountId, undefined, "header");
       const headerLedgerTypes = [headerAccount.accountType?.value, headerAccount.accountType?.label].map(normalizeUpper);
       if (accountMode === VoucherAccountMode.CASH && !headerLedgerTypes.includes("CASH_LEDGER")) throw new BadRequestException("Cash vouchers require a CASH LEDGER account");
       if (accountMode === VoucherAccountMode.BANK_CHEQUE && !headerLedgerTypes.includes("BANK_LEDGER")) throw new BadRequestException("Bank / Cheque vouchers require a BANK LEDGER account");
@@ -215,7 +268,7 @@ export class VoucherService implements OnModuleInit {
     for (const item of dto.items) {
       const [itemType, itemAccount, subledger] = await Promise.all([
         this.option(item.itemTypeOptionId, "VOUCHER_ITEM_TYPE"),
-        this.account(item.accountId, type),
+        this.account(item.accountId, type, "item"),
         item.subledgerPartyProfileId ? this.party(item.subledgerPartyProfileId) : Promise.resolve(null),
       ]);
       if (type !== VoucherType.JOURNAL) {
@@ -239,7 +292,8 @@ export class VoucherService implements OnModuleInit {
         accountTypeOptionId: accountType?.id ?? null, accountTypeSnapshot: accountType ? await this.snapshot(this.optionRepository, accountType.id) : null, accountMode,
         headerAccountId: headerAccount?.id ?? null, headerAccountSnapshot: headerAccount ? await this.snapshot(this.accountRepository, headerAccount.id) : null,
         entityTypeOptionId: entityType?.id ?? null, entityTypeSnapshot: entityType ? await this.snapshot(this.optionRepository, entityType.id) : null,
-        partyProfileId: party?.id ?? null, partyProfileSnapshot: party ? await this.snapshot(this.partyRepository, party.id) : null, panNumber: party?.panNo ?? null,
+        partyProfileId: party?.id ?? null, partyProfileSnapshot: party ? await this.snapshot(this.partyRepository, party.id) : null,
+        ...(party && entityType && partyDto ? resolveVoucherPan(party, entityType, partyDto) : { panNumber: null, panName: null, panDob: null }),
         chequeNumber: accountMode === VoucherAccountMode.BANK_CHEQUE ? normalize(partyDto?.chequeNumber) : null,
         normalizedChequeNumber: accountMode === VoucherAccountMode.BANK_CHEQUE ? normalizeUpper(partyDto?.chequeNumber) : null,
         chequeDate: accountMode === VoucherAccountMode.BANK_CHEQUE ? normalize(partyDto?.chequeDate).slice(0, 10) : null,

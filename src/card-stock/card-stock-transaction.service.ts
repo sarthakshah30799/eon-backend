@@ -89,8 +89,11 @@ export class CardStockTransactionService {
 
     if (input.items?.length) {
       const itemRepository = input.manager.getRepository(TransactionItem);
-      await itemRepository.save(
-        input.items.map((item, index) =>
+      const sortedItems = [...input.items].sort((left, right) =>
+        String(left.referenceId ?? left.cardId ?? '').localeCompare(String(right.referenceId ?? right.cardId ?? ''))
+      );
+      for (const [index, item] of sortedItems.entries()) {
+        await itemRepository.save(
           itemRepository.create({
             transactionId: transaction.id,
             transaction,
@@ -107,8 +110,8 @@ export class CardStockTransactionService {
             createdBy: input.actorId,
             updatedBy: input.actorId,
           }),
-        ),
-      );
+        );
+      }
     }
     const createsBranchSettlementPosting = input.items?.some(
       (item) =>

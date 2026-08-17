@@ -2021,11 +2021,6 @@ export class TransactionsService {
           const priorPassengerSale = await this.transactionItemRepository
             .createQueryBuilder("item")
             .innerJoin("item.transaction", "priorTransaction")
-            .innerJoin(
-              "card_stock_settlements",
-              "priorSettlement",
-              "priorSettlement.transaction_item_id = item.id AND priorSettlement.branch_settlement_entry_id IS NOT NULL",
-            )
             .where("item.card_id = :cardId", { cardId: String(row.cardId) })
             .andWhere("priorTransaction.passenger_id = :passengerId", {
               passengerId,

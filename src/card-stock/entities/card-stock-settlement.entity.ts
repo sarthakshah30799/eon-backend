@@ -1,8 +1,9 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from '../../base/base.entity';
 import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
-import { CardStockSettlementMode, CardStockSettlementStatus } from '../card-stock.enums';
+import { CardStockSettlementMode, CardStockSettlementSaleKind, CardStockSettlementStatus } from '../card-stock.enums';
 import { CardStockCard } from './card-stock-card.entity';
+import { CardStockSettlementDocument } from './card-stock-settlement-document.entity';
 import { CardStockTransactionEntry } from './card-stock-transaction-entry.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { TransactionItem } from '../../transactions/entities/transaction-item.entity';
@@ -12,6 +13,8 @@ import { TransactionItem } from '../../transactions/entities/transaction-item.en
 @Index('IDX_card_stock_settlements_issuer', ['issuerPartyProfileId'])
 @Index('IDX_card_stock_settlements_sale_date', ['saleDate'])
 @Index('UQ_card_stock_settlements_card_item', ['cardId', 'transactionItemId'], { unique: true })
+@Index('IDX_card_stock_settlements_branch_document', ['branchDocumentId'])
+@Index('IDX_card_stock_settlements_issuer_document', ['issuerDocumentId'])
 @Entity('card_stock_settlements')
 export class CardStockSettlement extends BaseEntity {
   @Column({ type: 'uuid', name: 'card_id' })
@@ -77,6 +80,9 @@ export class CardStockSettlement extends BaseEntity {
   @Column({ type: 'numeric', precision: 18, scale: 2 })
   denomination: string;
 
+  @Column({ type: 'numeric', precision: 18, scale: 7, name: 'sale_buy_rate' })
+  saleBuyRate: string;
+
   @Column({ type: 'numeric', precision: 18, scale: 7, name: 'buy_rate' })
   buyRate: string;
 
@@ -86,11 +92,34 @@ export class CardStockSettlement extends BaseEntity {
   @Column({ type: 'numeric', precision: 18, scale: 2, name: 'settlement_amount' })
   settlementAmount: string;
 
+  @Column({ type: 'numeric', precision: 18, scale: 7, name: 'issuer_rate', nullable: true })
+  issuerRate: string | null;
+
+  @Column({ type: 'numeric', precision: 18, scale: 2, name: 'issuer_settlement_amount', nullable: true })
+  issuerSettlementAmount: string | null;
+
+  @Column({ type: 'uuid', name: 'branch_document_id', nullable: true })
+  branchDocumentId: string | null;
+
+  @ManyToOne(() => CardStockSettlementDocument, document => document.branchItems, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'branch_document_id', foreignKeyConstraintName: 'FK_card_stock_settlements_branch_document' })
+  branchDocument: CardStockSettlementDocument | null;
+
+  @Column({ type: 'uuid', name: 'issuer_document_id', nullable: true })
+  issuerDocumentId: string | null;
+
+  @ManyToOne(() => CardStockSettlementDocument, document => document.issuerItems, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'issuer_document_id', foreignKeyConstraintName: 'FK_card_stock_settlements_issuer_document' })
+  issuerDocument: CardStockSettlementDocument | null;
+
   @Column({ type: 'timestamptz', name: 'sale_date' })
   saleDate: Date;
 
   @Column({ type: 'enum', enum: CardStockSettlementMode, name: 'settlement_mode' })
   settlementMode: CardStockSettlementMode;
+
+  @Column({ type: 'citext', name: 'sale_kind', default: CardStockSettlementSaleKind.FRESH })
+  saleKind: CardStockSettlementSaleKind;
 
   @Column({ type: 'timestamptz', name: 'branch_requested_date', nullable: true })
   branchRequestedDate: Date | null;

@@ -132,7 +132,6 @@ export class CardStockService {
       WHERE c.current_branch_id=$1 AND c.status='SOLD' AND c.reserved_by_transfer_id IS NULL
         AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
         AND EXISTS (SELECT 1 FROM transaction_items ti JOIN transactions t ON t.id=ti.transaction_id
-          JOIN card_stock_settlements settlement ON settlement.transaction_item_id=ti.id AND settlement.branch_settlement_entry_id IS NOT NULL
           WHERE ti.card_id=c.id AND t.passenger_id=$5 AND t.transaction_type='SALE' AND t.status='APPROVED')
       ORDER BY c.series, c.kit_number`, [branchId, currencyId, productId, issuerPartyProfileId, passengerId]);
   }
