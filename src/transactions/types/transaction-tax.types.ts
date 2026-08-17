@@ -6,6 +6,8 @@ export type TransactionTaxSplitMode = "IGST" | "CGST_SGST" | null;
 export interface TransactionTaxLineInput {
   quantity?: string | number | null;
   rate?: string | number | null;
+  per?: string | number | null;
+  finalAmount?: string | number | null;
 }
 
 export interface TransactionAdditionalChargeTaxLineInput {

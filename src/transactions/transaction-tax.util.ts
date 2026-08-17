@@ -2,6 +2,7 @@ import { roundMoney } from "./transaction-accounting.util";
 import {
   TransactionTaxCalculationInput,
   TransactionTaxComponentBreakdown,
+  TransactionTaxLineInput,
   TransactionTaxSplitMode,
   TransactionTaxSummary,
 } from "./types/transaction-tax.types";
@@ -57,6 +58,21 @@ const resolveSplitMode = (
 
 const calculateChargeTaxAmount = (baseAmount: number, taxRatePercent: number) =>
   (baseAmount * taxRatePercent) / 100;
+
+const calculateItemRowFinalAmount = (row: TransactionTaxLineInput) => {
+  const explicitFinalAmount = String(row.finalAmount ?? "").trim();
+  if (explicitFinalAmount !== "") {
+    return toMoney(toNumber(explicitFinalAmount));
+  }
+
+  const quantity = toNumber(row.quantity);
+  const rate = toNumber(row.rate);
+  const per = toNumber(row.per);
+  const divisor = per > 0 ? per : 1;
+  const rowTotal = toMoney(quantity * rate / divisor);
+
+  return toMoney(Math.round(rowTotal));
+};
 
 const calculateItemTaxableAmount = (baseAmount: number) => {
   if (baseAmount <= 25000) {
@@ -139,9 +155,7 @@ export function calculateTransactionTaxSummary(
   const splitMode = applyTax ? resolveSplitMode(branchStateName, partyStateName) : null;
 
   const itemBaseAmount = items.reduce((sum, row) => {
-    const quantity = toNumber(row.quantity);
-    const rate = toNumber(row.rate);
-    return sum + toMoney(quantity * rate);
+    return sum + calculateItemRowFinalAmount(row);
   }, 0);
 
   const additionalChargeBaseAmount = additionalCharges.reduce((sum, row) => {
@@ -154,9 +168,7 @@ export function calculateTransactionTaxSummary(
     ? toMoney(calculateChargeTaxAmount(itemTaxableAmount, gstRatePercent))
     : 0;
   const itemRows = items.map((row, index) => {
-    const quantity = toNumber(row.quantity);
-    const rate = toNumber(row.rate);
-    const rowBaseAmount = toMoney(quantity * rate);
+    const rowBaseAmount = calculateItemRowFinalAmount(row);
     const rowTaxableAmount = applyTax ? rowBaseAmount : 0;
     const rowTaxAmount = applyTax
       ? toMoney(calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent))
