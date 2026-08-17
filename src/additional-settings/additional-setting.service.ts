@@ -550,6 +550,21 @@ export class AdditionalSettingService {
     );
   }
 
+  async getSettingBooleanValue(
+    categoryCode: string,
+    subcategoryCode: string,
+    defaultValue = false,
+  ): Promise<boolean> {
+    const setting = await this.settingRepository.findOne({
+      where: { code: normalizeCode(subcategoryCode), nodeType: NodeType.Setting },
+    });
+    if (!setting?.parentId) return defaultValue;
+    const parent = await this.settingRepository.findOne({
+      where: { id: setting.parentId, code: normalizeCode(categoryCode), nodeType: NodeType.Category },
+    });
+    return parent ? setting.valueBoolean ?? defaultValue : defaultValue;
+  }
+
   async findAll(): Promise<AdvancedSetting[]> {
     return this.settingRepository.find({
       where: { nodeType: NodeType.Category },

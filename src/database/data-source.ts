@@ -21,7 +21,7 @@ export const AppDataSource = new DataSource({
 
   entities: [
     __dirname +
-      "/../!(manual-bill-books|chequebooks|transactions|transfers|card-stock|vouchers|monthly-locks|day-end-start-process)/**/*.entity{.ts,.js}",
+      "/../!(manual-bill-books|chequebooks|transactions|transfers|card-stock|vouchers|monthly-locks|day-end-start-process|stock-revaluation)/**/*.entity{.ts,.js}",
   ],
   migrations: [__dirname + "/../migrations/*{.ts,.js}"],
   synchronize: configService.database.synchronize,

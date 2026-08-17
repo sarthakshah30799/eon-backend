@@ -11,6 +11,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  Max,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -343,6 +344,18 @@ export class CreatePartyProfileDto {
   @IsString()
   @IsOptional()
   ffmcRegDate?: string;
+
+  @ApiPropertyOptional({ description: "Allowed CARD number length for this issuer. Defaults to 16.", example: 16 })
+  @IsInt()
+  @Min(8)
+  @Max(19)
+  @IsOptional()
+  cardNumberLength?: number;
+
+  @ApiPropertyOptional({ description: "When true, CARD stock upload and entry may use a masked number of the configured length.", default: false })
+  @IsBoolean()
+  @IsOptional()
+  allowCardNumberMasking?: boolean;
 
   @ApiPropertyOptional({ description: "Division Factor", example: 1 })
   @IsNumber()

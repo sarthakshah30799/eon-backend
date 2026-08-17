@@ -543,8 +543,11 @@ export class PartyProfileService {
       ...rest
     } = normalized;
 
+    const isCardIssuer = (normalized.type ?? dto.type) === ClientType.CARD_ISSUER_PROFILE;
     const client = this.partyProfileRepository.create({
       ...rest,
+      cardNumberLength: isCardIssuer ? (normalized.cardNumberLength ?? 16) : null,
+      allowCardNumberMasking: isCardIssuer ? Boolean(normalized.allowCardNumberMasking) : false,
       location: location ? ({ id: location } as any) : null,
       kycRiskCategory: kycRiskCategory ? ({ id: kycRiskCategory } as any) : null,
       defaultAgent: defaultAgent ? ({ id: defaultAgent } as any) : null,
@@ -620,6 +623,15 @@ export class PartyProfileService {
       ...updatableFields
     } = normalized;
     const updates = pickDefinedFields(updatableFields);
+    const nextType = normalized.type ?? client.type;
+    if (nextType !== ClientType.CARD_ISSUER_PROFILE) {
+      delete updates.cardNumberLength;
+      delete updates.allowCardNumberMasking;
+      client.cardNumberLength = null;
+      client.allowCardNumberMasking = false;
+    } else if (updates.cardNumberLength == null) {
+      updates.cardNumberLength = client.cardNumberLength ?? 16;
+    }
     Object.assign(client, {
       ...updates,
       dateOfIntro: normalized.dateOfIntro ? new Date(normalized.dateOfIntro) : client.dateOfIntro,
@@ -784,7 +796,6 @@ export class PartyProfileService {
   async findByIdForUser(
     id: string,
     userId?: string,
-    activeBranchId?: string,
   ): Promise<PartyProfileResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({
@@ -814,16 +825,6 @@ export class PartyProfileService {
       if (!this.canAccessPartyProfileType(user, client.type, "view")) {
         throw new NotFoundException(`Party profile type ${client.type} not found`);
       }
-
-      if (
-        !this.isPartyProfileVisibleToUser(
-        client,
-        user,
-        activeBranchId,
-      )
-      ) {
-        throw new NotFoundException(`Party Profile with id ${id} not found`);
-      }
     }
 
     const createdByUser = await this.resolveCreatedByUser(client.createdBy);
@@ -833,7 +834,6 @@ export class PartyProfileService {
   async getCommissionTemplate(
     id: string,
     userId?: string,
-    activeBranchId?: string,
   ): Promise<string> {
     const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({
@@ -846,15 +846,6 @@ export class PartyProfileService {
 
     if (user) {
       this.assertPartyProfileAccess(user, client.type, "view");
-      if (
-        !this.isPartyProfileVisibleToUser(
-          client,
-          user,
-          activeBranchId,
-        )
-      ) {
-        throw new NotFoundException(`Party Profile with id ${id} not found`);
-      }
     }
 
     const commissionRules = await this.partyProfileCommissionRuleRepository.find({
@@ -1019,10 +1010,9 @@ export class PartyProfileService {
   async findAll(
     query: PartyProfileListQueryDto,
     userId?: string,
-    activeBranchId?: string,
+    branchId?: string,
   ): Promise<PartyProfileListResponseDto> {
     const user = userId ? await this.getCurrentUser(userId) : null;
-    const userCanSeeAllBranches = Boolean(user?.isAdmin || this.isReviewer(user));
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
@@ -1071,23 +1061,14 @@ export class PartyProfileService {
       });
     }
 
-    if (!userCanSeeAllBranches && !activeBranchId) {
-      return {
-        data: [],
-        page,
-        limit,
-        totalItems: 0,
-        totalPages: 0,
-      };
-    }
+    const requestedBranchIds = [
+      ...(Array.isArray(query.branchIds) ? query.branchIds : []),
+      ...(branchId ? [branchId] : []),
+    ].filter((id, index, ids) => Boolean(id) && ids.indexOf(id) === index);
 
-    if (!userCanSeeAllBranches && activeBranchId) {
-      qb.andWhere("pp.branchId = :branchId", { branchId: activeBranchId });
-    }
-
-    if (Array.isArray(query.branchIds) && query.branchIds.length > 0) {
+    if (requestedBranchIds.length > 0) {
       qb.andWhere("pp.branchId IN (:...branchIds)", {
-        branchIds: query.branchIds,
+        branchIds: requestedBranchIds,
       });
     }
 

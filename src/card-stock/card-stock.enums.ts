@@ -43,6 +43,8 @@ export type CardStockReferenceType =
   (typeof CardStockReferenceType)[keyof typeof CardStockReferenceType];
 
 export const CardStockSettlementStatus = {
+  PENDING_BRANCH_SETTLEMENT: 'PENDING_BRANCH_SETTLEMENT',
+  PENDING_HO_ACCEPTANCE: 'PENDING_HO_ACCEPTANCE',
   PENDING_ISSUER_SETTLEMENT: 'PENDING_ISSUER_SETTLEMENT',
   ISSUER_SETTLED: 'ISSUER_SETTLED',
   CANCELLED: 'CANCELLED',
@@ -50,6 +52,41 @@ export const CardStockSettlementStatus = {
 
 export type CardStockSettlementStatus =
   (typeof CardStockSettlementStatus)[keyof typeof CardStockSettlementStatus];
+
+export const CardStockSettlementMode = {
+  AUTO: 'AUTO',
+  MANUAL: 'MANUAL',
+} as const;
+
+export type CardStockSettlementMode =
+  (typeof CardStockSettlementMode)[keyof typeof CardStockSettlementMode];
+
+export const CardStockSettlementSaleKind = {
+  FRESH: 'FRESH',
+  RELOAD: 'RELOAD',
+} as const;
+
+export type CardStockSettlementSaleKind =
+  (typeof CardStockSettlementSaleKind)[keyof typeof CardStockSettlementSaleKind];
+
+export const CardStockSettlementDocumentKind = {
+  BRANCH_HO: 'BRANCH_HO',
+  HO_ISSUER: 'HO_ISSUER',
+} as const;
+
+export type CardStockSettlementDocumentKind =
+  (typeof CardStockSettlementDocumentKind)[keyof typeof CardStockSettlementDocumentKind];
+
+export const CardStockSettlementDocumentStatus = {
+  PENDING_HO_ACCEPTANCE: 'PENDING_HO_ACCEPTANCE',
+  ACCEPTED: 'ACCEPTED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+  ISSUER_SETTLED: 'ISSUER_SETTLED',
+} as const;
+
+export type CardStockSettlementDocumentStatus =
+  (typeof CardStockSettlementDocumentStatus)[keyof typeof CardStockSettlementDocumentStatus];
 
 export const CardTransferStatus = {
   HELD: 'HELD',

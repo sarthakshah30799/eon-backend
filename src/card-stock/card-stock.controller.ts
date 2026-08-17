@@ -1,8 +1,11 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Session, UseGuards } from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Res, Session, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { ApiConsumes, ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CreateCardStockReceiptDto } from './dto/card-stock-receipt.dto';
 import { CardStockService } from './card-stock.service';
+import { AuthenticatedSession } from '../auth/types/session-context';
 
 @ApiTags('card-stock')
 @ApiCookieAuth('sessionId')
@@ -16,6 +19,26 @@ export class CardStockController {
   findAll(@Session() session: any) {
     const branchId = session?.isAdmin || session?.isHo || session?.isHoStaff ? undefined : session?.activeBranchId;
     return this.cardStockService.findAll(branchId);
+  }
+
+  @Get('cards/template')
+  @ApiOperation({ summary: 'Download CARD stock upload template' })
+  async downloadTemplate(@Res() response: Response) {
+    response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    response.setHeader('Content-Disposition', 'attachment; filename="card-stock-upload-template.xlsx"');
+    response.send(this.cardStockService.getUploadTemplate());
+  }
+
+  @Post('cards/preview')
+  @ApiOperation({ summary: 'Preview CARD stock CSV or Excel rows for one receipt item' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  previewUpload(
+    @UploadedFile() file: { buffer?: Buffer; originalname?: string } | undefined,
+    @Body('issuerPartyProfileId') issuerPartyProfileId: string,
+  ) {
+    if (!file) throw new BadRequestException('CARD stock file is required');
+    return this.cardStockService.previewUpload(file, issuerPartyProfileId);
   }
 
   @Get('cards/available')
@@ -34,12 +57,11 @@ export class CardStockController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get CARD stock receipt' })
-  findById(@Param('id') id: string) { return this.cardStockService.findById(id); }
+  findById(@Param('id') id: string, @Session() session: AuthenticatedSession) { return this.cardStockService.findById(id, session); }
 
   @Post()
   @ApiOperation({ summary: 'Create CARD stock receipt' })
-  create(@Body() dto: CreateCardStockReceiptDto, @Session() session: any) {
-    if (!session?.userId || (!session?.isAdmin && !session?.isHo && !session?.isHoStaff)) throw new ForbiddenException('Only HO/Admin users can create CARD stock receipts');
-    return this.cardStockService.create(dto, session.userId);
+  create(@Body() dto: CreateCardStockReceiptDto, @Session() session: AuthenticatedSession) {
+    return this.cardStockService.create(dto, session);
   }
 }

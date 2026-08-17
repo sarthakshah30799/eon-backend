@@ -1,71 +1,67 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import { CardStockSettlementStatus } from '../card-stock.enums';
+import { Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsNumberString,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import {
+  CardStockSettlementDocumentKind,
+  CardStockSettlementDocumentStatus,
+} from '../card-stock.enums';
 
-export class CardStockSettlementQueryDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsEnum(CardStockSettlementStatus)
-  status?: CardStockSettlementStatus;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  issuerPartyProfileId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  currencyId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  branchId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsDateString()
-  saleDateFrom?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsDateString()
-  saleDateTo?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsDateString()
-  settlementDateFrom?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsDateString()
-  settlementDateTo?: string;
+export class CardStockSettlementDocumentQueryDto {
+  @ApiPropertyOptional() @IsOptional() @IsEnum(CardStockSettlementDocumentStatus) status?: CardStockSettlementDocumentStatus;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(CardStockSettlementDocumentKind) kind?: CardStockSettlementDocumentKind;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() issuerPartyProfileId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() currencyId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
 }
 
-export class BulkSettleCardStockDto {
-  @ApiProperty({ type: [String] })
+export class CardStockUnsettledQueryDto {
+  @ApiProperty() @IsEnum(CardStockSettlementDocumentKind) kind: CardStockSettlementDocumentKind;
+  @ApiProperty() @IsUUID() issuerPartyProfileId: string;
+  @ApiProperty() @IsUUID() currencyId: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() hoBranchId?: string;
+}
+
+export class CreateCardStockSettlementItemDto {
+  @ApiProperty() @IsUUID() id: string;
+  @ApiProperty({ example: '84.0000000' }) @IsNumberString() rate: string;
+}
+
+export class CreateCardStockSettlementDocumentDto {
+  @ApiProperty({ enum: CardStockSettlementDocumentKind }) @IsEnum(CardStockSettlementDocumentKind) kind: CardStockSettlementDocumentKind;
+  @ApiProperty() @IsUUID() issuerPartyProfileId: string;
+  @ApiProperty() @IsUUID() currencyId: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() hoBranchId?: string;
+  @ApiProperty({ example: '2026-08-16' }) @IsDateString() transactionDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(150) reference?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) remarks?: string;
+  @ApiProperty({ type: [CreateCardStockSettlementItemDto] })
   @IsArray()
   @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
-  settlementIds: string[];
-
-  @ApiProperty({ example: '2026-08-15' })
-  @IsDateString()
-  issuerSettlementDate: string;
-
-  @ApiProperty()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(150)
-  issuerReference: string;
+  @ValidateNested({ each: true })
+  @Type(() => CreateCardStockSettlementItemDto)
+  items: CreateCardStockSettlementItemDto[];
 }
 
-export class CancelCardStockSettlementDto {
-  @ApiProperty()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(500)
-  reason: string;
+export class RejectCardStockSettlementDocumentDto {
+  @ApiProperty() @IsString() @MinLength(1) @MaxLength(500) reason: string;
+}
+
+export class CancelCardStockSettlementDocumentDto {
+  @ApiProperty() @IsString() @MinLength(1) @MaxLength(500) reason: string;
 }

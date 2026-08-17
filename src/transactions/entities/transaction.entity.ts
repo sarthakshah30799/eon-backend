@@ -63,7 +63,7 @@ import { CardStockReferenceType } from "../../card-stock/card-stock.enums";
   `"status" <> 'APPROVED' OR "number" IS NOT NULL`,
 )
 @Check(
-  "CHK_transactions_party_profile_required",
+  "CHK_transactions_party_profile_required_v2",
   `UPPER("slug") IN ('FAKE_CURRENCY', 'CARD_STOCK', 'CARD_TRANSFER_OUT', 'CARD_TRANSFER_IN', 'CARD_STOCK_LOAD', 'CARD_SELL', 'CARD_SETTLE', 'CARD_RETURN', 'CARD_VOID') OR "party_profile_id" IS NOT NULL`,
 )
 @Entity("transactions")

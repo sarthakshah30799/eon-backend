@@ -16,6 +16,7 @@ import {
 } from "../types/transaction-snapshot.types";
 import { TransactionTaxSplitMode } from "../transactions.enums";
 import { CardStockCard } from "../../card-stock/entities/card-stock-card.entity";
+import { CardStockReferenceType } from "../../card-stock/card-stock.enums";
 
 @Index("IDX_transaction_items_transaction_id", ["transactionId"])
 @Index("IDX_transaction_items_transaction_line", ["transactionId", "lineNo"], {
@@ -51,14 +52,33 @@ export class TransactionItem extends BaseEntity {
   @Column({ type: "uuid", name: "card_id", nullable: true })
   cardId: string | null;
 
+  @Column({
+    type: "enum",
+    enum: CardStockReferenceType,
+    enumName: "card_stock_reference_type_enum",
+    name: "card_stock_reference_type",
+    nullable: true,
+  })
+  cardStockReferenceType: CardStockReferenceType | null;
+
+  @Column({ type: "uuid", name: "card_stock_reference_id", nullable: true })
+  cardStockReferenceId: string | null;
+
   @ManyToOne(() => CardStockCard, { nullable: true, onDelete: "RESTRICT" })
-  @JoinColumn({ name: "card_id", foreignKeyConstraintName: "FK_transaction_items_card_id" })
+  @JoinColumn({
+    name: "card_id",
+    foreignKeyConstraintName: "FK_transaction_items_card_id",
+  })
   card: CardStockCard | null;
 
   @Column({ type: "uuid", name: "issuer_party_profile_id", nullable: true })
   issuerPartyProfileId: string | null;
 
-  @Column({ type: "jsonb", name: "issuer_party_profile_snapshot", nullable: true })
+  @Column({
+    type: "jsonb",
+    name: "issuer_party_profile_snapshot",
+    nullable: true,
+  })
   issuerPartyProfileSnapshot: TransactionReferenceSnapshotValue;
 
   @Column({ type: "jsonb", name: "card_snapshot", nullable: true })
@@ -179,14 +199,41 @@ export class TransactionItem extends BaseEntity {
   })
   splitMode: TransactionTaxSplitMode | null;
 
-  @Column({ type: "numeric", name: "commission", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "commission",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   commission: string | null;
 
-  @Column({ type: "numeric", name: "hold_cost", precision: 18, scale: 7, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "hold_cost",
+    precision: 18,
+    scale: 7,
+    nullable: true,
+  })
   holdCost: string | null;
 
-  @Column({ type: "numeric", name: "profit", precision: 18, scale: 2, nullable: true })
+  @Column({
+    type: "numeric",
+    name: "profit",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
   profit: string | null;
+
+  @Column({
+    type: "numeric",
+    name: "profit_amount",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  profitAmount: string | null;
 
   @Column({
     type: "numeric",

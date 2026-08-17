@@ -285,4 +285,10 @@ export class PartyProfile extends BaseEntity {
 
   @Column({ type: "timestamptz", nullable: true })
   ffmcRegDate: Date;
+
+  @Column({ type: "integer", name: "card_number_length", nullable: true })
+  cardNumberLength: number | null;
+
+  @Column({ type: "boolean", name: "allow_card_number_masking", default: false })
+  allowCardNumberMasking: boolean;
 }

@@ -64,11 +64,10 @@ export class PartyProfileController {
     @Query('branchId') branchId: string | undefined,
     @Session() session: any,
   ): Promise<PartyProfileListResponseDto> {
-    const canSeeAllBranches = Boolean(session?.isAdmin || session?.isHoStaff);
     return this.partyProfileService.findAll(
       query,
       session.userId,
-      canSeeAllBranches ? branchId?.trim() || undefined : session.activeBranchId,
+      branchId?.trim() || undefined,
     );
   }
 
@@ -91,7 +90,6 @@ export class PartyProfileController {
     return this.partyProfileService.findByIdForUser(
       id,
       session.userId,
-      session.activeBranchId,
     );
   }
 
@@ -160,7 +158,6 @@ export class PartyProfileController {
     const csv = await this.partyProfileService.getCommissionTemplate(
       id,
       session.userId,
-      session.activeBranchId,
     );
 
     res.status(HttpStatus.OK);

@@ -21,7 +21,7 @@ import { CardTransferRequestCard } from './entities/card-transfer-request-card.e
 import { CardTransferRequestItem } from './entities/card-transfer-request-item.entity';
 import { CardStockCardStatus, CardStockReferenceType, CardTransferStatus } from './card-stock.enums';
 import { CardTransferItemDto, CreateCardTransferDto } from './dto/card-transfer.dto';
-import { CardStockTechnicalTransactionService } from './card-stock-technical-transaction.service';
+import { CardStockTransactionService } from './card-stock-transaction.service';
 import { TransactionReferenceSnapshot } from '../transactions/types/transaction-snapshot.types';
 
 @Injectable()
@@ -41,7 +41,7 @@ export class CardTransferService {
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly mailService: MailService,
-    private readonly technicalTransactionService: CardStockTechnicalTransactionService,
+    private readonly cardStockTransactionService: CardStockTransactionService,
   ) {}
 
   private isHoAccess(session: AuthenticatedSession) {
@@ -95,7 +95,7 @@ export class CardTransferService {
     const cards = await manager.getRepository(CardStockCard).createQueryBuilder('card')
       .leftJoinAndSelect('card.receiptItem', 'receiptItem')
       .where('card.id IN (:...ids)', { ids })
-      .setLock('pessimistic_write')
+      .setLock('pessimistic_write', undefined, ['card'])
       .getMany();
     if (cards.length !== ids.length) throw new BadRequestException('One or more selected CARD stock records were not found');
     for (const card of cards) {
@@ -186,6 +186,7 @@ export class CardTransferService {
       const request = await manager.getRepository(CardTransferRequest).createQueryBuilder('request').where('request.id = :id', { id }).setLock('pessimistic_write').getOne();
       if (!request) throw new NotFoundException('CARD transfer request not found');
       if (request.status !== CardTransferStatus.HELD) throw new BadRequestException('Only held CARD transfers can be edited');
+      if (request.destinationBranchId !== destination.id) throw new BadRequestException('Destination branch cannot be changed after the CARD transfer request is created');
       const oldSelections = await manager.getRepository(CardTransferRequestCard).find({ where: { transferId: id } });
       const oldIds = oldSelections.map(selection => selection.cardId);
       if (oldIds.length) {
@@ -233,7 +234,7 @@ export class CardTransferService {
       if (!locked || locked.status !== CardTransferStatus.HELD) throw new BadRequestException('CARD transfer has already been processed');
       const selections = await manager.getRepository(CardTransferRequestCard).find({ where: { transferId: id }, relations: ['card', 'card.receiptItem', 'transferItem'] });
       const cards = await this.loadLockedCards(manager, selections.map(selection => selection.cardId), request.sourceBranchId, id);
-      const technicalItems = selections.map(selection => ({
+      const transactionItems = selections.map(selection => ({
         cardId: selection.cardId,
         currencyId: selection.card.receiptItem.currencyId,
         productId: selection.card.receiptItem.productId,
@@ -243,8 +244,8 @@ export class CardTransferService {
       }));
       for (const card of cards.values()) { card.currentBranchId = destination.id; card.currentBranchSnapshot = (await loadEntitySnapshot(this.branchRepository, destination.id) ?? { id: destination.id }) as TransactionReferenceSnapshot; card.status = CardStockCardStatus.AVAILABLE; card.reservedByTransferId = null; card.reservedAt = null; card.updatedBy = session.userId; }
       await manager.getRepository(CardStockCard).save([...cards.values()]);
-      const transferOutTransaction = await this.technicalTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_OUT, branch: source, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: technicalItems });
-      const transferInTransaction = await this.technicalTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_IN, branch: destination, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: technicalItems });
+      const transferOutTransaction = await this.cardStockTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_OUT, branch: source, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: transactionItems });
+      const transferInTransaction = await this.cardStockTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_IN, branch: destination, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: transactionItems });
       locked.status = CardTransferStatus.ACCEPTED; locked.acceptedAt = new Date(); locked.acceptedById = session.userId; locked.acceptanceRemarks = null; locked.sourceTransactionId = transferOutTransaction.id; locked.destinationTransactionId = transferInTransaction.id; locked.updatedBy = session.userId; await manager.getRepository(CardTransferRequest).save(locked);
     });
     await this.notifyBranchUsers(request.sourceBranchId, `CARD transfer ${request.transactionNumber} accepted`, `CARD transfer request ${request.transactionNumber} was accepted by the destination branch.`);

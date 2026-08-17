@@ -38,6 +38,21 @@ import {
 
 const RETRY_DELAY_MS = 30_000;
 const MAX_ATTEMPTS = 10;
+const CARD_ACCOUNTING_CATEGORY = "TRANSACTION_ACCOUNTING";
+const CARD_SELL_CONTROL_ACCOUNT = "CARD_SELL_CONTROL_ACCOUNT";
+const CARD_LOAD_CONTROL_ACCOUNT = "CARD_LOAD_CONTROL_ACCOUNT";
+const CARD_CONTROL_ACCOUNT = "CARD_CONTROL_ACCOUNT";
+const CARD_PURCHASE_CONTROL_ACCOUNT = "CARD_PURCHASE_CONTROL_ACCOUNT";
+const CARD_PROFIT_CONTROL_ACCOUNT = "CARD_PROFIT_CONTROL_ACCOUNT";
+const CARD_TECHNICAL_SLUGS = [
+  "CARD_STOCK",
+  "CARD_TRANSFER_OUT",
+  "CARD_TRANSFER_IN",
+  "CARD_STOCK_LOAD",
+  "CARD_SELL",
+  "CARD_RETURN",
+  "CARD_VOID",
+] as const;
 
 type PostingDraft = {
   transactionId: string;
@@ -230,17 +245,52 @@ export class TransactionAccountPostingWorker
         return;
       }
 
-      if (transaction.transactionType === TransactionType.SALE && transaction.items.some(item => Boolean(item.cardId))) {
-        const readiness: Array<{ incomplete_count: string }> = await this.database2.query(`
+      if (transaction.slug === "CARD_SETTLE") {
+        const isBranchSettlement = transaction.items.some(
+          (item) => item.cardStockReferenceType === "CARD_BRANCH_SETTLEMENT",
+        );
+        if (isBranchSettlement) {
+          await this.rebuildCardBranchSettlement(transaction);
+        } else {
+          await this.transactionAccountPostingRepository.delete({
+            transactionId: transaction.id,
+          });
+        }
+        await this.finishEvent(event.id, {
+          status: TransactionEventStatus.PROCESSED,
+          processedAt: new Date(),
+          lockedAt: null,
+          lockedById: null,
+          errorMessage: null,
+        });
+        return;
+      }
+
+      if (
+        transaction.transactionType === TransactionType.SALE &&
+        transaction.items.some((item) => Boolean(item.cardId))
+      ) {
+        const readiness: Array<{ incomplete_count: string }> =
+          await this.database2.query(
+            `
           SELECT count(*)::text AS incomplete_count
           FROM transaction_items item
           WHERE item.transaction_id=$1 AND item.card_id IS NOT NULL AND (
             NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries entry WHERE entry.card_id=item.card_id AND entry.reference_id=$1 AND entry.operation_type='SELL')
             OR NOT EXISTS (SELECT 1 FROM card_stock_settlements settlement WHERE settlement.transaction_item_id=item.id AND settlement.branch_settlement_entry_id IS NOT NULL)
             OR NOT EXISTS (SELECT 1 FROM card_stock_settlements settlement JOIN card_stock_balance balance ON balance.card_id=item.card_id AND balance.branch_id=$2 AND balance.series=settlement.series AND balance.settle_entry_id=settlement.branch_settlement_entry_id WHERE settlement.transaction_item_id=item.id)
-          )`, [transaction.id, transaction.branchId]);
+          )`,
+            [transaction.id, transaction.branchId],
+          );
         if (Number(readiness[0]?.incomplete_count ?? 0) > 0) {
-          throw new BadRequestException('CARD sale lifecycle is not complete; account posting will retry');
+          await this.finishEvent(event.id, {
+            status: TransactionEventStatus.PROCESSED,
+            processedAt: new Date(),
+            lockedAt: null,
+            lockedById: null,
+            errorMessage: null,
+          });
+          return;
         }
       }
 
@@ -303,7 +353,9 @@ export class TransactionAccountPostingWorker
           ...(changes.availableAt !== undefined
             ? { availableAt: changes.availableAt }
             : {}),
-          ...(changes.lockedAt !== undefined ? { lockedAt: changes.lockedAt } : {}),
+          ...(changes.lockedAt !== undefined
+            ? { lockedAt: changes.lockedAt }
+            : {}),
           ...(changes.lockedById !== undefined
             ? { lockedById: changes.lockedById }
             : {}),
@@ -316,11 +368,202 @@ export class TransactionAccountPostingWorker
     });
   }
 
+  private async rebuildCardBranchSettlement(transaction: Transaction) {
+    if (!transaction.isLatest || transaction.status !== "APPROVED") {
+      await this.transactionAccountPostingRepository.delete({
+        transactionId: transaction.id,
+      });
+      return;
+    }
+
+    const settingCodes = [
+      CARD_LOAD_CONTROL_ACCOUNT,
+      CARD_CONTROL_ACCOUNT,
+      CARD_PURCHASE_CONTROL_ACCOUNT,
+      CARD_PROFIT_CONTROL_ACCOUNT,
+      "BRANCH_CONTROL_ACCOUNT",
+    ] as const;
+    const accountIds = new Map<string, string>();
+    for (const code of settingCodes) {
+      const accountId = await this.additionalSettingService.getSettingTextValue(
+        CARD_ACCOUNTING_CATEGORY,
+        code,
+      );
+      if (!accountId)
+        throw new BadRequestException(`Missing ${code} additional setting`);
+      accountIds.set(code, accountId);
+    }
+
+    const accountSnapshots = new Map<
+      string,
+      TransactionReferenceSnapshotValue
+    >();
+    for (const accountId of new Set(accountIds.values())) {
+      const snapshot = await loadEntitySnapshot(
+        this.accountProfileRepository,
+        accountId,
+      );
+      if (!snapshot)
+        throw new BadRequestException(
+          `Account profile with id ${accountId} not found`,
+        );
+      accountSnapshots.set(
+        accountId,
+        snapshot as TransactionReferenceSnapshotValue,
+      );
+    }
+
+    const rows: Array<{
+      settlementId: string;
+      saleItemId: string;
+      hoBranchId: string;
+      quantity: string;
+      rate: string;
+      per: string | null;
+      roundOff: string | null;
+      profitAmount: string | null;
+    }> = await this.database2.query(
+      `
+      SELECT settlement.id AS "settlementId",
+             sale_item.id AS "saleItemId",
+             settlement.ho_branch_id AS "hoBranchId",
+             sale_item.quantity,
+             sale_item.rate,
+             sale_item.per,
+             sale_item.round_off AS "roundOff",
+             sale_item.profit_amount AS "profitAmount"
+      FROM transaction_items settlement_item
+      JOIN card_stock_settlements settlement
+        ON settlement.id = settlement_item.card_stock_reference_id
+       AND settlement_item.card_stock_reference_type = 'CARD_BRANCH_SETTLEMENT'
+      JOIN transaction_items sale_item ON sale_item.id = settlement.transaction_item_id
+      WHERE settlement_item.transaction_id = $1
+      ORDER BY settlement_item.line_no
+    `,
+      [transaction.id],
+    );
+    if (!rows.length)
+      throw new BadRequestException(
+        "CARD branch settlement has no linked sale items",
+      );
+
+    const actorId =
+      transaction.updatedBy || transaction.createdBy || this.workerId;
+    const drafts: PostingDraft[] = [];
+    const add = (
+      row: (typeof rows)[number],
+      code: string,
+      direction: TransactionPostingDirection,
+      amount: number,
+      remarks: string,
+      profileId: string | null = null,
+    ) => {
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      const accountId = accountIds.get(code);
+      if (!accountId)
+        throw new BadRequestException(`Missing ${code} additional setting`);
+      drafts.push({
+        transactionId: transaction.id,
+        createdBy: actorId,
+        updatedBy: actorId,
+        sourceType:
+          code === "BRANCH_CONTROL_ACCOUNT"
+            ? TransactionPostingSourceType.PARTY_CONTROL
+            : TransactionPostingSourceType.ITEM,
+        sourceId: row.settlementId,
+        accountId,
+        accountSnapshot: accountSnapshots.get(accountId) ?? null,
+        profileId,
+        direction,
+        amount: roundMoney(amount),
+        remarks,
+      });
+    };
+
+    for (const row of rows) {
+      const quantity = Number(row.quantity);
+      const rate = Number(row.rate);
+      const per = Number(row.per ?? 1) || 1;
+      const saleAmount = Number(
+        roundMoney((quantity * rate) / per + Number(row.roundOff ?? 0)),
+      );
+      const profitAmount = Number(row.profitAmount);
+      if (!Number.isFinite(profitAmount))
+        throw new BadRequestException(
+          `Stored CARD profit is missing for sale item ${row.saleItemId}`,
+        );
+      const branchAmount = saleAmount + profitAmount;
+
+      add(
+        row,
+        "BRANCH_CONTROL_ACCOUNT",
+        branchAmount >= 0
+          ? TransactionPostingDirection.CREDIT
+          : TransactionPostingDirection.DEBIT,
+        Math.abs(branchAmount),
+        "CARD branch settlement payable",
+        row.hoBranchId,
+      );
+      add(
+        row,
+        CARD_CONTROL_ACCOUNT,
+        TransactionPostingDirection.DEBIT,
+        saleAmount,
+        "CARD settlement control",
+      );
+      add(
+        row,
+        CARD_LOAD_CONTROL_ACCOUNT,
+        TransactionPostingDirection.CREDIT,
+        saleAmount,
+        "CARD load settlement",
+      );
+      add(
+        row,
+        CARD_PURCHASE_CONTROL_ACCOUNT,
+        TransactionPostingDirection.DEBIT,
+        saleAmount,
+        "CARD purchase settlement",
+      );
+      if (profitAmount > 0)
+        add(
+          row,
+          CARD_PROFIT_CONTROL_ACCOUNT,
+          TransactionPostingDirection.DEBIT,
+          profitAmount,
+          "CARD settlement profit",
+        );
+      if (profitAmount < 0)
+        add(
+          row,
+          CARD_PROFIT_CONTROL_ACCOUNT,
+          TransactionPostingDirection.CREDIT,
+          Math.abs(profitAmount),
+          "CARD settlement loss",
+        );
+    }
+
+    await this.database2.transaction(async (manager) => {
+      await manager.query(
+        `SELECT set_config('app.skip_transaction_account_postings_enqueue', 'true', true)`,
+      );
+      const repository = manager.getRepository(TransactionAccountPosting);
+      await repository.delete({ transactionId: transaction.id });
+      if (drafts.length)
+        await repository.save(
+          drafts.map((draft, index) => ({ ...draft, lineNo: index + 1 })),
+        );
+    });
+  }
+
   private async rebuildTransaction(transaction: Transaction) {
     const isFinalStandardTransaction =
       transaction.isLatest &&
       transaction.status === "APPROVED" &&
       transaction.slug !== "FAKE_CURRENCY" &&
+      !CARD_TECHNICAL_SLUGS.includes(
+        transaction.slug as (typeof CARD_TECHNICAL_SLUGS)[number],
+      ) &&
       (transaction.transactionType === TransactionType.PURCHASE ||
         transaction.transactionType === TransactionType.SALE);
     const isFinalFakeCurrencyTransaction =
@@ -328,8 +571,14 @@ export class TransactionAccountPostingWorker
       transaction.status === "APPROVED" &&
       transaction.slug === "FAKE_CURRENCY";
 
-    const productSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
-    const accountSnapshots = new Map<string, TransactionReferenceSnapshotValue>();
+    const productSnapshots = new Map<
+      string,
+      TransactionReferenceSnapshotValue
+    >();
+    const accountSnapshots = new Map<
+      string,
+      TransactionReferenceSnapshotValue
+    >();
     const productAccountCache = new Map<string, Product>();
     const avgCostCache = new Map<string, number>();
 
@@ -391,14 +640,23 @@ export class TransactionAccountPostingWorker
       );
 
     const resolveProductSnapshot = async (productId: string) =>
-      loadSnapshot(productSnapshots, this.productRepository, productId, "Product");
+      loadSnapshot(
+        productSnapshots,
+        this.productRepository,
+        productId,
+        "Product",
+      );
 
     const resolveAveragePurchaseCost = async (
       productId: string,
       currencyId: string,
       productCurrencyRateId: string | null,
     ): Promise<number> => {
-      const cacheKey = [productId, currencyId, productCurrencyRateId ?? ""].join("|");
+      const cacheKey = [
+        productId,
+        currencyId,
+        productCurrencyRateId ?? "",
+      ].join("|");
       const cached = avgCostCache.get(cacheKey);
       if (cached !== undefined) {
         return cached;
@@ -433,7 +691,7 @@ export class TransactionAccountPostingWorker
       return averageCost;
     };
 
-  const determineAccount = (
+    const determineAccount = (
       product: Product,
       kind: "purchase" | "sale" | "profit",
     ) => {
@@ -525,7 +783,46 @@ export class TransactionAccountPostingWorker
       postingSequence.push(posting);
     };
 
-    const sortedItems = [...(transaction.items ?? [])].sort((left, right) => left.lineNo - right.lineNo);
+    const sortedItems = [...(transaction.items ?? [])].sort(
+      (left, right) => left.lineNo - right.lineNo,
+    );
+    const hasCardSaleItems =
+      isFinalStandardTransaction &&
+      transaction.transactionType === TransactionType.SALE &&
+      sortedItems.some((item) => Boolean(item.cardId));
+    let cardSellAccountId: string | null = null;
+    let cardLoadAccountId: string | null = null;
+    let cardControlAccountId: string | null = null;
+    let cardSellAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let cardLoadAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let cardControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
+
+    if (hasCardSaleItems) {
+      cardSellAccountId =
+        await this.additionalSettingService.getSettingTextValue(
+          CARD_ACCOUNTING_CATEGORY,
+          CARD_SELL_CONTROL_ACCOUNT,
+        );
+      cardLoadAccountId =
+        await this.additionalSettingService.getSettingTextValue(
+          CARD_ACCOUNTING_CATEGORY,
+          CARD_LOAD_CONTROL_ACCOUNT,
+        );
+      cardControlAccountId =
+        await this.additionalSettingService.getSettingTextValue(
+          CARD_ACCOUNTING_CATEGORY,
+          CARD_CONTROL_ACCOUNT,
+        );
+      if (!cardSellAccountId || !cardLoadAccountId || !cardControlAccountId) {
+        throw new BadRequestException(
+          "Missing CARD sell, load, or control account additional setting",
+        );
+      }
+      cardSellAccountSnapshot = await resolveAccountSnapshot(cardSellAccountId);
+      cardLoadAccountSnapshot = await resolveAccountSnapshot(cardLoadAccountId);
+      cardControlAccountSnapshot =
+        await resolveAccountSnapshot(cardControlAccountId);
+    }
 
     const itemUpdates: TransactionItem[] = [];
 
@@ -545,17 +842,19 @@ export class TransactionAccountPostingWorker
     let tdsControlAccountId: string | null = null;
     let tdsControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let transferControlAccountId: string | null = null;
-    let transferControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let transferControlAccountSnapshot: TransactionReferenceSnapshotValue =
+      null;
 
     if (isFinalStandardTransaction) {
       const settingCode =
         transaction.transactionType === TransactionType.PURCHASE
           ? "PURCHASE_CONTROL_ACCOUNT"
           : "SALE_CONTROL_ACCOUNT";
-      const accountIdText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        settingCode,
-      );
+      const accountIdText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          settingCode,
+        );
 
       if (!accountIdText) {
         throw new BadRequestException(
@@ -579,32 +878,39 @@ export class TransactionAccountPostingWorker
       }
 
       roundOffAccountId = roundOffAccountText;
-      roundOffAccountSnapshot = await resolveAccountSnapshot(roundOffAccountText);
+      roundOffAccountSnapshot =
+        await resolveAccountSnapshot(roundOffAccountText);
 
-      const igstAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "IGST_CONTROL_ACCOUNT",
-      );
-      const cgstAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "CGST_CONTROL_ACCOUNT",
-      );
-      const sgstAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "SGST_CONTROL_ACCOUNT",
-      );
-      const handlingFeeAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "HANDLING_CHARGE_ACCOUNT",
-      );
-      const agentControlAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "AGENT_CRDAGT",
-      );
-      const tdsControlAccountText = await this.additionalSettingService.getSettingTextValue(
-        "TRANSACTION_ACCOUNTING",
-        "TDSFXCOM",
-      );
+      const igstAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "IGST_CONTROL_ACCOUNT",
+        );
+      const cgstAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "CGST_CONTROL_ACCOUNT",
+        );
+      const sgstAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "SGST_CONTROL_ACCOUNT",
+        );
+      const handlingFeeAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "HANDLING_CHARGE_ACCOUNT",
+        );
+      const agentControlAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "AGENT_CRDAGT",
+        );
+      const tdsControlAccountText =
+        await this.additionalSettingService.getSettingTextValue(
+          "TRANSACTION_ACCOUNTING",
+          "TDSFXCOM",
+        );
 
       if (!igstAccountText || !cgstAccountText || !sgstAccountText) {
         throw new BadRequestException(
@@ -671,29 +977,34 @@ export class TransactionAccountPostingWorker
     for (const item of sortedItems) {
       const product = await loadProduct(item.productId);
       const productSnapshot = await resolveProductSnapshot(item.productId);
-      const itemAccount = isFinalFakeCurrencyTransaction
-        ? product.fakeAccount
-        : transaction.transactionType === TransactionType.SALE
-          ? resolveProductTransactionAccount(
-              product,
-              transaction.transactionType,
-              transaction.tradeMode as TradeMode,
-              "sale",
-              {
-                useBranchAccounts: Boolean(transaction.transferRequestId),
-              },
-            )
-          : resolveProductTransactionAccount(
-              product,
-              transaction.transactionType,
-              transaction.tradeMode as TradeMode,
-              "purchase",
-              {
-                useBranchAccounts: Boolean(transaction.transferRequestId),
-              },
-            );
+      const isCardSaleItem =
+        transaction.transactionType === TransactionType.SALE &&
+        Boolean(item.cardId);
+      const itemAccount = isCardSaleItem
+        ? null
+        : isFinalFakeCurrencyTransaction
+          ? product.fakeAccount
+          : transaction.transactionType === TransactionType.SALE
+            ? resolveProductTransactionAccount(
+                product,
+                transaction.transactionType,
+                transaction.tradeMode as TradeMode,
+                "sale",
+                {
+                  useBranchAccounts: Boolean(transaction.transferRequestId),
+                },
+              )
+            : resolveProductTransactionAccount(
+                product,
+                transaction.transactionType,
+                transaction.tradeMode as TradeMode,
+                "purchase",
+                {
+                  useBranchAccounts: Boolean(transaction.transferRequestId),
+                },
+              );
 
-      if (!itemAccount && !isFinalFakeCurrencyTransaction) {
+      if (!itemAccount && !isFinalFakeCurrencyTransaction && !isCardSaleItem) {
         throw new BadRequestException(
           `Product account is not configured for item ${item.id}`,
         );
@@ -709,8 +1020,12 @@ export class TransactionAccountPostingWorker
         ? await resolveAccountSnapshot(itemAccount.id)
         : null;
 
-      item.accountId = itemAccount?.id ?? null;
-      item.accountSnapshot = accountSnapshot;
+      item.accountId = isCardSaleItem
+        ? cardSellAccountId
+        : (itemAccount?.id ?? null);
+      item.accountSnapshot = isCardSaleItem
+        ? cardSellAccountSnapshot
+        : accountSnapshot;
       item.productSnapshot = productSnapshot;
       item.updatedBy = transaction.updatedBy;
 
@@ -727,34 +1042,44 @@ export class TransactionAccountPostingWorker
             `Fake and loss accounts are required for fake currency item ${item.id}`,
           );
         }
-        const fakeAccountSnapshot = await resolveAccountSnapshot(product.fakeAccount.id);
-        const lossAccountSnapshot = await resolveAccountSnapshot(product.lossAccount.id);
-        addPosting({
-          transactionId: transaction.id,
-          createdBy: postingActorId,
-          updatedBy: postingActorId,
-          sourceType: TransactionPostingSourceType.FAKE_CURRENCY,
-          sourceId: item.id,
-          accountId: product.lossAccount.id,
-          accountSnapshot: lossAccountSnapshot,
-          profileId: null,
-          direction: TransactionPostingDirection.DEBIT,
-          amount: roundMoney(itemTotalAmount),
-          remarks: `Fake currency loss item ${item.lineNo}`,
-        }, true);
-        addPosting({
-          transactionId: transaction.id,
-          createdBy: postingActorId,
-          updatedBy: postingActorId,
-          sourceType: TransactionPostingSourceType.FAKE_CURRENCY,
-          sourceId: item.id,
-          accountId: product.fakeAccount.id,
-          accountSnapshot: fakeAccountSnapshot,
-          profileId: null,
-          direction: TransactionPostingDirection.CREDIT,
-          amount: roundMoney(itemTotalAmount),
-          remarks: `Fake currency stock removal item ${item.lineNo}`,
-        }, true);
+        const fakeAccountSnapshot = await resolveAccountSnapshot(
+          product.fakeAccount.id,
+        );
+        const lossAccountSnapshot = await resolveAccountSnapshot(
+          product.lossAccount.id,
+        );
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: TransactionPostingSourceType.FAKE_CURRENCY,
+            sourceId: item.id,
+            accountId: product.lossAccount.id,
+            accountSnapshot: lossAccountSnapshot,
+            profileId: null,
+            direction: TransactionPostingDirection.DEBIT,
+            amount: roundMoney(itemTotalAmount),
+            remarks: `Fake currency loss item ${item.lineNo}`,
+          },
+          true,
+        );
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: TransactionPostingSourceType.FAKE_CURRENCY,
+            sourceId: item.id,
+            accountId: product.fakeAccount.id,
+            accountSnapshot: fakeAccountSnapshot,
+            profileId: null,
+            direction: TransactionPostingDirection.CREDIT,
+            amount: roundMoney(itemTotalAmount),
+            remarks: `Fake currency stock removal item ${item.lineNo}`,
+          },
+          true,
+        );
         item.holdCost = null;
         item.profit = null;
         itemUpdates.push(item);
@@ -812,42 +1137,130 @@ export class TransactionAccountPostingWorker
           );
         }
       } else {
-        const averageCost = await resolveAveragePurchaseCost(
-          item.productId,
-          item.currencyId,
-          item.productCurrencyRateId,
-        );
-        const holdCost = averageCost > 0 ? averageCost : unitRate;
-        const profitRate = unitRate - holdCost;
-        const signedProfitAmount = Number(roundMoney(quantity * profitRate));
-        const saleAmount = Number(roundMoney(itemTotalAmount - signedProfitAmount));
-        const profitAccount = determineAccount(product, "profit");
-        const saleAccount = determineAccount(product, "sale");
-        const profitAccountSnapshot = await resolveAccountSnapshot(profitAccount.id);
-        const saleAccountSnapshot = await resolveAccountSnapshot(saleAccount.id);
+        if (item.cardId) {
+          if (
+            !cardSellAccountId ||
+            !cardLoadAccountId ||
+            !cardControlAccountId ||
+            item.profitAmount === null
+          ) {
+            throw new BadRequestException(
+              `CARD accounting values are incomplete for item ${item.id}`,
+            );
+          }
+          const cardSaleAmount = Number(
+            roundMoney(itemTotalAmount + roundOffAmount),
+          );
+          item.profit = null;
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ITEM_SALE,
+              sourceId: item.id,
+              accountId: cardSellAccountId,
+              accountSnapshot: cardSellAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.CREDIT,
+              amount: roundMoney(cardSaleAmount),
+              remarks: `CARD sell control item ${item.lineNo}`,
+            },
+            true,
+          );
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ITEM,
+              sourceId: item.id,
+              accountId: cardLoadAccountId,
+              accountSnapshot: cardLoadAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.DEBIT,
+              amount: roundMoney(cardSaleAmount),
+              remarks: `CARD load control item ${item.lineNo}`,
+            },
+            true,
+          );
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ITEM,
+              sourceId: item.id,
+              accountId: cardControlAccountId,
+              accountSnapshot: cardControlAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.CREDIT,
+              amount: roundMoney(cardSaleAmount),
+              remarks: `CARD balancing control item ${item.lineNo}`,
+            },
+            true,
+          );
+        } else {
+          const averageCost = await resolveAveragePurchaseCost(
+            item.productId,
+            item.currencyId,
+            item.productCurrencyRateId,
+          );
+          const holdCost = averageCost > 0 ? averageCost : unitRate;
+          const profitRate = unitRate - holdCost;
+          const signedProfitAmount = Number(roundMoney(quantity * profitRate));
+          const saleAmount = Number(
+            roundMoney(itemTotalAmount - signedProfitAmount),
+          );
+          const profitAccount = determineAccount(product, "profit");
+          const saleAccount = determineAccount(product, "sale");
+          const profitAccountSnapshot = await resolveAccountSnapshot(
+            profitAccount.id,
+          );
+          const saleAccountSnapshot = await resolveAccountSnapshot(
+            saleAccount.id,
+          );
 
-        item.holdCost = roundToScale(holdCost, 7);
-        item.profit = roundToScale(profitRate, 2);
+          item.holdCost = roundToScale(holdCost, 7);
+          item.profit = roundToScale(profitRate, 2);
 
-        addPosting(
-          {
-            transactionId: transaction.id,
-            createdBy: postingActorId,
-            updatedBy: postingActorId,
-            sourceType: "ITEM_PROFIT",
-            sourceId: item.id,
-            accountId: profitAccount.id,
-            accountSnapshot: profitAccountSnapshot,
-            profileId: null,
-            direction:
-              signedProfitAmount >= 0
-                ? TransactionPostingDirection.CREDIT
-                : TransactionPostingDirection.DEBIT,
-            amount: toPositiveAmount(signedProfitAmount),
-            remarks: `Sale profit item ${item.lineNo}`,
-          },
-          true,
-        );
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: "ITEM_PROFIT",
+              sourceId: item.id,
+              accountId: profitAccount.id,
+              accountSnapshot: profitAccountSnapshot,
+              profileId: null,
+              direction:
+                signedProfitAmount >= 0
+                  ? TransactionPostingDirection.CREDIT
+                  : TransactionPostingDirection.DEBIT,
+              amount: toPositiveAmount(signedProfitAmount),
+              remarks: `Sale profit item ${item.lineNo}`,
+            },
+            true,
+          );
+
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: "ITEM_SALE",
+              sourceId: item.id,
+              accountId: saleAccount.id,
+              accountSnapshot: saleAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.CREDIT,
+              amount: roundMoney(saleAmount),
+              remarks: `Sale amount item ${item.lineNo}`,
+            },
+            true,
+          );
+        }
 
         const roundOffDirection = resolveRoundOffDirection(
           roundOffAmount,
@@ -871,23 +1284,6 @@ export class TransactionAccountPostingWorker
             false,
           );
         }
-
-        addPosting(
-          {
-            transactionId: transaction.id,
-            createdBy: postingActorId,
-            updatedBy: postingActorId,
-            sourceType: "ITEM_SALE",
-            sourceId: item.id,
-            accountId: saleAccount.id,
-            accountSnapshot: saleAccountSnapshot,
-            profileId: null,
-            direction: TransactionPostingDirection.CREDIT,
-            amount: roundMoney(saleAmount),
-            remarks: `Sale amount item ${item.lineNo}`,
-          },
-          true,
-        );
       }
 
       const itemCommission = Number(roundMoney(Number(item.commission ?? 0)));
@@ -1099,7 +1495,9 @@ export class TransactionAccountPostingWorker
     }
 
     for (const payment of paymentRows) {
-      const accountSnapshot = payment.accountSnapshot ?? await resolveAccountSnapshot(payment.accountId);
+      const accountSnapshot =
+        payment.accountSnapshot ??
+        (await resolveAccountSnapshot(payment.accountId));
       const amount = roundMoney(Number(payment.amount));
       const paymentDirection =
         payment.paymentDirection === TransactionPaymentDirection.RECEIPT
@@ -1162,13 +1560,12 @@ export class TransactionAccountPostingWorker
       remarks: posting.remarks,
     }));
 
-    const finalPostings = [
-      ...groupedPostings,
-      ...postingSequence,
-    ].map((posting, index) => ({
-      ...posting,
-      lineNo: index + 1,
-    }));
+    const finalPostings = [...groupedPostings, ...postingSequence].map(
+      (posting, index) => ({
+        ...posting,
+        lineNo: index + 1,
+      }),
+    );
 
     await this.database2.transaction(async (manager) => {
       const postingRepo = manager.getRepository(TransactionAccountPosting);

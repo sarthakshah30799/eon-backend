@@ -105,7 +105,9 @@ const formatTimeOnly = (value: Date | string | null | undefined) => {
   }).format(date);
 };
 
-const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotLabel = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -120,14 +122,18 @@ const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) 
   return label || name || code;
 };
 
-const getSnapshotCode = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotCode = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
   return toText(snapshot.code);
 };
 
-const getSnapshotName = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotName = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -135,7 +141,9 @@ const getSnapshotName = (snapshot: Record<string, unknown> | null | undefined) =
 };
 
 const getTransactionDate = (transaction: Transaction) => {
-  return transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt;
+  return (
+    transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt
+  );
 };
 
 const compareIsoDateStrings = (
@@ -152,7 +160,8 @@ const compareIsoDateStrings = (
 };
 
 const getTransactionTypeLabel = (transaction: Transaction) => {
-  const slug = toText(transaction.slug) || transaction.transactionType.toLowerCase();
+  const slug =
+    toText(transaction.slug) || transaction.transactionType.toLowerCase();
   return [slug, transaction.tradeMode.toLowerCase()].filter(Boolean).join(" ");
 };
 
@@ -164,27 +173,38 @@ const getItemUnitRate = (item: TransactionItem) => {
 
 const getItemAmount = (item: TransactionItem) => {
   const quantity = Number(item.quantity ?? 0);
-  return quantity * getItemUnitRate(item);
+  const amount = quantity * getItemUnitRate(item);
+  return item.cardId ? amount + Number(item.roundOff ?? 0) : amount;
 };
 
 const getItemCostAmount = (item: TransactionItem) => {
+  if (item.cardId && item.profitAmount !== null) {
+    return getItemAmount(item) - Number(item.profitAmount);
+  }
   const quantity = Number(item.quantity ?? 0);
   const holdCost = Number(item.holdCost ?? 0);
   return quantity * holdCost;
 };
 
 const getItemGpAmount = (item: TransactionItem) => {
+  if (item.cardId) {
+    return Number(item.profitAmount ?? 0);
+  }
   const quantity = Number(item.quantity ?? 0);
   const profit = Number(item.profit ?? 0);
   return quantity * profit;
 };
 
 const getCommissionRate = (item: TransactionItem) => {
-  const snapshot = item.commissionSnapshot as Record<string, unknown> | null | undefined;
+  const snapshot = item.commissionSnapshot as
+    | Record<string, unknown>
+    | null
+    | undefined;
   return toText(snapshot?.commissionValue) || "";
 };
 
-const getCommissionAmount = (item: TransactionItem) => Number(item.commission ?? 0);
+const getCommissionAmount = (item: TransactionItem) =>
+  Number(item.commission ?? 0);
 
 const buildChargeTotals = (transaction: Transaction) => {
   let income = 0;
@@ -215,7 +235,9 @@ const buildChargeTotals = (transaction: Transaction) => {
   return { income, expense };
 };
 
-const buildSubtotalRow = (rows: ProductProfitReportRow[]): ProductProfitReportRow => {
+const buildSubtotalRow = (
+  rows: ProductProfitReportRow[],
+): ProductProfitReportRow => {
   const sum = (key: string) =>
     rows.reduce((total, row) => total + Number(row[key] ?? 0), 0);
 
@@ -291,7 +313,26 @@ export class ProductProfitReportService {
       .leftJoinAndSelect("transaction.additionalCharges", "charge")
       .where("transaction.isLatest = true")
       .andWhere("transaction.status = :status", { status: "APPROVED" });
-    qb.andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", { technicalSlugs: ['CARD_STOCK','CARD_TRANSFER_OUT','CARD_TRANSFER_IN','CARD_STOCK_LOAD','CARD_SELL','CARD_SETTLE','CARD_RETURN','CARD_VOID'] });
+    qb.andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", {
+      technicalSlugs: [
+        "CARD_STOCK",
+        "CARD_TRANSFER_OUT",
+        "CARD_TRANSFER_IN",
+        "CARD_STOCK_LOAD",
+        "CARD_SELL",
+        "CARD_SETTLE",
+        "CARD_RETURN",
+        "CARD_VOID",
+      ],
+    });
+    qb.andWhere(`(
+      item.card_id IS NULL OR EXISTS (
+        SELECT 1 FROM card_stock_settlements card_settlement
+        WHERE card_settlement.transaction_item_id = item.id
+          AND card_settlement.branch_settlement_entry_id IS NOT NULL
+          AND item.profit_amount IS NOT NULL
+      )
+    )`);
 
     if (filters.startDate && filters.endDate) {
       qb.andWhere("transaction.approvedAt >= :startDate", {
@@ -347,9 +388,9 @@ export class ProductProfitReportService {
     }
 
     qb.orderBy(
-        `COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`,
-        "ASC",
-      )
+      `COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`,
+      "ASC",
+    )
       .addOrderBy("transaction.approved_at", "ASC")
       .addOrderBy("transaction.created_at", "ASC")
       .addOrderBy("transaction.number", "ASC")
@@ -363,27 +404,42 @@ export class ProductProfitReportService {
     const transactions = await this.loadTransactions(filters);
     const rows: ProductProfitReportRow[] = [];
 
-    transactions.forEach(transaction => {
+    transactions.forEach((transaction) => {
       const transactionDate = getTransactionDate(transaction);
       const dateLabel = formatDateOnly(transactionDate);
       const timeLabel = formatTimeOnly(transactionDate);
       const branchLabel = getSnapshotLabel(
-        transaction.branchSnapshot as Record<string, unknown> | null | undefined,
+        transaction.branchSnapshot as
+          | Record<string, unknown>
+          | null
+          | undefined,
       );
       const profileName = getSnapshotLabel(
-        transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined,
+        transaction.partyProfileSnapshot as
+          | Record<string, unknown>
+          | null
+          | undefined,
       );
       const agentName = getSnapshotLabel(
-        transaction.agentProfileSnapshot as Record<string, unknown> | null | undefined,
+        transaction.agentProfileSnapshot as
+          | Record<string, unknown>
+          | null
+          | undefined,
       );
       const transactionItems = [...(transaction.items ?? [])].sort(
         (left, right) => left.lineNo - right.lineNo,
       );
-      const matchingItems = transactionItems.filter(item => {
-        if (filters.currencyIds.length > 0 && !filters.currencyIds.includes(item.currencyId)) {
+      const matchingItems = transactionItems.filter((item) => {
+        if (
+          filters.currencyIds.length > 0 &&
+          !filters.currencyIds.includes(item.currencyId)
+        ) {
           return false;
         }
-        if (filters.productIds.length > 0 && !filters.productIds.includes(item.productId)) {
+        if (
+          filters.productIds.length > 0 &&
+          !filters.productIds.includes(item.productId)
+        ) {
           return false;
         }
         return true;
@@ -393,11 +449,17 @@ export class ProductProfitReportService {
         return;
       }
 
-      const { income: totalTransactionIncome, expense: totalTransactionExpense } =
-        buildChargeTotals(transaction);
+      const {
+        income: totalTransactionIncome,
+        expense: totalTransactionExpense,
+      } = buildChargeTotals(transaction);
 
-      const totalMatchingAmount = matchingItems.reduce((sum, item) => sum + getItemAmount(item), 0);
-      const fallbackWeight = matchingItems.length > 0 ? 1 / matchingItems.length : 0;
+      const totalMatchingAmount = matchingItems.reduce(
+        (sum, item) => sum + getItemAmount(item),
+        0,
+      );
+      const fallbackWeight =
+        matchingItems.length > 0 ? 1 / matchingItems.length : 0;
 
       matchingItems.forEach((item, index) => {
         const itemAmount = getItemAmount(item);
@@ -406,7 +468,9 @@ export class ProductProfitReportService {
         const itemCommission = getCommissionAmount(item);
         const commissionRate = getCommissionRate(item);
         const allocationWeight =
-          totalMatchingAmount > 0 ? itemAmount / totalMatchingAmount : fallbackWeight;
+          totalMatchingAmount > 0
+            ? itemAmount / totalMatchingAmount
+            : fallbackWeight;
         const otherIncome = totalTransactionIncome * allocationWeight;
         const otherExpense = totalTransactionExpense * allocationWeight;
         const netProfit = itemGp + otherIncome - otherExpense - itemCommission;
@@ -415,20 +479,31 @@ export class ProductProfitReportService {
           rowType: "ITEM",
           transactionId: transaction.id,
           sortBranch: branchLabel,
-          sortDateTime: transactionDate ? new Date(transactionDate).toISOString() : "",
+          sortDateTime: transactionDate
+            ? new Date(transactionDate).toISOString()
+            : "",
           sortTransactionNumber: transaction.number ?? "",
           branchCode: getSnapshotCode(
-            transaction.branchSnapshot as Record<string, unknown> | null | undefined,
+            transaction.branchSnapshot as
+              | Record<string, unknown>
+              | null
+              | undefined,
           ),
           type: getTransactionTypeLabel(transaction),
           transactionNumber: transaction.number ?? "",
           date: dateLabel,
           time: timeLabel,
           profileName: getSnapshotName(
-            transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined,
+            transaction.partyProfileSnapshot as
+              | Record<string, unknown>
+              | null
+              | undefined,
           ),
           agentName: getSnapshotName(
-            transaction.agentProfileSnapshot as Record<string, unknown> | null | undefined,
+            transaction.agentProfileSnapshot as
+              | Record<string, unknown>
+              | null
+              | undefined,
           ),
           currencyCode: getSnapshotCode(
             item.currencySnapshot as Record<string, unknown> | null | undefined,
@@ -455,10 +530,16 @@ export class ProductProfitReportService {
         return left.sortBranch.localeCompare(right.sortBranch);
       }
       if (left.sortDateTime !== right.sortDateTime) {
-        return compareIsoDateStrings(left.sortDateTime, right.sortDateTime, filters.sortBy);
+        return compareIsoDateStrings(
+          left.sortDateTime,
+          right.sortDateTime,
+          filters.sortBy,
+        );
       }
       if (left.sortTransactionNumber !== right.sortTransactionNumber) {
-        return left.sortTransactionNumber.localeCompare(right.sortTransactionNumber);
+        return left.sortTransactionNumber.localeCompare(
+          right.sortTransactionNumber,
+        );
       }
       return 0;
     });
@@ -474,11 +555,14 @@ export class ProductProfitReportService {
     };
   }
 
-  async buildExport(query: ProductProfitReportQueryDto, format: "csv" | "xlsx") {
+  async buildExport(
+    query: ProductProfitReportQueryDto,
+    format: "csv" | "xlsx",
+  ) {
     const report = await this.buildReport(query);
-    const sheetData = report.rows.map(row => {
+    const sheetData = report.rows.map((row) => {
       const output: Record<string, string> = {};
-      report.columns.forEach(column => {
+      report.columns.forEach((column) => {
         output[column.key] = row[column.key] ?? "";
       });
       return output;
@@ -486,7 +570,7 @@ export class ProductProfitReportService {
 
     if (format === "csv") {
       const worksheet = XLSX.utils.json_to_sheet(sheetData, {
-        header: report.columns.map(column => column.key),
+        header: report.columns.map((column) => column.key),
       });
       const csv = XLSX.utils.sheet_to_csv(worksheet);
       return {
@@ -497,7 +581,7 @@ export class ProductProfitReportService {
     }
 
     const worksheet = XLSX.utils.json_to_sheet(sheetData, {
-      header: report.columns.map(column => column.key),
+      header: report.columns.map((column) => column.key),
     });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "ProductProfit");
