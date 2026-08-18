@@ -14,6 +14,10 @@ import { SpecialReportController } from "./special-report.controller";
 import { SpecialReportService } from "./special-report.service";
 import { CurrencyBalanceReportController } from "./currency-balance-report.controller";
 import { CurrencyBalanceReportService } from "./currency-balance-report.service";
+import { CardUnsettledReportController } from "./card-unsettled-report.controller";
+import { CardUnsettledReportService } from "./card-unsettled-report.service";
+import { CardSettledReportController } from "./card-settled-report.controller";
+import { CardSettledReportService } from "./card-settled-report.service";
 
 @Module({
   imports: [
@@ -34,12 +38,16 @@ import { CurrencyBalanceReportService } from "./currency-balance-report.service"
     ProductProfitReportController,
     SpecialReportController,
     CurrencyBalanceReportController,
+    CardUnsettledReportController,
+    CardSettledReportController,
   ],
   providers: [
     SalePurchaseReportService,
     ProductProfitReportService,
     SpecialReportService,
     CurrencyBalanceReportService,
+    CardUnsettledReportService,
+    CardSettledReportService,
   ],
 })
 export class ReportsModule {}
