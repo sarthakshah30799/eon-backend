@@ -244,6 +244,15 @@ export class TransactionItem extends BaseEntity {
   })
   roundOff: string | null;
 
+  @Column({
+    type: "numeric",
+    name: "amount",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  amount: string | null;
+
   @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
   currencySnapshot: TransactionReferenceSnapshotValue;
 
@@ -276,6 +285,7 @@ export class TransactionItem extends BaseEntity {
 
     if (!Number.isFinite(quantity) || !Number.isFinite(rate)) {
       this.roundOff = null;
+      this.amount = null;
       return;
     }
 
@@ -283,6 +293,7 @@ export class TransactionItem extends BaseEntity {
     const totalAmount = Number((quantity * rate / divisor).toFixed(2));
     const roundedAmount = Math.round(totalAmount);
     this.roundOff = (roundedAmount - totalAmount).toFixed(2);
+    this.amount = roundedAmount.toFixed(2);
   }
 
   @BeforeInsert()
