@@ -3,6 +3,8 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
+import { requireCompanyForDate } from '../common/snapshot/company-snapshot.util';
+import { CompanyService } from '../company/company.service';
 import { Branch } from '../branches/branch.entity';
 import { Currency } from '../currencies/currency.entity';
 import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
@@ -16,7 +18,10 @@ import { CardStockReceipt } from './entities/card-stock-receipt.entity';
 import { CardStockReceiptItem } from './entities/card-stock-receipt-item.entity';
 import { CardStockReceiptStatus, CardStockCardStatus, CardStockReferenceType } from './card-stock.enums';
 import { CreateCardStockReceiptDto } from './dto/card-stock-receipt.dto';
+import { CardStockPrintKind, RecordCardStockPrintDto } from './dto/card-stock-print.dto';
+import { CardStockPrintService } from './card-stock-print.service';
 import { CardStockTransactionService } from './card-stock-transaction.service';
+import { TransactionReferenceSnapshotValue } from '../transactions/types/transaction-snapshot.types';
 import { AuthenticatedSession } from '../auth/types/session-context';
 import { SpreadsheetUploadService } from '../common/upload/spreadsheet-upload.service';
 import { validateCardNumber } from './card-number.util';
@@ -37,6 +42,8 @@ export class CardStockService {
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly cardStockTransactionService: CardStockTransactionService,
     private readonly spreadsheetUploadService: SpreadsheetUploadService,
+    private readonly cardStockPrintService: CardStockPrintService,
+    private readonly companyService: CompanyService,
   ) {}
 
   async findAll(branchId?: string): Promise<CardStockReceipt[]> {
@@ -50,11 +57,28 @@ export class CardStockService {
     return this.withMaskedCards(receipts);
   }
 
-  async findById(id: string, session?: AuthenticatedSession): Promise<CardStockReceipt> {
+  async findById(id: string, session?: AuthenticatedSession): Promise<CardStockReceipt & { printCount: number }> {
     const receipt = await this.receiptRepository.findOne({ where: { id }, relations: ['items', 'items.cards'] });
     if (!receipt) throw new NotFoundException('Card stock receipt not found');
     if (session && !session.isAdmin && !session.isHo && !session.isHoStaff && receipt.branchId !== session.activeBranchId) throw new ForbiddenException('CARD stock receipt does not belong to the current branch');
-    return (await this.withMaskedCards([receipt]))[0];
+    const [masked] = await this.withMaskedCards([receipt]);
+    const printCount = masked.transactionId
+      ? await this.cardStockPrintService.countPrints(masked.transactionId)
+      : 0;
+    return { ...masked, printCount };
+  }
+
+  async recordPrint(id: string, dto: RecordCardStockPrintDto, session: AuthenticatedSession) {
+    const receipt = await this.findById(id, session);
+    if (!receipt.transactionId) {
+      throw new BadRequestException('CARD stock receipt has no technical transaction for print logging');
+    }
+    return this.cardStockPrintService.recordPrint({
+      transactionId: receipt.transactionId,
+      performedById: session.userId,
+      kind: CardStockPrintKind.STOCK_IN,
+      requestedCopyType: dto.copyType,
+    });
   }
 
   getUploadTemplate() {
@@ -150,6 +174,7 @@ export class CardStockService {
 
     const branchSnapshot = await loadEntitySnapshot(this.branchRepository, branch.id);
     const issuerSnapshot = await loadEntitySnapshot(this.partyProfileRepository, headerIssuer.id);
+    const { company, snapshot: companySnapshot } = await requireCompanyForDate(this.companyService, receiptDate);
     const normalizedItems = await Promise.all(dto.items.map(item => this.validateItem(item)));
     const calculatedTotal = normalizedItems.reduce((sum, item) => sum + item.feAmount, 0);
     if (Math.abs(calculatedTotal - Number(dto.totalFeAmount)) > 0.005) throw new BadRequestException('Total FE amount does not match item totals');
@@ -160,12 +185,20 @@ export class CardStockService {
       const itemRepo = manager.getRepository(CardStockReceiptItem);
       const cardRepo = manager.getRepository(CardStockCard);
       const seenCards = new Set<string>();
-      const savedReceipt = await receiptRepo.save(receiptRepo.create({ transactionNumber, receiptDate, branchId: branch.id, branchSnapshot: branchSnapshot ?? {}, issuerPartyProfileId: headerIssuer.id, issuerPartyProfileSnapshot: issuerSnapshot ?? {}, status: CardStockReceiptStatus.POSTED, totalFeAmount: calculatedTotal.toFixed(2), createdBy: userId, updatedBy: userId }));
+      const savedReceipt = await receiptRepo.save(receiptRepo.create({ transactionNumber, receiptDate, branchId: branch.id, branchSnapshot: branchSnapshot ?? {}, companyId: company.id, companySnapshot, issuerPartyProfileId: headerIssuer.id, issuerPartyProfileSnapshot: issuerSnapshot ?? {}, status: CardStockReceiptStatus.POSTED, totalFeAmount: calculatedTotal.toFixed(2), createdBy: userId, updatedBy: userId }));
       const stockInTransaction = await this.cardStockTransactionService.create({
         manager,
         operationCode: TransactionTypeProfileEnum.CARD_STOCK,
         number: transactionNumber,
         branch,
+        branchSnapshot: (branchSnapshot ?? {
+          id: branch.id,
+          code: branch.code,
+          name: branch.name,
+          label: `${branch.code} - ${branch.name}`,
+        }) as TransactionReferenceSnapshotValue,
+        companyId: company.id,
+        companySnapshot,
         transactionDate: receiptDate,
         referenceType: CardStockReferenceType.CARD_STOCK_RECEIPT,
         referenceId: savedReceipt.id,

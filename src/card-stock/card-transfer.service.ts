@@ -7,6 +7,8 @@ import { Currency } from '../currencies/currency.entity';
 import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
 import { WorkflowStatus } from '../common/enums/workflow-status.enum';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
+import { requireCompanyForDate } from '../common/snapshot/company-snapshot.util';
+import { CompanyService } from '../company/company.service';
 import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
 import { Product } from '../products/product.entity';
 import { ProductCardIssuer } from '../products/entities/product-card-issuer.entity';
@@ -21,6 +23,8 @@ import { CardTransferRequestCard } from './entities/card-transfer-request-card.e
 import { CardTransferRequestItem } from './entities/card-transfer-request-item.entity';
 import { CardStockCardStatus, CardStockReferenceType, CardTransferStatus } from './card-stock.enums';
 import { CardTransferItemDto, CreateCardTransferDto } from './dto/card-transfer.dto';
+import { CardStockPrintKind, RecordCardTransferPrintDto } from './dto/card-stock-print.dto';
+import { CardStockPrintService } from './card-stock-print.service';
 import { CardStockTransactionService } from './card-stock-transaction.service';
 import { TransactionReferenceSnapshot } from '../transactions/types/transaction-snapshot.types';
 
@@ -42,6 +46,8 @@ export class CardTransferService {
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly mailService: MailService,
     private readonly cardStockTransactionService: CardStockTransactionService,
+    private readonly cardStockPrintService: CardStockPrintService,
+    private readonly companyService: CompanyService,
   ) {}
 
   private isHoAccess(session: AuthenticatedSession) {
@@ -124,7 +130,56 @@ export class CardTransferService {
     const request = await this.requestRepository.findOne({ where: { id }, relations: { items: { selectedCards: { card: true } } } });
     if (!request) throw new NotFoundException('CARD transfer request not found');
     if (!this.isHoAccess(session) && session.activeBranchId !== request.sourceBranchId && session.activeBranchId !== request.destinationBranchId) throw new ForbiddenException('You cannot view this CARD transfer request');
-    return (await this.withBranchObjects([request]))[0];
+    const [hydrated] = await this.withBranchObjects([request]);
+    const [sourcePrintCount, destinationPrintCount] = await Promise.all([
+      request.sourceTransactionId
+        ? this.cardStockPrintService.countPrints(request.sourceTransactionId)
+        : Promise.resolve(0),
+      request.destinationTransactionId
+        ? this.cardStockPrintService.countPrints(request.destinationTransactionId)
+        : Promise.resolve(0),
+    ]);
+    return { ...hydrated, sourcePrintCount, destinationPrintCount };
+  }
+
+  async recordPrint(id: string, dto: RecordCardTransferPrintDto, session: AuthenticatedSession) {
+    const request = await this.requestRepository.findOne({ where: { id } });
+    if (!request) throw new NotFoundException('CARD transfer request not found');
+    if (!this.isHoAccess(session) && session.activeBranchId !== request.sourceBranchId && session.activeBranchId !== request.destinationBranchId) {
+      throw new ForbiddenException('You cannot print this CARD transfer request');
+    }
+    if (request.status !== CardTransferStatus.ACCEPTED) {
+      throw new BadRequestException('Only accepted CARD transfers can be printed');
+    }
+    if (dto.kind === CardStockPrintKind.STOCK_OUT) {
+      if (!this.isHoAccess(session) && session.activeBranchId !== request.sourceBranchId) {
+        throw new ForbiddenException('You can only print Stock Out from the source HO branch');
+      }
+      if (!request.sourceTransactionId) {
+        throw new BadRequestException('CARD transfer has no source transaction for print logging');
+      }
+      return this.cardStockPrintService.recordPrint({
+        transactionId: request.sourceTransactionId,
+        performedById: session.userId,
+        kind: CardStockPrintKind.STOCK_OUT,
+        requestedCopyType: dto.copyType,
+      });
+    }
+    if (dto.kind !== CardStockPrintKind.STOCK_IN) {
+      throw new BadRequestException('Print kind must be STOCK_IN or STOCK_OUT');
+    }
+    if (!this.isHoAccess(session) && session.activeBranchId !== request.destinationBranchId) {
+      throw new ForbiddenException('You can only print Stock In from the destination branch');
+    }
+    if (!request.destinationTransactionId) {
+      throw new BadRequestException('CARD transfer has no destination transaction for print logging');
+    }
+    return this.cardStockPrintService.recordPrint({
+      transactionId: request.destinationTransactionId,
+      performedById: session.userId,
+      kind: CardStockPrintKind.STOCK_IN,
+      requestedCopyType: dto.copyType,
+    });
   }
 
   async availableCards(sourceBranchId: string, session: AuthenticatedSession) {
@@ -152,6 +207,7 @@ export class CardTransferService {
     if (new Set(flatIds).size !== flatIds.length) throw new BadRequestException('A card can be selected only once in a transfer request');
     const branchSnapshot = await loadEntitySnapshot(this.branchRepository, source.id);
     const destinationSnapshot = await loadEntitySnapshot(this.branchRepository, destination.id);
+    const { company, snapshot: companySnapshot } = await requireCompanyForDate(this.companyService, transactionDate);
     const transactionNumber = await this.additionalSettingService.reserveTransactionNumber(TransactionTypeProfileEnum.CARD_TRANSFER_SELL, source.code, new Date(`${transactionDate}T00:00:00`));
     const saved = await this.database2.transaction(async manager => {
       const cardsById = await this.loadLockedCards(manager, flatIds, source.id);
@@ -159,7 +215,7 @@ export class CardTransferService {
       const validated = [];
       for (const item of dto.items) { const result = await this.validateItem(item, cardsById); total += result.feAmount; validated.push({ item, ...result }); }
       const requestRepo = manager.getRepository(CardTransferRequest);
-      const request = await requestRepo.save(requestRepo.create({ transactionNumber, transactionDate, sourceBranchId: source.id, sourceBranchSnapshot: branchSnapshot ?? {}, destinationBranchId: destination.id, destinationBranchSnapshot: destinationSnapshot ?? {}, status: CardTransferStatus.HELD, totalFeAmount: total.toFixed(2), remarks: dto.remarks?.trim() || null, heldAt: new Date(), heldById: session.userId, createdBy: session.userId, updatedBy: session.userId }));
+      const request = await requestRepo.save(requestRepo.create({ transactionNumber, transactionDate, sourceBranchId: source.id, sourceBranchSnapshot: branchSnapshot ?? {}, destinationBranchId: destination.id, destinationBranchSnapshot: destinationSnapshot ?? {}, companyId: company.id, companySnapshot, status: CardTransferStatus.HELD, totalFeAmount: total.toFixed(2), remarks: dto.remarks?.trim() || null, heldAt: new Date(), heldById: session.userId, createdBy: session.userId, updatedBy: session.userId }));
       const itemRepo = manager.getRepository(CardTransferRequestItem);
       const selectionRepo = manager.getRepository(CardTransferRequestCard);
       for (const row of validated) {
@@ -180,13 +236,15 @@ export class CardTransferService {
     const policy = await this.dayEndStartProcessService.assertTransactionDateAllowed(source.id, session.userId, dto.transactionDate);
     const flatIds = dto.items.flatMap(item => item.cardIds);
     if (new Set(flatIds).size !== flatIds.length) throw new BadRequestException('A card can be selected only once in a transfer request');
-    const sourceSnapshot = await loadEntitySnapshot(this.branchRepository, source.id);
-    const destinationSnapshot = await loadEntitySnapshot(this.branchRepository, destination.id);
     const saved = await this.database2.transaction(async manager => {
       const request = await manager.getRepository(CardTransferRequest).createQueryBuilder('request').where('request.id = :id', { id }).setLock('pessimistic_write').getOne();
       if (!request) throw new NotFoundException('CARD transfer request not found');
       if (request.status !== CardTransferStatus.HELD) throw new BadRequestException('Only held CARD transfers can be edited');
       if (request.destinationBranchId !== destination.id) throw new BadRequestException('Destination branch cannot be changed after the CARD transfer request is created');
+      const sourceChanged = request.sourceBranchId !== source.id;
+      const sourceSnapshot = sourceChanged
+        ? await loadEntitySnapshot(this.branchRepository, source.id)
+        : request.sourceBranchSnapshot;
       const oldSelections = await manager.getRepository(CardTransferRequestCard).find({ where: { transferId: id } });
       const oldIds = oldSelections.map(selection => selection.cardId);
       if (oldIds.length) {
@@ -202,7 +260,6 @@ export class CardTransferService {
       request.sourceBranchId = source.id;
       request.sourceBranchSnapshot = (sourceSnapshot ?? { id: source.id }) as TransactionReferenceSnapshot;
       request.destinationBranchId = destination.id;
-      request.destinationBranchSnapshot = (destinationSnapshot ?? { id: destination.id }) as TransactionReferenceSnapshot;
       request.totalFeAmount = total.toFixed(2);
       request.remarks = dto.remarks?.trim() || null;
       request.updatedBy = session.userId;
@@ -244,8 +301,8 @@ export class CardTransferService {
       }));
       for (const card of cards.values()) { card.currentBranchId = destination.id; card.currentBranchSnapshot = (await loadEntitySnapshot(this.branchRepository, destination.id) ?? { id: destination.id }) as TransactionReferenceSnapshot; card.status = CardStockCardStatus.AVAILABLE; card.reservedByTransferId = null; card.reservedAt = null; card.updatedBy = session.userId; }
       await manager.getRepository(CardStockCard).save([...cards.values()]);
-      const transferOutTransaction = await this.cardStockTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_OUT, branch: source, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: transactionItems });
-      const transferInTransaction = await this.cardStockTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_IN, branch: destination, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: transactionItems });
+      const transferOutTransaction = await this.cardStockTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_OUT, branch: source, branchSnapshot: request.sourceBranchSnapshot, companyId: request.companyId, companySnapshot: request.companySnapshot, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: transactionItems });
+      const transferInTransaction = await this.cardStockTransactionService.create({ manager, operationCode: TransactionTypeProfileEnum.CARD_TRANSFER_IN, branch: destination, branchSnapshot: request.destinationBranchSnapshot, companyId: request.companyId, companySnapshot: request.companySnapshot, transactionDate: request.transactionDate, referenceType: CardStockReferenceType.CARD_TRANSFER_REQUEST, referenceId: request.id, actorId: session.userId, items: transactionItems });
       locked.status = CardTransferStatus.ACCEPTED; locked.acceptedAt = new Date(); locked.acceptedById = session.userId; locked.acceptanceRemarks = null; locked.sourceTransactionId = transferOutTransaction.id; locked.destinationTransactionId = transferInTransaction.id; locked.updatedBy = session.userId; await manager.getRepository(CardTransferRequest).save(locked);
     });
     await this.notifyBranchUsers(request.sourceBranchId, `CARD transfer ${request.transactionNumber} accepted`, `CARD transfer request ${request.transactionNumber} was accepted by the destination branch.`);

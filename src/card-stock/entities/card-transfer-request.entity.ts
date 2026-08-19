@@ -4,6 +4,7 @@ import { CardTransferStatus } from '../card-stock.enums';
 import { CardTransferRequestCard } from './card-transfer-request-card.entity';
 import { CardTransferRequestItem } from './card-transfer-request-item.entity';
 import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
+import type { Company } from '../../company/company.entity';
 
 @Index('IDX_card_transfer_requests_transaction_number', ['transactionNumber'], { unique: true })
 @Index('IDX_card_transfer_requests_status', ['status'])
@@ -29,6 +30,12 @@ export class CardTransferRequest extends BaseEntity {
 
   @Column({ type: 'jsonb', name: 'destination_branch_snapshot' })
   destinationBranchSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: 'uuid', name: 'company_id', nullable: true })
+  companyId: string | null;
+
+  @Column({ type: 'jsonb', name: 'company_snapshot', nullable: true })
+  companySnapshot: Company | null;
 
   @Column({ type: 'enum', enum: CardTransferStatus, default: CardTransferStatus.HELD })
   status: CardTransferStatus;

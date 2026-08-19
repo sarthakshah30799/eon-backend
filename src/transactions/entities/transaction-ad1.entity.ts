@@ -1,6 +1,14 @@
 import { Column, Entity } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { TransactionType, TransactionProfileType } from "../transactions.enums";
+import type { AccountProfile } from "../../account-profiles/account-profile.entity";
+import type { Branch } from "../../branches/branch.entity";
+import type { Company } from "../../company/company.entity";
+import type { Currency } from "../../currencies/currency.entity";
+import type { PartyProfile } from "../../party-profiles/party-profile.entity";
+import type { Product } from "../../products/product.entity";
+import type { Purpose } from "../../purpose/purpose.entity";
+import type { SelectOption } from "../../category-options/category-option.entity";
 
 @Entity("transaction_ad1")
 export class TransactionAd1 extends BaseEntity {
@@ -13,6 +21,12 @@ export class TransactionAd1 extends BaseEntity {
 
   @Column({ type: "uuid", name: "company_id", nullable: true })
   companyId: string | null;
+
+  @Column({ type: "jsonb", name: "company_snapshot", nullable: true })
+  companySnapshot: Company | null;
+
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
 
   // ── Type / mode ───────────────────────────────────────────────────────────
   @Column({
@@ -242,29 +256,29 @@ export class TransactionAd1 extends BaseEntity {
 
   // ── Snapshots (full entity JSON) ──────────────────────────────────────────
   @Column({ type: "jsonb", name: "branch_snapshot", nullable: true })
-  branchSnapshot: Record<string, any> | null;
+  branchSnapshot: Branch | null;
 
   @Column({ type: "jsonb", name: "currency_snapshot", nullable: true })
-  currencySnapshot: Record<string, any> | null;
+  currencySnapshot: Currency | null;
 
   @Column({ type: "jsonb", name: "product_snapshot", nullable: true })
-  productSnapshot: Record<string, any> | null;
+  productSnapshot: Product | null;
 
   @Column({ type: "jsonb", name: "agent_snapshot", nullable: true })
-  agentSnapshot: Record<string, any> | null;
+  agentSnapshot: PartyProfile | null;
 
   @Column({ type: "jsonb", name: "bank_snapshot", nullable: true })
-  bankSnapshot: Record<string, any> | null;
+  bankSnapshot: AccountProfile | null;
 
   @Column({ type: "jsonb", name: "marketing_snapshot", nullable: true })
-  marketingSnapshot: Record<string, any> | null;
+  marketingSnapshot: SelectOption | null;
 
   @Column({ type: "jsonb", name: "segment_snapshot", nullable: true })
-  segmentSnapshot: Record<string, any> | null;
+  segmentSnapshot: SelectOption | null;
 
   @Column({ type: "jsonb", name: "purpose_snapshot", nullable: true })
-  purposeSnapshot: Record<string, any> | null;
+  purposeSnapshot: Purpose | null;
 
   @Column({ type: "jsonb", name: "relationship_snapshot", nullable: true })
-  relationshipSnapshot: Record<string, any> | null;
+  relationshipSnapshot: SelectOption | null;
 }

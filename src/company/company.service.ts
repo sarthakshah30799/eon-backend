@@ -54,10 +54,10 @@ export class CompanyService {
   async getCurrentCompanySnapshot(
     referenceDate = new Date(),
     excludeCompanyId?: string,
-  ) {
+  ): Promise<Company | null> {
     const company = await this.getCurrentCompany(referenceDate, excludeCompanyId);
     return company
-      ? buildEntitySnapshot(company, this.companyRepository)
+      ? (buildEntitySnapshot(company, this.companyRepository) as unknown as Company)
       : null;
   }
 

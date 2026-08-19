@@ -58,6 +58,7 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
 import {
@@ -1323,16 +1324,11 @@ export class TransactionsService {
       resolvedCounterId,
     );
 
-    const currentCompany = await this.companyService.getCurrentCompany(now);
-    if (!currentCompany) {
-      throw new BadRequestException("Current company not found");
-    }
-
-    const currentCompanySnapshot =
-      await this.companyService.getCurrentCompanySnapshot(now);
-    if (!currentCompanySnapshot) {
-      throw new BadRequestException("Current company snapshot not found");
-    }
+    const { company: currentCompany, snapshot: currentCompanySnapshot } =
+      await requireCompanyForDate(
+        this.companyService,
+        resolvedTransactionDate,
+      );
 
     const gstRatePercent = await this.resolveGstRatePercent();
 

@@ -35,6 +35,7 @@ import {
   TransactionPartyProfileTypeEnum,
 } from "../transactions.enums";
 import { CardStockReferenceType } from "../../card-stock/card-stock.enums";
+import type { Company } from "../../company/company.entity";
 
 @Index("IDX_transactions_number", ["number"], { unique: true })
 @Index(
@@ -112,7 +113,7 @@ export class Transaction extends BaseEntity {
   companyId: string | null;
 
   @Column({ type: "jsonb", name: "company_snapshot", nullable: true })
-  companySnapshot: TransactionReferenceSnapshotValue;
+  companySnapshot: Company | null;
 
   @Column({ type: "citext", name: "sac_code", nullable: true })
   sacCode: string | null;

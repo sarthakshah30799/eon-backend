@@ -17,6 +17,7 @@ import { TransactionItem } from '../transactions/entities/transaction-item.entit
 import { TransfersController } from './transfers.controller';
 import { TransfersService } from './transfers.service';
 import { DayEndStartProcessModule } from '../day-end-start-process/day-end-start-process.module';
+import { CompanyModule } from '../company/company.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { DayEndStartProcessModule } from '../day-end-start-process/day-end-start
     MailModule,
     TransactionsModule,
     DayEndStartProcessModule,
+    CompanyModule,
     TypeOrmModule.forFeature([Branch, Counter, User, UserRole, Product, Currency, ProductCurrencyRate, AccountProfile]),
     TypeOrmModule.forFeature([CurrencyTransfer, CurrencyTransferItem, Transaction, TransactionItem], 'database2'),
   ],

@@ -4,6 +4,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CreateCardStockReceiptDto } from './dto/card-stock-receipt.dto';
+import { RecordCardStockPrintDto } from './dto/card-stock-print.dto';
 import { CardStockService } from './card-stock.service';
 import { AuthenticatedSession } from '../auth/types/session-context';
 
@@ -58,6 +59,16 @@ export class CardStockController {
   @Get(':id')
   @ApiOperation({ summary: 'Get CARD stock receipt' })
   findById(@Param('id') id: string, @Session() session: AuthenticatedSession) { return this.cardStockService.findById(id, session); }
+
+  @Post(':id/print')
+  @ApiOperation({ summary: 'Record CARD stock receipt print (Original then Duplicate)' })
+  recordPrint(
+    @Param('id') id: string,
+    @Body() dto: RecordCardStockPrintDto,
+    @Session() session: AuthenticatedSession,
+  ) {
+    return this.cardStockService.recordPrint(id, dto, session);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create CARD stock receipt' })

@@ -11,6 +11,9 @@ import { Product } from '../products/product.entity';
 import { Purpose } from '../purpose/purpose.entity';
 import { TransactionProfileType, TransactionType } from './transactions.enums';
 import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
+import { CompanyService } from '../company/company.service';
+import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
+import { requireCompanyForDate } from '../common/snapshot/company-snapshot.util';
 
 interface Ad1Payload {
   currencyId?: string;
@@ -25,6 +28,7 @@ interface Ad1Payload {
   profileType?: TransactionProfileType;
   docNo?: string;
   dealId?: string;
+  branchId?: string;
   transactionDate?: string;
   servicedBy?: string;
   remitterName?: string;
@@ -79,6 +83,7 @@ export class TransactionAd1Service {
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
+    private readonly companyService: CompanyService,
   ) {}
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -90,11 +95,10 @@ export class TransactionAd1Service {
     const snapshots: Partial<TransactionAd1> = {};
 
     if (branchId) {
-      const branch = await this.branchRepository.findOne({
-        where: { id: branchId },
-        relations: ['company'],
-      });
-      snapshots.branchSnapshot = branch ?? null;
+      snapshots.branchSnapshot = (await loadEntitySnapshot(
+        this.branchRepository,
+        branchId,
+      )) as unknown as Branch | null;
     }
 
     if (payload.currencyId) {
@@ -208,9 +212,10 @@ export class TransactionAd1Service {
 
     const branch = await this.branchRepository.findOne({
       where: { id: resolvedBranchId },
-      relations: ['company'],
     });
-    const companyId = branch?.company?.id ?? null;
+    if (!branch) {
+      throw new NotFoundException(`Branch with id ${resolvedBranchId} not found`);
+    }
     const policyContext = await this.dayEndStartProcessService.getDayEndContext(
       {
         userId: performedById,
@@ -229,12 +234,18 @@ export class TransactionAd1Service {
       activeCounterId,
     );
 
+    const { company, snapshot: companySnapshot } = await requireCompanyForDate(
+      this.companyService,
+      resolvedTransactionDate,
+    );
     const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
     const ad1Data: DeepPartial<TransactionAd1> = {
         number: String(payload.docNo),
         branchId: String(resolvedBranchId),
-        companyId,
+        companyId: company.id,
+        companySnapshot,
+        printCount: 0,
         transactionType: payload.transactionType ?? TransactionType.PURCHASE,
         profileType: payload.profileType ?? TransactionProfileType.AD1,
         createdBy: performedById,
@@ -376,17 +387,36 @@ export class TransactionAd1Service {
       ad1.agentId = payload.fxRefAgentId || null;
     }
 
+    const nextBranchId = payload.branchId?.trim() || ad1.branchId;
+    const branchChanged = Boolean(nextBranchId && nextBranchId !== ad1.branchId);
+    if (branchChanged) {
+      ad1.branchId = nextBranchId;
+    }
+
     const snapshots = await this.resolveSnapshots(
       {
         ...payload,
         agentId: payload.agentId ?? payload.fxRefAgentId,
       },
-      branchId,
+      branchChanged ? nextBranchId : undefined,
     );
     Object.assign(ad1, snapshots);
 
     ad1.updatedBy = performedById;
     await this.repo.save(ad1);
     return this.findOne(id);
+  }
+
+  async recordPrint(id: string): Promise<{ message: string; copyType: string; printCount: number }> {
+    const ad1 = await this.findOne(id);
+    const existingPrintCount = ad1.printCount ?? 0;
+    const copyType = existingPrintCount === 0 ? 'CUSTOMER_COPY' : 'DUPLICATE_COPY';
+    ad1.printCount = existingPrintCount + 1;
+    await this.repo.save(ad1);
+    return {
+      message: copyType === 'DUPLICATE_COPY' ? 'Duplicate copy printed' : 'Original copy printed',
+      copyType,
+      printCount: ad1.printCount,
+    };
   }
 }

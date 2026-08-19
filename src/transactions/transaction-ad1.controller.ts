@@ -71,4 +71,10 @@ export class TransactionAd1Controller {
     const performedById = session?.userId ?? null;
     return this.ad1Service.update(id, body, performedById, session?.activeBranchId ?? null, session?.activeCounterId ?? null);
   }
+
+  @Post(':id/print')
+  @ApiOperation({ summary: 'Record an AD1 print and return Original or Duplicate' })
+  async recordPrint(@Param('id') id: string) {
+    return this.ad1Service.recordPrint(id);
+  }
 }
