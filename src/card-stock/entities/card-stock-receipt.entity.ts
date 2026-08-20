@@ -3,6 +3,7 @@ import { BaseEntity } from '../../base/base.entity';
 import { CardStockReceiptStatus } from '../card-stock.enums';
 import { CardStockReceiptItem } from './card-stock-receipt-item.entity';
 import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
+import type { Company } from '../../company/company.entity';
 
 @Index('IDX_card_stock_receipts_transaction_number', ['transactionNumber'], { unique: true })
 @Index('IDX_card_stock_receipts_date', ['receiptDate'])
@@ -19,6 +20,12 @@ export class CardStockReceipt extends BaseEntity {
 
   @Column({ type: 'jsonb', name: 'branch_snapshot' })
   branchSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: 'uuid', name: 'company_id', nullable: true })
+  companyId: string | null;
+
+  @Column({ type: 'jsonb', name: 'company_snapshot', nullable: true })
+  companySnapshot: Company | null;
 
   @Column({ type: 'uuid', name: 'issuer_party_profile_id' })
   issuerPartyProfileId: string;

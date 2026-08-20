@@ -12,6 +12,8 @@ import {
   type TransactionTypeProfile,
 } from "../transactions/transactions.enums";
 import { CardStockReferenceType } from "./card-stock.enums";
+import { Company } from "../company/company.entity";
+import { TransactionReferenceSnapshotValue } from "../transactions/types/transaction-snapshot.types";
 
 export interface CardStockTransactionInput {
   manager: EntityManager;
@@ -19,6 +21,9 @@ export interface CardStockTransactionInput {
   numberingCode?: TransactionTypeProfile;
   number?: string;
   branch: Branch;
+  branchSnapshot?: TransactionReferenceSnapshotValue;
+  companyId?: string | null;
+  companySnapshot?: Company | null;
   transactionDate: Date | string;
   referenceType?: CardStockReferenceType;
   referenceId?: string;
@@ -61,7 +66,7 @@ export class CardStockTransactionService {
         slug: input.operationCode,
         transactionDate: input.transactionDate,
         branchId: input.branch.id,
-        branchSnapshot: {
+        branchSnapshot: input.branchSnapshot ?? {
           id: input.branch.id,
           code: input.branch.code,
           name: input.branch.name,
@@ -69,6 +74,8 @@ export class CardStockTransactionService {
         },
         counterId: null,
         counterSnapshot: null,
+        companyId: input.companyId ?? null,
+        companySnapshot: input.companySnapshot ?? null,
         partyProfileId: null,
         partyProfileSnapshot: null,
         transactionPartyProfileType: TransactionPartyProfileTypeEnum.BRANCH,

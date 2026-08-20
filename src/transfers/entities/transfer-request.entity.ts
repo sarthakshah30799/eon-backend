@@ -16,6 +16,7 @@ import {
 import { TransactionReferenceSnapshotValue } from '../../transactions/types/transaction-snapshot.types';
 import { Branch } from '../../branches/branch.entity';
 import { Counter } from '../../counters/counter.entity';
+import type { Company } from '../../company/company.entity';
 
 @Index('IDX_transfer_requests_number', ['number'], { unique: true })
 @Index('IDX_transfer_requests_status', ['status'])
@@ -90,6 +91,15 @@ export class TransferRequest extends BaseEntity {
     nullable: true,
   })
   destinationCounterSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: 'uuid', name: 'company_id', nullable: true })
+  companyId: string | null;
+
+  @Column({ type: 'jsonb', name: 'company_snapshot', nullable: true })
+  companySnapshot: Company | null;
+
+  @Column({ type: 'integer', name: 'print_count', default: 0 })
+  printCount: number;
 
   @Column({ type: 'uuid', name: 'source_transaction_id', nullable: true })
   sourceTransactionId: string | null;

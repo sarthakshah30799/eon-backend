@@ -3,6 +3,7 @@ import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CardTransferService } from './card-transfer.service';
 import { CardTransferActionDto, CardTransferListQueryDto, CreateCardTransferDto } from './dto/card-transfer.dto';
+import { RecordCardTransferPrintDto } from './dto/card-stock-print.dto';
 
 @ApiTags('card-stock-transfers')
 @ApiCookieAuth('sessionId')
@@ -36,6 +37,16 @@ export class CardTransferController {
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: CreateCardTransferDto, @Session() session: any) {
     return this.service.update(id, dto, session);
+  }
+
+  @Post(':id/print')
+  @ApiOperation({ summary: 'Record CARD transfer Stock In or Stock Out print (Original then Duplicate)' })
+  recordPrint(
+    @Param('id') id: string,
+    @Body() dto: RecordCardTransferPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(id, dto, session);
   }
 
   @Post(':id/accept')

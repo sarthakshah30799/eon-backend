@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Branch } from '../branches/branch.entity';
 import { Counter } from '../counters/counter.entity';
+import { Company } from '../company/company.entity';
 import { User } from '../users/user.entity';
 import { UserRole } from '../user-roles/user-role.entity';
 import { MailService } from '../mail/mail.service';
@@ -18,7 +19,9 @@ import { Product } from '../products/product.entity';
 import { Currency } from '../currencies/currency.entity';
 import { ProductCurrencyRate } from '../currency-rates/product-currency-rate.entity';
 import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
+import { requireCompanyForDate } from '../common/snapshot/company-snapshot.util';
 import { toUtcDateOnly } from '../common/date/date.util';
+import { CompanyService } from '../company/company.service';
 import { TransactionReferenceSnapshotValue } from '../transactions/types/transaction-snapshot.types';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionItem } from '../transactions/entities/transaction-item.entity';
@@ -104,6 +107,7 @@ export class TransfersService {
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly mailService: MailService,
+    private readonly companyService: CompanyService,
   ) {}
 
   private async resolveTransferNumber(transferType: CurrencyTransferType, branchCode: string): Promise<string> {
@@ -418,6 +422,8 @@ export class TransfersService {
     transactionDate: Date;
     remarks: string | null;
     number?: string | null;
+    companyId: string | null;
+    companySnapshot: Company | null;
   }): Promise<Transaction> {
     const {
       manager,
@@ -436,6 +442,8 @@ export class TransfersService {
       transactionDate,
       remarks,
       number: requestedNumber,
+      companyId,
+      companySnapshot,
     } = params;
 
     const branchCode = String(branchSnapshot?.code ?? '').trim();
@@ -469,8 +477,8 @@ export class TransfersService {
         branchSnapshot,
         counterId,
         counterSnapshot,
-        companyId: null,
-        companySnapshot: null,
+        companyId,
+        companySnapshot,
         sacCode: null,
         partyProfileId: counterpartyId,
         partyProfileSnapshot: counterpartySnapshot,
@@ -695,7 +703,7 @@ export class TransfersService {
       counterId: sourceCounterId,
       items,
     });
-    const [snapshots, transferNumber] = await Promise.all([
+    const [snapshots, transferNumber, companyForDate] = await Promise.all([
       this.resolveSnapshots({
         sourceBranchId,
         sourceCounterId,
@@ -703,6 +711,7 @@ export class TransfersService {
         destinationCounterId,
       }),
       this.resolveTransferNumber(transferType, sourceBranch.code),
+      requireCompanyForDate(this.companyService, sourceDatePolicy.allowedDate),
     ]);
 
     const transfer = await this.transferRepository.save(
@@ -720,6 +729,9 @@ export class TransfersService {
         destinationBranchSnapshot: snapshots.destinationBranchSnapshot,
         destinationCounterId,
         destinationCounterSnapshot: snapshots.destinationCounterSnapshot,
+        companyId: companyForDate.company.id,
+        companySnapshot: companyForDate.snapshot,
+        printCount: 0,
         sourceNumberSeriesCode: TRANSFER_SERIES[transferType].source,
         destinationNumberSeriesCode: TRANSFER_SERIES[transferType].destination,
         remarks: normalizeString(body.remarks) || null,
@@ -863,7 +875,7 @@ export class TransfersService {
     activeCounterId: string | null,
     isAdmin = false,
     isHoStaff = false,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; copyType: TransferPrintCopyType; printCount: number }> {
     const transfer = await this.transferRepository.findOne({
       where: { id },
       relations: {
@@ -898,7 +910,15 @@ export class TransfersService {
       }
     }
 
-    const copyType = (dto.copyType ?? TransferPrintCopyType.CUSTOMER_COPY) as TransferPrintCopyType;
+    const existingPrintCount = transfer.printCount ?? 0;
+    const copyType = existingPrintCount === 0
+      ? TransferPrintCopyType.CUSTOMER_COPY
+      : TransferPrintCopyType.DUPLICATE_COPY;
+    transfer.printCount = existingPrintCount + 1;
+    await this.transferRepository.update(id, {
+      printCount: transfer.printCount,
+      updatedBy: _performedById ?? transfer.updatedBy,
+    });
     const printLabel = copyType === TransferPrintCopyType.DUPLICATE_COPY ? 'Duplicate copy printed' : 'Original copy printed';
 
     if (dto.sendEmail) {
@@ -927,6 +947,8 @@ export class TransfersService {
 
     return {
       message: printLabel,
+      copyType,
+      printCount: transfer.printCount,
     };
   }
 
@@ -960,15 +982,16 @@ export class TransfersService {
       activeCounterId,
     });
 
-    const [sourceBranchSnapshot, sourceCounterSnapshot, destinationBranchSnapshot, destinationCounterSnapshot] = await Promise.all([
-      loadEntitySnapshot(this.branchRepository, transfer.sourceBranchId),
-      loadEntitySnapshot(this.counterRepository, transfer.sourceCounterId),
-      loadEntitySnapshot(this.branchRepository, transfer.destinationBranchId),
-      loadEntitySnapshot(this.counterRepository, transfer.destinationCounterId),
-    ]);
+    const sourceBranchSnapshot = transfer.sourceBranchSnapshot;
+    const sourceCounterSnapshot = transfer.sourceCounterSnapshot;
+    const destinationBranchSnapshot = transfer.destinationBranchSnapshot;
+    const destinationCounterSnapshot = transfer.destinationCounterSnapshot;
 
     if (!sourceBranchSnapshot || !sourceCounterSnapshot || !destinationBranchSnapshot || !destinationCounterSnapshot) {
-      throw new NotFoundException('Unable to resolve transfer branch or counter snapshots');
+      throw new BadRequestException('Unable to resolve transfer branch or counter snapshots');
+    }
+    if (!transfer.companyId || !transfer.companySnapshot) {
+      throw new BadRequestException('Current company not found');
     }
 
     const sourceItems = await this.normalizeTransferItems(
@@ -1050,6 +1073,8 @@ export class TransfersService {
         transactionDate,
         remarks: transfer.remarks ?? `Transfer request ${transfer.number ?? ''}`.trim(),
         number: transfer.number,
+        companyId: transfer.companyId,
+        companySnapshot: transfer.companySnapshot,
       });
 
       const destinationTransaction = await this.createTransferTransaction({
@@ -1075,6 +1100,8 @@ export class TransfersService {
         items: sourceItems,
         transactionDate,
         remarks: transfer.remarks ?? `Transfer request ${transfer.number ?? ''}`.trim(),
+        companyId: transfer.companyId,
+        companySnapshot: transfer.companySnapshot,
       });
 
       transfer.status = CurrencyTransferStatus.ACCEPTED;
