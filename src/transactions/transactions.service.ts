@@ -159,6 +159,30 @@ const normalizePassengerIdentity = (value?: string | null) => {
   return normalized || null;
 };
 
+const hasPassengerIdentityText = (value?: string | null) =>
+  Boolean(String(value ?? "").trim());
+
+const hasCompletePassengerPan = (
+  passenger?: TransactionPassengerPayload | null,
+) =>
+  Boolean(
+    passenger &&
+      hasPassengerIdentityText(passenger.panNumber) &&
+      hasPassengerIdentityText(passenger.panHolderName) &&
+      hasPassengerIdentityText(passenger.panDob),
+  );
+
+const hasCompletePassengerPassport = (
+  passenger?: TransactionPassengerPayload | null,
+) =>
+  Boolean(
+    passenger &&
+      hasPassengerIdentityText(passenger.passportNumber) &&
+      hasPassengerIdentityText(passenger.passportIssueAt) &&
+      hasPassengerIdentityText(passenger.passportIssueDate) &&
+      hasPassengerIdentityText(passenger.passportExpiryDate),
+  );
+
 const addMonthsUtc = (date: Date, months: number) => {
   const next = new Date(date);
   next.setUTCMonth(next.getUTCMonth() + months);
@@ -1812,10 +1836,12 @@ export class TransactionsService {
 
     if (
       passengerPayload?.nationalityType === PassengerNationalityType.INDIAN &&
-      passengerOtherDocumentRows.length === 0
+      passengerOtherDocumentRows.length === 0 &&
+      !hasCompletePassengerPan(passengerPayload) &&
+      !hasCompletePassengerPassport(passengerPayload)
     ) {
       throw new BadRequestException(
-        "At least one other document is required for Indian passengers",
+        "PAN, passport, or at least one other document is required for Indian passengers",
       );
     }
 
