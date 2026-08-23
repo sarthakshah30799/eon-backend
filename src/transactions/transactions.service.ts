@@ -1517,6 +1517,22 @@ export class TransactionsService {
       }
 
       const passengerArrivalDate = parseDateValue(passengerPayload.arrivalDate);
+      const isForeignPassenger =
+        passengerPayload.nationalityType === PassengerNationalityType.NRI ||
+        passengerPayload.nationalityType === PassengerNationalityType.FOREIGNER;
+
+      if (isForeignPassenger && !hasCompletePassengerPassport(passengerPayload)) {
+        throw new BadRequestException(
+          "Passport details are required for NRI and foreign passengers",
+        );
+      }
+
+      if (isForeignPassenger && !passengerArrivalDate) {
+        throw new BadRequestException(
+          "Arrival date is required for NRI and foreign passengers",
+        );
+      }
+
       if (
         passengerArrivalDate &&
         passengerArrivalDate > passengerTransactionDate
