@@ -565,6 +565,35 @@ export class AdditionalSettingService {
     return parent ? setting.valueBoolean ?? defaultValue : defaultValue;
   }
 
+  async getSettingNumberValue(
+    categoryCode: string,
+    subcategoryCode: string,
+    defaultValue: number,
+  ): Promise<number> {
+    const setting = await this.settingRepository.findOne({
+      where: { code: normalizeCode(subcategoryCode), nodeType: NodeType.Setting },
+    });
+    if (!setting?.parentId) {
+      return defaultValue;
+    }
+
+    const parent = await this.settingRepository.findOne({
+      where: {
+        id: setting.parentId,
+        code: normalizeCode(categoryCode),
+        nodeType: NodeType.Category,
+      },
+    });
+    if (!parent) {
+      return defaultValue;
+    }
+
+    const parsed = Number(
+      setting.valueNumber ?? setting.valueDecimal ?? setting.valueText ?? defaultValue,
+    );
+    return Number.isFinite(parsed) ? parsed : defaultValue;
+  }
+
   async findAll(): Promise<AdvancedSetting[]> {
     return this.settingRepository.find({
       where: { nodeType: NodeType.Category },

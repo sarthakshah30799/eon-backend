@@ -7,3 +7,8 @@ export enum PurposePartyProfileType {
   CORPORATE = 'CORPORATE',
   INDIVIDUAL = 'INDIVIDUAL',
 }
+
+export enum PurposeGroupProfileType {
+  FFMC = 'FFMC',
+  AD = 'AD',
+}

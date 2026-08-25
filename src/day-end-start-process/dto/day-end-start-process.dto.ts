@@ -67,6 +67,13 @@ export class DayEndStartProcessContextDto {
   @ApiPropertyOptional()
   activeBackdateWindow?: MonthlyLockWindowResponseDto | null;
 
+  @ApiPropertyOptional({
+    description: "Branch data lock from FLM 8. Punching on this date or earlier is blocked.",
+  })
+  transactionDataLock?: {
+    lockedThroughDate: string;
+  } | null;
+
   @ApiProperty({ type: [PolicyChecklistItemDto] })
   checklist: PolicyChecklistItemDto[];
 }

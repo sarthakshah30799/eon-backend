@@ -36,6 +36,7 @@ import { CurrencyRatesModule } from "./currency-rates/currency-rates.module";
 import { ChequeBookModule } from "./chequebooks/chequebook.module";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { MigrationToolModule } from "./migration-tool/migration-tool.module";
+import { TransactionDataLocksModule } from "./transaction-data-locks/transaction-data-locks.module";
 import { ReportsModule } from "./reports/reports.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { PassengerModule } from "./passengers/passenger.module";
@@ -83,6 +84,7 @@ import { VoucherModule } from "./vouchers/voucher.module";
     CardStockModule,
     VoucherModule,
     MigrationToolModule,
+    TransactionDataLocksModule,
     ReportsModule,
     DashboardModule,
     AuditLogModule,

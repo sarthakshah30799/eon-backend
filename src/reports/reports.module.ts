@@ -18,9 +18,35 @@ import { CardUnsettledReportController } from "./card-unsettled-report.controlle
 import { CardUnsettledReportService } from "./card-unsettled-report.service";
 import { CardSettledReportController } from "./card-settled-report.controller";
 import { CardSettledReportService } from "./card-settled-report.service";
+import { CardBlankStockReportController } from "./card-blank-stock-report.controller";
+import { CardBlankStockReportService } from "./card-blank-stock-report.service";
+import { Flm1DailyCnSummaryController } from "./flm1-daily-cn-summary.controller";
+import { Flm1DailyCnSummaryService } from "./flm1-daily-cn-summary.service";
+import { Flm3PurchaseFromPublicController } from "./flm3-purchase-from-public.controller";
+import { Flm3PurchaseFromPublicService } from "./flm3-purchase-from-public.service";
+import { Flm4PurchaseFromFfmcController } from "./flm4-purchase-from-ffmc.controller";
+import { Flm4PurchaseFromFfmcService } from "./flm4-purchase-from-ffmc.service";
+import { Flm5SalesToPublicController } from "./flm5-sales-to-public.controller";
+import { Flm5SalesToPublicService } from "./flm5-sales-to-public.service";
+import { Flm6SalesToFfmcController } from "./flm6-sales-to-ffmc.controller";
+import { Flm6SalesToFfmcService } from "./flm6-sales-to-ffmc.service";
+import { Flm8CnStatementController } from "./flm8-cn-statement.controller";
+import { Flm8CnStatementService } from "./flm8-cn-statement.service";
+import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
+import { PurposeModule } from "../purpose/purpose.module";
+import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
+import { TransactionDataLocksModule } from "../transaction-data-locks/transaction-data-locks.module";
+import { Branch } from "../branches/branch.entity";
+import { Currency } from "../currencies/currency.entity";
+import { UserRole } from "../user-roles/user-role.entity";
 
 @Module({
   imports: [
+    AdditionalSettingModule,
+    PurposeModule,
+    DayEndStartProcessModule,
+    TransactionDataLocksModule,
+    TypeOrmModule.forFeature([Branch, UserRole, Currency]),
     TypeOrmModule.forFeature(
       [
         Transaction,
@@ -40,6 +66,13 @@ import { CardSettledReportService } from "./card-settled-report.service";
     CurrencyBalanceReportController,
     CardUnsettledReportController,
     CardSettledReportController,
+    CardBlankStockReportController,
+    Flm1DailyCnSummaryController,
+    Flm3PurchaseFromPublicController,
+    Flm4PurchaseFromFfmcController,
+    Flm5SalesToPublicController,
+    Flm6SalesToFfmcController,
+    Flm8CnStatementController,
   ],
   providers: [
     SalePurchaseReportService,
@@ -48,6 +81,13 @@ import { CardSettledReportService } from "./card-settled-report.service";
     CurrencyBalanceReportService,
     CardUnsettledReportService,
     CardSettledReportService,
+    CardBlankStockReportService,
+    Flm1DailyCnSummaryService,
+    Flm3PurchaseFromPublicService,
+    Flm4PurchaseFromFfmcService,
+    Flm5SalesToPublicService,
+    Flm6SalesToFfmcService,
+    Flm8CnStatementService,
   ],
 })
 export class ReportsModule {}
