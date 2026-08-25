@@ -130,9 +130,9 @@ export class AdditionalSettingService {
       );
     }
 
-    if (cleanValue.length !== 9) {
+    if (cleanValue.length !== 8) {
       throw new BadRequestException(
-        'Transaction numbering series must be exactly 9 digits',
+        'Transaction numbering series must be exactly 8 digits',
       );
     }
   }
