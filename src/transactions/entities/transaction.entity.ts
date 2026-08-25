@@ -88,8 +88,8 @@ export class Transaction extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   slug: string | null;
 
-  @Column({ type: "timestamptz", name: "transaction_date", nullable: true })
-  transactionDate: Date | string | null;
+  @Column({ type: "timestamptz", name: "transaction_date" })
+  transactionDate: Date | string;
 
   @Column({ type: "uuid", name: "branch_id" })
   branchId: string;

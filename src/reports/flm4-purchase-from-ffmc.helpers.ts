@@ -1,6 +1,6 @@
 import { DataSource } from "typeorm";
 import { CardSettlementReportFormat } from "./dto/card-settlement-report-query.dto";
-import { resolveFlm4ProfileSlugs } from "./flm-ffmc-profile.constants";
+import { resolveFlm4ProfileFilter } from "./flm-ffmc-profile.constants";
 import {
   buildFlm3PurchaseFromPublic,
   buildFlm3PurchaseFromPublicExport,
@@ -17,7 +17,6 @@ export const loadFlm4PaymentRows = loadFlm3PaymentRows;
 export const loadFlm4OtherDocumentRows = loadFlm3OtherDocumentRows;
 export const buildFlm4PurchaseFromFfmc = buildFlm3PurchaseFromPublic;
 
-
 export const loadFlm4ItemRows = (
   database2: DataSource,
   filters: {
@@ -27,12 +26,19 @@ export const loadFlm4ItemRows = (
     productId?: string;
     profileTypes?: string[];
   },
-): Promise<Flm3ItemRow[]> =>
-  loadFlmRegisterItemRows(
+): Promise<Flm3ItemRow[]> => {
+  const { slugs, partyProfileTypes, slugOnlyFallbackSlugs } =
+    resolveFlm4ProfileFilter(filters.profileTypes);
+  return loadFlmRegisterItemRows(
     database2,
-    filters,
-    resolveFlm4ProfileSlugs(filters.profileTypes),
+    {
+      ...filters,
+      partyProfileTypes,
+      slugOnlyFallbackSlugs,
+    },
+    slugs,
   );
+};
 
 
 export const buildFlm4PurchaseFromFfmcExport = (

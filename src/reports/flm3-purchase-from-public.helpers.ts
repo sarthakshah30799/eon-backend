@@ -318,11 +318,19 @@ export const loadFlmRegisterItemRows = async (
     endDateExclusive: Date;
     branchIds: string[];
     productId?: string;
+    partyProfileTypes?: string[];
+    slugOnlyFallbackSlugs?: string[];
   },
   slugs: string[],
 ): Promise<Flm3ItemRow[]> => {
+  if (!slugs.length) {
+    return [];
+  }
+
   const params: unknown[] = [filters.startDate, filters.endDateExclusive];
-  const slugList = slugs.map((slug) => `'${slug}'`).join(", ");
+  const slugList = slugs
+    .map((slug) => `'${String(slug).replace(/'/g, "''").toUpperCase()}'`)
+    .join(", ");
   const conditions = [
     "tx.deleted_at IS NULL",
     "item.deleted_at IS NULL",
@@ -332,6 +340,25 @@ export const loadFlmRegisterItemRows = async (
     "tx.transaction_date >= $1",
     "tx.transaction_date < $2",
   ];
+
+  if (filters.partyProfileTypes?.length) {
+    const typePlaceholders = filters.partyProfileTypes.map((profileType) => {
+      params.push(String(profileType).trim().toUpperCase());
+      return `$${params.length}`;
+    });
+    const typeMatch = `UPPER(COALESCE(tx.party_profile_snapshot->>'type', '')) IN (${typePlaceholders.join(", ")})`;
+    const fallbackSlugs = filters.slugOnlyFallbackSlugs ?? [];
+    if (fallbackSlugs.length) {
+      const fallbackList = fallbackSlugs
+        .map((slug) => `'${String(slug).replace(/'/g, "''").toUpperCase()}'`)
+        .join(", ");
+      conditions.push(
+        `(${typeMatch} OR (COALESCE(tx.party_profile_snapshot->>'type', '') = '' AND UPPER(tx.slug) IN (${fallbackList})))`,
+      );
+    } else {
+      conditions.push(typeMatch);
+    }
+  }
 
   if (filters.productId) {
     params.push(filters.productId);
