@@ -4,6 +4,10 @@ import { Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { AdvancedSetting } from "../additional-settings/advanced-setting.entity";
 import { MonthlyLocksService } from "../monthly-locks/monthly-locks.service";
+import { TransactionDataLocksService } from "../transaction-data-locks/transaction-data-locks.service";
+import {
+  getEarliestAllowedPunchDate,
+} from "../transaction-data-locks/transaction-data-lock.utils";
 import { DayEndExecution, DayEndExecutionStatus } from "./entities/day-end-execution.entity";
 import {
   CompleteDayEndDto,
@@ -57,6 +61,7 @@ export class DayEndStartProcessService {
     private readonly dayEndExecutionRepository: Repository<DayEndExecution>,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly monthlyLocksService: MonthlyLocksService,
+    private readonly transactionDataLocksService: TransactionDataLocksService,
   ) {}
 
   private assertSessionContext(session: SessionContext, requireCounter = false) {
@@ -191,19 +196,33 @@ export class DayEndStartProcessService {
   private resolveSuggestedTransactionDate(
     currentBusinessDate: string,
     activeMonthlyLock: { fromDate: string; toDate: string } | null,
+    transactionDataLock: { lockedThroughDate: string } | null,
   ): string {
     const currentDate = parseDateOnly(currentBusinessDate);
     if (!currentDate) {
       return currentBusinessDate;
     }
 
-    if (!activeMonthlyLock) {
-      return currentBusinessDate;
+    let suggested = currentBusinessDate;
+
+    if (activeMonthlyLock) {
+      const minDate = parseDateOnly(activeMonthlyLock.fromDate);
+      const maxDate = parseDateOnly(activeMonthlyLock.toDate);
+      suggested = formatDateOnly(clampDate(currentDate, minDate, maxDate));
     }
 
-    const minDate = parseDateOnly(activeMonthlyLock.fromDate);
-    const maxDate = parseDateOnly(activeMonthlyLock.toDate);
-    return formatDateOnly(clampDate(currentDate, minDate, maxDate));
+    if (transactionDataLock?.lockedThroughDate) {
+      const earliestAllowed = getEarliestAllowedPunchDate(
+        transactionDataLock.lockedThroughDate,
+      );
+      const suggestedDate = parseDateOnly(suggested);
+      const earliestDate = parseDateOnly(earliestAllowed);
+      if (suggestedDate && earliestDate && suggestedDate < earliestDate) {
+        return earliestAllowed;
+      }
+    }
+
+    return suggested;
   }
 
   private async upsertBodRow(
@@ -257,9 +276,12 @@ export class DayEndStartProcessService {
     const latestExecution = await this.findLatestExecution(branchId);
     const workflow = this.getWorkflowStateForExecution(today, todayExecution, latestExecution);
     const activeMonthlyLock = await this.monthlyLocksService.getActiveMonthlyLock(branchId, userId);
+    const transactionDataLock =
+      await this.transactionDataLocksService.getActiveLockForBranch(branchId);
     const suggestedTransactionDate = this.resolveSuggestedTransactionDate(
       workflow.currentBusinessDate,
       activeMonthlyLock,
+      transactionDataLock,
     );
 
     return {
@@ -276,6 +298,9 @@ export class DayEndStartProcessService {
       workflowState: workflow.workflowState,
       activeMonthlyLock,
       activeBackdateWindow: activeMonthlyLock,
+      transactionDataLock: transactionDataLock
+        ? { lockedThroughDate: transactionDataLock.lockedThroughDate }
+        : null,
       checklist: await this.getPolicyChecklist(),
     };
   }
@@ -297,8 +322,23 @@ export class DayEndStartProcessService {
     const allowedDate = context.transactionDate;
     const activeWindow = context.activeMonthlyLock;
     const hasMonthlyLockOverride = Boolean(activeWindow);
+    const dataLock = context.transactionDataLock;
+
+    const assertNotDataLocked = (dateValue: string) => {
+      if (!dataLock?.lockedThroughDate) {
+        return;
+      }
+      if (dateValue <= dataLock.lockedThroughDate) {
+        const earliestAllowed = getEarliestAllowedPunchDate(dataLock.lockedThroughDate);
+        throw new BadRequestException(
+          `Transaction dates through ${dataLock.lockedThroughDate} are locked. Allowed dates start from ${earliestAllowed}`,
+        );
+      }
+    };
 
     if (!transactionDate) {
+      assertNotDataLocked(allowedDate);
+
       if (hasMonthlyLockOverride || context.workflowState === "PENDING_EOD") {
         return { allowedDate, context };
       }
@@ -322,6 +362,8 @@ export class DayEndStartProcessService {
     if (requestedDate > this.getTodayBusinessDate()) {
       throw new BadRequestException("Transaction date cannot be in the future");
     }
+
+    assertNotDataLocked(requestedDate);
 
     if (hasMonthlyLockOverride) {
       if (requestedDate < activeWindow.fromDate || requestedDate > activeWindow.toDate) {

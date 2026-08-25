@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import { Purpose } from './purpose.entity';
 import { PurposeSlab } from './purpose-slab.entity';
+import { PurposeGroupPurpose } from './purpose-group-purpose.entity';
 import { CreatePurposeDto } from './dto/create-purpose.dto';
 import { UpdatePurposeDto } from './dto/update-purpose.dto';
 import { PurposeResponseDto } from './dto/purpose-response.dto';
@@ -17,6 +18,8 @@ export class PurposeService {
     private readonly purposeRepository: Repository<Purpose>,
     @InjectRepository(PurposeSlab)
     private readonly purposeSlabRepository: Repository<PurposeSlab>,
+    @InjectRepository(PurposeGroupPurpose)
+    private readonly purposeGroupPurposeRepository: Repository<PurposeGroupPurpose>,
   ) {}
 
   private normalizeCode(code: string): string {
@@ -306,6 +309,15 @@ export class PurposeService {
 
     if (!purpose) {
       throw new NotFoundException(`Purpose with id ${id} not found`);
+    }
+
+    const groupLinkCount = await this.purposeGroupPurposeRepository.count({
+      where: { purposeId: id },
+    });
+    if (groupLinkCount > 0) {
+      throw new ConflictException(
+        'Purpose is assigned to a purpose group. Remove it from the group before deleting.',
+      );
     }
 
     await this.dataSource.transaction(async manager => {

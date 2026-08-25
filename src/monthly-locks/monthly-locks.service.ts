@@ -132,4 +132,41 @@ export class MonthlyLocksService {
     window.updatedBy = actorUserId;
     return this.monthlyLockWindowRepository.save(window);
   }
+
+  async applyDataLockToBranchWindows(
+    branchId: string,
+    earliestAllowedDate: string,
+    actorUserId: string,
+  ): Promise<{ raised: number; revoked: number }> {
+    const windows = await this.monthlyLockWindowRepository.find({
+      where: { branchId, isActive: true },
+    });
+
+    let raised = 0;
+    let revoked = 0;
+
+    for (const window of windows) {
+      let changed = false;
+      if (window.fromDate < earliestAllowedDate) {
+        window.fromDate = earliestAllowedDate;
+        changed = true;
+        raised += 1;
+      }
+
+      if (window.fromDate > window.toDate) {
+        window.isActive = false;
+        window.revokedAt = new Date();
+        window.revokedBy = actorUserId;
+        changed = true;
+        revoked += 1;
+      }
+
+      if (changed) {
+        window.updatedBy = actorUserId;
+        await this.monthlyLockWindowRepository.save(window);
+      }
+    }
+
+    return { raised, revoked };
+  }
 }

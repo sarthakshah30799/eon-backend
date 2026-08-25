@@ -1,5 +1,6 @@
 import { Check, Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from '../base/base.entity';
+import { PurposeGroupPurpose } from './purpose-group-purpose.entity';
 import { PurposeSlab } from './purpose-slab.entity';
 import { PurposeRateType } from './purpose.enums';
 
@@ -44,4 +45,7 @@ export class Purpose extends BaseEntity {
     cascade: true,
   })
   slabs: PurposeSlab[];
+
+  @OneToMany(() => PurposeGroupPurpose, link => link.purpose)
+  groupLinks: PurposeGroupPurpose[];
 }

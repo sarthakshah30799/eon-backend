@@ -38,6 +38,7 @@ type PurchaseRulePassengerInput = {
 
 type PurchaseRuleTransactionBlock = {
   transactionType?: string | null;
+  transactionDate?: string | null;
   passenger?: PurchaseRulePassengerInput | null;
   items?: PurchaseRuleRowInput[] | null;
   additionalCharges?: PurchaseRuleRowInput[] | null;
@@ -46,6 +47,7 @@ type PurchaseRuleTransactionBlock = {
 
 type PurchaseRuleTransactionInput = {
   transactionType?: string | null;
+  transactionDate?: string | null;
   transaction?: PurchaseRuleTransactionBlock | null;
   passenger?: PurchaseRulePassengerInput | null;
   items?: PurchaseRuleRowInput[] | null;
@@ -70,6 +72,7 @@ export type PurchaseRulePreviewResponse = {
   allowed: boolean;
   ruleType: 'OK' | 'CORPORATE_CHEQUE_ONLY' | 'CDF_REQUIRED' | 'CASH_LIMIT_EXCEEDED' | 'CHEQUE_NOT_ALLOWED' | 'HISTORY_LIMIT_EXCEEDED' | 'MISSING_PASSENGER' | 'MISSING_PAYMENT';
   blockingReason: string | null;
+  blockingReasons: string[];
   requiresCdf: boolean;
   cdfThresholdAmount: string;
   referenceCurrencyCode: string;
@@ -176,6 +179,26 @@ export class PurchaseRuleService {
     return normalizeUpper(body.transaction?.transactionType ?? body.transactionType);
   }
 
+  private resolveHistoryWindow(
+    body: PurchaseRuleTransactionInput,
+    windowDays: number,
+  ): { windowStart: Date; windowEnd: Date } {
+    const rawDate = normalize(body.transaction?.transactionDate ?? body.transactionDate);
+    const parsedDate = rawDate ? new Date(rawDate) : new Date();
+    const windowEnd = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+    const startOfEndDay = new Date(Date.UTC(
+      windowEnd.getUTCFullYear(),
+      windowEnd.getUTCMonth(),
+      windowEnd.getUTCDate(),
+    ));
+    const exclusiveEnd = new Date(startOfEndDay);
+    exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
+    const windowStart = new Date(startOfEndDay);
+    windowStart.setUTCDate(windowStart.getUTCDate() - Math.max(1, windowDays));
+
+    return { windowStart, windowEnd: exclusiveEnd };
+  }
+
   private calculateRowAmount(row: PurchaseRuleRowInput) {
     const quantity = toNumber(row.quantity);
     const rate = toNumber(row.rate);
@@ -226,12 +249,11 @@ export class PurchaseRuleService {
     return Math.max(1, toNumber(currency?.ratePer || 1) || 1);
   }
 
-  private async calculateTransactionAmountInReferenceCurrency(
-    body: PurchaseRuleTransactionInput,
+  private async calculateRowsAmountInReferenceCurrency(
+    items: PurchaseRuleRowInput[],
+    charges: PurchaseRuleRowInput[],
     config: PurchaseRuleConfig,
   ): Promise<{ transactionAmount: number; referenceAmount: number }> {
-    const items = this.getItems(body);
-    const charges = this.getAdditionalCharges(body);
     const referenceCurrency = await this.resolveCurrencyByCodeOrId(config.referenceCurrencyCode);
     const referenceCurrencyCode = normalizeUpper(
       referenceCurrency?.currencyCode ?? config.referenceCurrencyCode,
@@ -285,6 +307,17 @@ export class PurchaseRuleService {
     }
 
     return { transactionAmount, referenceAmount };
+  }
+
+  private async calculateTransactionAmountInReferenceCurrency(
+    body: PurchaseRuleTransactionInput,
+    config: PurchaseRuleConfig,
+  ): Promise<{ transactionAmount: number; referenceAmount: number }> {
+    return this.calculateRowsAmountInReferenceCurrency(
+      this.getItems(body),
+      this.getAdditionalCharges(body),
+      config,
+    );
   }
 
   private convertAmountToReferenceCurrency(amount: number, referenceRatePer: number): number {
@@ -422,85 +455,44 @@ export class PurchaseRuleService {
       return 0;
     }
 
-    const referenceRatePer = await this.resolveReferenceRatePer(config.referenceCurrencyCode);
     const transactions = await this.transactionRepository
       .createQueryBuilder('transaction')
       .leftJoinAndSelect('transaction.items', 'item')
       .leftJoinAndSelect('transaction.additionalCharges', 'charge')
       .where('transaction.isLatest = true')
       .andWhere('transaction.status = :status', { status: TransactionStatus.APPROVED })
+      .andWhere('transaction.transactionType = :transactionType', {
+        transactionType: TransactionType.PURCHASE,
+      })
       .andWhere('transaction.passengerId = ANY(:passengerIds)', {
         passengerIds: candidatePassengerIds,
       })
-      .andWhere('transaction.createdAt BETWEEN :windowStart AND :windowEnd', {
-        windowStart,
-        windowEnd,
-      })
+      .andWhere('transaction.transactionDate >= :windowStart', { windowStart })
+      .andWhere('transaction.transactionDate < :windowEnd', { windowEnd })
       .getMany();
 
     if (!transactions.length) {
       return 0;
     }
 
-    const currencyRateCache = new Map<string, number>();
+    const { referenceAmount } = await this.calculateRowsAmountInReferenceCurrency(
+      transactions.flatMap((transaction) =>
+        (transaction.items ?? []).map((item) => ({
+          quantity: item.quantity,
+          rate: item.rate,
+          per: item.per,
+          currencyId: item.currencyId,
+        })),
+      ),
+      transactions.flatMap((transaction) =>
+        (transaction.additionalCharges ?? []).map((charge) => ({
+          amount: charge.amount,
+        })),
+      ),
+      config,
+    );
 
-    const resolveCurrencyRatePer = async (currencyId?: string | null) => {
-      const normalizedCurrencyId = normalize(currencyId);
-      if (!normalizedCurrencyId) {
-        return 1;
-      }
-
-      const cachedRate = currencyRateCache.get(normalizedCurrencyId);
-      if (cachedRate !== undefined) {
-        return cachedRate;
-      }
-
-      const currency = await this.currencyRepository.findOne({
-        where: { id: normalizedCurrencyId },
-        select: { id: true, ratePer: true },
-      });
-
-      const ratePer = Math.max(1, toNumber(currency?.ratePer || 1) || 1);
-      currencyRateCache.set(normalizedCurrencyId, ratePer);
-      return ratePer;
-    };
-
-    let amount = 0;
-
-    for (const transaction of transactions) {
-      const itemAmount = (transaction.items ?? []).reduce((sum, item) => {
-        const quantity = toNumber(item.quantity);
-        const rate = toNumber(item.rate);
-        const per = Math.max(1, toNumber(item.per) || 1);
-        return sum + quantity * rate / per;
-      }, 0);
-
-      const chargeAmount = (transaction.additionalCharges ?? []).reduce(
-        (sum, charge) => sum + toNumber(charge.amount),
-        0,
-      );
-
-      const itemCurrencies = [...new Set(
-        (transaction.items ?? [])
-          .map((item) => normalize(item.currencyId))
-          .filter(Boolean),
-      )];
-
-      let currencyRatePer = Number.POSITIVE_INFINITY;
-      for (const currencyId of itemCurrencies) {
-        currencyRatePer = Math.min(
-          currencyRatePer,
-          await resolveCurrencyRatePer(currencyId),
-        );
-      }
-
-      amount += ((itemAmount + chargeAmount) * referenceRatePer) / Math.max(
-        1,
-        Number.isFinite(currencyRatePer) ? currencyRatePer : 1,
-      );
-    }
-
-    return amount;
+    return referenceAmount;
   }
 
   async preview(body: PurchaseRuleTransactionInput): Promise<PurchaseRulePreviewResponse> {
@@ -511,6 +503,7 @@ export class PurchaseRuleService {
         allowed: true,
         ruleType: 'OK',
         blockingReason: null,
+        blockingReasons: [],
         requiresCdf: false,
         cdfThresholdAmount: '0.00',
         referenceCurrencyCode: 'USD',
@@ -548,6 +541,7 @@ export class PurchaseRuleService {
         allowed: false,
         ruleType: 'MISSING_PASSENGER',
         blockingReason: 'Passenger information is required before purchase validation',
+        blockingReasons: ['Passenger information is required before purchase validation'],
         requiresCdf: false,
         cdfThresholdAmount: config.cdfThresholdAmount.toFixed(2),
         referenceCurrencyCode,
@@ -571,11 +565,7 @@ export class PurchaseRuleService {
     });
     const candidate = await this.findPassengerCandidate(body);
     const candidatePassengerIds = candidate ? [candidate.passenger.id] : [];
-    const now = new Date();
-    const arrivalDateRaw = normalize(passenger.arrivalDate);
-    const arrivalDate = arrivalDateRaw ? new Date(arrivalDateRaw) : now;
-    const windowStart = arrivalDate;
-    const windowEnd = now;
+    const { windowStart, windowEnd } = this.resolveHistoryWindow(body, config.windowDays);
     const cumulativeAmountInReferenceCurrency = await this.calculateHistoricalCumulativeAmount(
       candidatePassengerIds,
       windowStart,
@@ -609,55 +599,70 @@ export class PurchaseRuleService {
 
     let allowed = true;
     let ruleType: PurchaseRulePreviewResponse['ruleType'] = 'OK';
-    let blockingReason: string | null = null;
+    const blockingReasons: string[] = [];
     let requiresCdf = false;
+
+    const addBlockingReason = (
+      nextRuleType: PurchaseRulePreviewResponse['ruleType'],
+      reason: string,
+    ) => {
+      allowed = false;
+      ruleType = nextRuleType;
+      if (!blockingReasons.includes(reason)) {
+        blockingReasons.push(reason);
+      }
+    };
 
     if (isCorporate) {
       if (cashTotalAmount > 0) {
-        allowed = false;
-        ruleType = 'CORPORATE_CHEQUE_ONLY';
-        blockingReason = 'Corporate purchases can only be settled by cheque';
+        addBlockingReason(
+          'CORPORATE_CHEQUE_ONLY',
+          'Corporate purchases can only be settled by cheque',
+        );
       }
     } else if (isIndian) {
-      if (referenceAmount >= config.cdfThresholdAmount || cumulativeAmountInReferenceCurrency >= config.cdfThresholdAmount) {
+      if (referenceAmount + cumulativeAmountInReferenceCurrency >= config.cdfThresholdAmount) {
         requiresCdf = true;
       }
 
-      if (referenceAmount > config.indianCashLimitAmount) {
-        allowed = false;
-        ruleType = 'CASH_LIMIT_EXCEEDED';
-        blockingReason = `Cash payment exceeds the Indian limit of ${config.indianCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`;
+      if (cashTotalAmount > config.indianCashLimitAmount) {
+        addBlockingReason(
+          'CASH_LIMIT_EXCEEDED',
+          `Cash payment exceeds the Indian limit of ${config.indianCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
+        );
       }
     } else if (isNriOrForeigner) {
       if (chequeTotalAmount > 0) {
-        allowed = false;
-        ruleType = 'CHEQUE_NOT_ALLOWED';
-        blockingReason = 'NRI / FOREIGNER purchases cannot be paid by cheque';
+        addBlockingReason(
+          'CHEQUE_NOT_ALLOWED',
+          'NRI / FOREIGNER purchases cannot be paid by cheque',
+        );
       }
 
-      if (referenceAmount > config.nriCashLimitAmount) {
-        allowed = false;
-        ruleType = 'CASH_LIMIT_EXCEEDED';
-        blockingReason = `Cash payment exceeds the NRI / FOREIGNER limit of ${config.nriCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`;
+      if (cashTotalAmount > config.nriCashLimitAmount) {
+        addBlockingReason(
+          'CASH_LIMIT_EXCEEDED',
+          `Cash payment exceeds the NRI / FOREIGNER limit of ${config.nriCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
+        );
       }
     }
 
     if (!candidate && (isIndian || isCorporate || isNriOrForeigner)) {
       if (entityType === PassengerEntityType.INDIVIDUAL && isIndian) {
-        allowed = false;
-        ruleType = 'MISSING_PASSENGER';
-        blockingReason = 'No matching passenger record found for the entered PAN details';
+        addBlockingReason(
+          'MISSING_PASSENGER',
+          'No matching passenger record found for the entered PAN details',
+        );
       }
     }
 
-    if (requiresCdf && !allowed) {
-      blockingReason = blockingReason || 'CDF declaration is required before submission';
-    }
+    const blockingReason = blockingReasons.length > 0 ? blockingReasons.join(' ') : null;
 
     return {
       allowed,
       ruleType,
       blockingReason,
+      blockingReasons,
       requiresCdf,
       cdfThresholdAmount: config.cdfThresholdAmount.toFixed(2),
       referenceCurrencyCode,

@@ -185,9 +185,6 @@ export class PassengerService {
     if (isBlank(dto.passportExpiryDate)) {
       return this.buildFailure('Passport expiry date is required');
     }
-    if (isBlank(dto.arrivalDate)) {
-      return this.buildFailure('Arrival date is required');
-    }
 
     if (
       dto.passportIssueDate &&

@@ -60,6 +60,8 @@ type SettlementQueryRow = {
 
 const MASKED_CARD_SQL = `CASE WHEN length(clear_number)<=8 THEN left(clear_number,4)||repeat('X',greatest(length(clear_number)-4,0)) ELSE left(clear_number,4)||repeat('X',length(clear_number)-8)||right(clear_number,4) END`;
 
+const BRANCH_SETTLE_DATE_SQL = `COALESCE(bd.transaction_date, s.branch_settlement_date)`;
+
 const UNSETTLED_COLUMNS: CardSettlementReportColumn[] = [
   { key: "date", label: "Date" },
   { key: "hoBranch", label: "HO Branch" },
@@ -277,21 +279,32 @@ const loadSettlementRows = async (
   const params: unknown[] = [];
 
   if (kind === "unsettled") {
-    conditions.push(
-      `s.status IN ('${CardStockSettlementStatus.PENDING_BRANCH_SETTLEMENT}', '${CardStockSettlementStatus.PENDING_HO_ACCEPTANCE}')`,
-    );
+    if (filters.startDate) {
+      params.push(filters.startDate);
+      conditions.push(`s.sale_date >= $${params.length}`);
+    }
+
+    if (filters.endDateExclusive) {
+      params.push(filters.endDateExclusive);
+      conditions.push(`s.sale_date < $${params.length}`);
+      conditions.push(
+        `(s.branch_settlement_entry_id IS NULL OR ${BRANCH_SETTLE_DATE_SQL} >= $${params.length})`,
+      );
+    } else {
+      conditions.push("s.branch_settlement_entry_id IS NULL");
+    }
   } else {
     conditions.push("s.branch_settlement_entry_id IS NOT NULL");
-  }
 
-  if (filters.startDate) {
-    params.push(filters.startDate);
-    conditions.push(`s.sale_date >= $${params.length}`);
-  }
+    if (filters.startDate) {
+      params.push(filters.startDate);
+      conditions.push(`${BRANCH_SETTLE_DATE_SQL} >= $${params.length}`);
+    }
 
-  if (filters.endDateExclusive) {
-    params.push(filters.endDateExclusive);
-    conditions.push(`s.sale_date < $${params.length}`);
+    if (filters.endDateExclusive) {
+      params.push(filters.endDateExclusive);
+      conditions.push(`${BRANCH_SETTLE_DATE_SQL} < $${params.length}`);
+    }
   }
 
   const addIn = (column: string, values: string[]) => {
@@ -316,8 +329,8 @@ const loadSettlementRows = async (
         s.branch_id AS "branchId",
         s.sale_date AS "saleDate",
         s.denomination,
-        s.buy_rate AS "buyRate",
-        s.settlement_amount AS "settlementAmount",
+        COALESCE(bal.settle_rate, s.buy_rate) AS "buyRate",
+        COALESCE(bal.settle_amount, s.settlement_amount) AS "settlementAmount",
         s.branch_snapshot AS "branchSnapshot",
         s.ho_branch_snapshot AS "hoBranchSnapshot",
         s.issuer_party_profile_snapshot AS "issuerPartyProfileSnapshot",
@@ -327,16 +340,33 @@ const loadSettlementRows = async (
         ${MASKED_CARD_SQL} AS "maskedCardNumber",
         t.number AS "invoiceNumber",
         t.party_profile_snapshot AS "partyProfileSnapshot",
-        ti.rate AS "rate",
-        ti.amount AS "amount",
-        ti.profit_amount AS "profitAmount",
-        bd.transaction_date AS "branchDocumentDate",
+        COALESCE(bal.sell_rate, ti.rate) AS "rate",
+        COALESCE(bal.sell_amount, ti.amount) AS "amount",
+        COALESCE(
+          ti.profit_amount,
+          ROUND(
+            COALESCE(bal.sell_amount, ti.amount, 0)
+              - COALESCE(bal.settle_amount, s.settlement_amount, 0),
+            2
+          )
+        ) AS "profitAmount",
+        ${BRANCH_SETTLE_DATE_SQL} AS "branchDocumentDate",
         bd.transaction_number AS "branchDocumentNumber"
       FROM card_stock_settlements s
       JOIN card_stock_cards c ON c.id = s.card_id
       CROSS JOIN LATERAL (
         SELECT public.decrypt_card_number(c.card_number) clear_number
       ) decoded
+      LEFT JOIN LATERAL (
+        SELECT balance.sell_rate, balance.sell_amount, balance.settle_rate, balance.settle_amount
+        FROM card_stock_balance balance
+        WHERE balance.card_id = s.card_id
+          AND balance.branch_id = s.branch_id
+          AND balance.series = s.series
+          AND balance.deleted_at IS NULL
+        ORDER BY balance.created_at DESC
+        LIMIT 1
+      ) bal ON TRUE
       LEFT JOIN transactions t ON t.id = s.transaction_id
       LEFT JOIN transaction_items ti ON ti.id = s.transaction_item_id
       LEFT JOIN card_stock_settlement_documents bd ON bd.id = s.branch_document_id
@@ -357,7 +387,9 @@ const buildItemRow = (
     transactionId: row.id,
     partyProfileId: "",
     sortBranch: branchSortKey,
-    sortDate: toSortDate(row.saleDate),
+    sortDate: toSortDate(
+      kind === "settled" ? row.branchDocumentDate : row.saleDate,
+    ),
     date: formatDateOnly(row.saleDate),
     hoBranch: getSnapshotLabel(row.hoBranchSnapshot),
     sellingBranch: branchLabel,
