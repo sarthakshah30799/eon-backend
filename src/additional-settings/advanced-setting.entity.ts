@@ -24,7 +24,7 @@ export enum ValueType {
   "CHK_advanced_settings_transaction_number_series_length",
   `UPPER("code") NOT IN (${Object.values(TransactionTypeProfileEnum)
     .map(code => `'${code}'`)
-    .join(', ')}) OR "value_number" IS NULL OR "value_number" BETWEEN 0 AND 999999999`
+    .join(', ')}) OR "value_number" IS NULL OR "value_number" BETWEEN 0 AND 99999999`
 )
 @Entity("advanced_settings")
 export class AdvancedSetting extends BaseEntity {
