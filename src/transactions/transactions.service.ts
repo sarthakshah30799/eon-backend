@@ -1337,16 +1337,21 @@ export class TransactionsService {
         activeCounterId: resolvedCounterId,
       },
     );
-    const resolvedTransactionDate = transactionPayload.transactionDate?.trim()
-      ? transactionPayload.transactionDate
-      : policyContext.transactionDate;
-
-    await this.dayEndStartProcessService.assertTransactionDateAllowed(
+    const requestedTransactionDate = transactionPayload.transactionDate?.trim()
+      ? transactionPayload.transactionDate.trim()
+      : policyContext.transactionDate?.trim() || undefined;
+    const datePolicy = await this.dayEndStartProcessService.assertTransactionDateAllowed(
       resolvedBranchId,
       performedById,
-      resolvedTransactionDate,
+      requestedTransactionDate,
       resolvedCounterId,
     );
+    const resolvedTransactionDate = (
+      requestedTransactionDate || datePolicy.allowedDate
+    ).slice(0, 10);
+    if (!resolvedTransactionDate) {
+      throw new BadRequestException("Transaction date is required");
+    }
 
     const { company: currentCompany, snapshot: currentCompanySnapshot } =
       await requireCompanyForDate(
@@ -1765,11 +1770,9 @@ export class TransactionsService {
       agentProfileSnapshot,
       manualBookPageId: transactionPayload.manualBookPageId ?? null,
       manualBookPageSnapshot,
-      transactionDate: resolvedTransactionDate
-        ? new Date(
-            `${String(resolvedTransactionDate).slice(0, 10)}T00:00:00.000Z`,
-          )
-        : null,
+      transactionDate: new Date(
+        `${resolvedTransactionDate}T00:00:00.000Z`,
+      ),
       transactionType: transactionPayload.transactionType,
       tradeMode: transactionPayload.tradeMode,
       status: persistedTransactionStatus,

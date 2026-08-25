@@ -337,6 +337,10 @@ export class DayEndStartProcessService {
     };
 
     if (!transactionDate) {
+      if (!allowedDate) {
+        throw new BadRequestException("Transaction date is required");
+      }
+
       assertNotDataLocked(allowedDate);
 
       if (hasMonthlyLockOverride || context.workflowState === "PENDING_EOD") {
@@ -371,7 +375,7 @@ export class DayEndStartProcessService {
           `Transaction date must be between ${activeWindow.fromDate} and ${activeWindow.toDate}`,
         );
       }
-      return { allowedDate, context };
+      return { allowedDate: requestedDate, context };
     }
 
     if (context.workflowState === "CLOSED_TODAY") {
@@ -398,7 +402,7 @@ export class DayEndStartProcessService {
       );
     }
 
-    return { allowedDate, context };
+    return { allowedDate: requestedDate, context };
   }
 
   async completeDayEnd(
