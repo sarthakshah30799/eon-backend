@@ -39,6 +39,7 @@ type PurchaseRulePassengerInput = {
 type PurchaseRuleTransactionBlock = {
   transactionType?: string | null;
   transactionDate?: string | null;
+  slug?: string | null;
   passenger?: PurchaseRulePassengerInput | null;
   items?: PurchaseRuleRowInput[] | null;
   additionalCharges?: PurchaseRuleRowInput[] | null;
@@ -48,6 +49,7 @@ type PurchaseRuleTransactionBlock = {
 type PurchaseRuleTransactionInput = {
   transactionType?: string | null;
   transactionDate?: string | null;
+  slug?: string | null;
   transaction?: PurchaseRuleTransactionBlock | null;
   passenger?: PurchaseRulePassengerInput | null;
   items?: PurchaseRuleRowInput[] | null;
@@ -91,6 +93,10 @@ export type PurchaseRulePreviewResponse = {
 
 const normalize = (value?: string | null) => String(value ?? '').trim();
 const normalizeUpper = (value?: string | null) => normalize(value).toUpperCase();
+const normalizeIdentity = (value?: string | null) => {
+  const normalized = normalize(value).replace(/\s+/g, '').toUpperCase();
+  return normalized || null;
+};
 const isTruthy = (value?: string | null) => Boolean(normalize(value));
 const toNumber = (value: unknown) => {
   const parsed = Number(value);
@@ -335,8 +341,9 @@ export class PurchaseRuleService {
     const searchTiers: Array<{ tier: number; where: Record<string, unknown> }> = [];
 
     if (entityType === PassengerEntityType.CORPORATE) {
-      if (isTruthy(passenger.panNumber)) {
-        searchTiers.push({ tier: 1, where: { panNumber: normalize(passenger.panNumber) } });
+      const panNumber = normalizeIdentity(passenger.panNumber);
+      if (panNumber) {
+        searchTiers.push({ tier: 1, where: { panNumber } });
       }
       if (isTruthy(passenger.panHolderName) && isTruthy(passenger.panDob) && isTruthy(passenger.contactNo)) {
         searchTiers.push({
@@ -376,8 +383,9 @@ export class PurchaseRuleService {
         });
       }
     } else if (nationalityType === PassengerNationalityType.INDIAN) {
-      if (isTruthy(passenger.panNumber)) {
-        searchTiers.push({ tier: 1, where: { panNumber: normalize(passenger.panNumber) } });
+      const panNumber = normalizeIdentity(passenger.panNumber);
+      if (panNumber) {
+        searchTiers.push({ tier: 1, where: { panNumber } });
       }
       if (isTruthy(passenger.panHolderName) && isTruthy(passenger.panDob) && isTruthy(passenger.contactNo)) {
         searchTiers.push({
@@ -417,14 +425,15 @@ export class PurchaseRuleService {
         });
       }
     } else {
-      if (isTruthy(passenger.passportNumber)) {
-        searchTiers.push({ tier: 1, where: { passportNumber: normalize(passenger.passportNumber) } });
+      const passportNumber = normalizeIdentity(passenger.passportNumber);
+      if (passportNumber) {
+        searchTiers.push({ tier: 1, where: { passportNumber } });
       }
-      if (isTruthy(passenger.passportNumber) && isTruthy(passenger.contactNo)) {
+      if (passportNumber && isTruthy(passenger.contactNo)) {
         searchTiers.push({
           tier: 2,
           where: {
-            passportNumber: normalize(passenger.passportNumber),
+            passportNumber,
             contactNo: normalize(passenger.contactNo),
           },
         });
@@ -536,12 +545,44 @@ export class PurchaseRuleService {
       nationalityType === PassengerNationalityType.NRI ||
       nationalityType === PassengerNationalityType.FOREIGNER;
 
+    // Passenger cash/CDF rules apply only when passenger details are present.
+    // Corporate / individual pages must send them; FFMC and other party pages skip.
     if (!passenger) {
+      const slug = normalizeUpper(
+        body.transaction?.slug ?? body.slug,
+      );
+      const requiresPassenger =
+        slug === 'PURCHASE_CORPORATE_INDIVIDUAL' ||
+        slug === 'SALE_CORPORATE_INDIVIDUAL';
+
+      if (requiresPassenger) {
+        return {
+          allowed: false,
+          ruleType: 'MISSING_PASSENGER',
+          blockingReason: 'Passenger information is required before purchase validation',
+          blockingReasons: ['Passenger information is required before purchase validation'],
+          requiresCdf: false,
+          cdfThresholdAmount: config.cdfThresholdAmount.toFixed(2),
+          referenceCurrencyCode,
+          transactionAmount: '0.00',
+          transactionAmountInReferenceCurrency: '0.00',
+          cumulativeAmountInReferenceCurrency: '0.00',
+          cashLimitAmount: '0.00',
+          cashTotalAmount: '0.00',
+          chequeTotalAmount: '0.00',
+          passengerMatchTier: null,
+          passengerId: null,
+          isCorporate: false,
+          nationalityType: null,
+          paymentMethodsAllowed: [],
+        };
+      }
+
       return {
-        allowed: false,
-        ruleType: 'MISSING_PASSENGER',
-        blockingReason: 'Passenger information is required before purchase validation',
-        blockingReasons: ['Passenger information is required before purchase validation'],
+        allowed: true,
+        ruleType: 'OK',
+        blockingReason: null,
+        blockingReasons: [],
         requiresCdf: false,
         cdfThresholdAmount: config.cdfThresholdAmount.toFixed(2),
         referenceCurrencyCode,
@@ -553,8 +594,8 @@ export class PurchaseRuleService {
         chequeTotalAmount: '0.00',
         passengerMatchTier: null,
         passengerId: null,
-        isCorporate,
-        nationalityType: nationalityType || null,
+        isCorporate: false,
+        nationalityType: null,
         paymentMethodsAllowed: [],
       };
     }
