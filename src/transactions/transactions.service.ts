@@ -16,6 +16,7 @@ import {
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
+  TradeMode,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionItem } from "./entities/transaction-item.entity";
@@ -937,7 +938,7 @@ export class TransactionsService {
     search?: string,
     status?: TransactionStatus,
     partyProfileId?: string,
-    transactionType?: TransactionType,
+    tradeMode?: string,
   ): Promise<Transaction[]> {
     const query = this.transactionRepository
       .createQueryBuilder("transaction")
@@ -952,7 +953,10 @@ export class TransactionsService {
     }
 
     if (status) {
-      query.andWhere("transaction.status = :status", { status });
+      const normalizedStatus = String(status).trim().toUpperCase() as TransactionStatus;
+      if (Object.values(TransactionStatus).includes(normalizedStatus)) {
+        query.andWhere("transaction.status = :status", { status: normalizedStatus });
+      }
     }
 
     if (partyProfileId) {
@@ -961,10 +965,11 @@ export class TransactionsService {
       });
     }
 
-    if (transactionType) {
-      query.andWhere("transaction.transactionType = :transactionType", {
-        transactionType,
-      });
+    if (tradeMode) {
+      const normalizedTradeMode = String(tradeMode).trim().toUpperCase();
+      if (Object.values(TradeMode).includes(normalizedTradeMode as any)) {
+        query.andWhere("transaction.tradeMode = :tradeMode", { tradeMode: normalizedTradeMode });
+      }
     }
 
     const trimmedSearch = search?.trim();
