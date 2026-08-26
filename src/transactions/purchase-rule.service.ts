@@ -647,14 +647,8 @@ export class PurchaseRuleService {
       }
     }
 
-    if (!candidate && (isIndian || isCorporate || isNriOrForeigner)) {
-      if (entityType === PassengerEntityType.INDIVIDUAL && isIndian) {
-        addBlockingReason(
-          'MISSING_PASSENGER',
-          'No matching passenger record found for the entered PAN details',
-        );
-      }
-    }
+    // First-time PAN/passport (no DB match) is allowed; passenger is created on
+    // save and historical cumulative amount stays 0 via empty candidate ids.
 
     const blockingReason = blockingReasons.length > 0 ? blockingReasons.join(' ') : null;
 
