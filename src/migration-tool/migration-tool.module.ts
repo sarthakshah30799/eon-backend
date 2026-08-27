@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Company } from '../company/company.entity';
 import { Branch } from '../branches/branch.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
 import { Counter } from '../counters/counter.entity';
 import { User } from '../users/user.entity';
 import { Role } from '../roles/role.entity';
@@ -10,7 +11,7 @@ import { MigrationToolService } from './migration-tool.service';
 import { MigrationToolController } from './migration-tool.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Company, Branch, Counter, User, Role, UserRole])],
+  imports: [TypeOrmModule.forFeature([Company, Branch, BranchCounter, Counter, User, Role, UserRole])],
   controllers: [MigrationToolController],
   providers: [MigrationToolService],
   exports: [MigrationToolService],

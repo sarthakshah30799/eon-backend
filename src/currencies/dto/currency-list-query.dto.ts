@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsEnum } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { CurrencyProductAllowed } from '../currency.entity';
 
 const parseBooleanQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
@@ -38,4 +39,23 @@ export class CurrencyListQueryDto {
   @IsOptional()
   @Transform(parseBooleanQuery)
   activeOnly?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, include only-stocking currencies. Default false excludes them from sale/purchase lists.',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(parseBooleanQuery)
+  includeOnlyStocking?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When includeOnlyStocking is true, optionally restrict only-stocking rows to this productAllowed code (e.g. CM).',
+    enum: CurrencyProductAllowed,
+  })
+  @IsEnum(CurrencyProductAllowed)
+  @IsOptional()
+  productAllowed?: CurrencyProductAllowed;
 }

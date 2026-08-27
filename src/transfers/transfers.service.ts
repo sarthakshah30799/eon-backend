@@ -8,6 +8,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Branch } from '../branches/branch.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
+import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
 import { Counter } from '../counters/counter.entity';
 import { Company } from '../company/company.entity';
 import { User } from '../users/user.entity';
@@ -93,6 +95,8 @@ export class TransfersService {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Counter)
     private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(BranchCounter)
+    private readonly branchCounterRepository: Repository<BranchCounter>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(Product)
@@ -675,20 +679,26 @@ export class TransfersService {
     if (!destinationBranch) {
       throw new NotFoundException(`Branch with id ${destinationBranchId} not found`);
     }
-    const sourceCounter = await this.counterRepository.findOne({ where: { id: sourceCounterId }, relations: ['branch'] });
+    const sourceCounter = await this.counterRepository.findOne({ where: { id: sourceCounterId } });
     if (!sourceCounter) {
       throw new NotFoundException(`Counter with id ${sourceCounterId} not found`);
     }
-    const destinationCounter = await this.counterRepository.findOne({ where: { id: destinationCounterId }, relations: ['branch'] });
+    const destinationCounter = await this.counterRepository.findOne({ where: { id: destinationCounterId } });
     if (!destinationCounter) {
       throw new NotFoundException(`Counter with id ${destinationCounterId} not found`);
     }
-    if (sourceCounter.branch?.id !== sourceBranchId) {
-      throw new BadRequestException('Source counter does not belong to the selected source branch');
-    }
-    if (destinationCounter.branch?.id !== destinationBranchId) {
-      throw new BadRequestException('Destination counter does not belong to the selected destination branch');
-    }
+    await assertCounterBelongsToBranch(
+      this.branchCounterRepository,
+      sourceBranchId,
+      sourceCounterId,
+      'Source counter does not belong to the selected source branch',
+    );
+    await assertCounterBelongsToBranch(
+      this.branchCounterRepository,
+      destinationBranchId,
+      destinationCounterId,
+      'Destination counter does not belong to the selected destination branch',
+    );
     if (transferType === CurrencyTransferType.BRANCH && sourceBranchId === destinationBranchId) {
       throw new BadRequestException('Branch transfers must move between different branches');
     }

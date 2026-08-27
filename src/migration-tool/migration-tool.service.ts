@@ -13,6 +13,7 @@ import {
 } from './dto/migration-run-request.dto';
 import { Company } from '../company/company.entity';
 import { Branch } from '../branches/branch.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
 import { Counter } from '../counters/counter.entity';
 import { Menu } from '../menu/menu.entity';
 import { Permission } from '../permissions/permission.entity';
@@ -776,6 +777,10 @@ export class MigrationToolService {
 
   private get targetCounterRepository() {
     return this.targetDataSource.getRepository(Counter);
+  }
+
+  private get targetBranchCounterRepository() {
+    return this.targetDataSource.getRepository(BranchCounter);
   }
 
   private get targetUserRepository() {
@@ -2556,7 +2561,6 @@ export class MigrationToolService {
     }
 
     const counter = this.targetCounterRepository.create({
-      branch: branchId ? ({ id: branchId } as Branch) : null,
       counterNo,
       name: toStringOrFallback(row.vCounterName || row.vDescription, `Counter ${oldId}`),
       isActive: toBoolean(row.bIsActive),
@@ -2571,6 +2575,21 @@ export class MigrationToolService {
 
     if (context.mode === 'real') {
       const saved = await this.targetCounterRepository.save(counter);
+      if (branchId) {
+        const existingLink = await this.targetBranchCounterRepository.findOne({
+          where: { branchId, counterId: saved.id },
+        });
+        if (!existingLink) {
+          await this.targetBranchCounterRepository.save(
+            this.targetBranchCounterRepository.create({
+              branchId,
+              counterId: saved.id,
+              createdBy,
+              updatedBy,
+            }),
+          );
+        }
+      }
       this.logger.log(`[mstcounter] created counter id=${saved.id}`);
       this.counterMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
@@ -4147,24 +4166,30 @@ export class MigrationToolService {
     }
 
     if (context.mode === 'real') {
-      const counter = await this.targetCounterRepository.findOne({
-        where: { id: counterId },
-        relations: { branch: true },
+      const existingLink = await this.targetBranchCounterRepository.findOne({
+        where: { branchId, counterId },
       });
-      if (counter && (!counter.branch || String(counter.branch.id) !== String(branchId))) {
-        counter.branch = { id: branchId } as Branch;
-        await this.targetCounterRepository.save(counter);
+      if (!existingLink) {
+        const actorId = '00000000-0000-0000-0000-000000000000';
+        await this.targetBranchCounterRepository.save(
+          this.targetBranchCounterRepository.create({
+            branchId,
+            counterId,
+            createdBy: actorId,
+            updatedBy: actorId,
+          }),
+        );
         this.logger.log(
-          `[mstBranchCounterLink] backfilled counter branch relation counterId=${counterId} branchId=${branchId}`,
+          `[mstBranchCounterLink] created branch-counter link counterId=${counterId} branchId=${branchId}`,
         );
         this.addFieldStatus(context, {
           sourceTable,
           sourceColumn: 'nBranchID / nCounterID',
           sourceValue: { nBranchID: branchOldId, nCounterID: counterOldId, bMainCounter: toBoolean(row.bMainCounter) },
-          targetColumn: 'counters.branch_id',
+          targetColumn: 'branch_counters.branch_id / branch_counters.counter_id',
           targetValue: { branchId, counterId },
           status: 'saved',
-          note: 'Counter branch FK backfilled from branch-counter relation table',
+          note: 'Branch-counter link created from mstBranchCounterLink',
         });
       }
     }

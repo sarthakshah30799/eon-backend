@@ -9,15 +9,15 @@ import {
 } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { Company } from "../company/company.entity";
-import { Counter } from "../counters/counter.entity";
 import { Country } from "../country/country.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { State } from "../state/state.entity";
+import { BranchCounter } from "./entities/branch-counter.entity";
 
 @Entity("branches")
 export class Branch extends BaseEntity {
-  @OneToMany(() => Counter, (counter) => counter.branch)
-  counters: Counter[];
+  @OneToMany(() => BranchCounter, (counterLink) => counterLink.branch)
+  counterLinks: BranchCounter[];
 
   @Index()
   @ManyToOne(() => Company, (company) => company.branches, {

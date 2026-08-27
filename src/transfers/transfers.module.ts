@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Branch } from '../branches/branch.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
 import { Counter } from '../counters/counter.entity';
 import { User } from '../users/user.entity';
 import { UserRole } from '../user-roles/user-role.entity';
@@ -26,7 +27,7 @@ import { CompanyModule } from '../company/company.module';
     TransactionsModule,
     DayEndStartProcessModule,
     CompanyModule,
-    TypeOrmModule.forFeature([Branch, Counter, User, UserRole, Product, Currency, ProductCurrencyRate, AccountProfile]),
+    TypeOrmModule.forFeature([Branch, Counter, BranchCounter, User, UserRole, Product, Currency, ProductCurrencyRate, AccountProfile]),
     TypeOrmModule.forFeature([CurrencyTransfer, CurrencyTransferItem, Transaction, TransactionItem], 'database2'),
   ],
   controllers: [TransfersController],

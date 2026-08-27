@@ -1,21 +1,16 @@
 // counter.entity.ts
-import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany } from "typeorm";
+import { Entity, Column, OneToMany } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
-import { Branch } from "../branches/branch.entity";
 import { UserRole } from "../user-roles/user-role.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
 
 @Entity("counters")
 export class Counter extends BaseEntity {
   @OneToMany(() => UserRole, (userRole) => userRole.counter)
   userRoles: UserRole[];
 
-  @Index()
-  @ManyToOne(() => Branch, (branch) => branch.counters, {
-    nullable: true,
-    onDelete: "SET NULL",
-  })
-  @JoinColumn({ name: "branch_id" })
-  branch: Branch;
+  @OneToMany(() => BranchCounter, (branchLink) => branchLink.counter)
+  branchLinks: BranchCounter[];
 
   @Column({ type: "integer", default: 1 })
   counterNo: number;
