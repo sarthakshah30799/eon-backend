@@ -67,6 +67,7 @@ export class TransactionsController {
     @Query('status') status?: string,
     @Query('partyProfileId') partyProfileId?: string,
     @Query('partyProfile') partyProfile?: string,
+    @Query('transactionType') transactionType?: string,
     @Query('tradeMode') tradeMode?: string,
   ): Promise<Transaction[]> {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
@@ -79,6 +80,7 @@ export class TransactionsController {
       search,
       status as any,
       effectivePartyProfileId,
+      transactionType as any,
       tradeMode as any,
     );
   }

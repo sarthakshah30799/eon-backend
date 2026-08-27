@@ -938,6 +938,7 @@ export class TransactionsService {
     search?: string,
     status?: TransactionStatus,
     partyProfileId?: string,
+    transactionType?: TransactionType,
     tradeMode?: string,
   ): Promise<Transaction[]> {
     const query = this.transactionRepository
@@ -963,6 +964,15 @@ export class TransactionsService {
       query.andWhere("transaction.partyProfileId = :partyProfileId", {
         partyProfileId,
       });
+    }
+
+    if (transactionType) {
+      const normalizedType = String(transactionType).trim().toUpperCase() as TransactionType;
+      if (Object.values(TransactionType).includes(normalizedType)) {
+        query.andWhere("transaction.transactionType = :transactionType", {
+          transactionType: normalizedType,
+        });
+      }
     }
 
     if (tradeMode) {
