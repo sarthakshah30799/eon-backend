@@ -1,6 +1,12 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import { IsInt, IsOptional, Max, Min } from "class-validator";
+import {
+  DEFAULT_PAGINATION_LIMIT,
+  DEFAULT_PAGINATION_OFFSET,
+  MAX_PAGINATION_LIMIT,
+} from "../pagination.constants";
+import type { PaginationParams } from "../pagination.util";
 
 /**
  * Reusable pagination query DTO.
@@ -9,12 +15,12 @@ import { IsInt, IsOptional, Max, Min } from "class-validator";
  *
  * Example: GET /manual-bill-books/dispatches?limit=20&offset=40&status=PENDING&search=MB26
  */
-export class PaginationQueryDto {
+export class PaginationQueryDto implements PaginationParams {
   @ApiPropertyOptional({
     description: "Number of items to return",
-    default: 10,
+    default: DEFAULT_PAGINATION_LIMIT,
     minimum: 1,
-    maximum: 100,
+    maximum: MAX_PAGINATION_LIMIT,
     type: Number,
   })
   @Transform(({ value }) => {
@@ -25,13 +31,13 @@ export class PaginationQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(MAX_PAGINATION_LIMIT)
   @IsOptional()
-  limit?: number = 10;
+  limit?: number = DEFAULT_PAGINATION_LIMIT;
 
   @ApiPropertyOptional({
     description: "Number of items to skip (offset-based pagination)",
-    default: 0,
+    default: DEFAULT_PAGINATION_OFFSET,
     minimum: 0,
     type: Number,
   })
@@ -44,5 +50,5 @@ export class PaginationQueryDto {
   @IsInt()
   @Min(0)
   @IsOptional()
-  offset?: number = 0;
+  offset?: number = DEFAULT_PAGINATION_OFFSET;
 }

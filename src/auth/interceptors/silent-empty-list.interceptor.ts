@@ -1,5 +1,6 @@
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Observable, of } from 'rxjs';
+import { DEFAULT_PAGINATION_LIMIT } from '../../common/pagination/pagination.constants';
 
 type SilentEmptyResult =
   | { kind: 'array' }
@@ -19,7 +20,7 @@ export class SilentEmptyListInterceptor implements NestInterceptor {
       return of({
         data: [],
         page: 1,
-        limit: 10,
+        limit: DEFAULT_PAGINATION_LIMIT,
         totalItems: 0,
         totalPages: 0,
       });

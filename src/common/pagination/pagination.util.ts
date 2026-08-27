@@ -1,22 +1,34 @@
 import { SelectQueryBuilder } from "typeorm";
-import { PaginationQueryDto } from "./dto/pagination-query.dto";
+import {
+  DEFAULT_PAGINATION_LIMIT,
+  DEFAULT_PAGINATION_OFFSET,
+  MAX_PAGINATION_LIMIT,
+} from "./pagination.constants";
+
+/**
+ * Proper typed contract for pagination - replaces `any`/`unknown`.
+ * All list APIs (e.g. ManualBillBookListQueryDto) implement this.
+ */
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+}
 
 /**
  * Normalise raw pagination query into safe limit/offset values.
  * Applies defaults and clamps to allowed ranges so callers never have to repeat this logic.
  */
-export function normalizePagination(query: PaginationQueryDto | Record<string, any>): { limit: number; offset: number } {
-  const parse = (val: any, fallback: number) => {
-    if (val === undefined || val === null || val === '') return fallback;
-    const num = typeof val === 'number' ? val : parseInt(String(val), 10);
-    if (isNaN(num)) return fallback;
-    return num;
+export function normalizePagination(query: PaginationParams = {}): { limit: number; offset: number } {
+  const parse = (val: number | undefined, fallback: number): number => {
+    if (val === undefined || val === null) return fallback;
+    if (Number.isNaN(val)) return fallback;
+    return val;
   };
 
-  let limit = parse((query as any).limit, 10);
-  let offset = parse((query as any).offset, 0);
+  let limit = parse(query.limit, DEFAULT_PAGINATION_LIMIT);
+  let offset = parse(query.offset, DEFAULT_PAGINATION_OFFSET);
 
-  limit = Math.max(1, Math.min(limit, 100));
+  limit = Math.max(1, Math.min(limit, MAX_PAGINATION_LIMIT));
   offset = Math.max(0, offset);
 
   return { limit, offset };
@@ -37,14 +49,23 @@ export function applyPagination<T>(
 }
 
 /**
+ * Raw query shape before ValidationPipe (strings from URL).
+ * Used only for backwards-compat helper parsePaginationParams.
+ */
+export interface RawPaginationParams {
+  limit?: string | number;
+  offset?: string | number;
+}
+
+/**
  * Parse raw query strings (when not using DTO) into pagination values.
  * Kept for backwards-compat / non-DTO usage.
  */
-export function parsePaginationParams(query: Record<string, any>): { limit: number; offset: number } {
-  const limit = query.limit !== undefined ? parseInt(String(query.limit), 10) : 10;
-  const offset = query.offset !== undefined ? parseInt(String(query.offset), 10) : 0;
+export function parsePaginationParams(query: RawPaginationParams): { limit: number; offset: number } {
+  const limit = query.limit !== undefined ? parseInt(String(query.limit), 10) : DEFAULT_PAGINATION_LIMIT;
+  const offset = query.offset !== undefined ? parseInt(String(query.offset), 10) : DEFAULT_PAGINATION_OFFSET;
   return normalizePagination({
-    limit: isNaN(limit) ? 10 : limit,
-    offset: isNaN(offset) ? 0 : offset,
+    limit: isNaN(limit) ? DEFAULT_PAGINATION_LIMIT : limit,
+    offset: isNaN(offset) ? DEFAULT_PAGINATION_OFFSET : offset,
   });
 }

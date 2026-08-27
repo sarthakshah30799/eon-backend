@@ -95,9 +95,6 @@ export class ManualBillBookController {
     @Session() session: any,
     @Query() query: ManualBillBookListQueryDto,
   ): Promise<PaginatedResponseDto<any>> {
-    this.logger.log(
-      `[DEBUG] dispatches query=${JSON.stringify(query)} rawLimit=${(query as any)?.limit} rawOffset=${(query as any)?.offset}`,
-    );
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
       ? query.branchId?.trim() || undefined
       : session.activeBranchId;

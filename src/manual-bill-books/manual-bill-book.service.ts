@@ -279,12 +279,9 @@ export class ManualBillBookService {
     assignedTo?: string,
     paginationQuery?: ManualBillBookListQueryDto,
   ): Promise<PaginatedResponseDto<any>> {
-    const { limit, offset } = normalizePagination({
-      limit: (paginationQuery as any)?.limit,
-      offset: (paginationQuery as any)?.offset,
-    });
+    const { limit, offset } = normalizePagination(paginationQuery ?? {});
     this.logger.log(
-      `[DEBUG] findAll pagination limit=${limit} offset=${offset} rawLimit=${(paginationQuery as any)?.limit} rawOffset=${(paginationQuery as any)?.offset} branchId=${branchId ?? 'null'} status=${status ?? 'null'} search=${(paginationQuery as any)?.search ?? 'null'}`,
+      `[DEBUG] findAll pagination limit=${limit} offset=${offset} rawLimit=${paginationQuery?.limit} rawOffset=${paginationQuery?.offset} branchId=${branchId ?? 'null'} status=${status ?? 'null'} search=${paginationQuery?.search ?? 'null'}`,
     );
 
     const qb = this.manualBookRepository.createQueryBuilder("book");
