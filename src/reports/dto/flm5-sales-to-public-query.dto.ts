@@ -9,6 +9,7 @@ import {
   IsUUID,
 } from "class-validator";
 import { CardSettlementReportFormat } from "./card-settlement-report-query.dto";
+import { FlmReportLayout } from "../flm-report-layout.constants";
 
 export const Flm5SalesToPublicView = {
   NORMAL: "normal",
@@ -57,6 +58,15 @@ export class Flm5SalesToPublicQueryDto {
   @IsIn(Object.values(Flm5SalesToPublicView))
   @IsOptional()
   view?: Flm5SalesToPublicView;
+
+  @ApiPropertyOptional({
+    description:
+      "Report layout. branch_wise shows one section per branch. consolidate rolls selected branches into one register.",
+    enum: Object.values(FlmReportLayout),
+  })
+  @IsIn(Object.values(FlmReportLayout))
+  @IsOptional()
+  layout?: FlmReportLayout;
 
   @ApiPropertyOptional({
     description: "Export format",

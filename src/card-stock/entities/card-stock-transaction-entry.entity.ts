@@ -8,7 +8,7 @@ import { Transaction } from '../../transactions/entities/transaction.entity';
 @Index('IDX_card_stock_entries_card_date', ['cardId', 'date'])
 @Index('IDX_card_stock_entries_branch_date', ['branchId', 'date'])
 @Index('IDX_card_stock_entries_reference', ['referenceType', 'referenceId'])
-@Unique('UQ_card_stock_entries_card_operation_reference', ['cardId', 'referenceType', 'referenceId', 'operationType'])
+@Unique('UQ_card_stock_entries_card_operation_reference', ['cardId', 'referenceType', 'referenceId', 'operationType', 'currencyId'])
 @Entity('card_stock_transaction_entries')
 export class CardStockTransactionEntry extends BaseEntity {
   @Column({ type: 'uuid', name: 'card_id' })

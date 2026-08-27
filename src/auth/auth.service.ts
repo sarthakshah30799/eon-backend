@@ -12,7 +12,8 @@ import { SessionPolicyService } from '../session-policy/session-policy.service';
 import { MailService } from '../mail/mail.service';
 import { SetWorkplaceDto } from './dto/set-workplace.dto';
 import { ConfigService } from '../config/config.service';
-import { Counter } from '../counters/counter.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
+import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
 
 @Injectable()
 export class AuthService {
@@ -23,8 +24,8 @@ export class AuthService {
     private readonly sessionPolicyService: SessionPolicyService,
     private readonly mailService: MailService,
     private readonly configService: ConfigService,
-    @InjectRepository(Counter)
-    private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(BranchCounter)
+    private readonly branchCounterRepository: Repository<BranchCounter>,
   ) { }
 
   async validateUser(loginUserDto: LoginUserDto): Promise<User | null> {
@@ -77,16 +78,13 @@ export class AuthService {
       if (!hasAssignment) {
         throw new BadRequestException('Selected branch and counter are not assigned to this user');
       }
-
-      const selectedCounter = await this.counterRepository.findOne({
-        where: { id: dto.counterId },
-        relations: ['branch'],
-      });
-
-      if (!selectedCounter?.branch?.id || selectedCounter.branch.id !== dto.branchId) {
-        throw new BadRequestException('Selected counter does not belong to the selected branch');
-      }
     }
+
+    await assertCounterBelongsToBranch(
+      this.branchCounterRepository,
+      dto.branchId,
+      dto.counterId,
+    );
 
     console.log('[workplace-debug] setWorkplace', {
       userId: session.userId,

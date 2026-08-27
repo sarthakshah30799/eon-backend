@@ -33,6 +33,7 @@ import { Country } from "../country/country.entity";
 import { State } from "../state/state.entity";
 import { CompanyModule } from "../company/company.module";
 import { Branch } from "../branches/branch.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
 import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
@@ -71,6 +72,7 @@ import { VoucherModule } from "../vouchers/voucher.module";
       State,
       Branch,
       Counter,
+      BranchCounter,
       User,
     ]),
     TypeOrmModule.forFeature(

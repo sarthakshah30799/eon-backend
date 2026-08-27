@@ -9,8 +9,7 @@ export class CounterResponseDto {
   @ApiProperty() isRetail: boolean;
   @ApiProperty() isBulk: boolean;
   @ApiProperty() isCombine: boolean;
-  @ApiProperty({ required: false }) branchId: string;
-  @ApiProperty({ required: false }) branchCode: string;
+  @ApiProperty({ type: [String], required: false }) branchIds: string[];
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
 
@@ -23,8 +22,11 @@ export class CounterResponseDto {
     dto.isRetail = entity.isRetail;
     dto.isBulk = entity.isBulk;
     dto.isCombine = entity.isCombine;
-    dto.branchId = entity.branch?.id || null;
-    dto.branchCode = entity.branch?.code || null;
+    dto.branchIds = entity.branchLinks
+      ? entity.branchLinks
+          .map((link) => link.branchId || link.branch?.id)
+          .filter((id): id is string => Boolean(id))
+      : [];
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

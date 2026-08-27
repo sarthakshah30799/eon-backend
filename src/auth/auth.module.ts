@@ -8,11 +8,11 @@ import { PasswordPolicyModule } from '../password-policy/password-policy.module'
 import { SessionPolicyModule } from '../session-policy/session-policy.module';
 import { MailModule } from '../mail/mail.module';
 import { DayEndStartProcessModule } from '../day-end-start-process/day-end-start-process.module';
-import { Counter } from '../counters/counter.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Counter]),
+    TypeOrmModule.forFeature([BranchCounter]),
     UserModule,
     PasswordPolicyModule,
     SessionPolicyModule,

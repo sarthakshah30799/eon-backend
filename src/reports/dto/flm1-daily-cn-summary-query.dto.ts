@@ -4,10 +4,12 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsOptional,
   IsUUID,
 } from "class-validator";
 import { CardSettlementReportFormat } from "./card-settlement-report-query.dto";
+import { FlmReportLayout } from "../flm-report-layout.constants";
 
 const parseArrayQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
@@ -35,6 +37,14 @@ export class Flm1DailyCnSummaryQueryDto {
   @IsUUID()
   @IsOptional()
   productId?: string;
+
+  @ApiPropertyOptional({
+    description: "Report layout. branch_wise shows one section per branch. consolidate rolls selected branches into one company-level section.",
+    enum: Object.values(FlmReportLayout),
+  })
+  @IsIn(Object.values(FlmReportLayout))
+  @IsOptional()
+  layout?: FlmReportLayout;
 
   @ApiPropertyOptional({
     description: "Export format",

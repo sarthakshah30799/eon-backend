@@ -70,7 +70,9 @@ export class BranchResponseDto {
     dto.isActive = entity.isActive;
     dto.companyId = entity.company?.id || null;
     dto.companyName = entity.company?.name || null;
-    dto.counterIds = entity.counters ? entity.counters.map(c => c.id) : [];
+    dto.counterIds = entity.counterLinks
+      ? entity.counterLinks.map((link) => link.counterId || link.counter?.id).filter(Boolean)
+      : [];
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

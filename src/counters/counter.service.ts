@@ -22,7 +22,8 @@ export class CounterService {
   ): Promise<CounterResponseDto[]> {
     const qb = this.counterRepository
       .createQueryBuilder('counter')
-      .leftJoinAndSelect('counter.branch', 'branch')
+      .leftJoinAndSelect('counter.branchLinks', 'branchLinks')
+      .leftJoinAndSelect('branchLinks.branch', 'branch')
       .orderBy('counter.createdAt', 'DESC');
 
     if (activeOnly) {
@@ -34,7 +35,9 @@ export class CounterService {
     }
 
     if (branchId?.trim()) {
-      qb.andWhere('branch.id = :branchId', { branchId: branchId.trim() });
+      qb.andWhere('branchLinks.branchId = :branchId', {
+        branchId: branchId.trim(),
+      });
     }
 
     const counters = await qb.getMany();
@@ -44,7 +47,7 @@ export class CounterService {
   async findById(id: string): Promise<CounterResponseDto> {
     const counter = await this.counterRepository.findOne({
       where: { id },
-      relations: ['branch'],
+      relations: ['branchLinks', 'branchLinks.branch'],
     });
     if (!counter) {
       throw new NotFoundException(`Counter with id ${id} not found`);
@@ -53,10 +56,9 @@ export class CounterService {
   }
 
   async create(dto: CreateCounterDto, userId: string): Promise<CounterResponseDto> {
-    const { branchId, ...rest } = uppercaseFields(dto);
+    const rest = uppercaseFields(dto);
     const counter = this.counterRepository.create({
       ...rest,
-      branch: branchId ? ({ id: branchId } as any) : null,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -69,11 +71,8 @@ export class CounterService {
     if (!counter) {
       throw new NotFoundException(`Counter with id ${id} not found`);
     }
-    const { branchId, ...rest } = uppercaseFields(dto);
+    const rest = uppercaseFields(dto);
     Object.assign(counter, rest);
-    if (branchId !== undefined) {
-      counter.branch = branchId ? ({ id: branchId } as any) : null;
-    }
     counter.updatedBy = userId;
     await this.counterRepository.save(counter);
     return this.findById(id);

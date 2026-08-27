@@ -2,11 +2,13 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import { Branch } from '../branches/branch.entity';
+import { Product } from '../products/product.entity';
 import { ProductCardIssuer } from '../products/entities/product-card-issuer.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { TransactionItem } from '../transactions/entities/transaction-item.entity';
 import { TransactionStatus, TransactionType, TransactionTypeProfileEnum } from '../transactions/transactions.enums';
 import { CardStockCardStatus, CardStockReferenceType } from './card-stock.enums';
+import { isMultiCurrencyCardProduct } from './card-product.util';
 import { CardStockTransactionService } from './card-stock-transaction.service';
 import { CardStockSettlementService } from './card-stock-settlement.service';
 import { CardStockCard } from './entities/card-stock-card.entity';
@@ -15,6 +17,7 @@ import { CardStockCard } from './entities/card-stock-card.entity';
 export class CardStockSaleLifecycleService {
   constructor(
     @InjectRepository(Branch) private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(Product) private readonly productRepository: Repository<Product>,
     @InjectRepository(ProductCardIssuer) private readonly productIssuerRepository: Repository<ProductCardIssuer>,
     private readonly cardStockTransactionService: CardStockTransactionService,
     private readonly settlementService: CardStockSettlementService,
@@ -26,8 +29,10 @@ export class CardStockSaleLifecycleService {
     }
     const cardItems = items.filter(item => Boolean(item.cardId));
     if (!cardItems.length) return;
-    if (new Set(cardItems.map(item => item.cardId)).size !== cardItems.length) {
-      throw new BadRequestException('A CARD can be selected only once in one transaction');
+
+    const cardCurrencyKeys = cardItems.map(item => `${item.cardId}:${item.currencyId}`);
+    if (new Set(cardCurrencyKeys).size !== cardCurrencyKeys.length) {
+      throw new BadRequestException('A CARD can be selected only once per currency in one transaction');
     }
 
     const existingSettlementRows: Array<{ transaction_item_id: string }> = await manager.query(
@@ -36,7 +41,7 @@ export class CardStockSaleLifecycleService {
     );
     const settledItemIds = new Set(existingSettlementRows.map(row => row.transaction_item_id));
     await this.settlementService.assertPersistedBuyRates(cardItems.filter(item => !settledItemIds.has(item.id)));
-    const cardIds = cardItems.map(item => String(item.cardId)).sort();
+    const cardIds = [...new Set(cardItems.map(item => String(item.cardId)))].sort();
     const cards = await manager.getRepository(CardStockCard).createQueryBuilder('card')
       .innerJoinAndSelect('card.receiptItem', 'receiptItem')
       .where({ id: In(cardIds) })
@@ -48,29 +53,50 @@ export class CardStockSaleLifecycleService {
     const branch = await this.branchRepository.findOne({ where: { id: transaction.branchId, isActive: true } });
     if (!branch) throw new NotFoundException(`Branch ${transaction.branchId} not found for CARD sale`);
 
-    for (const item of [...cardItems].sort((left, right) => String(left.cardId).localeCompare(String(right.cardId)))) {
+    const productIds = [...new Set(cardItems.map(item => item.productId))];
+    const products = await this.productRepository.find({ where: { id: In(productIds) } });
+    const productById = new Map(products.map(product => [product.id, product]));
+
+    const sortedItems = [...cardItems].sort((left, right) => {
+      const cardCmp = String(left.cardId).localeCompare(String(right.cardId));
+      if (cardCmp !== 0) return cardCmp;
+      return String(left.currencyId).localeCompare(String(right.currencyId));
+    });
+
+    for (const item of sortedItems) {
       const card = cardById.get(String(item.cardId));
       if (!card?.receiptItem || !item.issuerPartyProfileId) throw new BadRequestException(`CARD item ${item.lineNo} is incomplete`);
       if (card.currentBranchId !== transaction.branchId) throw new BadRequestException(`CARD item ${item.lineNo} is not held by the sale branch`);
       if (card.reservedByTransferId || card.reservedAt) throw new BadRequestException(`CARD item ${item.lineNo} is reserved for transfer`);
-      if (card.receiptItem.currencyId !== item.currencyId || card.receiptItem.productId !== item.productId || card.receiptItem.issuerPartyProfileId !== item.issuerPartyProfileId) {
+      const product = productById.get(item.productId);
+      if (!product) throw new BadRequestException(`CARD item ${item.lineNo} product is invalid`);
+      const multiCurrency = isMultiCurrencyCardProduct(product.productCode);
+      if (!multiCurrency && card.receiptItem.currencyId !== item.currencyId) {
+        throw new BadRequestException(`CARD item ${item.lineNo} does not match its currency, product, or issuer`);
+      }
+      if (card.receiptItem.productId !== item.productId || card.receiptItem.issuerPartyProfileId !== item.issuerPartyProfileId) {
         throw new BadRequestException(`CARD item ${item.lineNo} does not match its currency, product, or issuer`);
       }
       const issuerLink = await this.productIssuerRepository.findOne({ where: { productId: item.productId, partyProfileId: item.issuerPartyProfileId } });
       if (!issuerLink) throw new BadRequestException(`Issuer is not linked to the CARD product for item ${item.lineNo}`);
 
       const existingLoad: Array<{ id: string }> = await manager.query(
-        `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 LIMIT 1`,
-        [card.id, transaction.id],
+        `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
+        [card.id, transaction.id, item.currencyId],
       );
       if (!existingLoad[0]) {
-        if (!item.isReload && card.status !== CardStockCardStatus.AVAILABLE) {
+        const siblingLoadInTx: Array<{ id: string }> = await manager.query(
+          `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 LIMIT 1`,
+          [card.id, transaction.id],
+        );
+        // Fresh multi-currency lines on the same card: first line needs AVAILABLE; later lines may already be SOLD after a prior SELL in this tx.
+        if (!item.isReload && card.status !== CardStockCardStatus.AVAILABLE && !siblingLoadInTx[0]) {
           throw new BadRequestException(`CARD item ${item.lineNo} is not available for sale`);
         }
-        if (item.isReload && card.status !== CardStockCardStatus.SOLD) {
+        if (item.isReload && card.status !== CardStockCardStatus.SOLD && !siblingLoadInTx[0]) {
           throw new BadRequestException(`CARD item ${item.lineNo} is not eligible for reload`);
         }
-        if (item.isReload) await this.assertReloadPassenger(manager, transaction, item);
+        if (item.isReload && !siblingLoadInTx[0]) await this.assertReloadPassenger(manager, transaction, item);
         await this.cardStockTransactionService.create({
           manager,
           operationCode: TransactionTypeProfileEnum.CARD_STOCK_LOAD,
@@ -91,21 +117,27 @@ export class CardStockSaleLifecycleService {
             cardSnapshot: item.cardSnapshot ?? { id: card.id, series: card.series, kitNumber: card.kitNumber, denomination: card.denomination, amount: card.amount, expirationDate: card.expirationDate },
           }],
         });
+        // Refresh status after LOAD/SELL siblings may have changed it.
+        const refreshed = await manager.getRepository(CardStockCard).findOne({ where: { id: card.id } });
+        if (refreshed) card.status = refreshed.status;
       }
 
       const existingSell: Array<{ id: string }> = await manager.query(
-        `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 LIMIT 1`,
-        [card.id, transaction.id],
+        `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
+        [card.id, transaction.id, item.currencyId],
       );
       if (!existingSell[0]) {
         await manager.query(`UPDATE transaction_items SET updated_at=now(), updated_by=$2 WHERE id=$1`, [item.id, actorId]);
         const createdSell: Array<{ id: string }> = await manager.query(
-          `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 LIMIT 1`,
-          [card.id, transaction.id],
+          `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
+          [card.id, transaction.id, item.currencyId],
         );
         if (!createdSell[0]) throw new BadRequestException(`SELL ledger entry was not created for CARD item ${item.lineNo}`);
+        const refreshed = await manager.getRepository(CardStockCard).findOne({ where: { id: card.id } });
+        if (refreshed) card.status = refreshed.status;
       }
     }
+
     await this.settlementService.createForApprovedSale(manager, transaction, cardItems, actorId);
   }
 

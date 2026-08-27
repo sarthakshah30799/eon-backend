@@ -26,7 +26,11 @@ import { AuthenticatedSession } from '../auth/types/session-context';
 import { SpreadsheetUploadService } from '../common/upload/spreadsheet-upload.service';
 import { validateCardNumber } from './card-number.util';
 
-const CARD_PRODUCT_CODE = 'CC';
+import {
+  isCardProductCode,
+  isMultiCurrencyCardProduct,
+  MULTI_CURRENCY_CARD_PRODUCT_CODE,
+} from './card-product.util';
 
 @Injectable()
 export class CardStockService {
@@ -132,8 +136,25 @@ export class CardStockService {
   }
 
   async findAvailableCards(branchId: string, currencyId: string, productId: string, issuerPartyProfileId: string) {
-    if (!branchId || !currencyId || !productId || !issuerPartyProfileId) return [];
-    const rows = await this.database2.query(`
+    if (!branchId || !productId || !issuerPartyProfileId) return [];
+    const product = await this.productRepository.findOne({ where: { id: productId } });
+    if (!product || !isCardProductCode(product.productCode)) return [];
+    const multiCurrency = isMultiCurrencyCardProduct(product.productCode);
+    if (!multiCurrency && !currencyId) return [];
+
+    if (multiCurrency) {
+      return this.database2.query(`
+        SELECT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
+               i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
+               CASE WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0)) ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4) END AS "maskedCardNumber"
+        FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+        CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
+        WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND c.reserved_by_transfer_id IS NULL AND c.reserved_at IS NULL
+          AND i.product_id=$2 AND i.issuer_party_profile_id=$3
+        ORDER BY c.series, c.kit_number`, [branchId, productId, issuerPartyProfileId]);
+    }
+
+    return this.database2.query(`
       SELECT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
              i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
              CASE WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0)) ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4) END AS "maskedCardNumber"
@@ -142,11 +163,29 @@ export class CardStockService {
       WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND c.reserved_by_transfer_id IS NULL AND c.reserved_at IS NULL
         AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
       ORDER BY c.series, c.kit_number`, [branchId, currencyId, productId, issuerPartyProfileId]);
-    return rows;
   }
 
   async findReloadCards(branchId: string, passengerId: string, currencyId: string, productId: string, issuerPartyProfileId: string) {
-    if (!branchId || !passengerId || !currencyId || !productId || !issuerPartyProfileId) return [];
+    if (!branchId || !passengerId || !productId || !issuerPartyProfileId) return [];
+    const product = await this.productRepository.findOne({ where: { id: productId } });
+    if (!product || !isCardProductCode(product.productCode)) return [];
+    const multiCurrency = isMultiCurrencyCardProduct(product.productCode);
+    if (!multiCurrency && !currencyId) return [];
+
+    if (multiCurrency) {
+      return this.database2.query(`
+        SELECT DISTINCT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
+          i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
+          CASE WHEN length(decoded.clear_number) <= 8 THEN left(decoded.clear_number, 4) || repeat('X', greatest(length(decoded.clear_number) - 4, 0)) ELSE left(decoded.clear_number, 4) || repeat('X', length(decoded.clear_number) - 8) || right(decoded.clear_number, 4) END AS "maskedCardNumber"
+        FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+        CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
+        WHERE c.current_branch_id=$1 AND c.status='SOLD' AND c.reserved_by_transfer_id IS NULL
+          AND i.product_id=$2 AND i.issuer_party_profile_id=$3
+          AND EXISTS (SELECT 1 FROM transaction_items ti JOIN transactions t ON t.id=ti.transaction_id
+            WHERE ti.card_id=c.id AND t.passenger_id=$4 AND t.transaction_type='SALE' AND t.status='APPROVED')
+        ORDER BY c.series, c.kit_number`, [branchId, productId, issuerPartyProfileId, passengerId]);
+    }
+
     return this.database2.query(`
       SELECT DISTINCT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
         i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
@@ -242,9 +281,23 @@ export class CardStockService {
       this.requireIssuer(item.issuerPartyProfileId),
     ]);
     if (!currency) throw new BadRequestException(`Currency ${item.currencyId} is invalid or inactive`);
-    if (!product || !product.isActiveProduct || product.productCode.toUpperCase() !== CARD_PRODUCT_CODE) throw new BadRequestException('Only active CARD product CC is allowed');
+    if (!product || !product.isActiveProduct || !isCardProductCode(product.productCode)) {
+      throw new BadRequestException('Only active CARD products CC or CM are allowed');
+    }
+    const multiCurrency = isMultiCurrencyCardProduct(product.productCode);
+    if (multiCurrency) {
+      if (!currency.onlyStocking || currency.productAllowed !== MULTI_CURRENCY_CARD_PRODUCT_CODE) {
+        throw new BadRequestException(
+          `Item ${item.lineNo}: CM cards must be stocked under an only-stocking currency with product allowed CM`,
+        );
+      }
+    } else if (currency.onlyStocking) {
+      throw new BadRequestException(
+        `Item ${item.lineNo}: CC cards must be stocked under a non-stocking (tradable) currency`,
+      );
+    }
     const link = await this.productIssuerRepository.findOne({ where: { productId: product.id, partyProfileId: issuer.id } });
-    if (!link) throw new BadRequestException(`Issuer ${issuer.code} is not configured for product CC`);
+    if (!link) throw new BadRequestException(`Issuer ${issuer.code} is not configured for product ${product.productCode.toUpperCase()}`);
     if (!item.cards?.length) throw new BadRequestException(`Item ${item.lineNo} must contain at least one card`);
     const cards = item.cards.map(card => {
       if (!/^[A-Za-z0-9]{1,4}$/.test(card.series)) throw new BadRequestException(`Item ${item.lineNo}: series prefix must be 1 to 4 alphanumeric characters (for example, CC)`);
