@@ -5,6 +5,8 @@ import { Brackets, DataSource, EntityManager, Repository } from "typeorm";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { Branch } from "../branches/branch.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
+import { assertCounterBelongsToBranch } from "../branches/branch-counter.access";
 import { SelectOption } from "../category-options/category-option.entity";
 import { Counter } from "../counters/counter.entity";
 import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
@@ -89,6 +91,7 @@ export class VoucherService implements OnModuleInit {
     @InjectRepository(SelectOption) private readonly optionRepository: Repository<SelectOption>,
     @InjectRepository(Branch) private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Counter) private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(BranchCounter) private readonly branchCounterRepository: Repository<BranchCounter>,
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
@@ -119,10 +122,11 @@ export class VoucherService implements OnModuleInit {
     if (!branchId || !counterId) throw new BadRequestException("Branch and counter are required");
     const [branch, counter] = await Promise.all([
       this.branchRepository.findOne({ where: { id: branchId, isActive: true } }),
-      this.counterRepository.findOne({ where: { id: counterId, isActive: true }, relations: ["branch"] }),
+      this.counterRepository.findOne({ where: { id: counterId, isActive: true } }),
     ]);
     if (!branch) throw new NotFoundException("Active branch not found");
-    if (!counter || counter.branch?.id !== branch.id) throw new BadRequestException("Selected counter does not belong to the selected branch");
+    if (!counter) throw new NotFoundException("Active counter not found");
+    await assertCounterBelongsToBranch(this.branchCounterRepository, branch.id, counter.id);
     return { branch, counter };
   }
 

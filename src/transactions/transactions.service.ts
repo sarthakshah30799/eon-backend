@@ -53,6 +53,8 @@ import { Country } from "../country/country.entity";
 import { State } from "../state/state.entity";
 import { CompanyService } from "../company/company.service";
 import { Branch } from "../branches/branch.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
+import { assertCounterBelongsToBranch } from "../branches/branch-counter.access";
 import { Counter } from "../counters/counter.entity";
 import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
@@ -75,6 +77,10 @@ import { DayEndStartProcessService } from "../day-end-start-process/day-end-star
 import { CountryService } from "../country/country.service";
 import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 import { CardStockSaleLifecycleService } from "../card-stock/card-stock-sale-lifecycle.service";
+import {
+  isCardProductCode,
+  isMultiCurrencyCardProduct,
+} from "../card-stock/card-product.util";
 import { VoucherService } from "../vouchers/voucher.service";
 import { AdvanceApplicationPayloadDto } from "../vouchers/dto/voucher.dto";
 import { TransactionSettlementSource } from "../vouchers/voucher.enums";
@@ -357,6 +363,8 @@ export class TransactionsService {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Counter)
     private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(BranchCounter)
+    private readonly branchCounterRepository: Repository<BranchCounter>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(ManualBookPageTracking, "database2")
@@ -1363,7 +1371,6 @@ export class TransactionsService {
 
     const selectedCounter = await this.counterRepository.findOne({
       where: { id: resolvedCounterId },
-      relations: ["branch"],
     });
 
     if (!selectedCounter) {
@@ -1375,18 +1382,14 @@ export class TransactionsService {
     console.log("[workplace-debug] createDraft counter check", {
       resolvedBranchId,
       resolvedCounterId,
-      counterActualBranchId: selectedCounter.branch?.id ?? null,
       counterName: selectedCounter.name,
     });
 
-    if (
-      selectedCounter.branch?.id &&
-      selectedCounter.branch.id !== resolvedBranchId
-    ) {
-      throw new BadRequestException(
-        "Selected counter does not belong to the selected branch",
-      );
-    }
+    await assertCounterBelongsToBranch(
+      this.branchCounterRepository,
+      String(resolvedBranchId),
+      resolvedCounterId,
+    );
 
     const branchSnapshot = await loadEntitySnapshot(
       this.branchRepository,
@@ -1992,14 +1995,16 @@ export class TransactionsService {
 
     const itemRows = requestedItemRows;
     const cardSaleItems: TransactionItem[] = [];
-    const selectedCardIds = new Set<string>();
+    const selectedCardCurrencyKeys = new Set<string>();
     for (let index = 0; index < itemRows.length; index += 1) {
       const row = itemRows[index];
       const currency = await resolveCurrency(String(row.currencyId));
       const product = await resolveProduct(String(row.productId));
       const productEntity = await resolveProductEntity(String(row.productId));
-      const isCardItem =
-        String(productEntity.productCode ?? "").toUpperCase() === "CC";
+      const isCardItem = isCardProductCode(productEntity.productCode);
+      const isMultiCurrencyCard = isMultiCurrencyCardProduct(
+        productEntity.productCode,
+      );
       if (isCardItem) {
         if (transactionPayload.transactionType !== TransactionType.SALE) {
           throw new BadRequestException(
@@ -2017,12 +2022,28 @@ export class TransactionsService {
             `CARD item ${index + 1} FE amount must be greater than 0`,
           );
         }
-        if (selectedCardIds.has(String(row.cardId))) {
+        if (Boolean(currency.onlyStocking)) {
           throw new BadRequestException(
-            `CARD ${row.cardId} cannot be selected more than once in one transaction`,
+            `CARD item ${index + 1} cannot use an only-stocking currency on sale`,
           );
         }
-        selectedCardIds.add(String(row.cardId));
+        const cardCurrencyKey = `${row.cardId}:${row.currencyId}`;
+        if (selectedCardCurrencyKeys.has(cardCurrencyKey)) {
+          throw new BadRequestException(
+            `CARD ${row.cardId} cannot be selected more than once for the same currency in one transaction`,
+          );
+        }
+        if (!isMultiCurrencyCard) {
+          const sameCardOtherCurrency = [...selectedCardCurrencyKeys].some(
+            (key) => key.startsWith(`${row.cardId}:`),
+          );
+          if (sameCardOtherCurrency) {
+            throw new BadRequestException(
+              `CARD ${row.cardId} cannot be selected more than once in one transaction`,
+            );
+          }
+        }
+        selectedCardCurrencyKeys.add(cardCurrencyKey);
         const selectedCard = await this.cardStockCardRepository.findOne({
           where: { id: row.cardId },
           relations: ["receiptItem"],
@@ -2088,6 +2109,22 @@ export class TransactionsService {
         ) {
           throw new BadRequestException(
             `CARD item ${index + 1} issuer does not match the selected CARD`,
+          );
+        }
+        if (
+          selectedCard.receiptItem?.productId &&
+          selectedCard.receiptItem.productId !== String(product.id)
+        ) {
+          throw new BadRequestException(
+            `CARD item ${index + 1} product does not match the selected CARD`,
+          );
+        }
+        if (
+          !isMultiCurrencyCard &&
+          selectedCard.receiptItem?.currencyId !== String(currency.id)
+        ) {
+          throw new BadRequestException(
+            `CARD item ${index + 1} currency does not match the selected CARD`,
           );
         }
         const issuerLink = await this.productCardIssuerRepository.findOne({

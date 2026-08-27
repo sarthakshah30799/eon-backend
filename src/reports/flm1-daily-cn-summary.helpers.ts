@@ -9,6 +9,10 @@ import {
 } from "../transactions/transactions.enums";
 import { CardSettlementReportFormat } from "./dto/card-settlement-report-query.dto";
 import { FLM1_DEFAULT_PRODUCT_CODE } from "./flm1-report.constants";
+import {
+  FlmReportLayout,
+  resolveFlmReportLayout,
+} from "./flm-report-layout.constants";
 
 export type Flm1LineKind = "HEADER" | "ITEM" | "TOTAL";
 
@@ -39,6 +43,7 @@ export type Flm1ReportGroup = {
 };
 
 export type Flm1ReportResponse = {
+  layout: FlmReportLayout;
   date: string;
   productLabel: string;
   currenciesPerBlock: number;
@@ -439,6 +444,62 @@ const emptyCurrency = (currencyId: string, currencyCode: string): CurrencyTotals
   ungroupedSale: 0,
 });
 
+const mergeCurrencyTotals = (
+  left: CurrencyTotals,
+  right: CurrencyTotals,
+): CurrencyTotals => {
+  const saleGroupQty = { ...left.saleGroupQty };
+  Object.entries(right.saleGroupQty).forEach(([groupId, qty]) => {
+    saleGroupQty[groupId] = (saleGroupQty[groupId] ?? 0) + qty;
+  });
+
+  return {
+    currencyId: left.currencyId,
+    currencyCode: left.currencyCode || right.currencyCode,
+    opening: left.opening + right.opening,
+    purchasePublic: left.purchasePublic + right.purchasePublic,
+    purchaseBulk: left.purchaseBulk + right.purchaseBulk,
+    purchaseForeign: left.purchaseForeign + right.purchaseForeign,
+    transferIn: left.transferIn + right.transferIn,
+    salePublic: left.salePublic + right.salePublic,
+    saleBulk: left.saleBulk + right.saleBulk,
+    saleForeign: left.saleForeign + right.saleForeign,
+    transferOut: left.transferOut + right.transferOut,
+    saleGroupQty,
+    ungroupedSale: left.ungroupedSale + right.ungroupedSale,
+  };
+};
+
+const consolidateBranchMap = (
+  branchMap: Map<
+    string,
+    { label: string; productLabel: string; currencies: Map<string, CurrencyTotals> }
+  >,
+) => {
+  const consolidated = {
+    label: "Consolidated",
+    productLabel: "",
+    currencies: new Map<string, CurrencyTotals>(),
+  };
+
+  branchMap.forEach((branch) => {
+    if (branch.productLabel && !consolidated.productLabel) {
+      consolidated.productLabel = branch.productLabel;
+    }
+    branch.currencies.forEach((currency, currencyId) => {
+      const current =
+        consolidated.currencies.get(currencyId) ??
+        emptyCurrency(currencyId, currency.currencyCode);
+      consolidated.currencies.set(
+        currencyId,
+        mergeCurrencyTotals(current, currency),
+      );
+    });
+  });
+
+  return consolidated;
+};
+
 const hasMovement = (totals: CurrencyTotals) =>
   [
     totals.opening,
@@ -580,8 +641,10 @@ export const buildFlm1DailyCnSummary = (
     selectedBranches: Flm1BranchMeta[];
     saleGroups?: Flm1SaleGroup[];
     currencyLabelById?: Record<string, string>;
+    layout?: string;
   },
 ): Flm1ReportResponse => {
+  const layout = resolveFlmReportLayout(options.layout);
   const branchMap = new Map<
     string,
     { label: string; productLabel: string; currencies: Map<string, CurrencyTotals> }
@@ -640,13 +703,20 @@ export const buildFlm1DailyCnSummary = (
     }
   });
 
-  const branchIds = options.selectedBranches.length
+  let branchIds = options.selectedBranches.length
     ? options.selectedBranches.map((branch) => branch.id)
     : [...branchMap.keys()].sort((left, right) =>
         (branchMap.get(left)?.label ?? left).localeCompare(
           branchMap.get(right)?.label ?? right,
         ),
       );
+
+  if (layout === FlmReportLayout.CONSOLIDATE) {
+    const consolidated = consolidateBranchMap(branchMap);
+    branchMap.clear();
+    branchMap.set("__consolidated__", consolidated);
+    branchIds = ["__consolidated__"];
+  }
 
   let productLabel = FLM1_DEFAULT_PRODUCT_CODE;
   const groups: Flm1ReportGroup[] = branchIds.map((branchId) => {
@@ -694,6 +764,7 @@ export const buildFlm1DailyCnSummary = (
   });
 
   return {
+    layout,
     date: options.dateLabel,
     productLabel,
     currenciesPerBlock: options.currenciesPerBlock,

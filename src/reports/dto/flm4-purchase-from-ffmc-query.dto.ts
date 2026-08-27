@@ -9,6 +9,7 @@ import {
   IsUUID,
 } from "class-validator";
 import { CardSettlementReportFormat } from "./card-settlement-report-query.dto";
+import { FlmReportLayout } from "../flm-report-layout.constants";
 import { FLM_FFMC_PROFILE_TYPES } from "../flm-ffmc-profile.constants";
 
 export const Flm4PurchaseFromFfmcView = {
@@ -70,6 +71,15 @@ export class Flm4PurchaseFromFfmcQueryDto {
   @IsIn(Object.values(Flm4PurchaseFromFfmcView))
   @IsOptional()
   view?: Flm4PurchaseFromFfmcView;
+
+  @ApiPropertyOptional({
+    description:
+      "Report layout. branch_wise shows one section per branch. consolidate rolls selected branches into one register.",
+    enum: Object.values(FlmReportLayout),
+  })
+  @IsIn(Object.values(FlmReportLayout))
+  @IsOptional()
+  layout?: FlmReportLayout;
 
   @ApiPropertyOptional({
     description: "Export format",

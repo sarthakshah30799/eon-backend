@@ -1,12 +1,7 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsBoolean, IsInt, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsInt, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCounterDto {
-  @ApiProperty({ description: 'Branch ID (UUID)', required: false })
-  @IsUUID()
-  @IsOptional()
-  branchId?: string;
-
   @ApiProperty({ description: 'Counter No.', example: 1 })
   @IsInt()
   @IsNotEmpty()

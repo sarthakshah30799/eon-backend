@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as XLSX from 'xlsx';
 import { Branch } from '../branches/branch.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
+import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
 import { Currency } from '../currencies/currency.entity';
 import { Counter } from '../counters/counter.entity';
 import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
@@ -99,6 +101,8 @@ export class StockRevaluationService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Counter)
     private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(BranchCounter)
+    private readonly branchCounterRepository: Repository<BranchCounter>,
     private readonly additionalSettingService: AdditionalSettingService,
   ) {}
 
@@ -148,8 +152,14 @@ export class StockRevaluationService {
     const { branchId, counterId } = target;
     const branch = await this.branchRepository.findOne({ where: { id: branchId, isActive: true } });
     if (!branch) throw new NotFoundException(`Active branch ${branchId} was not found`);
-    const counter = await this.counterRepository.findOne({ where: { id: counterId, branch: { id: branchId }, isActive: true } });
-    if (!counter) throw new NotFoundException(`Active counter ${counterId} was not found on branch ${branchId}`);
+    const counter = await this.counterRepository.findOne({ where: { id: counterId, isActive: true } });
+    if (!counter) throw new NotFoundException(`Active counter ${counterId} was not found`);
+    await assertCounterBelongsToBranch(
+      this.branchCounterRepository,
+      branchId,
+      counterId,
+      `Active counter ${counterId} was not found on branch ${branchId}`,
+    );
 
     const configuredFrequency = await this.getConfiguredFrequency();
     if (!configuredFrequency) {
@@ -229,8 +239,14 @@ export class StockRevaluationService {
     for (const target of targets) {
       const branch = await this.branchRepository.findOne({ where: { id: target.branchId, isActive: true } });
       if (!branch) throw new NotFoundException(`Active branch ${target.branchId} was not found`);
-      const counter = await this.counterRepository.findOne({ where: { id: target.counterId, branch: { id: target.branchId }, isActive: true } });
-      if (!counter) throw new NotFoundException(`Active counter ${target.counterId} was not found on branch ${target.branchId}`);
+      const counter = await this.counterRepository.findOne({ where: { id: target.counterId, isActive: true } });
+      if (!counter) throw new NotFoundException(`Active counter ${target.counterId} was not found`);
+      await assertCounterBelongsToBranch(
+        this.branchCounterRepository,
+        target.branchId,
+        target.counterId,
+        `Active counter ${target.counterId} was not found on branch ${target.branchId}`,
+      );
       const existing = await this.revaluationRepository.findOne({ where: { branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd } });
       if (existing?.status === StockRevaluationStatus.PROCESSED) throw new BadRequestException(`Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`);
       const pending = existing ?? this.revaluationRepository.create({ branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd, createdBy: userId, updatedBy: userId });

@@ -34,9 +34,11 @@ export const buildFlm5SalesToPublic = (
   paymentRows: Parameters<typeof buildFlm3PurchaseFromPublic>[1],
   otherDocumentRows: Parameters<typeof buildFlm3PurchaseFromPublic>[2],
   view?: string,
+  options?: import("./flm3-purchase-from-public.helpers").Flm3BuildOptions,
 ) =>
   buildFlm3PurchaseFromPublic(itemRows, paymentRows, otherDocumentRows, view, {
     includePanColumns: true,
+    ...options,
   });
 
 export const buildFlm5SalesToPublicExport = (

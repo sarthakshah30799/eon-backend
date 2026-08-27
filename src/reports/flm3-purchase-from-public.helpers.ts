@@ -14,6 +14,11 @@ import {
   type Flm3PurchaseFromPublicView as Flm3View,
 } from "./dto/flm3-purchase-from-public-query.dto";
 import { FLM1_DEFAULT_PRODUCT_CODE } from "./flm1-report.constants";
+import type { Flm1BranchMeta } from "./flm1-daily-cn-summary.helpers";
+import {
+  FlmReportLayout,
+  resolveFlmReportLayout,
+} from "./flm-report-layout.constants";
 
 export type Flm3ReportColumn = {
   key: string;
@@ -35,15 +40,29 @@ export type Flm3ReportTotals = {
   byOther: string;
 };
 
-export type Flm3ReportResponse = {
-  view: Flm3View;
+export type Flm3ReportGroup = {
+  branchId: string;
+  branchLabel: string;
+  empty: boolean;
+  emptyMessage?: string;
   columns: Flm3ReportColumn[];
   rows: Flm3ReportRow[];
   totals: Flm3ReportTotals;
 };
 
+export type Flm3ReportResponse = {
+  view: Flm3View;
+  layout: FlmReportLayout;
+  columns: Flm3ReportColumn[];
+  rows: Flm3ReportRow[];
+  totals: Flm3ReportTotals;
+  groups: Flm3ReportGroup[];
+};
+
 export type Flm3ItemRow = {
   transactionId: string;
+  branchId: string;
+  branchSnapshot: Record<string, unknown> | string | null;
   transactionDate: string | Date;
   transactionNumber: string | null;
   passengerSnapshot: Record<string, unknown> | string | null;
@@ -115,6 +134,8 @@ const COMMISSION_COLUMN: Flm3ReportColumn = {
 
 export type Flm3BuildOptions = {
   includePanColumns?: boolean;
+  layout?: string;
+  selectedBranches?: Flm1BranchMeta[];
 };
 
 const buildColumns = (
@@ -152,6 +173,16 @@ const toNumber = (value: string | number | null | undefined) => {
 };
 
 const formatAmount = (value: number) => value.toFixed(2);
+
+const emptyFlm3Totals = (): Flm3ReportTotals => ({
+  feAmount: formatAmount(0),
+  rupeeEquivalent: formatAmount(0),
+  netAmount: formatAmount(0),
+  commissionAmount: formatAmount(0),
+  byCash: formatAmount(0),
+  byCheque: formatAmount(0),
+  byOther: formatAmount(0),
+});
 
 const formatQuantity = (value: number) => {
   if (Number.isInteger(value)) {
@@ -292,6 +323,19 @@ const buildPaymentBuckets = (
   );
 };
 
+const getBranchSnapshotLabel = (
+  branchId: string,
+  snapshot: Record<string, unknown> | string | null | undefined,
+) => {
+  const parsed = parseSnapshot(snapshot);
+  const code = snapshotText(parsed.code);
+  const name = snapshotText(parsed.name);
+  if (code && name) {
+    return `${code} - ${name}`;
+  }
+  return snapshotText(parsed.label) || name || code || branchId;
+};
+
 const resolveView = (view?: string): Flm3View =>
   view === Flm3PurchaseFromPublicView.EXTENDED
     ? Flm3PurchaseFromPublicView.EXTENDED
@@ -380,6 +424,8 @@ export const loadFlmRegisterItemRows = async (
   return database2.query(
     `SELECT
         tx.id AS "transactionId",
+        tx.branch_id AS "branchId",
+        tx.branch_snapshot AS "branchSnapshot",
         tx.transaction_date AS "transactionDate",
         tx.number AS "transactionNumber",
         tx.passenger_snapshot AS "passengerSnapshot",
@@ -455,15 +501,13 @@ export const loadFlm3OtherDocumentRows = async (
   );
 };
 
-export const buildFlm3PurchaseFromPublic = (
+const buildFlm3RegisterSection = (
   itemRows: Flm3ItemRow[],
   paymentRows: Flm3PaymentRow[],
   otherDocumentRows: Flm3OtherDocumentRow[],
-  view?: string,
-  options?: Flm3BuildOptions,
-): Flm3ReportResponse => {
-  const resolvedView = resolveView(view);
-  const includePanColumns = Boolean(options?.includePanColumns);
+  resolvedView: Flm3View,
+  includePanColumns: boolean,
+) => {
   const columns = buildColumns(resolvedView, includePanColumns);
 
   const paymentsByTransaction = new Map<string, Flm3PaymentRow[]>();
@@ -613,7 +657,6 @@ export const buildFlm3PurchaseFromPublic = (
   }
 
   return {
-    view: resolvedView,
     columns,
     rows,
     totals: {
@@ -628,16 +671,136 @@ export const buildFlm3PurchaseFromPublic = (
   };
 };
 
+export const buildFlm3PurchaseFromPublic = (
+  itemRows: Flm3ItemRow[],
+  paymentRows: Flm3PaymentRow[],
+  otherDocumentRows: Flm3OtherDocumentRow[],
+  view?: string,
+  options?: Flm3BuildOptions,
+): Flm3ReportResponse => {
+  const resolvedView = resolveView(view);
+  const includePanColumns = Boolean(options?.includePanColumns);
+  const layout = resolveFlmReportLayout(options?.layout);
+  const selectedBranches = options?.selectedBranches ?? [];
+
+  if (layout === FlmReportLayout.CONSOLIDATE) {
+    const section = buildFlm3RegisterSection(
+      itemRows,
+      paymentRows,
+      otherDocumentRows,
+      resolvedView,
+      includePanColumns,
+    );
+    return {
+      view: resolvedView,
+      layout,
+      ...section,
+      groups: [],
+    };
+  }
+
+  const branchLabelById = new Map<string, string>();
+  selectedBranches.forEach((branch) => {
+    branchLabelById.set(branch.id, branch.label);
+  });
+  itemRows.forEach((row) => {
+    if (!branchLabelById.has(row.branchId)) {
+      branchLabelById.set(
+        row.branchId,
+        getBranchSnapshotLabel(row.branchId, row.branchSnapshot),
+      );
+    }
+  });
+
+  const branchIds = selectedBranches.length
+    ? selectedBranches.map((branch) => branch.id)
+    : [...branchLabelById.keys()].sort((left, right) =>
+        (branchLabelById.get(left) ?? left).localeCompare(
+          branchLabelById.get(right) ?? right,
+        ),
+      );
+
+  const groups: Flm3ReportGroup[] = branchIds.map((branchId) => {
+    const branchItems = itemRows.filter((row) => row.branchId === branchId);
+    const branchLabel = branchLabelById.get(branchId) ?? branchId;
+    const columns = buildColumns(resolvedView, includePanColumns);
+
+    if (!branchItems.length) {
+      return {
+        branchId,
+        branchLabel,
+        empty: true,
+        emptyMessage: "No transactions in this period",
+        columns,
+        rows: [],
+        totals: emptyFlm3Totals(),
+      };
+    }
+
+    const branchTransactionIds = new Set(
+      branchItems.map((row) => row.transactionId),
+    );
+    const branchPayments = paymentRows.filter((row) =>
+      branchTransactionIds.has(row.transactionId),
+    );
+    const branchDocuments = otherDocumentRows.filter((row) =>
+      branchTransactionIds.has(row.transactionId),
+    );
+    const section = buildFlm3RegisterSection(
+      branchItems,
+      branchPayments,
+      branchDocuments,
+      resolvedView,
+      includePanColumns,
+    );
+
+    return {
+      branchId,
+      branchLabel,
+      empty: false,
+      columns: section.columns,
+      rows: section.rows,
+      totals: section.totals,
+    };
+  });
+
+  return {
+    view: resolvedView,
+    layout,
+    columns: [],
+    rows: [],
+    totals: emptyFlm3Totals(),
+    groups,
+  };
+};
+
 export const buildFlm3PurchaseFromPublicExport = (
   report: Flm3ReportResponse,
   format: CardSettlementReportFormat,
 ) => {
-  const sheetRows = [
-    report.columns.map((column) => column.label),
-    ...report.rows.map((row) =>
-      report.columns.map((column) => row[column.key] ?? ""),
-    ),
-  ];
+  const sheetRows: Array<string[]> = [];
+
+  if (report.layout === FlmReportLayout.BRANCH_WISE && report.groups.length) {
+    report.groups.forEach((group) => {
+      sheetRows.push([group.branchLabel]);
+      if (group.empty) {
+        sheetRows.push([group.emptyMessage || "No transactions in this period"]);
+        sheetRows.push([]);
+        return;
+      }
+      sheetRows.push(group.columns.map((column) => column.label));
+      group.rows.forEach((row) => {
+        sheetRows.push(group.columns.map((column) => row[column.key] ?? ""));
+      });
+      sheetRows.push([]);
+    });
+  } else {
+    sheetRows.push(report.columns.map((column) => column.label));
+    report.rows.forEach((row) => {
+      sheetRows.push(report.columns.map((column) => row[column.key] ?? ""));
+    });
+  }
+
   const worksheet = XLSX.utils.aoa_to_sheet(sheetRows);
 
   if (format === CardSettlementReportFormat.CSV) {

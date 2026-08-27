@@ -12,13 +12,22 @@ import {
   loadFlm3OtherDocumentRows,
   loadFlm3PaymentRows,
   resolveFlm3DateRange,
+  type Flm3BuildOptions,
 } from "./flm3-purchase-from-public.helpers";
+import {
+  canSeeAllFlmBranches,
+  loadFlmSelectedBranches,
+  resolveFlmAccessibleBranchIds,
+} from "./flm-report-access.helpers";
+import { Branch } from "../branches/branch.entity";
 
 @Injectable()
 export class Flm3PurchaseFromPublicService {
   constructor(
     @InjectDataSource("database2")
     private readonly database2: DataSource,
+    @InjectRepository(Branch)
+    private readonly branchRepository: Repository<Branch>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
   ) {}
@@ -31,15 +40,23 @@ export class Flm3PurchaseFromPublicService {
       query.startDate,
       query.endDate,
     );
-    const resolvedBranchIds = await this.resolveAccessibleBranchIds(
+    const resolvedBranchIds = await resolveFlmAccessibleBranchIds(
+      this.userRoleRepository,
       query.branchIds ?? [],
       session,
     );
     const hasNoBranchAccess =
-      !this.canSeeAllBranches(session) && resolvedBranchIds.length === 0;
+      !canSeeAllFlmBranches(session) && resolvedBranchIds.length === 0;
+    const buildOptions: Flm3BuildOptions = {
+      layout: query.layout,
+      selectedBranches: await loadFlmSelectedBranches(
+        this.branchRepository,
+        resolvedBranchIds,
+      ),
+    };
 
     if (hasNoBranchAccess) {
-      return buildFlm3PurchaseFromPublic([], [], [], query.view);
+      return buildFlm3PurchaseFromPublic([], [], [], query.view, buildOptions);
     }
 
     const itemRows = await loadFlm3ItemRows(this.database2, {
@@ -61,6 +78,7 @@ export class Flm3PurchaseFromPublicService {
       paymentRows,
       otherDocumentRows,
       query.view,
+      buildOptions,
     );
   }
 
@@ -71,51 +89,5 @@ export class Flm3PurchaseFromPublicService {
   ) {
     const report = await this.buildReport(query, session);
     return buildFlm3PurchaseFromPublicExport(report, format);
-  }
-
-  private canSeeAllBranches(session?: SessionContext) {
-    return Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
-  }
-
-  private async resolveAccessibleBranchIds(
-    requestedBranchIds: string[],
-    session?: SessionContext,
-  ) {
-    if (this.canSeeAllBranches(session)) {
-      return requestedBranchIds;
-    }
-
-    const assignedBranchIds = await this.loadAssignedBranchIds(session?.userId);
-    if (!assignedBranchIds.length) {
-      return [];
-    }
-
-    if (!requestedBranchIds.length) {
-      return assignedBranchIds;
-    }
-
-    const assignedBranchIdSet = new Set(assignedBranchIds);
-    return requestedBranchIds.filter((branchId) =>
-      assignedBranchIdSet.has(branchId),
-    );
-  }
-
-  private async loadAssignedBranchIds(userId?: string | null) {
-    if (!userId) {
-      return [];
-    }
-
-    const assignments = await this.userRoleRepository.find({
-      where: { user: { id: userId } },
-      relations: { branch: true },
-    });
-
-    return [
-      ...new Set(
-        assignments
-          .map((assignment) => assignment.branch?.id)
-          .filter((branchId): branchId is string => Boolean(branchId)),
-      ),
-    ];
   }
 }

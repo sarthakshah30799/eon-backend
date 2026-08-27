@@ -27,6 +27,7 @@ import { CardStockPrintKind, RecordCardTransferPrintDto } from './dto/card-stock
 import { CardStockPrintService } from './card-stock-print.service';
 import { CardStockTransactionService } from './card-stock-transaction.service';
 import { TransactionReferenceSnapshot } from '../transactions/types/transaction-snapshot.types';
+import { isCardProductCode } from './card-product.util';
 
 @Injectable()
 export class CardTransferService {
@@ -76,10 +77,10 @@ export class CardTransferService {
       this.partyProfileRepository.findOne({ where: { id: item.issuerPartyProfileId, active: true, status: WorkflowStatus.APPROVE, type: ClientType.CARD_ISSUER_PROFILE } as any }),
     ]);
     if (!currency) throw new BadRequestException(`Item ${item.lineNo}: currency is invalid or inactive`);
-    if (!product || !product.isActiveProduct || product.productCode.toUpperCase() !== 'CC') throw new BadRequestException(`Item ${item.lineNo}: only active CARD product CC is allowed`);
+    if (!product || !product.isActiveProduct || !isCardProductCode(product.productCode)) throw new BadRequestException(`Item ${item.lineNo}: only active CARD products CC or CM are allowed`);
     if (!issuer) throw new BadRequestException(`Item ${item.lineNo}: issuer profile is invalid, inactive, or not approved`);
     const link = await this.productIssuerRepository.findOne({ where: { productId: product.id, partyProfileId: issuer.id } });
-    if (!link) throw new BadRequestException(`Item ${item.lineNo}: issuer is not configured for product CC`);
+    if (!link) throw new BadRequestException(`Item ${item.lineNo}: issuer is not configured for product ${product.productCode.toUpperCase()}`);
     if (!item.cardIds?.length) throw new BadRequestException(`Item ${item.lineNo}: at least one card is required`);
 
     const uniqueIds = new Set(item.cardIds);

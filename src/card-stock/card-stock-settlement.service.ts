@@ -181,7 +181,16 @@ export class CardStockSettlementService {
         const ho = await this.getSettlementHo(card.receiptItem.receipt.branchId, sellingBranch);
         const freezeBranch = auto || sellingBranch.id === ho.id;
         const mode = freezeBranch ? CardStockSettlementMode.AUTO : CardStockSettlementMode.MANUAL;
-        const balance = (await manager.query(`SELECT id,series FROM card_stock_balance WHERE card_id=$1 AND branch_id=$2 AND is_active=true ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [card.id, transaction.branchId]))[0];
+        const balance = (await manager.query(
+          `SELECT e.series
+           FROM card_stock_transaction_entries e
+           WHERE e.card_id=$1 AND e.reference_id=$2 AND e.currency_id=$3 AND e.operation_type='CARD_STOCK_LOAD'
+           ORDER BY e.created_at DESC LIMIT 1`,
+          [card.id, transaction.id, item.currencyId],
+        ))[0] ?? (await manager.query(
+          `SELECT id,series FROM card_stock_balance WHERE card_id=$1 AND branch_id=$2 AND is_active=true ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+          [card.id, transaction.branchId],
+        ))[0];
         if (!balance) throw new BadRequestException(`No active CARD balance exists for item ${item.lineNo}`);
         const quote = this.resolveBuyQuote(item);
         const denomination = Number(item.quantity);

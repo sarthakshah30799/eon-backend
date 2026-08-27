@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Not, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -6,6 +6,8 @@ import { User } from './user.entity';
 import { Role } from '../roles/role.entity';
 import { UserRole } from '../user-roles/user-role.entity';
 import { CounterMenuRestriction } from '../counter-menu-restrictions/counter-menu-restriction.entity';
+import { BranchCounter } from '../branches/entities/branch-counter.entity';
+import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -44,6 +46,8 @@ export class UserService {
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(CounterMenuRestriction)
     private readonly counterMenuRestrictionRepository: Repository<CounterMenuRestriction>,
+    @InjectRepository(BranchCounter)
+    private readonly branchCounterRepository: Repository<BranchCounter>,
     private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
 
@@ -177,6 +181,19 @@ export class UserService {
       if (role.isAdmin && !requesterIsAdmin) {
         throw new ConflictException('Admin role cannot be assigned to non-admin users');
       }
+    }
+  }
+
+  private async ensureAssignmentsBelongToBranch(
+    assignments: UserAssignmentDto[],
+  ): Promise<void> {
+    for (const assignment of assignments) {
+      await assertCounterBelongsToBranch(
+        this.branchCounterRepository,
+        assignment.branchId,
+        assignment.counterId,
+        'Selected counter does not belong to the selected branch for this user assignment',
+      );
     }
   }
 
@@ -316,6 +333,7 @@ export class UserService {
     const assignments = this.normalizeAssignments(uppercased);
     const requesterIsAdmin = await this.isRequesterAdmin(userId);
     await this.ensureRolesAreAssignable(assignments, requesterIsAdmin);
+    await this.ensureAssignmentsBelongToBranch(assignments);
 
     const {
       roleId: _roleId,
@@ -366,6 +384,7 @@ export class UserService {
 
     if (assignmentsProvided) {
       await this.ensureRolesAreAssignable(assignments, requesterIsAdmin);
+      await this.ensureAssignmentsBelongToBranch(assignments);
     }
 
     if (uppercased.email && uppercased.email !== user.email) {
