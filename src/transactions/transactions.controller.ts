@@ -66,18 +66,22 @@ export class TransactionsController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('partyProfileId') partyProfileId?: string,
+    @Query('partyProfile') partyProfile?: string,
     @Query('transactionType') transactionType?: string,
+    @Query('tradeMode') tradeMode?: string,
   ): Promise<Transaction[]> {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
       ? branchId?.trim() || undefined
       : session?.activeBranchId;
+    const effectivePartyProfileId = partyProfileId?.trim() || partyProfile?.trim() || undefined;
     return this.transactionsService.getTransactions(
       slug,
       effectiveBranchId,
       search,
       status as any,
-      partyProfileId,
+      effectivePartyProfileId,
       transactionType as any,
+      tradeMode as any,
     );
   }
 

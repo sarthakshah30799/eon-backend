@@ -7,7 +7,18 @@ export class BranchListQueryDto {
   @IsOptional()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Whether to return only active branches', default: true })
+  @ApiPropertyOptional({ description: 'Filter by city (partial match, case-insensitive)', example: 'Pune' })
+  @IsString()
   @IsOptional()
-  activeOnly?: boolean;
+  city?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by state name (partial match, case-insensitive)', example: 'Maharashtra' })
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by status: active | inactive | all', enum: ['active', 'inactive', 'all'], example: 'active' })
+  @IsString()
+  @IsOptional()
+  status?: string;
 }

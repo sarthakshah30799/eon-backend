@@ -27,7 +27,6 @@ export class BranchService {
   ) {}
 
   async findAll(query?: BranchListQueryDto): Promise<BranchResponseDto[]> {
-    const includeInactive = query?.activeOnly === false;
     const qb = this.branchRepository
       .createQueryBuilder('branch')
       .leftJoinAndSelect('branch.company', 'company')
@@ -37,8 +36,22 @@ export class BranchService {
       .leftJoinAndSelect('branch.locationType', 'locationType')
       .orderBy('branch.createdAt', 'DESC');
 
-    if (!includeInactive) {
-      qb.andWhere('branch.isActive = :isActive', { isActive: true });
+    if (query?.status) {
+      const normalized = query.status.trim().toLowerCase();
+      if (normalized === 'active') {
+        qb.andWhere('branch.isActive = :isActive', { isActive: true });
+      } else if (normalized === 'inactive') {
+        qb.andWhere('branch.isActive = :isActive', { isActive: false });
+      }
+      // 'all' => no status filter
+    }
+
+    if (query?.state) {
+      qb.andWhere('state.name ILIKE :stateName', { stateName: `%${query.state}%` });
+    }
+
+    if (query?.city) {
+      qb.andWhere('branch.city ILIKE :city', { city: `%${query.city}%` });
     }
 
     if (query?.search) {
@@ -55,7 +68,7 @@ export class BranchService {
             .orWhere('country.name ILIKE :search', { search: `%${query.search}%` })
             .orWhere('state.name ILIKE :search', { search: `%${query.search}%` })
             .orWhere('company.name ILIKE :search', { search: `%${query.search}%` });
-        })
+        }),
       );
     }
 

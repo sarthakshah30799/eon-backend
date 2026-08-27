@@ -53,8 +53,48 @@ export class CurrencyService {
       );
     }
 
-    if (query?.activeOnly !== false) {
-      qb.andWhere('currency.active = :active', { active: true });
+    // Country filter (country name ILIKE or countryId exact)
+    const countryVal = query?.country?.trim() || query?.countryId?.trim();
+    if (countryVal) {
+      // If looks like UUID, filter by id; otherwise by name ILIKE
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(countryVal);
+      if (isUuid) {
+        qb.andWhere('country.id = :countryId', { countryId: countryVal });
+      } else {
+        qb.andWhere('country.name ILIKE :countryName', { countryName: `%${countryVal}%` });
+      }
+    }
+
+    // Group filter (ASIA/AFRICA/EUROPE/GULF) - exact match case-insensitive
+    if (query?.group?.trim()) {
+      qb.andWhere('currency.group ILIKE :group', { group: query.group.trim() });
+    }
+
+    // Pricing group filter (UUID)
+    const pricingGroupVal = query?.pricingGroupId?.trim() || query?.pricingGroup?.trim();
+    if (pricingGroupVal) {
+      qb.andWhere('pricingGroup.id = :pricingGroupId', { pricingGroupId: pricingGroupVal });
+    }
+
+    // Status filter: active | inactive | all (if not provided, no filter — returns both)
+    if (query?.status?.trim()) {
+      const normalized = query.status.trim().toLowerCase();
+      if (normalized === 'active') {
+        qb.andWhere('currency.active = :active', { active: true });
+      } else if (normalized === 'inactive') {
+        qb.andWhere('currency.active = :active', { active: false });
+      }
+      // 'all' => no filter
+    } else if (query?.activeOnly !== undefined) {
+      // Backward compatibility: activeOnly=true => only active, activeOnly=false => all
+      const activeOnly = String(query.activeOnly).trim().toLowerCase();
+      if (activeOnly === 'true') {
+        qb.andWhere('currency.active = :active', { active: true });
+      } else if (activeOnly === 'false') {
+        // no filter
+      } else if (query.activeOnly === (true as any)) {
+        qb.andWhere('currency.active = :active', { active: true });
+      }
     }
 
     const currencies = await qb.getMany();
