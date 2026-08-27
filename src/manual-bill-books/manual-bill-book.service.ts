@@ -6,7 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, Like, In, Between } from "typeorm";
+import { Repository, Like, In, Between, Brackets } from "typeorm";
 import { ManualBook } from "./entities/manual-book.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.entity";
@@ -22,6 +22,12 @@ import {
   UpdatePageStatusDto,
   ReturnPagesDto,
 } from "./dto/manual-bill-book.dto";
+import { ManualBillBookListQueryDto } from "./dto/manual-bill-book-list-query.dto";
+import { normalizePagination } from "../common/pagination/pagination.util";
+import {
+  PaginatedResponseDto,
+  buildPaginatedResponse,
+} from "../common/pagination/dto/paginated-response.dto";
 
 const isUuid = (val: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
@@ -271,26 +277,59 @@ export class ManualBillBookService {
     status?: string,
     transactionType?: string,
     assignedTo?: string,
-  ): Promise<any[]> {
-    const where: any = {};
-    if (branchId) where.branchId = branchId;
-    if (status) where.status = status;
+    paginationQuery?: ManualBillBookListQueryDto,
+  ): Promise<PaginatedResponseDto<any>> {
+    const { limit, offset } = normalizePagination(paginationQuery ?? {});
+    this.logger.log(
+      `[DEBUG] findAll pagination limit=${limit} offset=${offset} rawLimit=${paginationQuery?.limit} rawOffset=${paginationQuery?.offset} branchId=${branchId ?? 'null'} status=${status ?? 'null'} search=${paginationQuery?.search ?? 'null'}`,
+    );
+
+    const qb = this.manualBookRepository.createQueryBuilder("book");
+
+    if (branchId) {
+      qb.andWhere("book.branchId = :branchId", { branchId });
+    }
+    if (status) {
+      qb.andWhere("book.status = :status", { status });
+    }
     const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
     if (transactionType && transactionType !== "ALL" && transactionTypeGroup) {
-      where.transactionType =
-        transactionTypeGroup.length === 1
-          ? transactionTypeGroup[0]
-          : In(transactionTypeGroup);
+      if (transactionTypeGroup.length === 1) {
+        qb.andWhere("book.transactionType = :transactionType", {
+          transactionType: transactionTypeGroup[0],
+        });
+      } else {
+        qb.andWhere("book.transactionType IN (:...transactionTypes)", {
+          transactionTypes: transactionTypeGroup,
+        });
+      }
     }
-    if (assignedTo) where.assignedTo = assignedTo;
+    if (assignedTo) {
+      qb.andWhere("book.assignedTo = :assignedTo", { assignedTo });
+    }
 
-    const books = await this.manualBookRepository.find({
-      where,
-      order: { createdAt: "DESC" },
-    });
+    const search = paginationQuery?.search?.trim();
+    if (search) {
+      const like = `%${search}%`;
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub
+            .where("book.no ILIKE :search", { search: like })
+            .orWhere("book.remarks ILIKE :search", { search: like })
+            .orWhere("CAST(book.bookNoFrom AS TEXT) ILIKE :search", { search: like })
+            .orWhere("CAST(book.bookNoTo AS TEXT) ILIKE :search", { search: like })
+            .orWhere("CAST(book.mvNoFrom AS TEXT) ILIKE :search", { search: like })
+            .orWhere("CAST(book.mvNoTo AS TEXT) ILIKE :search", { search: like });
+        }),
+      );
+    }
+
+    qb.orderBy("book.createdAt", "DESC").skip(offset).take(limit);
+
+    const [books, total] = await qb.getManyAndCount();
 
     if (books.length === 0) {
-      return [];
+      return buildPaginatedResponse([], total, { limit, offset });
     }
 
     // Fetch branch profiles from DB1 in a single query
@@ -312,7 +351,7 @@ export class ManualBillBookService {
     }
     const userMap = new Map(assignedUsers.map((u) => [u.id, u]));
 
-    return books.map((book) => {
+    const enriched = books.map((book) => {
       const branch = branchMap.get(book.branchId);
       const assignedUser = userMap.get(book.assignedTo);
       return {
@@ -326,6 +365,8 @@ export class ManualBillBookService {
         },
       };
     });
+
+    return buildPaginatedResponse(enriched, total, { limit, offset });
   }
 
   async findOne(id: string): Promise<ManualBook> {

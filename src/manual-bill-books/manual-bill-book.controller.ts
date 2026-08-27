@@ -30,6 +30,8 @@ import {
   ManageDeliveryPersonDto,
   ReassignManualBookDto,
 } from "./dto/manual-bill-book.dto";
+import { ManualBillBookListQueryDto } from "./dto/manual-bill-book-list-query.dto";
+import { PaginatedResponseDto } from "../common/pagination/dto/paginated-response.dto";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 
@@ -87,16 +89,14 @@ export class ManualBillBookController {
   }
 
   @Get("dispatches")
-  @ApiOperation({ summary: "Get all manual bill book dispatches" })
-  @ApiResponse({ status: 200, description: "List of dispatches" })
+  @ApiOperation({ summary: "Get all manual bill book dispatches (paginated)" })
+  @ApiResponse({ status: 200, description: "Paginated list of dispatches", type: PaginatedResponseDto })
   async findAll(
     @Session() session: any,
-    @Query("branchId") branchId?: string,
-    @Query("status") status?: string,
-    @Query("transactionType") transactionType?: string,
-  ) {
+    @Query() query: ManualBillBookListQueryDto,
+  ): Promise<PaginatedResponseDto<any>> {
     const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || undefined
+      ? query.branchId?.trim() || undefined
       : session.activeBranchId;
     let assignedToFilter: string | undefined;
     if (!session.isAdmin && !session.isHoStaff) {
@@ -104,9 +104,10 @@ export class ManualBillBookController {
     }
     return this.service.findAll(
       effectiveBranchId,
-      status,
-      transactionType,
+      query.status,
+      query.transactionType,
       assignedToFilter,
+      query,
     );
   }
 
