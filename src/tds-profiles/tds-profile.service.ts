@@ -3,14 +3,20 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
-import { TdsProfile } from './tds-profile.entity';
-import { CreateTdsProfileDto } from './dto/create-tds-profile.dto';
-import { UpdateTdsProfileDto } from './dto/update-tds-profile.dto';
-import { TdsProfileResponseDto } from './dto/tds-profile-response.dto';
-import { TdsProfileListQueryDto } from './dto/tds-profile-list-query.dto';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, Repository } from "typeorm";
+import { TdsProfile } from "./tds-profile.entity";
+import { CreateTdsProfileDto } from "./dto/create-tds-profile.dto";
+import { UpdateTdsProfileDto } from "./dto/update-tds-profile.dto";
+import { TdsProfileResponseDto } from "./dto/tds-profile-response.dto";
+import { TdsProfileListQueryDto } from "./dto/tds-profile-list-query.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 @Injectable()
 export class TdsProfileService {
@@ -19,28 +25,37 @@ export class TdsProfileService {
     private readonly tdsProfileRepository: Repository<TdsProfile>,
   ) {}
 
-  async findAll(query?: TdsProfileListQueryDto): Promise<TdsProfileResponseDto[]> {
-    const qb = this.tdsProfileRepository.createQueryBuilder('tds_profile');
+  async findAll(
+    query?: TdsProfileListQueryDto,
+  ): Promise<PaginatedResponseDto<TdsProfileResponseDto>> {
+    const pagination = normalizePagination(query);
+    const qb = this.tdsProfileRepository.createQueryBuilder("tds_profile");
 
     if (query?.search?.trim()) {
       const search = `%${query.search.trim()}%`;
       qb.andWhere(
-        new Brackets(searchQb => {
+        new Brackets((searchQb) => {
           searchQb
-            .where('tds_profile.code ILIKE :search', { search })
-            .orWhere('tds_profile.name ILIKE :search', { search })
-            .orWhere('tds_profile.value::text ILIKE :search', { search })
-            .orWhere('tds_profile.sort_order::text ILIKE :search', { search });
+            .where("tds_profile.code ILIKE :search", { search })
+            .orWhere("tds_profile.name ILIKE :search", { search })
+            .orWhere("tds_profile.value::text ILIKE :search", { search })
+            .orWhere("tds_profile.sort_order::text ILIKE :search", { search });
         }),
       );
     }
 
-    const profiles = await qb
-      .orderBy('tds_profile.sort_order', 'ASC')
-      .addOrderBy('tds_profile.code', 'ASC')
-      .getMany();
+    qb.orderBy("tds_profile.sort_order", "ASC").addOrderBy(
+      "tds_profile.code",
+      "ASC",
+    );
+    applyPagination(qb, pagination);
+    const [profiles, total] = await qb.getManyAndCount();
 
-    return profiles.map(TdsProfileResponseDto.fromEntity);
+    return buildPaginatedResponse(
+      profiles.map(TdsProfileResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<TdsProfileResponseDto> {
@@ -111,14 +126,21 @@ export class TdsProfileService {
       profile.sortOrder = updatableFields.sortOrder;
     }
 
-    if (updatableFields.from !== undefined || updatableFields.to !== undefined) {
+    if (
+      updatableFields.from !== undefined ||
+      updatableFields.to !== undefined
+    ) {
       const nextFrom =
         updatableFields.from !== undefined
-          ? (updatableFields.from ? new Date(updatableFields.from) : null)
+          ? updatableFields.from
+            ? new Date(updatableFields.from)
+            : null
           : profile.from;
       const nextTo =
         updatableFields.to !== undefined
-          ? (updatableFields.to ? new Date(updatableFields.to) : null)
+          ? updatableFields.to
+            ? new Date(updatableFields.to)
+            : null
           : profile.to;
       this.ensureValidDateRange(
         nextFrom ? nextFrom.toISOString() : null,
@@ -159,7 +181,9 @@ export class TdsProfileService {
     });
 
     if (existing && existing.id !== excludeId) {
-      throw new ConflictException(`TDS profile with code "${code}" already exists`);
+      throw new ConflictException(
+        `TDS profile with code "${code}" already exists`,
+      );
     }
   }
 
@@ -171,11 +195,13 @@ export class TdsProfileService {
     const fromDate = new Date(from);
     const toDate = new Date(to);
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-      throw new BadRequestException('Invalid TDS date range');
+      throw new BadRequestException("Invalid TDS date range");
     }
 
     if (fromDate.getTime() > toDate.getTime()) {
-      throw new BadRequestException('"from" date cannot be later than "to" date');
+      throw new BadRequestException(
+        '"from" date cannot be later than "to" date',
+      );
     }
   }
 }

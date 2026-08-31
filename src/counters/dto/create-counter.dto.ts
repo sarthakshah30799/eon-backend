@@ -1,34 +1,57 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsInt, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  MaxLength,
+} from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateCounterDto {
-  @ApiProperty({ description: 'Counter No.', example: 1 })
+  @ApiProperty({ description: "Counter No.", example: 1 })
   @IsInt()
   @IsNotEmpty()
   counterNo: number;
 
-  @ApiProperty({ description: 'Counter name', example: 'Counter 1', maxLength: 250 })
+  @ApiProperty({
+    description: "Counter name",
+    example: "Counter 1",
+    maxLength: 250,
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
   name: string;
 
-  @ApiProperty({ description: 'Is Active', default: true, required: false })
+  @ApiProperty({ description: "Is Active", default: true, required: false })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
 
-  @ApiProperty({ description: 'Is Retail Counter', default: false, required: false })
+  @ApiProperty({
+    description: "Is Retail Counter",
+    default: false,
+    required: false,
+  })
   @IsBoolean()
   @IsOptional()
   isRetail?: boolean;
 
-  @ApiProperty({ description: 'Is Bulk Counter', default: false, required: false })
+  @ApiProperty({
+    description: "Is Bulk Counter",
+    default: false,
+    required: false,
+  })
   @IsBoolean()
   @IsOptional()
   isBulk?: boolean;
 
-  @ApiProperty({ description: 'Is Combine Counter', default: false, required: false })
+  @ApiProperty({
+    description: "Is Combine Counter",
+    default: false,
+    required: false,
+  })
   @IsBoolean()
   @IsOptional()
   isCombine?: boolean;

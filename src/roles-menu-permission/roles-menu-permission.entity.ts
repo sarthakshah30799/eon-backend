@@ -18,7 +18,9 @@ export class RolesMenuPermission {
   @PrimaryGeneratedColumn("uuid") id: string;
 
   @Index()
-  @ManyToOne(() => Role, (role) => role.menuPermissions, { onDelete: "CASCADE" })
+  @ManyToOne(() => Role, (role) => role.menuPermissions, {
+    onDelete: "CASCADE",
+  })
   @JoinColumn({ name: "role_id" })
   role: Role;
 

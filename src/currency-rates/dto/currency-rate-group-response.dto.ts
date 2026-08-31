@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { CurrencyRateGroup } from '../currency-rate-group.entity';
-import { CurrencyRateMarginType } from '../currency-rates.enums';
+import { ApiProperty } from "@nestjs/swagger";
+import { CurrencyRateGroup } from "../currency-rate-group.entity";
+import { CurrencyRateMarginType } from "../currency-rates.enums";
 
 export class CurrencyRateGroupResponseDto {
   @ApiProperty()
@@ -15,13 +15,21 @@ export class CurrencyRateGroupResponseDto {
   @ApiProperty({ required: false, nullable: true })
   description: string | null;
 
-  @ApiProperty({ enum: CurrencyRateMarginType, required: false, nullable: true })
+  @ApiProperty({
+    enum: CurrencyRateMarginType,
+    required: false,
+    nullable: true,
+  })
   buyMarginType: CurrencyRateMarginType | null;
 
   @ApiProperty({ required: false, nullable: true })
   buyMarginValue: string | null;
 
-  @ApiProperty({ enum: CurrencyRateMarginType, required: false, nullable: true })
+  @ApiProperty({
+    enum: CurrencyRateMarginType,
+    required: false,
+    nullable: true,
+  })
   saleMarginType: CurrencyRateMarginType | null;
 
   @ApiProperty({ required: false, nullable: true })

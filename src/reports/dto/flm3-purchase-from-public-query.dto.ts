@@ -46,7 +46,9 @@ export class Flm3PurchaseFromPublicQueryDto {
   @IsOptional()
   branchIds?: string[];
 
-  @ApiPropertyOptional({ description: "Product id. Defaults to CN when omitted." })
+  @ApiPropertyOptional({
+    description: "Product id. Defaults to CN when omitted.",
+  })
   @IsUUID()
   @IsOptional()
   productId?: string;

@@ -18,7 +18,10 @@ export interface PaginationParams {
  * Normalise raw pagination query into safe limit/offset values.
  * Applies defaults and clamps to allowed ranges so callers never have to repeat this logic.
  */
-export function normalizePagination(query: PaginationParams = {}): { limit: number; offset: number } {
+export function normalizePagination(query: PaginationParams = {}): {
+  limit: number;
+  offset: number;
+} {
   const parse = (val: number | undefined, fallback: number): number => {
     if (val === undefined || val === null) return fallback;
     if (Number.isNaN(val)) return fallback;
@@ -61,9 +64,18 @@ export interface RawPaginationParams {
  * Parse raw query strings (when not using DTO) into pagination values.
  * Kept for backwards-compat / non-DTO usage.
  */
-export function parsePaginationParams(query: RawPaginationParams): { limit: number; offset: number } {
-  const limit = query.limit !== undefined ? parseInt(String(query.limit), 10) : DEFAULT_PAGINATION_LIMIT;
-  const offset = query.offset !== undefined ? parseInt(String(query.offset), 10) : DEFAULT_PAGINATION_OFFSET;
+export function parsePaginationParams(query: RawPaginationParams): {
+  limit: number;
+  offset: number;
+} {
+  const limit =
+    query.limit !== undefined
+      ? parseInt(String(query.limit), 10)
+      : DEFAULT_PAGINATION_LIMIT;
+  const offset =
+    query.offset !== undefined
+      ? parseInt(String(query.offset), 10)
+      : DEFAULT_PAGINATION_OFFSET;
   return normalizePagination({
     limit: isNaN(limit) ? DEFAULT_PAGINATION_LIMIT : limit,
     offset: isNaN(offset) ? DEFAULT_PAGINATION_OFFSET : offset,

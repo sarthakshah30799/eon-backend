@@ -1,15 +1,15 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { Branch } from './branch.entity';
-import { BranchCounter } from './entities/branch-counter.entity';
-import { Counter } from '../counters/counter.entity';
-import { Country } from '../country/country.entity';
-import { State } from '../state/state.entity';
-import { SelectOption } from '../category-options/category-option.entity';
-import { UserRole } from '../user-roles/user-role.entity';
-import { BranchService } from './branch.service';
-import { BranchController } from './branch.controller';
-import { UserModule } from '../users/user.module';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { Branch } from "./branch.entity";
+import { BranchCounter } from "./entities/branch-counter.entity";
+import { Counter } from "../counters/counter.entity";
+import { Country } from "../country/country.entity";
+import { State } from "../state/state.entity";
+import { SelectOption } from "../category-options/category-option.entity";
+import { UserRole } from "../user-roles/user-role.entity";
+import { BranchService } from "./branch.service";
+import { BranchController } from "./branch.controller";
+import { UserModule } from "../users/user.module";
 
 @Module({
   imports: [

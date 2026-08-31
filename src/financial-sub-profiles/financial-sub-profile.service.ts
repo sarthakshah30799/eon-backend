@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import { FinancialSubProfile } from "./financial-sub-profile.entity";
@@ -7,9 +11,16 @@ import { CreateFinancialSubProfileDto } from "./dto/create-financial-sub-profile
 import { UpdateFinancialSubProfileDto } from "./dto/update-financial-sub-profile.dto";
 import { FinancialSubProfileResponseDto } from "./dto/financial-sub-profile-response.dto";
 import { FinancialSubProfileListQueryDto } from "./dto/financial-sub-profile-list-query.dto";
-import { FinancialSubProfileListResponseDto } from "./dto/financial-sub-profile-list-response.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
-function normalizeFinancialSubProfileDto(dto: CreateFinancialSubProfileDto | UpdateFinancialSubProfileDto) {
+function normalizeFinancialSubProfileDto(
+  dto: CreateFinancialSubProfileDto | UpdateFinancialSubProfileDto,
+) {
   return {
     ...dto,
     financialSubCode: dto.financialSubCode?.trim()?.toUpperCase(),
@@ -17,8 +28,12 @@ function normalizeFinancialSubProfileDto(dto: CreateFinancialSubProfileDto | Upd
   };
 }
 
-function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> {
-  const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
+function pickDefinedFields<T extends Record<string, any>>(
+  value: T,
+): Partial<T> {
+  const entries = Object.entries(value).filter(
+    ([, fieldValue]) => fieldValue !== undefined,
+  );
   return Object.fromEntries(entries) as Partial<T>;
 }
 
@@ -31,14 +46,19 @@ export class FinancialSubProfileService {
     private readonly financialCodeRepository: Repository<FinancialCode>,
   ) {}
 
-  async create(dto: CreateFinancialSubProfileDto, userId: string): Promise<FinancialSubProfileResponseDto> {
+  async create(
+    dto: CreateFinancialSubProfileDto,
+    userId: string,
+  ): Promise<FinancialSubProfileResponseDto> {
     const normalized = normalizeFinancialSubProfileDto(dto);
     const financialCode = await this.financialCodeRepository.findOne({
       where: { id: normalized.financialCodeId },
     });
 
     if (!financialCode) {
-      throw new NotFoundException(`Financial Code with id ${normalized.financialCodeId} not found`);
+      throw new NotFoundException(
+        `Financial Code with id ${normalized.financialCodeId} not found`,
+      );
     }
 
     const existing = await this.financialSubProfileRepository.findOne({
@@ -50,7 +70,7 @@ export class FinancialSubProfileService {
 
     if (existing) {
       throw new ConflictException(
-        `Financial Sub Code "${normalized.financialSubCode}" already exists for this financial category`
+        `Financial Sub Code "${normalized.financialSubCode}" already exists for this financial category`,
       );
     }
 
@@ -65,26 +85,37 @@ export class FinancialSubProfileService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateFinancialSubProfileDto, userId: string): Promise<FinancialSubProfileResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateFinancialSubProfileDto,
+    userId: string,
+  ): Promise<FinancialSubProfileResponseDto> {
     const subProfile = await this.financialSubProfileRepository.findOne({
       where: { id },
       relations: ["financialCode"],
     });
 
     if (!subProfile) {
-      throw new NotFoundException(`Financial Sub Profile with id ${id} not found`);
+      throw new NotFoundException(
+        `Financial Sub Profile with id ${id} not found`,
+      );
     }
 
     const normalized = normalizeFinancialSubProfileDto(dto);
     let financialCode = subProfile.financialCode;
 
-    if (normalized.financialCodeId && normalized.financialCodeId !== subProfile.financialCode?.id) {
+    if (
+      normalized.financialCodeId &&
+      normalized.financialCodeId !== subProfile.financialCode?.id
+    ) {
       const nextCode = await this.financialCodeRepository.findOne({
         where: { id: normalized.financialCodeId },
       });
 
       if (!nextCode) {
-        throw new NotFoundException(`Financial Code with id ${normalized.financialCodeId} not found`);
+        throw new NotFoundException(
+          `Financial Code with id ${normalized.financialCodeId} not found`,
+        );
       }
 
       financialCode = nextCode;
@@ -102,12 +133,13 @@ export class FinancialSubProfileService {
 
       if (existing && existing.id !== subProfile.id) {
         throw new ConflictException(
-          `Financial Sub Code "${candidateSubCode}" already exists for this financial category`
+          `Financial Sub Code "${candidateSubCode}" already exists for this financial category`,
         );
       }
     }
 
-    const { financialSubCode: _financialSubCode, ...updatableFields } = normalized;
+    const { financialSubCode: _financialSubCode, ...updatableFields } =
+      normalized;
     const updates = pickDefinedFields({
       ...updatableFields,
       financialCode,
@@ -127,46 +159,67 @@ export class FinancialSubProfileService {
     });
 
     if (!subProfile) {
-      throw new NotFoundException(`Financial Sub Profile with id ${id} not found`);
+      throw new NotFoundException(
+        `Financial Sub Profile with id ${id} not found`,
+      );
     }
 
     return FinancialSubProfileResponseDto.fromEntity(subProfile);
   }
 
   async delete(id: string): Promise<{ message: string }> {
-    const subProfile = await this.financialSubProfileRepository.findOne({ where: { id } });
+    const subProfile = await this.financialSubProfileRepository.findOne({
+      where: { id },
+    });
 
     if (!subProfile) {
-      throw new NotFoundException(`Financial Sub Profile with id ${id} not found`);
+      throw new NotFoundException(
+        `Financial Sub Profile with id ${id} not found`,
+      );
     }
 
     await this.financialSubProfileRepository.remove(subProfile);
-    return { message: `Financial Sub Profile with id ${id} deleted successfully` };
+    return {
+      message: `Financial Sub Profile with id ${id} deleted successfully`,
+    };
   }
 
-  async findAll(query: FinancialSubProfileListQueryDto): Promise<FinancialSubProfileListResponseDto> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
+  async findAll(
+    query: FinancialSubProfileListQueryDto,
+  ): Promise<PaginatedResponseDto<FinancialSubProfileResponseDto>> {
+    const pagination = normalizePagination(query);
 
-    const qb = this.financialSubProfileRepository.createQueryBuilder("fsp")
+    const qb = this.financialSubProfileRepository
+      .createQueryBuilder("fsp")
       .leftJoinAndSelect("fsp.financialCode", "fc");
 
     if (query.search) {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("fsp.financialSubCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fsp.financialSubName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.financialCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.financialName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.financialType::text ILIKE :search", { search: `%${query.search}%` });
+            .where("fsp.financialSubCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("fsp.financialSubName ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("fc.financialCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("fc.financialName ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("fc.financialType::text ILIKE :search", {
+              search: `%${query.search}%`,
+            });
         }),
       );
     }
 
     if (query.financialCodeId) {
-      qb.andWhere("fc.id = :financialCodeId", { financialCodeId: query.financialCodeId });
+      qb.andWhere("fc.id = :financialCodeId", {
+        financialCodeId: query.financialCodeId,
+      });
     }
 
     if (query.financialSubCode) {
@@ -181,16 +234,14 @@ export class FinancialSubProfileService {
       });
     }
 
-    qb.orderBy("fsp.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy("fsp.createdAt", "DESC");
+    applyPagination(qb, pagination);
+    const [data, total] = await qb.getManyAndCount();
 
-    const [data, totalItems] = await qb.getManyAndCount();
-
-    return {
-      data: data.map(FinancialSubProfileResponseDto.fromEntity),
-      page,
-      limit,
-      totalItems,
-      totalPages: Math.ceil(totalItems / limit),
-    };
+    return buildPaginatedResponse(
+      data.map(FinancialSubProfileResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 }

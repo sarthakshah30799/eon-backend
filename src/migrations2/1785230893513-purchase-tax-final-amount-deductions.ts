@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class PurchaseTaxFinalAmountDeductions1785230893513 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DO $$
           DECLARE
             v_sql text;
@@ -27,10 +26,10 @@ export class PurchaseTaxFinalAmountDeductions1785230893513 implements MigrationI
           END
           $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DO $$
           DECLARE
             v_sql text;
@@ -54,6 +53,5 @@ export class PurchaseTaxFinalAmountDeductions1785230893513 implements MigrationI
           END
           $$;
         `);
-    }
-
+  }
 }

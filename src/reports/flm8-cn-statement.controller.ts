@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Post, Query, Res, Session, UseGuards } from "@nestjs/common";
-import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Res,
+  Session,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { SessionContext } from "../auth/types/session-context";
@@ -57,7 +71,8 @@ export class Flm8CnStatementController {
 
   @Post("flm8-cn-statement/lock-data")
   @ApiOperation({
-    summary: "Lock FLM 8 report end date for selected branches (no undo; advance-only)",
+    summary:
+      "Lock FLM 8 report end date for selected branches (no undo; advance-only)",
   })
   @ApiResponse({ status: 201, type: CreateTransactionDataLocksResultDto })
   async lockFlm8Data(

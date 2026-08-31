@@ -19,8 +19,13 @@ import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
-import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.dto";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
 import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
@@ -64,8 +69,12 @@ function normalizeDto(dto: CreatePartyProfileDto | UpdatePartyProfileDto) {
   };
 }
 
-function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> {
-  const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
+function pickDefinedFields<T extends Record<string, any>>(
+  value: T,
+): Partial<T> {
+  const entries = Object.entries(value).filter(
+    ([, fieldValue]) => fieldValue !== undefined,
+  );
   return Object.fromEntries(entries) as Partial<T>;
 }
 
@@ -121,7 +130,7 @@ export class PartyProfileService {
     const createdByIds = [
       ...new Set(
         partyProfiles
-          .map(profile => profile.createdBy)
+          .map((profile) => profile.createdBy)
           .filter((createdBy): createdBy is string => Boolean(createdBy)),
       ),
     ];
@@ -136,7 +145,7 @@ export class PartyProfileService {
     });
 
     return new Map(
-      users.map(user => [user.id, { id: user.id, name: user.name }]),
+      users.map((user) => [user.id, { id: user.id, name: user.name }]),
     );
   }
 
@@ -187,8 +196,8 @@ export class PartyProfileService {
     }
 
     return (
-      user.userRoles?.some(userRole =>
-        userRole.role?.menuPermissions?.some(menuPermission => {
+      user.userRoles?.some((userRole) =>
+        userRole.role?.menuPermissions?.some((menuPermission) => {
           const permissionCode = menuPermission.permission?.code;
           const menuPath = menuPermission.menu?.path?.trim().toLowerCase();
 
@@ -197,8 +206,7 @@ export class PartyProfileService {
           }
 
           return (
-            menuPath === requiredPath ||
-            requiredPath.startsWith(`${menuPath}/`)
+            menuPath === requiredPath || requiredPath.startsWith(`${menuPath}/`)
           );
         }),
       ) ?? false
@@ -224,7 +232,9 @@ export class PartyProfileService {
       return true;
     }
 
-    return user.userRoles?.some(userRole => userRole.role?.isHoStaff) || false;
+    return (
+      user.userRoles?.some((userRole) => userRole.role?.isHoStaff) || false
+    );
   }
 
   private isBranchManager(user: User | null | undefined) {
@@ -236,7 +246,7 @@ export class PartyProfileService {
       return true;
     }
 
-    return user.userRoles?.some(userRole => userRole.role?.isBrnMgr) || false;
+    return user.userRoles?.some((userRole) => userRole.role?.isBrnMgr) || false;
   }
 
   private async resolveCreatedByUser(
@@ -262,10 +272,13 @@ export class PartyProfileService {
     }
 
     const users = await qb.distinct(true).getMany();
-    return users.filter(user => Boolean(user.email));
+    return users.filter((user) => Boolean(user.email));
   }
 
-  private async notifyPartyProfileReviewers(client: PartyProfile, actor: User | null | undefined) {
+  private async notifyPartyProfileReviewers(
+    client: PartyProfile,
+    actor: User | null | undefined,
+  ) {
     const recipients = await this.getProfileReviewRecipients(actor?.id);
     if (!recipients.length) {
       return;
@@ -275,8 +288,14 @@ export class PartyProfileService {
       this.configService.getOptional("FRONTEND_URL") || "http://localhost:5173";
     const reviewUrl = `${frontendBaseUrl}${this.normalizePartyProfilePath(client.type)}/edit/${client.id}?review=1`;
 
-    const recipientEmails = recipients.map(user => user.email).filter(Boolean).join(",");
-    const recipientNames = recipients.map(user => user.name).filter(Boolean).join(", ");
+    const recipientEmails = recipients
+      .map((user) => user.email)
+      .filter(Boolean)
+      .join(",");
+    const recipientNames = recipients
+      .map((user) => user.name)
+      .filter(Boolean)
+      .join(", ");
 
     try {
       await this.mailService.sendEmail({
@@ -332,7 +351,7 @@ export class PartyProfileService {
     return [
       ...new Set(
         user.userRoles
-          .map(userRole => userRole.branch?.id)
+          .map((userRole) => userRole.branch?.id)
           .filter((branchId): branchId is string => Boolean(branchId)),
       ),
     ];
@@ -345,7 +364,7 @@ export class PartyProfileService {
       return undefined;
     }
 
-    return commissionRules.map(rule => ({
+    return commissionRules.map((rule) => ({
       currencyCode: rule.currencyCode?.trim().toUpperCase(),
       currencyName: rule.currencyName?.trim() || null,
       productCode: rule.productCode?.trim().toUpperCase(),
@@ -431,7 +450,7 @@ export class PartyProfileService {
     }
 
     await this.partyProfileCommissionRuleRepository.save(
-      resolvedRules.map(rule =>
+      resolvedRules.map((rule) =>
         this.partyProfileCommissionRuleRepository.create({
           partyProfileId: client.id,
           partyProfile: client,
@@ -450,25 +469,28 @@ export class PartyProfileService {
 
   getTypes(userId?: string) {
     const allTypes = [
-      { value: ClientType.CORPORATE_CLIENT, label: 'CORPORATE CLIENT' },
-      { value: ClientType.FFMC, label: 'FFMC' },
-      { value: ClientType.RF, label: 'RF' },
-      { value: ClientType.AUTHORISED_DEALER, label: 'AUTHORISED DEALER' },
-      { value: ClientType.RMC, label: 'RMC' },
-      { value: ClientType.FRANCHISE, label: 'FRANCHISE' },
-      { value: ClientType.AGENT, label: 'AGENT' },
-      { value: ClientType.FOREIGN_CORRESPONDENT, label: 'FOREIGN CORRESPONDENT' },
-      { value: ClientType.FOREX_CORRESPONDENT, label: 'FOREX CORRESPONDENT' },
-      { value: ClientType.MARKETING_EXECUTIVE, label: 'MARKETING EXECUTIVE' },
-      { value: ClientType.CARD_ISSUER_PROFILE, label: 'CARD ISSUER PROFILE' },
-      { value: ClientType.MISC_PROFILE, label: 'MISC SUPPLIER PROFILE' }
+      { value: ClientType.CORPORATE_CLIENT, label: "CORPORATE CLIENT" },
+      { value: ClientType.FFMC, label: "FFMC" },
+      { value: ClientType.RF, label: "RF" },
+      { value: ClientType.AUTHORISED_DEALER, label: "AUTHORISED DEALER" },
+      { value: ClientType.RMC, label: "RMC" },
+      { value: ClientType.FRANCHISE, label: "FRANCHISE" },
+      { value: ClientType.AGENT, label: "AGENT" },
+      {
+        value: ClientType.FOREIGN_CORRESPONDENT,
+        label: "FOREIGN CORRESPONDENT",
+      },
+      { value: ClientType.FOREX_CORRESPONDENT, label: "FOREX CORRESPONDENT" },
+      { value: ClientType.MARKETING_EXECUTIVE, label: "MARKETING EXECUTIVE" },
+      { value: ClientType.CARD_ISSUER_PROFILE, label: "CARD ISSUER PROFILE" },
+      { value: ClientType.MISC_PROFILE, label: "MISC SUPPLIER PROFILE" },
     ];
 
     if (!userId) {
       return [];
     }
 
-    return this.getCurrentUser(userId).then(user => {
+    return this.getCurrentUser(userId).then((user) => {
       if (!user) {
         return [];
       }
@@ -477,7 +499,7 @@ export class PartyProfileService {
         return allTypes;
       }
 
-      return allTypes.filter(type =>
+      return allTypes.filter((type) =>
         this.canAccessPartyProfileType(user, type.value, "view"),
       );
     });
@@ -491,40 +513,56 @@ export class PartyProfileService {
     const user = await this.getCurrentUser(userId);
     const normalized = normalizeDto(dto);
     const commissionRules = this.normalizeCommissionRules(dto.commissionRules);
-    this.assertPartyProfileAccess(user, normalized.type ?? dto.type ?? ClientType.CORPORATE_CLIENT, "add");
+    this.assertPartyProfileAccess(
+      user,
+      normalized.type ?? dto.type ?? ClientType.CORPORATE_CLIENT,
+      "add",
+    );
 
     const existingCode = await this.partyProfileRepository.findOne({
       where: { code: normalized.code },
     });
     if (existingCode) {
-      throw new ConflictException(`Party Profile Code "${normalized.code}" already exists`);
+      throw new ConflictException(
+        `Party Profile Code "${normalized.code}" already exists`,
+      );
     }
 
     const existingName = await this.partyProfileRepository.findOne({
       where: { name: normalized.name },
     });
     if (existingName) {
-      throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
+      throw new ConflictException(
+        `Party Profile Name "${normalized.name}" already exists`,
+      );
     }
 
     if (!activeBranchId) {
       throw new BadRequestException("Active branch is required");
     }
 
-    const branch = await this.branchRepository.findOne({ where: { id: activeBranchId } });
+    const branch = await this.branchRepository.findOne({
+      where: { id: activeBranchId },
+    });
     if (!branch) {
       throw new NotFoundException(`Branch with id ${activeBranchId} not found`);
     }
 
     if (dto.gstStateId) {
-      const state = await this.stateRepository.findOne({ where: { id: dto.gstStateId } });
+      const state = await this.stateRepository.findOne({
+        where: { id: dto.gstStateId },
+      });
       if (!state) {
-        throw new NotFoundException(`GST State with id ${dto.gstStateId} not found`);
+        throw new NotFoundException(
+          `GST State with id ${dto.gstStateId} not found`,
+        );
       }
     }
 
     if (dto.stateId) {
-      const state = await this.stateRepository.findOne({ where: { id: dto.stateId } });
+      const state = await this.stateRepository.findOne({
+        where: { id: dto.stateId },
+      });
       if (!state) {
         throw new NotFoundException(`State with id ${dto.stateId} not found`);
       }
@@ -543,24 +581,41 @@ export class PartyProfileService {
       ...rest
     } = normalized;
 
-    const isCardIssuer = (normalized.type ?? dto.type) === ClientType.CARD_ISSUER_PROFILE;
+    const isCardIssuer =
+      (normalized.type ?? dto.type) === ClientType.CARD_ISSUER_PROFILE;
     const client = this.partyProfileRepository.create({
       ...rest,
-      cardNumberLength: isCardIssuer ? (normalized.cardNumberLength ?? 16) : null,
-      allowCardNumberMasking: isCardIssuer ? Boolean(normalized.allowCardNumberMasking) : false,
+      cardNumberLength: isCardIssuer
+        ? (normalized.cardNumberLength ?? 16)
+        : null,
+      allowCardNumberMasking: isCardIssuer
+        ? Boolean(normalized.allowCardNumberMasking)
+        : false,
       location: location ? ({ id: location } as any) : null,
-      kycRiskCategory: kycRiskCategory ? ({ id: kycRiskCategory } as any) : null,
+      kycRiskCategory: kycRiskCategory
+        ? ({ id: kycRiskCategory } as any)
+        : null,
       defaultAgent: defaultAgent ? ({ id: defaultAgent } as any) : null,
       group: group ? ({ id: group } as any) : null,
       entityType: entityType ? ({ id: entityType } as any) : null,
-      marketingExecutive: marketingExecutive ? ({ id: marketingExecutive } as any) : null,
+      marketingExecutive: marketingExecutive
+        ? ({ id: marketingExecutive } as any)
+        : null,
       businessNature: businessNature ? ({ id: businessNature } as any) : null,
       tdsGroup: tdsGroup ? ({ id: tdsGroup } as any) : null,
-      dateOfIntro: normalized.dateOfIntro ? new Date(normalized.dateOfIntro) : new Date(),
-      blockDateFrom: normalized.blockDateFrom ? new Date(normalized.blockDateFrom) : null,
-      establishmentDate: normalized.establishmentDate ? new Date(normalized.establishmentDate) : null,
+      dateOfIntro: normalized.dateOfIntro
+        ? new Date(normalized.dateOfIntro)
+        : new Date(),
+      blockDateFrom: normalized.blockDateFrom
+        ? new Date(normalized.blockDateFrom)
+        : null,
+      establishmentDate: normalized.establishmentDate
+        ? new Date(normalized.establishmentDate)
+        : null,
       panDob: normalized.panDob ? new Date(normalized.panDob) : null,
-      ffmcRegDate: normalized.ffmcRegDate ? new Date(normalized.ffmcRegDate) : null,
+      ffmcRegDate: normalized.ffmcRegDate
+        ? new Date(normalized.ffmcRegDate)
+        : null,
       createdBy: userId,
       updatedBy: userId,
       status: WorkflowStatus.PENDING,
@@ -574,7 +629,11 @@ export class PartyProfileService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdatePartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
+  async update(
+    id: string,
+    dto: UpdatePartyProfileDto,
+    userId: string,
+  ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
     const client = await this.partyProfileRepository.findOne({ where: { id } });
     if (!client) {
@@ -583,7 +642,11 @@ export class PartyProfileService {
 
     const normalized = normalizeDto(dto);
     const commissionRules = this.normalizeCommissionRules(dto.commissionRules);
-    this.assertPartyProfileAccess(user, normalized.type ?? client.type, "modify");
+    this.assertPartyProfileAccess(
+      user,
+      normalized.type ?? client.type,
+      "modify",
+    );
     this.assertPartyProfileEditableByUser(client, user);
 
     if (normalized.name && normalized.name !== client.name) {
@@ -591,19 +654,27 @@ export class PartyProfileService {
         where: { name: normalized.name },
       });
       if (existingName) {
-        throw new ConflictException(`Party Profile Name "${normalized.name}" already exists`);
+        throw new ConflictException(
+          `Party Profile Name "${normalized.name}" already exists`,
+        );
       }
     }
 
     if (dto.gstStateId && dto.gstStateId !== client.gstStateId) {
-      const state = await this.stateRepository.findOne({ where: { id: dto.gstStateId } });
+      const state = await this.stateRepository.findOne({
+        where: { id: dto.gstStateId },
+      });
       if (!state) {
-        throw new NotFoundException(`GST State with id ${dto.gstStateId} not found`);
+        throw new NotFoundException(
+          `GST State with id ${dto.gstStateId} not found`,
+        );
       }
     }
 
     if (dto.stateId && dto.stateId !== client.stateId) {
-      const state = await this.stateRepository.findOne({ where: { id: dto.stateId } });
+      const state = await this.stateRepository.findOne({
+        where: { id: dto.stateId },
+      });
       if (!state) {
         throw new NotFoundException(`State with id ${dto.stateId} not found`);
       }
@@ -634,7 +705,9 @@ export class PartyProfileService {
     }
     Object.assign(client, {
       ...updates,
-      dateOfIntro: normalized.dateOfIntro ? new Date(normalized.dateOfIntro) : client.dateOfIntro,
+      dateOfIntro: normalized.dateOfIntro
+        ? new Date(normalized.dateOfIntro)
+        : client.dateOfIntro,
       blockDateFrom:
         normalized.blockDateFrom !== undefined
           ? normalized.blockDateFrom
@@ -664,7 +737,9 @@ export class PartyProfileService {
       client.location = location ? ({ id: location } as any) : null;
     }
     if (kycRiskCategory !== undefined) {
-      client.kycRiskCategory = kycRiskCategory ? ({ id: kycRiskCategory } as any) : null;
+      client.kycRiskCategory = kycRiskCategory
+        ? ({ id: kycRiskCategory } as any)
+        : null;
     }
     if (defaultAgent !== undefined) {
       client.defaultAgent = defaultAgent ? ({ id: defaultAgent } as any) : null;
@@ -676,10 +751,14 @@ export class PartyProfileService {
       client.entityType = entityType ? ({ id: entityType } as any) : null;
     }
     if (marketingExecutive !== undefined) {
-      client.marketingExecutive = marketingExecutive ? ({ id: marketingExecutive } as any) : null;
+      client.marketingExecutive = marketingExecutive
+        ? ({ id: marketingExecutive } as any)
+        : null;
     }
     if (businessNature !== undefined) {
-      client.businessNature = businessNature ? ({ id: businessNature } as any) : null;
+      client.businessNature = businessNature
+        ? ({ id: businessNature } as any)
+        : null;
     }
     if (tdsGroup !== undefined) {
       client.tdsGroup = tdsGroup ? ({ id: tdsGroup } as any) : null;
@@ -702,10 +781,16 @@ export class PartyProfileService {
     return this.findById(id);
   }
 
-  async review(id: string, dto: ReviewPartyProfileDto, userId: string): Promise<PartyProfileResponseDto> {
+  async review(
+    id: string,
+    dto: ReviewPartyProfileDto,
+    userId: string,
+  ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
     if (!this.isReviewer(user)) {
-      throw new ForbiddenException("You are not allowed to review party profiles");
+      throw new ForbiddenException(
+        "You are not allowed to review party profiles",
+      );
     }
 
     const client = await this.partyProfileRepository.findOne({ where: { id } });
@@ -715,13 +800,21 @@ export class PartyProfileService {
 
     if (!user?.isAdmin) {
       const branchIds = this.getReviewerBranchIds(user);
-      if (!branchIds.length || !client.branchId || !branchIds.includes(client.branchId)) {
-        throw new ForbiddenException("You are not allowed to review this party profile");
+      if (
+        !branchIds.length ||
+        !client.branchId ||
+        !branchIds.includes(client.branchId)
+      ) {
+        throw new ForbiddenException(
+          "You are not allowed to review this party profile",
+        );
       }
     }
 
     if (dto.status === WorkflowStatus.REJECT && !dto.rejectReason?.trim()) {
-      throw new BadRequestException("Reject reason is required when rejecting a profile");
+      throw new BadRequestException(
+        "Reject reason is required when rejecting a profile",
+      );
     }
 
     client.status = dto.status;
@@ -781,7 +874,7 @@ export class PartyProfileService {
 
     const pending = await qb.getMany();
     const createdByUsers = await this.resolveCreatedByUsers(pending);
-    return pending.map(client =>
+    return pending.map((client) =>
       PartyProfileResponseDto.fromEntity(
         client,
         createdByUsers.get(client.createdBy),
@@ -823,7 +916,9 @@ export class PartyProfileService {
 
     if (user) {
       if (!this.canAccessPartyProfileType(user, client.type, "view")) {
-        throw new NotFoundException(`Party profile type ${client.type} not found`);
+        throw new NotFoundException(
+          `Party profile type ${client.type} not found`,
+        );
       }
     }
 
@@ -831,10 +926,7 @@ export class PartyProfileService {
     return PartyProfileResponseDto.fromEntity(client, createdByUser);
   }
 
-  async getCommissionTemplate(
-    id: string,
-    userId?: string,
-  ): Promise<string> {
+  async getCommissionTemplate(id: string, userId?: string): Promise<string> {
     const user = userId ? await this.getCurrentUser(userId) : null;
     const client = await this.partyProfileRepository.findOne({
       where: { id },
@@ -848,13 +940,14 @@ export class PartyProfileService {
       this.assertPartyProfileAccess(user, client.type, "view");
     }
 
-    const commissionRules = await this.partyProfileCommissionRuleRepository.find({
-      where: { partyProfileId: id },
-      order: { currencyCode: "ASC", productCode: "ASC" },
-    });
+    const commissionRules =
+      await this.partyProfileCommissionRuleRepository.find({
+        where: { partyProfileId: id },
+        order: { currencyCode: "ASC", productCode: "ASC" },
+      });
 
     return serializeCommissionRulesToCsv(
-      commissionRules.map(rule => ({
+      commissionRules.map((rule) => ({
         currencyCode: rule.currencyCode,
         productCode: rule.productCode,
         commissionType: rule.commissionType,
@@ -883,13 +976,7 @@ export class PartyProfileService {
     }
 
     this.assertPartyProfileAccess(user, client.type, "modify");
-    if (
-      !this.isPartyProfileVisibleToUser(
-        client,
-        user,
-        activeBranchId,
-      )
-    ) {
+    if (!this.isPartyProfileVisibleToUser(client, user, activeBranchId)) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
@@ -911,7 +998,7 @@ export class PartyProfileService {
       where: { partyProfileId: client.id },
     });
     const mergedRules = new Map<string, PartyProfileCommissionRule>(
-      existingRules.map(rule => [
+      existingRules.map((rule) => [
         `${rule.currencyCode}:${rule.productCode}`,
         rule,
       ]),
@@ -973,7 +1060,7 @@ export class PartyProfileService {
     client.updatedBy = userId;
     await this.partyProfileRepository.save(client);
     await this.partyProfileCommissionRuleRepository.upsert(
-      Array.from(mergedRules.values()).map(rule => ({
+      Array.from(mergedRules.values()).map((rule) => ({
         id: rule.id,
         partyProfileId: rule.partyProfileId,
         currencyCode: rule.currencyCode,
@@ -1011,11 +1098,9 @@ export class PartyProfileService {
     query: PartyProfileListQueryDto,
     userId?: string,
     branchId?: string,
-  ): Promise<PartyProfileListResponseDto> {
+  ): Promise<PaginatedResponseDto<PartyProfileResponseDto>> {
     const user = userId ? await this.getCurrentUser(userId) : null;
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
+    const pagination = normalizePagination(query);
 
     const qb = this.partyProfileRepository
       .createQueryBuilder("pp")
@@ -1032,23 +1117,22 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
     const hasRequestedTypes = Boolean(query.type?.length);
-    const requestedTypes = (hasRequestedTypes
-      ? query.type
-      : query.isIndividual === true
-        ? undefined
-        : [ClientType.CORPORATE_CLIENT]) as ClientType[] | undefined;
-    const accessibleTypes = user && requestedTypes
-      ? requestedTypes.filter(type => this.canAccessPartyProfileType(user, type, "view"))
-      : requestedTypes;
+    const requestedTypes = (
+      hasRequestedTypes
+        ? query.type
+        : query.isIndividual === true
+          ? undefined
+          : [ClientType.CORPORATE_CLIENT]
+    ) as ClientType[] | undefined;
+    const accessibleTypes =
+      user && requestedTypes
+        ? requestedTypes.filter((type) =>
+            this.canAccessPartyProfileType(user, type, "view"),
+          )
+        : requestedTypes;
 
     if (requestedTypes && accessibleTypes && accessibleTypes.length === 0) {
-      return {
-        data: [],
-        page,
-        limit,
-        totalItems: 0,
-        totalPages: 0,
-      };
+      return buildPaginatedResponse([], 0, pagination);
     }
 
     if (accessibleTypes && accessibleTypes.length > 0) {
@@ -1080,8 +1164,12 @@ export class PartyProfileService {
       qb.andWhere("pp.purchase = :purchase", { purchase: query.purchase });
     }
 
-    if (query.entityTypeId) qb.andWhere("entityTypeOption.id = :entityTypeId", { entityTypeId: query.entityTypeId });
-    if (query.groupId) qb.andWhere("groupOption.id = :groupId", { groupId: query.groupId });
+    if (query.entityTypeId)
+      qb.andWhere("entityTypeOption.id = :entityTypeId", {
+        entityTypeId: query.entityTypeId,
+      });
+    if (query.groupId)
+      qb.andWhere("groupOption.id = :groupId", { groupId: query.groupId });
 
     if (query.status !== undefined) {
       qb.andWhere("pp.status = :status", { status: query.status });
@@ -1094,8 +1182,12 @@ export class PartyProfileService {
             .where("pp.code ILIKE :search", { search: `%${query.search}%` })
             .orWhere("pp.name ILIKE :search", { search: `%${query.search}%` })
             .orWhere("pp.city ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("pp.pinCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("pp.phoneNo ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("pp.pinCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("pp.phoneNo ILIKE :search", {
+              search: `%${query.search}%`,
+            });
         }),
       );
     }
@@ -1121,23 +1213,22 @@ export class PartyProfileService {
       // activeOnly=false means include both active and inactive records.
     }
 
-    qb.orderBy("pp.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy("pp.createdAt", "DESC");
+    applyPagination(qb, pagination);
 
-    const [data, totalItems] = await qb.getManyAndCount();
+    const [data, total] = await qb.getManyAndCount();
 
     const createdByUsers = await this.resolveCreatedByUsers(data);
 
-    return {
-      data: data.map(client =>
+    return buildPaginatedResponse(
+      data.map((client) =>
         PartyProfileResponseDto.fromEntity(
           client,
           createdByUsers.get(client.createdBy),
         ),
       ),
-      page,
-      limit,
-      totalItems,
-      totalPages: Math.ceil(totalItems / limit),
-    };
+      total,
+      pagination,
+    );
   }
 }

@@ -1,6 +1,6 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Column, Entity, PrimaryColumn } from "typeorm";
 
-@Entity('mail_configurations')
+@Entity("mail_configurations")
 export class MailConfig {
   @PrimaryColumn()
   username: string;
@@ -8,12 +8,12 @@ export class MailConfig {
   @Column()
   host: string;
 
-  @Column({ type: 'integer' })
+  @Column({ type: "integer" })
   port: number;
 
   @Column()
   password: string;
 
-  @Column({ name: 'sender_email', nullable: true })
+  @Column({ name: "sender_email", nullable: true })
   senderEmail?: string;
 }

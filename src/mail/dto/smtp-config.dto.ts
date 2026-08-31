@@ -1,8 +1,8 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from "@nestjs/swagger";
+import { IsInt, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class SaveSmtpConfigDto {
-  @ApiProperty({ example: 'smtp.gmail.com' })
+  @ApiProperty({ example: "smtp.gmail.com" })
   @IsString()
   @IsNotEmpty()
   host: string;
@@ -12,17 +12,17 @@ export class SaveSmtpConfigDto {
   @IsNotEmpty()
   port: number;
 
-  @ApiProperty({ example: 'username@gmail.com' })
+  @ApiProperty({ example: "username@gmail.com" })
   @IsString()
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ example: 'mypassword', required: false })
+  @ApiProperty({ example: "mypassword", required: false })
   @IsString()
   @IsOptional()
   password?: string;
 
-  @ApiProperty({ example: 'no-reply@yourdomain.com', required: false })
+  @ApiProperty({ example: "no-reply@yourdomain.com", required: false })
   @IsString()
   @IsOptional()
   senderEmail?: string;

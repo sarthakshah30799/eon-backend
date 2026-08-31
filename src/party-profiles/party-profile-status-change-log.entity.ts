@@ -20,7 +20,8 @@ export class PartyProfileStatusChangeLog {
   @ManyToOne(() => PartyProfile, { onDelete: "CASCADE" })
   @JoinColumn({
     name: "party_profile_id",
-    foreignKeyConstraintName: "FK_party_profile_status_change_logs_party_profile_id",
+    foreignKeyConstraintName:
+      "FK_party_profile_status_change_logs_party_profile_id",
   })
   partyProfile: PartyProfile;
 
@@ -43,7 +44,8 @@ export class PartyProfileStatusChangeLog {
   @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({
     name: "reviewed_by_id",
-    foreignKeyConstraintName: "FK_party_profile_status_change_logs_reviewed_by_id",
+    foreignKeyConstraintName:
+      "FK_party_profile_status_change_logs_reviewed_by_id",
   })
   reviewedBy: User;
 

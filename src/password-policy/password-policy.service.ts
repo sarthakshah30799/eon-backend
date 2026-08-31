@@ -1,13 +1,20 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AdvancedSetting, NodeType, ValueType } from '../additional-settings/advanced-setting.entity';
-import { Company } from '../company/company.entity';
-import { PasswordPolicyConfig, PasswordPolicyResponseDto } from './password-policy.dto';
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  AdvancedSetting,
+  NodeType,
+  ValueType,
+} from "../additional-settings/advanced-setting.entity";
+import { Company } from "../company/company.entity";
+import {
+  PasswordPolicyConfig,
+  PasswordPolicyResponseDto,
+} from "./password-policy.dto";
 import {
   PasswordPolicyCodeEnum,
   PasswordValidationCodeEnum,
-} from './password-policy.enum';
+} from "./password-policy.enum";
 
 @Injectable()
 export class PasswordPolicyService {
@@ -16,15 +23,15 @@ export class PasswordPolicyService {
     private readonly settingRepository: Repository<AdvancedSetting>,
     @InjectRepository(Company)
     private readonly companyRepository: Repository<Company>,
-  ) { }
+  ) {}
 
   private toSafeInteger(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') {
+    if (value === null || value === undefined || value === "") {
       return null;
     }
 
     const parsed =
-      typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+      typeof value === "number" ? value : Number.parseInt(String(value), 10);
 
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -150,10 +157,14 @@ export class PasswordPolicyService {
     const normalized: PasswordPolicyConfig = {
       minLength: this.normalizeRequiredCount(config.minLength),
       maxLength: this.normalizeRequiredCount(config.maxLength),
-      minSpecialCharCount: this.normalizeOptionalCount(config.minSpecialCharCount),
+      minSpecialCharCount: this.normalizeOptionalCount(
+        config.minSpecialCharCount,
+      ),
       minNumericCount: this.normalizeOptionalCount(config.minNumericCount),
       minAlphaCount: this.normalizeOptionalCount(config.minAlphaCount),
-      maxInvalidAttempts: this.normalizeOptionalCount(config.maxInvalidAttempts),
+      maxInvalidAttempts: this.normalizeOptionalCount(
+        config.maxInvalidAttempts,
+      ),
     };
 
     if (
@@ -163,7 +174,7 @@ export class PasswordPolicyService {
     ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.InvalidPolicyConfig,
-        'Minimum password length cannot exceed maximum password length',
+        "Minimum password length cannot exceed maximum password length",
         {
           minLength: normalized.minLength,
           maxLength: normalized.maxLength,
@@ -172,11 +183,15 @@ export class PasswordPolicyService {
     }
 
     for (const [key, value] of [
-      ['minSpecialCharCount', normalized.minSpecialCharCount],
-      ['minNumericCount', normalized.minNumericCount],
-      ['minAlphaCount', normalized.minAlphaCount],
+      ["minSpecialCharCount", normalized.minSpecialCharCount],
+      ["minNumericCount", normalized.minNumericCount],
+      ["minAlphaCount", normalized.minAlphaCount],
     ] as const) {
-      if (value !== undefined && normalized.maxLength !== undefined && value > normalized.maxLength) {
+      if (
+        value !== undefined &&
+        normalized.maxLength !== undefined &&
+        value > normalized.maxLength
+      ) {
         throw this.createPolicyException(
           PasswordValidationCodeEnum.InvalidPolicyConfig,
           `${key} cannot exceed maximum password length`,
@@ -194,7 +209,7 @@ export class PasswordPolicyService {
   async getCompany(): Promise<Company | null> {
     return this.companyRepository.findOne({
       where: {},
-      order: { createdAt: 'ASC' },
+      order: { createdAt: "ASC" },
     });
   }
 
@@ -204,9 +219,9 @@ export class PasswordPolicyService {
         code: PasswordPolicyCodeEnum.Policy,
         nodeType: NodeType.Category,
       },
-      relations: ['children'],
+      relations: ["children"],
       order: {
-        createdAt: 'ASC',
+        createdAt: "ASC",
       },
     });
     return rows[0] || null;
@@ -218,7 +233,9 @@ export class PasswordPolicyService {
       return PasswordPolicyResponseDto.fromConfig({});
     }
 
-    const config = this.validatePolicyConfig(this.buildConfigFromRows(category.children || []));
+    const config = this.validatePolicyConfig(
+      this.buildConfigFromRows(category.children || []),
+    );
     return PasswordPolicyResponseDto.fromConfig(config);
   }
 
@@ -226,7 +243,10 @@ export class PasswordPolicyService {
     const normalized = this.validatePolicyConfig(policy);
     const passwordLength = password.length;
 
-    if (normalized.minLength !== undefined && passwordLength < normalized.minLength) {
+    if (
+      normalized.minLength !== undefined &&
+      passwordLength < normalized.minLength
+    ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.TooShort,
         `Password must be at least ${normalized.minLength} characters long`,
@@ -234,7 +254,10 @@ export class PasswordPolicyService {
       );
     }
 
-    if (normalized.maxLength !== undefined && passwordLength > normalized.maxLength) {
+    if (
+      normalized.maxLength !== undefined &&
+      passwordLength > normalized.maxLength
+    ) {
       throw this.createPolicyException(
         PasswordValidationCodeEnum.TooLong,
         `Password must be at most ${normalized.maxLength} characters long`,
@@ -286,7 +309,7 @@ export class PasswordPolicyService {
   lockedAccountException(): HttpException {
     return this.createPolicyException(
       PasswordValidationCodeEnum.AccountLocked,
-      'Account is locked because too many invalid login attempts were made',
+      "Account is locked because too many invalid login attempts were made",
     );
   }
 }

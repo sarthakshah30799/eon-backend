@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 /**
  * CARD lifecycle schema.  This migration is intentionally in migrations2:
@@ -6,25 +6,53 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * stored with snapshots; no cross-database foreign keys are created.
  */
 export class CardStockLifecycleLedger1786555310415 implements MigrationInterface {
-  name = 'CardStockLifecycleLedger1786555310415';
+  name = "CardStockLifecycleLedger1786555310415";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "card_transfer_requests" ADD COLUMN IF NOT EXISTS "source_transaction_id" uuid`);
-    await queryRunner.query(`ALTER TABLE "card_transfer_requests" ADD COLUMN IF NOT EXISTS "destination_transaction_id" uuid`);
+    await queryRunner.query(
+      `ALTER TABLE "card_transfer_requests" ADD COLUMN IF NOT EXISTS "source_transaction_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_transfer_requests" ADD COLUMN IF NOT EXISTS "destination_transaction_id" uuid`,
+    );
 
-    await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "counter_id" DROP NOT NULL`);
-    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'card_stock_reference_type_enum') THEN CREATE TYPE "public"."card_stock_reference_type_enum" AS ENUM('CARD_STOCK_RECEIPT','CARD_TRANSFER_REQUEST','CARD_SALE','CARD_SETTLEMENT','CARD_RETURN','CARD_VOID'); END IF; END $$`);
-    await queryRunner.query(`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "card_stock_reference_type" "public"."card_stock_reference_type_enum"`);
-    await queryRunner.query(`ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "card_stock_reference_id" uuid`);
-    await queryRunner.query(`ALTER TABLE "card_stock_receipts" ADD COLUMN IF NOT EXISTS "transaction_id" uuid`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "card_id" uuid`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "issuer_party_profile_id" uuid`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "issuer_party_profile_snapshot" jsonb`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "card_snapshot" jsonb`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "is_reload" boolean NOT NULL DEFAULT false`);
+    await queryRunner.query(
+      `ALTER TABLE "transactions" ALTER COLUMN "counter_id" DROP NOT NULL`,
+    );
+    await queryRunner.query(
+      `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'card_stock_reference_type_enum') THEN CREATE TYPE "public"."card_stock_reference_type_enum" AS ENUM('CARD_STOCK_RECEIPT','CARD_TRANSFER_REQUEST','CARD_SALE','CARD_SETTLEMENT','CARD_RETURN','CARD_VOID'); END IF; END $$`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "card_stock_reference_type" "public"."card_stock_reference_type_enum"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "card_stock_reference_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_receipts" ADD COLUMN IF NOT EXISTS "transaction_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "card_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "issuer_party_profile_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "issuer_party_profile_snapshot" jsonb`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "card_snapshot" jsonb`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" ADD COLUMN IF NOT EXISTS "is_reload" boolean NOT NULL DEFAULT false`,
+    );
 
-    await queryRunner.query(`ALTER TYPE "public"."card_stock_cards_status_enum" ADD VALUE IF NOT EXISTS 'SOLD'`);
-    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'card_stock_transaction_entries_operation_type_enum') THEN CREATE TYPE "public"."card_stock_transaction_entries_operation_type_enum" AS ENUM('STOCK','TRANSFER_OUT','TRANSFER_IN','CARD_STOCK_LOAD','SELL','SETTLE','RETURN','VOID'); END IF; END $$`);
+    await queryRunner.query(
+      `ALTER TYPE "public"."card_stock_cards_status_enum" ADD VALUE IF NOT EXISTS 'SOLD'`,
+    );
+    await queryRunner.query(
+      `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'card_stock_transaction_entries_operation_type_enum') THEN CREATE TYPE "public"."card_stock_transaction_entries_operation_type_enum" AS ENUM('STOCK','TRANSFER_OUT','TRANSFER_IN','CARD_STOCK_LOAD','SELL','SETTLE','RETURN','VOID'); END IF; END $$`,
+    );
 
     await queryRunner.query(`CREATE TABLE IF NOT EXISTS "card_stock_transaction_entries" (
       "id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" timestamptz NOT NULL DEFAULT now(), "updated_at" timestamptz NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" timestamptz, "deleted_by" uuid,
@@ -36,9 +64,15 @@ export class CardStockLifecycleLedger1786555310415 implements MigrationInterface
       CONSTRAINT "PK_card_stock_transaction_entries" PRIMARY KEY ("id"),
       CONSTRAINT "UQ_card_stock_entries_card_operation_reference" UNIQUE ("card_id","operation_type","reference_type","reference_id")
     )`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_card_stock_entries_card_date" ON "card_stock_transaction_entries" ("card_id","date")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_card_stock_entries_branch_date" ON "card_stock_transaction_entries" ("branch_id","date")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_card_stock_entries_reference" ON "card_stock_transaction_entries" ("reference_type","reference_id")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_card_stock_entries_card_date" ON "card_stock_transaction_entries" ("card_id","date")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_card_stock_entries_branch_date" ON "card_stock_transaction_entries" ("branch_id","date")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_card_stock_entries_reference" ON "card_stock_transaction_entries" ("reference_type","reference_id")`,
+    );
 
     await queryRunner.query(`CREATE TABLE IF NOT EXISTS "card_stock_balance" (
       "id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" timestamptz NOT NULL DEFAULT now(), "updated_at" timestamptz NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" timestamptz, "deleted_by" uuid,
@@ -50,16 +84,32 @@ export class CardStockLifecycleLedger1786555310415 implements MigrationInterface
       "is_active" boolean NOT NULL DEFAULT true,
       CONSTRAINT "PK_card_stock_balance" PRIMARY KEY ("id")
     )`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_card_stock_balance_card_branch_active" ON "card_stock_balance" ("card_id","branch_id","is_active")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_card_stock_balance_branch_series" ON "card_stock_balance" ("branch_id","series")`);
-    await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_card_stock_balance_active_card_branch" ON "card_stock_balance" ("card_id","branch_id") WHERE "is_active" = true`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_card_stock_balance_card_branch_active" ON "card_stock_balance" ("card_id","branch_id","is_active")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS "IDX_card_stock_balance_branch_series" ON "card_stock_balance" ("branch_id","series")`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_card_stock_balance_active_card_branch" ON "card_stock_balance" ("card_id","branch_id") WHERE "is_active" = true`,
+    );
 
-    await queryRunner.query(`ALTER TABLE "card_stock_transaction_entries" ADD CONSTRAINT "FK_card_stock_entries_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT`);
-    await queryRunner.query(`ALTER TABLE "card_stock_transaction_entries" ADD CONSTRAINT "FK_card_stock_entries_transaction" FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT`);
-    await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" ADD CONSTRAINT "FK_transaction_items_card_id" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT`);
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_transaction_entries" ADD CONSTRAINT "FK_card_stock_entries_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_transaction_entries" ADD CONSTRAINT "FK_card_stock_entries_transaction" FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" ADD CONSTRAINT "FK_transaction_items_card_id" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT`,
+    );
 
-    await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_prefix(value citext) RETURNS citext LANGUAGE sql IMMUTABLE AS $$ SELECT upper(regexp_replace(value::text, '[0-9]{4}$', ''))::citext $$`);
+    await queryRunner.query(
+      `CREATE OR REPLACE FUNCTION public.card_stock_prefix(value citext) RETURNS citext LANGUAGE sql IMMUTABLE AS $$ SELECT upper(regexp_replace(value::text, '[0-9]{4}$', ''))::citext $$`,
+    );
     await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_next_series(prefix citext, previous citext DEFAULT NULL) RETURNS citext LANGUAGE plpgsql AS $fn$
       DECLARE n integer := 0; digits text; BEGIN
         IF previous IS NOT NULL AND previous ~ '[0-9]{4}$' THEN n := substring(previous::text from '([0-9]{4})$')::integer + 1; END IF;
@@ -91,8 +141,12 @@ export class CardStockLifecycleLedger1786555310415 implements MigrationInterface
           ON CONFLICT (card_id,branch_id) WHERE is_active=true DO NOTHING;
         END IF; RETURN NEW;
       END; $fn$`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS "TRG_card_stock_card_insert_ledger" ON "card_stock_cards"`);
-    await queryRunner.query(`CREATE TRIGGER "TRG_card_stock_card_insert_ledger" AFTER INSERT ON "card_stock_cards" FOR EACH ROW EXECUTE FUNCTION public.card_stock_on_card_insert()`);
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "TRG_card_stock_card_insert_ledger" ON "card_stock_cards"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER "TRG_card_stock_card_insert_ledger" AFTER INSERT ON "card_stock_cards" FOR EACH ROW EXECUTE FUNCTION public.card_stock_on_card_insert()`,
+    );
 
     await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_item() RETURNS trigger LANGUAGE plpgsql AS $fn$
       DECLARE t record; c record; b record; r record; entry_id uuid; next_series citext; operation public.card_stock_transaction_entries_operation_type_enum; ref_type citext; ref_id uuid; op_rate numeric := 0; op_amount numeric := 0;
@@ -135,39 +189,99 @@ export class CardStockLifecycleLedger1786555310415 implements MigrationInterface
         END IF;
         RETURN NEW;
       END; $fn$`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_item_ledger" ON "transaction_items"`);
-    await queryRunner.query(`CREATE TRIGGER "TRG_card_stock_transaction_item_ledger" AFTER INSERT OR UPDATE ON "transaction_items" FOR EACH ROW EXECUTE FUNCTION public.card_stock_on_transaction_item()`);
-    await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_approved() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN IF NEW.status='APPROVED' AND (TG_OP='INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN UPDATE transaction_items SET updated_at=now() WHERE transaction_id=NEW.id AND card_id IS NOT NULL; END IF; RETURN NEW; END; $fn$`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_approved_ledger" ON "transactions"`);
-    await queryRunner.query(`CREATE TRIGGER "TRG_card_stock_transaction_approved_ledger" AFTER INSERT OR UPDATE OF "status" ON "transactions" FOR EACH ROW EXECUTE FUNCTION public.card_stock_on_transaction_approved()`);
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_item_ledger" ON "transaction_items"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER "TRG_card_stock_transaction_item_ledger" AFTER INSERT OR UPDATE ON "transaction_items" FOR EACH ROW EXECUTE FUNCTION public.card_stock_on_transaction_item()`,
+    );
+    await queryRunner.query(
+      `CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_approved() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN IF NEW.status='APPROVED' AND (TG_OP='INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN UPDATE transaction_items SET updated_at=now() WHERE transaction_id=NEW.id AND card_id IS NOT NULL; END IF; RETURN NEW; END; $fn$`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_approved_ledger" ON "transactions"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER "TRG_card_stock_transaction_approved_ledger" AFTER INSERT OR UPDATE OF "status" ON "transactions" FOR EACH ROW EXECUTE FUNCTION public.card_stock_on_transaction_approved()`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TRIGGER IF EXISTS "TRG_card_stock_card_insert_ledger" ON "card_stock_cards"`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_on_card_insert()`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_item_ledger" ON "transaction_items"`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_on_transaction_item()`);
-    await queryRunner.query(`DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_approved_ledger" ON "transactions"`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_on_transaction_approved()`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_insert_entry(uuid,uuid,public.card_stock_reference_type_enum,uuid,public.card_stock_transaction_entries_operation_type_enum,uuid,jsonb,uuid,jsonb,uuid,jsonb,uuid,jsonb,citext,timestamptz,numeric,numeric,uuid)`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_next_series(citext,citext)`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_prefix(citext)`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP CONSTRAINT IF EXISTS "FK_transaction_items_card_id"`);
-    await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP CONSTRAINT IF EXISTS "FK_card_stock_balance_card"`);
-    await queryRunner.query(`ALTER TABLE "card_stock_transaction_entries" DROP CONSTRAINT IF EXISTS "FK_card_stock_entries_transaction"`);
-    await queryRunner.query(`ALTER TABLE "card_stock_transaction_entries" DROP CONSTRAINT IF EXISTS "FK_card_stock_entries_card"`);
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "TRG_card_stock_card_insert_ledger" ON "card_stock_cards"`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_on_card_insert()`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_item_ledger" ON "transaction_items"`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_on_transaction_item()`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS "TRG_card_stock_transaction_approved_ledger" ON "transactions"`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_on_transaction_approved()`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_insert_entry(uuid,uuid,public.card_stock_reference_type_enum,uuid,public.card_stock_transaction_entries_operation_type_enum,uuid,jsonb,uuid,jsonb,uuid,jsonb,uuid,jsonb,citext,timestamptz,numeric,numeric,uuid)`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_next_series(citext,citext)`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_prefix(citext)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP CONSTRAINT IF EXISTS "FK_transaction_items_card_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP CONSTRAINT IF EXISTS "FK_card_stock_balance_card"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_transaction_entries" DROP CONSTRAINT IF EXISTS "FK_card_stock_entries_transaction"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_transaction_entries" DROP CONSTRAINT IF EXISTS "FK_card_stock_entries_card"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "card_stock_balance"`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "card_stock_transaction_entries"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."card_stock_transaction_entries_operation_type_enum"`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "is_reload"`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "card_snapshot"`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "issuer_party_profile_snapshot"`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "issuer_party_profile_id"`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "card_id"`);
-    await queryRunner.query(`ALTER TABLE "transactions" DROP COLUMN IF EXISTS "card_stock_reference_id"`);
-    await queryRunner.query(`ALTER TABLE "transactions" DROP COLUMN IF EXISTS "card_stock_reference_type"`);
-    await queryRunner.query(`ALTER TABLE "card_stock_receipts" DROP COLUMN IF EXISTS "transaction_id"`);
-    await queryRunner.query(`DROP TYPE IF EXISTS "public"."card_stock_reference_type_enum"`);
-    await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "counter_id" SET NOT NULL`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "card_stock_transaction_entries"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."card_stock_transaction_entries_operation_type_enum"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "is_reload"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "card_snapshot"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "issuer_party_profile_snapshot"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "issuer_party_profile_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN IF EXISTS "card_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transactions" DROP COLUMN IF EXISTS "card_stock_reference_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transactions" DROP COLUMN IF EXISTS "card_stock_reference_type"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_receipts" DROP COLUMN IF EXISTS "transaction_id"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS "public"."card_stock_reference_type_enum"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transactions" ALTER COLUMN "counter_id" SET NOT NULL`,
+    );
   }
 }

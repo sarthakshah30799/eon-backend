@@ -290,7 +290,7 @@ export class TransactionItem extends BaseEntity {
     }
 
     const divisor = Number.isFinite(per) && per > 0 ? per : 1;
-    const totalAmount = Number((quantity * rate / divisor).toFixed(2));
+    const totalAmount = Number(((quantity * rate) / divisor).toFixed(2));
     const roundedAmount = Math.round(totalAmount);
     this.roundOff = (roundedAmount - totalAmount).toFixed(2);
     this.amount = roundedAmount.toFixed(2);

@@ -93,7 +93,9 @@ export const resolveFlm4ProfileFilter = (profileTypes?: string[]) => {
   const selectedSet = new Set(partyProfileTypes);
   const slugs = [
     ...new Set(
-      partyProfileTypes.map((profileType) => FLM4_PROFILE_SLUG_BY_TYPE[profileType]),
+      partyProfileTypes.map(
+        (profileType) => FLM4_PROFILE_SLUG_BY_TYPE[profileType],
+      ),
     ),
   ];
   const allTypesSelected =
@@ -118,7 +120,9 @@ export const resolveFlm6ProfileFilter = (profileTypes?: string[]) => {
   const selectedSet = new Set(partyProfileTypes);
   const slugs = [
     ...new Set(
-      partyProfileTypes.map((profileType) => FLM6_PROFILE_SLUG_BY_TYPE[profileType]),
+      partyProfileTypes.map(
+        (profileType) => FLM6_PROFILE_SLUG_BY_TYPE[profileType],
+      ),
     ),
   ];
   const allTypesSelected =

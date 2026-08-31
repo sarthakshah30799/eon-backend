@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class FixPurchaseGstFinalAmountInTcsRefresh1785350788879 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
       CREATE OR REPLACE FUNCTION public.refresh_transaction_tcs(
         p_transaction_id uuid
       )
@@ -166,10 +165,10 @@ export class FixPurchaseGstFinalAmountInTcsRefresh1785350788879 implements Migra
       END;
       $$;
     `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
       CREATE OR REPLACE FUNCTION public.refresh_transaction_tcs(
         p_transaction_id uuid
       )
@@ -312,6 +311,5 @@ export class FixPurchaseGstFinalAmountInTcsRefresh1785350788879 implements Migra
       END;
       $$;
     `);
-    }
-
+  }
 }

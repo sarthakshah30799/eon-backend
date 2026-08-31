@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { PartyProfileDocumentProfileResponseDto } from './party-profile-document-profile-response.dto';
+import { ApiProperty } from "@nestjs/swagger";
+import { PartyProfileDocumentProfileResponseDto } from "./party-profile-document-profile-response.dto";
 
 export class PartyProfileDocumentsResponseDto {
   @ApiProperty()

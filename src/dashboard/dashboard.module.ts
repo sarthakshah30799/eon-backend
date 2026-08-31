@@ -13,7 +13,14 @@ import { CardTransferRequest } from "../card-stock/entities/card-transfer-reques
 @Module({
   imports: [
     TypeOrmModule.forFeature(
-      [Transaction, TransactionItem, ChequeBook, ManualBook, TransferRequest, CardTransferRequest],
+      [
+        Transaction,
+        TransactionItem,
+        ChequeBook,
+        ManualBook,
+        TransferRequest,
+        CardTransferRequest,
+      ],
       "database2",
     ),
     TypeOrmModule.forFeature([PartyProfile]),

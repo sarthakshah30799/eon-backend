@@ -50,9 +50,11 @@ export class TransactionDataLocksService {
     maxAllowedBusinessDate: string,
   ): Promise<CreateTransactionDataLocksResultDto> {
     const lockedThroughDate = normalizeDateOnly(dto.lockedThroughDate);
-    const reportStartDate = normalizeDateOnly(dto.reportStartDate ?? null) || null;
+    const reportStartDate =
+      normalizeDateOnly(dto.reportStartDate ?? null) || null;
     const reportEndDate =
-      normalizeDateOnly(dto.reportEndDate ?? dto.lockedThroughDate) || lockedThroughDate;
+      normalizeDateOnly(dto.reportEndDate ?? dto.lockedThroughDate) ||
+      lockedThroughDate;
     const maxDate = normalizeDateOnly(maxAllowedBusinessDate);
     const actorUserId = session.userId;
 
@@ -60,7 +62,9 @@ export class TransactionDataLocksService {
       throw new BadRequestException("Lock date is required");
     }
     if (!maxDate) {
-      throw new BadRequestException("Business date is required to create a data lock");
+      throw new BadRequestException(
+        "Business date is required to create a data lock",
+      );
     }
     if (lockedThroughDate > maxDate) {
       throw new BadRequestException(
@@ -73,7 +77,9 @@ export class TransactionDataLocksService {
       session,
     );
     if (!accessibleBranchIds.length) {
-      throw new BadRequestException("No accessible branches selected for data lock");
+      throw new BadRequestException(
+        "No accessible branches selected for data lock",
+      );
     }
 
     const branches = await this.branchRepository.find({
@@ -81,7 +87,7 @@ export class TransactionDataLocksService {
       select: ["id", "name", "code"],
     });
     const branchNameById = new Map(
-      branches.map(branch => [
+      branches.map((branch) => [
         branch.id,
         branch.code && branch.name
           ? `${branch.code} - ${branch.name}`
@@ -89,7 +95,7 @@ export class TransactionDataLocksService {
       ]),
     );
 
-    const missing = accessibleBranchIds.filter(id => !branchNameById.has(id));
+    const missing = accessibleBranchIds.filter((id) => !branchNameById.has(id));
     if (missing.length) {
       throw new NotFoundException(`Branch not found: ${missing[0]}`);
     }
@@ -97,7 +103,9 @@ export class TransactionDataLocksService {
     const existingLocks = await this.lockRepository.find({
       where: { branchId: In(accessibleBranchIds) },
     });
-    const existingByBranch = new Map(existingLocks.map(lock => [lock.branchId, lock]));
+    const existingByBranch = new Map(
+      existingLocks.map((lock) => [lock.branchId, lock]),
+    );
     const earliestAllowed = getEarliestAllowedPunchDate(lockedThroughDate);
     const results: TransactionDataLockResponseDto[] = [];
 
@@ -180,7 +188,7 @@ export class TransactionDataLocksService {
 
     const assignedBranchIds = await this.loadAssignedBranchIds(session.userId);
     const assignedSet = new Set(assignedBranchIds);
-    return uniqueRequested.filter(branchId => assignedSet.has(branchId));
+    return uniqueRequested.filter((branchId) => assignedSet.has(branchId));
   }
 
   private async loadAssignedBranchIds(userId?: string | null) {
@@ -196,7 +204,7 @@ export class TransactionDataLocksService {
     return [
       ...new Set(
         assignments
-          .map(assignment => assignment.branch?.id)
+          .map((assignment) => assignment.branch?.id)
           .filter((branchId): branchId is string => Boolean(branchId)),
       ),
     ];

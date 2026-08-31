@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, IsUUID } from "class-validator";
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  IsUUID,
+} from "class-validator";
 import { CountryRiskCategory } from "../country.entity";
 
 export class CreateCountryDto {
@@ -9,7 +17,11 @@ export class CreateCountryDto {
   @MaxLength(20)
   code: string;
 
-  @ApiProperty({ description: "Country name", example: "India", maxLength: 250 })
+  @ApiProperty({
+    description: "Country name",
+    example: "India",
+    maxLength: 250,
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
@@ -36,12 +48,18 @@ export class CreateCountryDto {
   @IsOptional()
   riskCategory?: CountryRiskCategory;
 
-  @ApiPropertyOptional({ description: "Restricted country flag", default: false })
+  @ApiPropertyOptional({
+    description: "Restricted country flag",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   restrictedCountry?: boolean;
 
-  @ApiPropertyOptional({ description: "Grey list country flag", default: false })
+  @ApiPropertyOptional({
+    description: "Grey list country flag",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   greyListCountry?: boolean;

@@ -1,17 +1,24 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import * as XLSX from 'xlsx';
-import { Branch } from '../branches/branch.entity';
-import { BranchCounter } from '../branches/entities/branch-counter.entity';
-import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
-import { Currency } from '../currencies/currency.entity';
-import { Counter } from '../counters/counter.entity';
-import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
-import { StockRevaluation } from './entities/stock-revaluation.entity';
-import { StockRevaluationItem } from './entities/stock-revaluation-item.entity';
-import { ProcessStockRevaluationDto } from './dto/stock-revaluation.dto';
-import { StockRevaluationFrequency, StockRevaluationStatus } from './stock-revaluation.enums';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import * as XLSX from "xlsx";
+import { Branch } from "../branches/branch.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
+import { assertCounterBelongsToBranch } from "../branches/branch-counter.access";
+import { Currency } from "../currencies/currency.entity";
+import { Counter } from "../counters/counter.entity";
+import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
+import { StockRevaluation } from "./entities/stock-revaluation.entity";
+import { StockRevaluationItem } from "./entities/stock-revaluation-item.entity";
+import { ProcessStockRevaluationDto } from "./dto/stock-revaluation.dto";
+import {
+  StockRevaluationFrequency,
+  StockRevaluationStatus,
+} from "./stock-revaluation.enums";
 
 type UploadedRate = { date: string; currencyCode: string; rate: string };
 type StockRevaluationTarget = { branchId: string; counterId: string };
@@ -21,7 +28,11 @@ const toDateKey = (value: string) => {
   if (match) {
     const [, day, month, year] = match;
     const date = new Date(Number(year), Number(month) - 1, Number(day));
-    if (date.getFullYear() !== Number(year) || date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day)) {
+    if (
+      date.getFullYear() !== Number(year) ||
+      date.getMonth() !== Number(month) - 1 ||
+      date.getDate() !== Number(day)
+    ) {
       throw new BadRequestException(`Invalid date: ${value}`);
     }
     return `${year}-${month}-${day}`;
@@ -32,7 +43,7 @@ const toDateKey = (value: string) => {
     const serial = Number(value);
     const excelDate = new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
     if (!Number.isNaN(excelDate.getTime())) {
-      return `${excelDate.getUTCFullYear()}-${String(excelDate.getUTCMonth() + 1).padStart(2, '0')}-${String(excelDate.getUTCDate()).padStart(2, '0')}`;
+      return `${excelDate.getUTCFullYear()}-${String(excelDate.getUTCMonth() + 1).padStart(2, "0")}-${String(excelDate.getUTCDate()).padStart(2, "0")}`;
     }
   }
 
@@ -40,24 +51,30 @@ const toDateKey = (value: string) => {
   if (Number.isNaN(date.getTime())) {
     throw new BadRequestException(`Invalid date: ${value}`);
   }
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
-const lastDay = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+const lastDay = (year: number, month: number) =>
+  new Date(year, month + 1, 0).getDate();
 
-const getFinancialYearStart = (year: number, month: number) => month >= 3 ? year : year - 1;
+const getFinancialYearStart = (year: number, month: number) =>
+  month >= 3 ? year : year - 1;
 
-const getPeriodEnd = (dateKey: string, frequency: StockRevaluationFrequency) => {
-  const [year, month, day] = dateKey.split('-').map(Number);
+const getPeriodEnd = (
+  dateKey: string,
+  frequency: StockRevaluationFrequency,
+) => {
+  const [year, month, day] = dateKey.split("-").map(Number);
   const monthIndex = month - 1;
   const financialYearStart = getFinancialYearStart(year, monthIndex);
-  const financialMonth = ((year - financialYearStart) * 12) + monthIndex - 3;
+  const financialMonth = (year - financialYearStart) * 12 + monthIndex - 3;
   let endYear = year;
   let endMonth = monthIndex;
 
   if (frequency === StockRevaluationFrequency.QUARTERLY) {
     const quarterEndFinancialMonth = Math.floor(financialMonth / 3) * 3 + 2;
-    endYear = financialYearStart + Math.floor((quarterEndFinancialMonth + 3) / 12);
+    endYear =
+      financialYearStart + Math.floor((quarterEndFinancialMonth + 3) / 12);
     endMonth = (quarterEndFinancialMonth + 3) % 12;
   } else if (frequency === StockRevaluationFrequency.HALF_YEARLY) {
     const halfEndFinancialMonth = financialMonth < 6 ? 5 : 11;
@@ -68,32 +85,36 @@ const getPeriodEnd = (dateKey: string, frequency: StockRevaluationFrequency) => 
     endMonth = 2;
   }
 
-  return `${endYear}-${String(endMonth + 1).padStart(2, '0')}-${String(lastDay(endYear, endMonth)).padStart(2, '0')}`;
+  return `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(lastDay(endYear, endMonth)).padStart(2, "0")}`;
 };
 
 const todayKey = () => {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).split('-');
-  return parts.join('-');
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" })
+    .format(new Date())
+    .split("-");
+  return parts.join("-");
 };
 
 const latestCompletedPeriodEnd = (frequency: StockRevaluationFrequency) => {
-  const current = todayKey().split('-').map(Number);
+  const current = todayKey().split("-").map(Number);
   const date = new Date(current[0], current[1] - 1, current[2] - 1);
   for (let index = 0; index < 400; index += 1) {
-    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     const periodEnd = getPeriodEnd(dateKey, frequency);
     if (periodEnd <= todayKey()) return periodEnd;
     date.setDate(date.getDate() - 1);
   }
-  throw new BadRequestException('Unable to determine the current stock revaluation period');
+  throw new BadRequestException(
+    "Unable to determine the current stock revaluation period",
+  );
 };
 
 @Injectable()
 export class StockRevaluationService {
   constructor(
-    @InjectRepository(StockRevaluation, 'database2')
+    @InjectRepository(StockRevaluation, "database2")
     private readonly revaluationRepository: Repository<StockRevaluation>,
-    @InjectRepository(StockRevaluationItem, 'database2')
+    @InjectRepository(StockRevaluationItem, "database2")
     private readonly itemRepository: Repository<StockRevaluationItem>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
@@ -107,53 +128,103 @@ export class StockRevaluationService {
   ) {}
 
   parseWorkbook(file: { buffer: Buffer }): UploadedRate[] {
-    const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: false });
+    const workbook = XLSX.read(file.buffer, {
+      type: "buffer",
+      cellDates: false,
+    });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!sheet) throw new BadRequestException('The uploaded template has no worksheet');
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-    if (!rows.length) throw new BadRequestException('The uploaded template is empty');
+    if (!sheet)
+      throw new BadRequestException("The uploaded template has no worksheet");
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+    });
+    if (!rows.length)
+      throw new BadRequestException("The uploaded template is empty");
 
     const read = (row: Record<string, unknown>, key: string) => {
-      const found = Object.entries(row).find(([name]) => name.trim().toLowerCase() === key);
-      return String(found?.[1] ?? '').trim();
+      const found = Object.entries(row).find(
+        ([name]) => name.trim().toLowerCase() === key,
+      );
+      return String(found?.[1] ?? "").trim();
     };
 
     const rates = rows.map((row, index) => {
-      const date = read(row, 'date');
-      const currencyCode = read(row, 'currency');
-      const rate = read(row, 'rate');
-      if (!date || !currencyCode || !rate) throw new BadRequestException(`Row ${index + 2}: date, currency, and rate are required`);
+      const date = read(row, "date");
+      const currencyCode = read(row, "currency");
+      const rate = read(row, "rate");
+      if (!date || !currencyCode || !rate)
+        throw new BadRequestException(
+          `Row ${index + 2}: date, currency, and rate are required`,
+        );
       const numericRate = Number(rate);
-      if (!Number.isFinite(numericRate) || numericRate <= 0) throw new BadRequestException(`Row ${index + 2}: rate must be greater than zero`);
-      return { date: toDateKey(date), currencyCode: currencyCode.toUpperCase(), rate: numericRate.toFixed(7) };
+      if (!Number.isFinite(numericRate) || numericRate <= 0)
+        throw new BadRequestException(
+          `Row ${index + 2}: rate must be greater than zero`,
+        );
+      return {
+        date: toDateKey(date),
+        currencyCode: currencyCode.toUpperCase(),
+        rate: numericRate.toFixed(7),
+      };
     });
 
     const date = rates[0].date;
-    if (rates.some((rate) => rate.date !== date)) throw new BadRequestException('All rows must use the same date');
-    const duplicates = rates.filter((rate, index) => rates.findIndex((candidate) => candidate.currencyCode === rate.currencyCode) !== index);
-    if (duplicates.length) throw new BadRequestException(`Duplicate currency rows found: ${[...new Set(duplicates.map((rate) => rate.currencyCode))].join(', ')}`);
+    if (rates.some((rate) => rate.date !== date))
+      throw new BadRequestException("All rows must use the same date");
+    const duplicates = rates.filter(
+      (rate, index) =>
+        rates.findIndex(
+          (candidate) => candidate.currencyCode === rate.currencyCode,
+        ) !== index,
+    );
+    if (duplicates.length)
+      throw new BadRequestException(
+        `Duplicate currency rows found: ${[...new Set(duplicates.map((rate) => rate.currencyCode))].join(", ")}`,
+      );
     return rates;
   }
 
   async getTemplate() {
-    const worksheet = XLSX.utils.aoa_to_sheet([['Date', 'Currency', 'Rate'], ['DD/MM/YYYY', 'USD', '94.0000000']]);
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ["Date", "Currency", "Rate"],
+      ["DD/MM/YYYY", "USD", "94.0000000"],
+    ]);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Stock Revaluation');
-    return XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' }) as Buffer;
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Stock Revaluation");
+    return XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }) as Buffer;
   }
 
   private async getConfiguredFrequency() {
-    const configured = await this.additionalSettingService.getSettingTextValue('STOCK_REVALUATION_SETTINGS', 'STOCK_REVALUATION_FREQUENCY');
-    const normalized = configured?.trim().toUpperCase() as StockRevaluationFrequency | undefined;
-    return normalized && Object.values(StockRevaluationFrequency).includes(normalized) ? normalized : undefined;
+    const configured = await this.additionalSettingService.getSettingTextValue(
+      "STOCK_REVALUATION_SETTINGS",
+      "STOCK_REVALUATION_FREQUENCY",
+    );
+    const normalized = configured?.trim().toUpperCase() as
+      | StockRevaluationFrequency
+      | undefined;
+    return normalized &&
+      Object.values(StockRevaluationFrequency).includes(normalized)
+      ? normalized
+      : undefined;
   }
 
-  private async processTarget(target: StockRevaluationTarget, dto: ProcessStockRevaluationDto, rates: UploadedRate[], userId: string) {
+  private async processTarget(
+    target: StockRevaluationTarget,
+    dto: ProcessStockRevaluationDto,
+    rates: UploadedRate[],
+    userId: string,
+  ) {
     const { branchId, counterId } = target;
-    const branch = await this.branchRepository.findOne({ where: { id: branchId, isActive: true } });
-    if (!branch) throw new NotFoundException(`Active branch ${branchId} was not found`);
-    const counter = await this.counterRepository.findOne({ where: { id: counterId, isActive: true } });
-    if (!counter) throw new NotFoundException(`Active counter ${counterId} was not found`);
+    const branch = await this.branchRepository.findOne({
+      where: { id: branchId, isActive: true },
+    });
+    if (!branch)
+      throw new NotFoundException(`Active branch ${branchId} was not found`);
+    const counter = await this.counterRepository.findOne({
+      where: { id: counterId, isActive: true },
+    });
+    if (!counter)
+      throw new NotFoundException(`Active counter ${counterId} was not found`);
     await assertCounterBelongsToBranch(
       this.branchCounterRepository,
       branchId,
@@ -163,129 +234,308 @@ export class StockRevaluationService {
 
     const configuredFrequency = await this.getConfiguredFrequency();
     if (!configuredFrequency) {
-      throw new BadRequestException('Stock revaluation frequency is not configured in Additional Settings');
+      throw new BadRequestException(
+        "Stock revaluation frequency is not configured in Additional Settings",
+      );
     }
     if (configuredFrequency && configuredFrequency !== dto.frequency) {
-      throw new BadRequestException(`Stock revaluation frequency must be ${configuredFrequency}`);
+      throw new BadRequestException(
+        `Stock revaluation frequency must be ${configuredFrequency}`,
+      );
     }
 
     // The uploaded date identifies the upload event; valuation always targets
     // the latest completed financial-year period, never a future period.
     const periodEnd = latestCompletedPeriodEnd(dto.frequency);
 
-    const currencies = await this.currencyRepository.find({ where: rates.map((rate) => ({ currencyCode: rate.currencyCode, active: true })) });
-    const currencyMap = new Map(currencies.map((currency) => [currency.currencyCode.toUpperCase(), currency]));
-    const missing = rates.filter((rate) => !currencyMap.has(rate.currencyCode)).map((rate) => rate.currencyCode);
-    if (missing.length) throw new BadRequestException(`Unknown or inactive currency codes: ${missing.join(', ')}`);
+    const currencies = await this.currencyRepository.find({
+      where: rates.map((rate) => ({
+        currencyCode: rate.currencyCode,
+        active: true,
+      })),
+    });
+    const currencyMap = new Map(
+      currencies.map((currency) => [
+        currency.currencyCode.toUpperCase(),
+        currency,
+      ]),
+    );
+    const missing = rates
+      .filter((rate) => !currencyMap.has(rate.currencyCode))
+      .map((rate) => rate.currencyCode);
+    if (missing.length)
+      throw new BadRequestException(
+        `Unknown or inactive currency codes: ${missing.join(", ")}`,
+      );
 
     const requested = rates.map((rate) => {
       const currency = currencyMap.get(rate.currencyCode)!;
-      return { currencyId: currency.id, currencyCode: currency.currencyCode, currencyName: currency.currencyName, rate: rate.rate };
+      return {
+        currencyId: currency.id,
+        currencyCode: currency.currencyCode,
+        currencyName: currency.currencyName,
+        rate: rate.rate,
+      };
     });
     const rows = await this.revaluationRepository.query(
       `SELECT public.calculate_stock_revaluation($1::uuid, $2::uuid, $3::date, $4::jsonb) AS rows`,
       [branchId, counterId, periodEnd, JSON.stringify(requested)],
     );
-    const calculated = typeof rows?.[0]?.rows === 'string' ? JSON.parse(rows[0].rows) : rows?.[0]?.rows ?? [];
-    const branchSnapshot = { id: branch.id, code: branch.code, name: branch.name, label: `${branch.code} - ${branch.name}` };
-    const counterSnapshot = { id: counter.id, counterNo: counter.counterNo, name: counter.name, label: `${counter.counterNo} - ${counter.name}` };
+    const calculated =
+      typeof rows?.[0]?.rows === "string"
+        ? JSON.parse(rows[0].rows)
+        : (rows?.[0]?.rows ?? []);
+    const branchSnapshot = {
+      id: branch.id,
+      code: branch.code,
+      name: branch.name,
+      label: `${branch.code} - ${branch.name}`,
+    };
+    const counterSnapshot = {
+      id: counter.id,
+      counterNo: counter.counterNo,
+      name: counter.name,
+      label: `${counter.counterNo} - ${counter.name}`,
+    };
 
     return this.revaluationRepository.manager.transaction(async (manager) => {
       const repository = manager.getRepository(StockRevaluation);
       const itemRepository = manager.getRepository(StockRevaluationItem);
-      const existing = await repository.findOne({ where: { branchId, counterId, frequency: dto.frequency, valuationDate: periodEnd } });
-      if (existing?.status === StockRevaluationStatus.PROCESSED) throw new BadRequestException(`Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`);
-      let revaluation = existing ?? repository.create({ branchId, counterId, branchSnapshot, counterSnapshot, frequency: dto.frequency, valuationDate: periodEnd, uploadedDate: rates[0].date, createdBy: userId, updatedBy: userId });
+      const existing = await repository.findOne({
+        where: {
+          branchId,
+          counterId,
+          frequency: dto.frequency,
+          valuationDate: periodEnd,
+        },
+      });
+      if (existing?.status === StockRevaluationStatus.PROCESSED)
+        throw new BadRequestException(
+          `Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`,
+        );
+      let revaluation =
+        existing ??
+        repository.create({
+          branchId,
+          counterId,
+          branchSnapshot,
+          counterSnapshot,
+          frequency: dto.frequency,
+          valuationDate: periodEnd,
+          uploadedDate: rates[0].date,
+          createdBy: userId,
+          updatedBy: userId,
+        });
       revaluation.branchSnapshot = branchSnapshot;
       revaluation.counterSnapshot = counterSnapshot;
       revaluation.status = StockRevaluationStatus.PROCESSED;
       revaluation.uploadedRates = requested;
       revaluation.updatedBy = userId;
       revaluation = await repository.save(revaluation);
-      const items = calculated.map((row: Record<string, unknown>, index: number) => itemRepository.create({
-        revaluationId: revaluation!.id,
-        lineNo: index + 1,
-        currencyId: String(row.currencyId),
-        currencySnapshot: { id: row.currencyId, currencyCode: row.currencyCode, currencyName: row.currencyName },
-        closingQuantity: String(row.closingQuantity ?? 0),
-        awp: String(row.awp ?? 0),
-        closingInrAmount: String(row.closingInrAmount ?? 0),
-        newRate: String(row.newRate ?? 0),
-        newInrAmount: String(row.newInrAmount ?? 0),
-        differenceInr: String(row.differenceInr ?? 0),
-        createdBy: userId,
-        updatedBy: userId,
-      }));
+      const items = calculated.map(
+        (row: Record<string, unknown>, index: number) =>
+          itemRepository.create({
+            revaluationId: revaluation!.id,
+            lineNo: index + 1,
+            currencyId: String(row.currencyId),
+            currencySnapshot: {
+              id: row.currencyId,
+              currencyCode: row.currencyCode,
+              currencyName: row.currencyName,
+            },
+            closingQuantity: String(row.closingQuantity ?? 0),
+            awp: String(row.awp ?? 0),
+            closingInrAmount: String(row.closingInrAmount ?? 0),
+            newRate: String(row.newRate ?? 0),
+            newInrAmount: String(row.newInrAmount ?? 0),
+            differenceInr: String(row.differenceInr ?? 0),
+            createdBy: userId,
+            updatedBy: userId,
+          }),
+      );
       revaluation.items = await itemRepository.save(items);
       return revaluation;
     });
   }
 
-  async upload(dto: ProcessStockRevaluationDto, file: { buffer: Buffer }, userId: string, targets: StockRevaluationTarget[]) {
+  async upload(
+    dto: ProcessStockRevaluationDto,
+    file: { buffer: Buffer },
+    userId: string,
+    targets: StockRevaluationTarget[],
+  ) {
     const rates = this.parseWorkbook(file);
     const configuredFrequency = await this.getConfiguredFrequency();
-    if (!configuredFrequency) throw new BadRequestException('Stock revaluation frequency is not configured in Additional Settings');
-    if (configuredFrequency !== dto.frequency) throw new BadRequestException(`Stock revaluation frequency must be ${configuredFrequency}`);
+    if (!configuredFrequency)
+      throw new BadRequestException(
+        "Stock revaluation frequency is not configured in Additional Settings",
+      );
+    if (configuredFrequency !== dto.frequency)
+      throw new BadRequestException(
+        `Stock revaluation frequency must be ${configuredFrequency}`,
+      );
     const periodEnd = latestCompletedPeriodEnd(dto.frequency);
-    const currencies = await this.currencyRepository.find({ where: rates.map((rate) => ({ currencyCode: rate.currencyCode, active: true })) });
-    const currencyMap = new Map(currencies.map((currency) => [currency.currencyCode.toUpperCase(), currency]));
-    const missing = rates.filter((rate) => !currencyMap.has(rate.currencyCode)).map((rate) => rate.currencyCode);
-    if (missing.length) throw new BadRequestException(`Unknown or inactive currency codes: ${missing.join(', ')}`);
+    const currencies = await this.currencyRepository.find({
+      where: rates.map((rate) => ({
+        currencyCode: rate.currencyCode,
+        active: true,
+      })),
+    });
+    const currencyMap = new Map(
+      currencies.map((currency) => [
+        currency.currencyCode.toUpperCase(),
+        currency,
+      ]),
+    );
+    const missing = rates
+      .filter((rate) => !currencyMap.has(rate.currencyCode))
+      .map((rate) => rate.currencyCode);
+    if (missing.length)
+      throw new BadRequestException(
+        `Unknown or inactive currency codes: ${missing.join(", ")}`,
+      );
     const uploadedRates = rates.map((rate) => {
       const currency = currencyMap.get(rate.currencyCode)!;
-      return { currencyId: currency.id, currencyCode: currency.currencyCode, currencyName: currency.currencyName, rate: rate.rate };
+      return {
+        currencyId: currency.id,
+        currencyCode: currency.currencyCode,
+        currencyName: currency.currencyName,
+        rate: rate.rate,
+      };
     });
     const results = [];
     for (const target of targets) {
-      const branch = await this.branchRepository.findOne({ where: { id: target.branchId, isActive: true } });
-      if (!branch) throw new NotFoundException(`Active branch ${target.branchId} was not found`);
-      const counter = await this.counterRepository.findOne({ where: { id: target.counterId, isActive: true } });
-      if (!counter) throw new NotFoundException(`Active counter ${target.counterId} was not found`);
+      const branch = await this.branchRepository.findOne({
+        where: { id: target.branchId, isActive: true },
+      });
+      if (!branch)
+        throw new NotFoundException(
+          `Active branch ${target.branchId} was not found`,
+        );
+      const counter = await this.counterRepository.findOne({
+        where: { id: target.counterId, isActive: true },
+      });
+      if (!counter)
+        throw new NotFoundException(
+          `Active counter ${target.counterId} was not found`,
+        );
       await assertCounterBelongsToBranch(
         this.branchCounterRepository,
         target.branchId,
         target.counterId,
         `Active counter ${target.counterId} was not found on branch ${target.branchId}`,
       );
-      const existing = await this.revaluationRepository.findOne({ where: { branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd } });
-      if (existing?.status === StockRevaluationStatus.PROCESSED) throw new BadRequestException(`Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`);
-      const pending = existing ?? this.revaluationRepository.create({ branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd, createdBy: userId, updatedBy: userId });
+      const existing = await this.revaluationRepository.findOne({
+        where: {
+          branchId: target.branchId,
+          counterId: target.counterId,
+          frequency: dto.frequency,
+          valuationDate: periodEnd,
+        },
+      });
+      if (existing?.status === StockRevaluationStatus.PROCESSED)
+        throw new BadRequestException(
+          `Stock revaluation already exists for ${periodEnd}. Delete the existing upload before uploading again.`,
+        );
+      const pending =
+        existing ??
+        this.revaluationRepository.create({
+          branchId: target.branchId,
+          counterId: target.counterId,
+          frequency: dto.frequency,
+          valuationDate: periodEnd,
+          createdBy: userId,
+          updatedBy: userId,
+        });
       pending.status = StockRevaluationStatus.PENDING;
       pending.uploadedDate = rates[0].date;
       pending.uploadedRates = uploadedRates;
-      pending.branchSnapshot = { id: branch.id, code: branch.code, name: branch.name, label: `${branch.code} - ${branch.name}` };
-      pending.counterSnapshot = { id: counter.id, counterNo: counter.counterNo, name: counter.name, label: `${counter.counterNo} - ${counter.name}` };
+      pending.branchSnapshot = {
+        id: branch.id,
+        code: branch.code,
+        name: branch.name,
+        label: `${branch.code} - ${branch.name}`,
+      };
+      pending.counterSnapshot = {
+        id: counter.id,
+        counterNo: counter.counterNo,
+        name: counter.name,
+        label: `${counter.counterNo} - ${counter.name}`,
+      };
       pending.updatedBy = userId;
       results.push(await this.revaluationRepository.save(pending));
     }
     return results;
   }
 
-  async process(dto: ProcessStockRevaluationDto, userId: string, targets: StockRevaluationTarget[]) {
+  async process(
+    dto: ProcessStockRevaluationDto,
+    userId: string,
+    targets: StockRevaluationTarget[],
+  ) {
     const results = [];
     const periodEnd = latestCompletedPeriodEnd(dto.frequency);
     for (const target of targets) {
-      const pending = await this.revaluationRepository.findOne({ where: { branchId: target.branchId, counterId: target.counterId, frequency: dto.frequency, valuationDate: periodEnd, status: StockRevaluationStatus.PENDING } });
-      if (!pending?.uploadedRates?.length) throw new BadRequestException(`No uploaded stock revaluation rates are available for ${target.branchId}/${target.counterId}. Ask Admin or HO to upload them first.`);
-      results.push(await this.processTarget(target, dto, pending.uploadedRates.map(rate => ({ date: pending.uploadedDate, currencyCode: rate.currencyCode, rate: rate.rate })), userId));
+      const pending = await this.revaluationRepository.findOne({
+        where: {
+          branchId: target.branchId,
+          counterId: target.counterId,
+          frequency: dto.frequency,
+          valuationDate: periodEnd,
+          status: StockRevaluationStatus.PENDING,
+        },
+      });
+      if (!pending?.uploadedRates?.length)
+        throw new BadRequestException(
+          `No uploaded stock revaluation rates are available for ${target.branchId}/${target.counterId}. Ask Admin or HO to upload them first.`,
+        );
+      results.push(
+        await this.processTarget(
+          target,
+          dto,
+          pending.uploadedRates.map((rate) => ({
+            date: pending.uploadedDate,
+            currencyCode: rate.currencyCode,
+            rate: rate.rate,
+          })),
+          userId,
+        ),
+      );
     }
     return results;
   }
 
-  async current(targets: StockRevaluationTarget[], frequency: StockRevaluationFrequency) {
+  async current(
+    targets: StockRevaluationTarget[],
+    frequency: StockRevaluationFrequency,
+  ) {
     const valuationDate = latestCompletedPeriodEnd(frequency);
-    return this.revaluationRepository.find({ where: targets.map(({ branchId, counterId }) => ({ branchId, counterId, frequency, valuationDate })), relations: ['items'], order: { valuationDate: 'DESC', createdAt: 'DESC' } });
+    return this.revaluationRepository.find({
+      where: targets.map(({ branchId, counterId }) => ({
+        branchId,
+        counterId,
+        frequency,
+        valuationDate,
+      })),
+      relations: ["items"],
+      order: { valuationDate: "DESC", createdAt: "DESC" },
+    });
   }
 
   async findOne(id: string) {
-    const revaluation = await this.revaluationRepository.findOne({ where: { id }, relations: ['items'] });
-    if (!revaluation) throw new NotFoundException('Stock revaluation was not found');
+    const revaluation = await this.revaluationRepository.findOne({
+      where: { id },
+      relations: ["items"],
+    });
+    if (!revaluation)
+      throw new NotFoundException("Stock revaluation was not found");
     return revaluation;
   }
 
   async delete(id: string, userId: string) {
     const result = await this.revaluationRepository.delete(id);
-    if (!result.affected) throw new NotFoundException('Stock revaluation was not found');
-    return { message: 'Stock revaluation deleted successfully' };
+    if (!result.affected)
+      throw new NotFoundException("Stock revaluation was not found");
+    return { message: "Stock revaluation deleted successfully" };
   }
 }

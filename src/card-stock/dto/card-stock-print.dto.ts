@@ -1,14 +1,14 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsEnum, IsOptional, IsString } from "class-validator";
 
 export enum CardStockPrintCopyType {
-  CUSTOMER_COPY = 'CUSTOMER_COPY',
-  DUPLICATE_COPY = 'DUPLICATE_COPY',
+  CUSTOMER_COPY = "CUSTOMER_COPY",
+  DUPLICATE_COPY = "DUPLICATE_COPY",
 }
 
 export enum CardStockPrintKind {
-  STOCK_IN = 'STOCK_IN',
-  STOCK_OUT = 'STOCK_OUT',
+  STOCK_IN = "STOCK_IN",
+  STOCK_OUT = "STOCK_OUT",
 }
 
 export class RecordCardStockPrintDto {
@@ -17,7 +17,10 @@ export class RecordCardStockPrintDto {
   @IsOptional()
   copyType?: CardStockPrintCopyType;
 
-  @ApiPropertyOptional({ description: 'Printable HTML is not persisted; the client uses it only for the print window.' })
+  @ApiPropertyOptional({
+    description:
+      "Printable HTML is not persisted; the client uses it only for the print window.",
+  })
   @IsString()
   @IsOptional()
   html?: string;

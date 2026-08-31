@@ -1,16 +1,16 @@
 export const TransferRequestType = {
-  COUNTER: 'COUNTER',
-  BRANCH: 'BRANCH',
+  COUNTER: "COUNTER",
+  BRANCH: "BRANCH",
 } as const;
 
 export type TransferRequestType =
   (typeof TransferRequestType)[keyof typeof TransferRequestType];
 
 export const TransferRequestStatus = {
-  HELD: 'HELD',
-  ACCEPTED: 'ACCEPTED',
-  REJECTED: 'REJECTED',
-  CANCELLED: 'CANCELLED',
+  HELD: "HELD",
+  ACCEPTED: "ACCEPTED",
+  REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export type TransferRequestStatus =

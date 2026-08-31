@@ -1,10 +1,9 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CardNumberEncryptionFunctions1786393034606 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.encrypt_card_number(input_value text)
             RETURNS bytea
             LANGUAGE plpgsql
@@ -23,7 +22,7 @@ export class CardNumberEncryptionFunctions1786393034606 implements MigrationInte
             END;
             $function$;
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.decrypt_card_number(input_value bytea)
             RETURNS text
             LANGUAGE plpgsql
@@ -42,11 +41,14 @@ export class CardNumberEncryptionFunctions1786393034606 implements MigrationInte
             END;
             $function$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP FUNCTION IF EXISTS public.decrypt_card_number(bytea)`);
-        await queryRunner.query(`DROP FUNCTION IF EXISTS public.encrypt_card_number(text)`);
-    }
-
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.decrypt_card_number(bytea)`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.encrypt_card_number(text)`,
+    );
+  }
 }

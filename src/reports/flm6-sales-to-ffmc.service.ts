@@ -32,10 +32,7 @@ export class Flm6SalesToFfmcService {
     private readonly userRoleRepository: Repository<UserRole>,
   ) {}
 
-  async buildReport(
-    query: Flm6SalesToFfmcQueryDto,
-    session?: SessionContext,
-  ) {
+  async buildReport(query: Flm6SalesToFfmcQueryDto, session?: SessionContext) {
     const { startDate, endDateExclusive } = resolveFlm6DateRange(
       query.startDate,
       query.endDate,

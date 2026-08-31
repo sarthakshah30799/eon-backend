@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty } from "@nestjs/swagger";
 
 export class MigrationVerifyResponseDto {
   @ApiProperty()
@@ -7,4 +7,3 @@ export class MigrationVerifyResponseDto {
   @ApiProperty()
   message: string;
 }
-

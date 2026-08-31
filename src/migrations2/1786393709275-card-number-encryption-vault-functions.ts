@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CardNumberEncryptionVaultFunctions1786393709275 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.encrypt_card_number(input_value text)
             RETURNS bytea
             LANGUAGE plpgsql
@@ -27,7 +26,7 @@ export class CardNumberEncryptionVaultFunctions1786393709275 implements Migratio
             END;
             $function$;
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.decrypt_card_number(input_value bytea)
             RETURNS text
             LANGUAGE plpgsql
@@ -51,10 +50,10 @@ export class CardNumberEncryptionVaultFunctions1786393709275 implements Migratio
             END;
             $function$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.encrypt_card_number(input_value text)
             RETURNS bytea
             LANGUAGE plpgsql
@@ -73,7 +72,7 @@ export class CardNumberEncryptionVaultFunctions1786393709275 implements Migratio
             END;
             $function$;
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.decrypt_card_number(input_value bytea)
             RETURNS text
             LANGUAGE plpgsql
@@ -92,6 +91,5 @@ export class CardNumberEncryptionVaultFunctions1786393709275 implements Migratio
             END;
             $function$;
         `);
-    }
-
+  }
 }

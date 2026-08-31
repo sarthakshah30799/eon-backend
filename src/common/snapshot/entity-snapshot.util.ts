@@ -1,4 +1,4 @@
-import { ObjectLiteral, Repository } from 'typeorm';
+import { ObjectLiteral, Repository } from "typeorm";
 
 type SnapshotEntity = Record<string, unknown>;
 
@@ -7,8 +7,24 @@ interface SnapshotTree {
 }
 
 const aliasFieldCandidates = {
-  code: ['code', 'shortCode', 'accountCode', 'currencyCode', 'documentCode', 'branchCode', 'productCode'],
-  name: ['name', 'accountName', 'currencyName', 'documentDescription', 'value', 'label', 'productDescription'],
+  code: [
+    "code",
+    "shortCode",
+    "accountCode",
+    "currencyCode",
+    "documentCode",
+    "branchCode",
+    "productCode",
+  ],
+  name: [
+    "name",
+    "accountName",
+    "currencyName",
+    "documentDescription",
+    "value",
+    "label",
+    "productDescription",
+  ],
 };
 
 const shouldSkipRelation = (
@@ -16,23 +32,32 @@ const shouldSkipRelation = (
   relationPropertyName: string,
   targetEntityName: string,
 ) => {
-  if (parentEntityName === 'Branch' && relationPropertyName === 'company') {
+  if (parentEntityName === "Branch" && relationPropertyName === "company") {
     return true;
   }
 
-  if (parentEntityName === 'PartyProfile' && relationPropertyName === 'branch') {
+  if (
+    parentEntityName === "PartyProfile" &&
+    relationPropertyName === "branch"
+  ) {
     return true;
   }
 
-  if (parentEntityName === 'AccountProfile' && relationPropertyName === 'mapToAccount') {
+  if (
+    parentEntityName === "AccountProfile" &&
+    relationPropertyName === "mapToAccount"
+  ) {
     return true;
   }
 
-  if (parentEntityName === 'AccountProfile' && relationPropertyName === 'branchToTransfer') {
+  if (
+    parentEntityName === "AccountProfile" &&
+    relationPropertyName === "branchToTransfer"
+  ) {
     return true;
   }
 
-  if (parentEntityName === 'Product' && targetEntityName === 'AccountProfile') {
+  if (parentEntityName === "Product" && targetEntityName === "AccountProfile") {
     return true;
   }
 
@@ -40,20 +65,23 @@ const shouldSkipRelation = (
 };
 
 function isObjectLike(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function firstDefinedValue(entity: SnapshotEntity, keys: string[]) {
   for (const key of keys) {
     const value = entity[key];
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null && value !== "") {
       return value;
     }
   }
   return undefined;
 }
 
-function withAliases(entity: SnapshotEntity, metadataName?: string): SnapshotEntity {
+function withAliases(
+  entity: SnapshotEntity,
+  metadataName?: string,
+): SnapshotEntity {
   const snapshot: SnapshotEntity = { ...entity };
   const code = firstDefinedValue(snapshot, aliasFieldCandidates.code);
   const name = firstDefinedValue(snapshot, aliasFieldCandidates.name);
@@ -83,7 +111,10 @@ function withAliases(entity: SnapshotEntity, metadataName?: string): SnapshotEnt
   return snapshot;
 }
 
-function serializeEntityColumns(entity: SnapshotEntity, metadataName?: string): SnapshotEntity {
+function serializeEntityColumns(
+  entity: SnapshotEntity,
+  metadataName?: string,
+): SnapshotEntity {
   const snapshot: SnapshotEntity = {};
   for (const [key, value] of Object.entries(entity)) {
     if (value !== undefined) {
@@ -115,8 +146,13 @@ function buildRelationTree(
       continue;
     }
 
-    const childTree = buildRelationTree(relation.inverseEntityMetadata as any, currentAncestors);
-    tree[relation.propertyName] = Object.keys(childTree).length ? childTree : true;
+    const childTree = buildRelationTree(
+      relation.inverseEntityMetadata as any,
+      currentAncestors,
+    );
+    tree[relation.propertyName] = Object.keys(childTree).length
+      ? childTree
+      : true;
   }
 
   return tree;
@@ -142,7 +178,10 @@ function serializeEntitySnapshotRecursive(
 ): SnapshotEntity {
   const snapshot = serializeEntityColumns(
     Object.fromEntries(
-      metadata.columns.map(column => [column.propertyName, entity[column.propertyName]]),
+      metadata.columns.map((column) => [
+        column.propertyName,
+        entity[column.propertyName],
+      ]),
     ),
     metadata.name,
   );
@@ -178,7 +217,10 @@ function serializeEntitySnapshotRecursive(
       : currentAncestors;
 
     if (currentAncestors.has(targetName)) {
-      snapshot[relation.propertyName] = serializeEntityColumns(relationValue, targetName);
+      snapshot[relation.propertyName] = serializeEntityColumns(
+        relationValue,
+        targetName,
+      );
       continue;
     }
 
@@ -211,7 +253,10 @@ export async function loadEntitySnapshot<T extends ObjectLiteral>(
       return null;
     }
 
-    return serializeEntitySnapshotRecursive(entity as SnapshotEntity, repository.metadata as any);
+    return serializeEntitySnapshotRecursive(
+      entity as SnapshotEntity,
+      repository.metadata as any,
+    );
   } catch (error) {
     const fallbackEntity = await repository.findOne({
       where: { id: entityId } as any,
@@ -223,7 +268,7 @@ export async function loadEntitySnapshot<T extends ObjectLiteral>(
 
     return serializeEntityColumns(
       Object.fromEntries(
-        repository.metadata.columns.map(column => [
+        repository.metadata.columns.map((column) => [
           column.propertyName,
           (fallbackEntity as SnapshotEntity)[column.propertyName],
         ]),
@@ -241,5 +286,8 @@ export function buildEntitySnapshot<T extends ObjectLiteral>(
     return null;
   }
 
-  return serializeEntitySnapshotRecursive(entity as SnapshotEntity, repository.metadata as any);
+  return serializeEntitySnapshotRecursive(
+    entity as SnapshotEntity,
+    repository.metadata as any,
+  );
 }

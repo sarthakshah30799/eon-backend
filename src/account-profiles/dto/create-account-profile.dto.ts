@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, IsUUID, Length } from "class-validator";
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+} from "class-validator";
 
 export class CreateAccountProfileDto {
   @ApiPropertyOptional({ description: "Division / Department" })
@@ -7,16 +14,30 @@ export class CreateAccountProfileDto {
   @IsOptional()
   divisionDept?: string;
 
-  @ApiProperty({ description: "Account Code", example: "ACCINT", minLength: 5, maxLength: 20 })
+  @ApiProperty({
+    description: "Account Code",
+    example: "ACCINT",
+    minLength: 5,
+    maxLength: 20,
+  })
   @IsString()
   @IsNotEmpty()
-  @Length(5, 20, { message: "Account Code must be between 5 and 20 characters" })
+  @Length(5, 20, {
+    message: "Account Code must be between 5 and 20 characters",
+  })
   accountCode: string;
 
-  @ApiProperty({ description: "Account Name", example: "ACCRUED FD INTEREST", minLength: 10, maxLength: 250 })
+  @ApiProperty({
+    description: "Account Name",
+    example: "ACCRUED FD INTEREST",
+    minLength: 10,
+    maxLength: 250,
+  })
   @IsString()
   @IsNotEmpty()
-  @Length(10, 250, { message: "Account Name must be between 10 and 250 characters" })
+  @Length(10, 250, {
+    message: "Account Name must be between 10 and 250 characters",
+  })
   accountName: string;
 
   @ApiPropertyOptional({ description: "Account Type" })
@@ -54,7 +75,10 @@ export class CreateAccountProfileDto {
   @IsOptional()
   pettyCashExpenseId?: string;
 
-  @ApiPropertyOptional({ description: "Zero Balance at EOD flag", default: false })
+  @ApiPropertyOptional({
+    description: "Zero Balance at EOD flag",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   zeroBalanceAtEod?: boolean;
@@ -104,7 +128,10 @@ export class CreateAccountProfileDto {
   @IsOptional()
   payment?: boolean;
 
-  @ApiPropertyOptional({ description: "Journal Voucher (JV) flag", default: false })
+  @ApiPropertyOptional({
+    description: "Journal Voucher (JV) flag",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   journalVoucher?: boolean;
@@ -119,7 +146,10 @@ export class CreateAccountProfileDto {
   @IsOptional()
   cmsBank?: boolean;
 
-  @ApiPropertyOptional({ description: "Direct Remittance flag", default: false })
+  @ApiPropertyOptional({
+    description: "Direct Remittance flag",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   directRemittance?: boolean;

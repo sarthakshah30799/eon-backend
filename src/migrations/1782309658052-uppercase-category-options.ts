@@ -1,20 +1,20 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class UppercaseCategoryOptions1782309658052 implements MigrationInterface {
-    name = 'UppercaseCategoryOptions1782309658052'
+  name = "UppercaseCategoryOptions1782309658052";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             UPDATE "category_options"
             SET
               "code" = UPPER(REPLACE("code", '_', '')),
               "value" = UPPER("value"),
               "label" = UPPER("label")
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             UPDATE "category_options"
             SET
               "code" = CASE
@@ -42,5 +42,5 @@ export class UppercaseCategoryOptions1782309658052 implements MigrationInterface
               "value" = LOWER("value"),
               "label" = LOWER("label")
         `);
-    }
+  }
 }

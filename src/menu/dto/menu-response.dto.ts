@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Menu } from '../menu.entity';
-import { normalizeMenuPath } from '../menu-path.util';
+import { ApiProperty } from "@nestjs/swagger";
+import { Menu } from "../menu.entity";
+import { normalizeMenuPath } from "../menu-path.util";
 
 export class MenuResponseDto {
   @ApiProperty() id: string;
@@ -27,7 +27,7 @@ export class MenuResponseDto {
     if (includeChildren && entity.children) {
       dto.children = entity.children
         .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map(child => MenuResponseDto.fromEntity(child, true));
+        .map((child) => MenuResponseDto.fromEntity(child, true));
     }
     return dto;
   }

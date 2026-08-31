@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class BackfillTransactionBalanceCurrencies1785254964923 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
       DO $$
       DECLARE
         tx RECORD;
@@ -170,12 +169,11 @@ export class BackfillTransactionBalanceCurrencies1785254964923 implements Migrat
       END;
       $$;
     `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
       DELETE FROM transaction_balance_currencies;
     `);
-    }
-
+  }
 }

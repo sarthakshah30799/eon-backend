@@ -1,33 +1,36 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { PassengerAmlVerificationResponseDto } from './dto/passenger-aml-verification-response.dto';
-import { LookupPassengerPassportDto } from './dto/lookup-passenger-passport.dto';
-import { VerifyPassengerOtherDocumentDto } from './dto/verify-passenger-other-document.dto';
-import { VerifyPassengerPanDto } from './dto/verify-passenger-pan.dto';
-import { VerifyPassengerPassportDto } from './dto/verify-passenger-passport.dto';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { PassengerAmlVerificationResponseDto } from "./dto/passenger-aml-verification-response.dto";
+import { LookupPassengerPassportDto } from "./dto/lookup-passenger-passport.dto";
+import { VerifyPassengerOtherDocumentDto } from "./dto/verify-passenger-other-document.dto";
+import { VerifyPassengerPanDto } from "./dto/verify-passenger-pan.dto";
+import { VerifyPassengerPassportDto } from "./dto/verify-passenger-passport.dto";
 import {
   PassengerEntityType,
   PassengerNationalityType,
   PassengerOtherIdProofType,
   Passenger,
-} from './passenger.entity';
-import { PassengerPassportLookupResponseDto } from './dto/passenger-passport-lookup-response.dto';
-import { LookupPassengerIdentityDto } from './dto/lookup-passenger-identity.dto';
+} from "./passenger.entity";
+import { PassengerPassportLookupResponseDto } from "./dto/passenger-passport-lookup-response.dto";
+import { LookupPassengerIdentityDto } from "./dto/lookup-passenger-identity.dto";
 
 const INVALID_VERIFICATION_TOKEN = /test/i;
 
-const isBlank = (value?: string | null) => !String(value ?? '').trim();
+const isBlank = (value?: string | null) => !String(value ?? "").trim();
 const normalizeIdentity = (value?: string | null) => {
-  const normalized = String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "")
+    .toUpperCase();
   return normalized || null;
 };
 
 const containsInvalidVerificationToken = (value?: string | null) =>
-  INVALID_VERIFICATION_TOKEN.test(String(value ?? '').trim());
+  INVALID_VERIFICATION_TOKEN.test(String(value ?? "").trim());
 
 const parseDate = (value?: string | null) => {
-  const normalized = String(value ?? '').trim();
+  const normalized = String(value ?? "").trim();
   if (!normalized) {
     return null;
   }
@@ -56,11 +59,15 @@ export class PassengerService {
     };
   }
 
-  private hasInvalidVerificationToken(values: Array<string | undefined | null>): boolean {
-    return values.some(value => containsInvalidVerificationToken(value));
+  private hasInvalidVerificationToken(
+    values: Array<string | undefined | null>,
+  ): boolean {
+    return values.some((value) => containsInvalidVerificationToken(value));
   }
 
-  private buildPassengerLookupPayload(passenger: Passenger): Record<string, unknown> {
+  private buildPassengerLookupPayload(
+    passenger: Passenger,
+  ): Record<string, unknown> {
     return {
       id: passenger.id,
       entityType: passenger.entityType,
@@ -134,23 +141,23 @@ export class PassengerService {
 
     if (isCorporate) {
       if (isBlank(dto.panNumber)) {
-        return this.buildFailure('Corporate PAN number is required');
+        return this.buildFailure("Corporate PAN number is required");
       }
       if (isBlank(dto.panHolderName)) {
-        return this.buildFailure('Corporate PAN holder name is required');
+        return this.buildFailure("Corporate PAN holder name is required");
       }
       if (isBlank(dto.panDob)) {
-        return this.buildFailure('Corporate PAN holder DOB is required');
+        return this.buildFailure("Corporate PAN holder DOB is required");
       }
     } else if (isIndianNationality) {
       if (isBlank(dto.panNumber)) {
-        return this.buildFailure('PAN number is required');
+        return this.buildFailure("PAN number is required");
       }
       if (isBlank(dto.panHolderName)) {
-        return this.buildFailure('PAN holder name is required');
+        return this.buildFailure("PAN holder name is required");
       }
       if (isBlank(dto.panDob)) {
-        return this.buildFailure('PAN holder DOB is required');
+        return this.buildFailure("PAN holder DOB is required");
       }
     }
 
@@ -161,12 +168,14 @@ export class PassengerService {
         dto.panDob,
       ])
     ) {
-      return this.buildFailure('Verification failed. Please review the entered details.');
+      return this.buildFailure(
+        "Verification failed. Please review the entered details.",
+      );
     }
 
     return {
       verified: true,
-      message: 'PAN details verified successfully',
+      message: "PAN details verified successfully",
     };
   }
 
@@ -174,16 +183,16 @@ export class PassengerService {
     dto: VerifyPassengerPassportDto,
   ): PassengerAmlVerificationResponseDto {
     if (isBlank(dto.passportNumber)) {
-      return this.buildFailure('Passport number is required');
+      return this.buildFailure("Passport number is required");
     }
     if (isBlank(dto.passportIssueAt)) {
-      return this.buildFailure('Passport issue place is required');
+      return this.buildFailure("Passport issue place is required");
     }
     if (isBlank(dto.passportIssueDate)) {
-      return this.buildFailure('Passport issue date is required');
+      return this.buildFailure("Passport issue date is required");
     }
     if (isBlank(dto.passportExpiryDate)) {
-      return this.buildFailure('Passport expiry date is required');
+      return this.buildFailure("Passport expiry date is required");
     }
 
     if (
@@ -191,7 +200,7 @@ export class PassengerService {
       dto.passportExpiryDate &&
       new Date(dto.passportExpiryDate) < new Date(dto.passportIssueDate)
     ) {
-      return this.buildFailure('Passport expiry date must be after issue date');
+      return this.buildFailure("Passport expiry date must be after issue date");
     }
 
     const transactionDate = parseDate(dto.transactionDate);
@@ -199,13 +208,17 @@ export class PassengerService {
     if (transactionDate && passportExpiryDate) {
       const minimumValidExpiryDate = addMonths(transactionDate, 3);
       if (passportExpiryDate <= minimumValidExpiryDate) {
-        return this.buildFailure('Passport expiry date must be more than 3 months after the transaction date');
+        return this.buildFailure(
+          "Passport expiry date must be more than 3 months after the transaction date",
+        );
       }
     }
 
     const arrivalDate = parseDate(dto.arrivalDate);
     if (transactionDate && arrivalDate && arrivalDate > transactionDate) {
-      return this.buildFailure('Arrival date cannot be after the transaction date');
+      return this.buildFailure(
+        "Arrival date cannot be after the transaction date",
+      );
     }
 
     if (
@@ -218,12 +231,14 @@ export class PassengerService {
         dto.transactionDate,
       ])
     ) {
-      return this.buildFailure('Verification failed. Please review the entered details.');
+      return this.buildFailure(
+        "Verification failed. Please review the entered details.",
+      );
     }
 
     return {
       verified: true,
-      message: 'Passport details verified successfully',
+      message: "Passport details verified successfully",
     };
   }
 
@@ -235,7 +250,7 @@ export class PassengerService {
     if (!passportNumber) {
       return {
         found: false,
-        message: 'Passport number is required',
+        message: "Passport number is required",
         passenger: null,
       };
     }
@@ -250,22 +265,22 @@ export class PassengerService {
         location: true,
       },
       order: {
-        updatedAt: 'DESC',
-        createdAt: 'DESC',
+        updatedAt: "DESC",
+        createdAt: "DESC",
       },
     });
 
     if (!passenger) {
       return {
         found: false,
-        message: 'No passenger found for this passport number',
+        message: "No passenger found for this passport number",
         passenger: null,
       };
     }
 
     return {
       found: true,
-      message: 'Passenger found',
+      message: "Passenger found",
       passenger: this.buildPassengerLookupPayload(passenger),
     };
   }
@@ -273,33 +288,54 @@ export class PassengerService {
   async lookupByIdentity(dto: LookupPassengerIdentityDto) {
     const panNumber = normalizeIdentity(dto.panNumber);
     const passportNumber = normalizeIdentity(dto.passportNumber);
-    if (!panNumber && !passportNumber) return { found: false, message: 'PAN or passport number is required', passenger: null };
+    if (!panNumber && !passportNumber)
+      return {
+        found: false,
+        message: "PAN or passport number is required",
+        passenger: null,
+      };
     const passenger = await this.passengerRepository.findOne({
       where: [
         ...(panNumber ? [{ panNumber }] : []),
         ...(passportNumber ? [{ passportNumber }] : []),
       ] as never,
-      relations: { country: true, state: true, gstState: true, residentStatus: true, location: true },
-      order: { updatedAt: 'DESC', createdAt: 'DESC' },
+      relations: {
+        country: true,
+        state: true,
+        gstState: true,
+        residentStatus: true,
+        location: true,
+      },
+      order: { updatedAt: "DESC", createdAt: "DESC" },
     });
-    return passenger ? { found: true, message: 'Passenger found', passenger: this.buildPassengerLookupPayload(passenger) } : { found: false, message: 'No passenger found for the supplied identity', passenger: null };
+    return passenger
+      ? {
+          found: true,
+          message: "Passenger found",
+          passenger: this.buildPassengerLookupPayload(passenger),
+        }
+      : {
+          found: false,
+          message: "No passenger found for the supplied identity",
+          passenger: null,
+        };
   }
 
   verifyOtherDocument(
     dto: VerifyPassengerOtherDocumentDto,
   ): PassengerAmlVerificationResponseDto {
     if (isBlank(dto.documentType)) {
-      return this.buildFailure('Document type is required');
+      return this.buildFailure("Document type is required");
     }
     if (isBlank(dto.documentNumber)) {
-      return this.buildFailure('Document number is required');
+      return this.buildFailure("Document number is required");
     }
 
     const requiresValidityDate =
       dto.documentType === PassengerOtherIdProofType.DRIVING_LICENSE;
 
     if (requiresValidityDate && isBlank(dto.validTill)) {
-      return this.buildFailure('Valid till is required');
+      return this.buildFailure("Valid till is required");
     }
 
     if (
@@ -312,12 +348,14 @@ export class PassengerService {
         dto.expiryDate,
       ])
     ) {
-      return this.buildFailure('Verification failed. Please review the entered details.');
+      return this.buildFailure(
+        "Verification failed. Please review the entered details.",
+      );
     }
 
     return {
       verified: true,
-      message: 'Other document verified successfully',
+      message: "Other document verified successfully",
     };
   }
 }

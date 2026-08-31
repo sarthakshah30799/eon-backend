@@ -21,13 +21,21 @@ const toNullableNumber = ({ value }: { value: unknown }) => {
 };
 
 export class CreateCountryGroupDto {
-  @ApiProperty({ description: "Country group name", example: "Europe", maxLength: 250 })
+  @ApiProperty({
+    description: "Country group name",
+    example: "Europe",
+    maxLength: 250,
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
   name: string;
 
-  @ApiPropertyOptional({ description: "Country group code", example: "EUROPE", maxLength: 100 })
+  @ApiPropertyOptional({
+    description: "Country group code",
+    example: "EUROPE",
+    maxLength: 100,
+  })
   @IsString()
   @IsOptional()
   @MaxLength(100)

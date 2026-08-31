@@ -1,42 +1,46 @@
 import { Check, Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
-import {
-  PassengerOtherIdProofType,
-} from "../../passengers/passenger.entity";
+import { PassengerOtherIdProofType } from "../../passengers/passenger.entity";
 import { Transaction } from "./transaction.entity";
 
-@Index("IDX_transaction_passenger_other_documents_transaction_id", ["transactionId"])
+@Index("IDX_transaction_passenger_other_documents_transaction_id", [
+  "transactionId",
+])
 @Index(
   "IDX_transaction_passenger_other_documents_transaction_line_no",
   ["transactionId", "lineNo"],
   {
     unique: true,
-  }
+  },
 )
-@Index(
-  "IDX_transaction_passenger_other_documents_document_number",
-  ["documentNumber"]
-)
+@Index("IDX_transaction_passenger_other_documents_document_number", [
+  "documentNumber",
+])
 @Check(
   "CHK_transaction_passenger_other_documents_document_number_prese",
-  `"document_number" IS NOT NULL`
+  `"document_number" IS NOT NULL`,
 )
 @Check(
   "CHK_transaction_passenger_other_documents_date_order",
-  `"issue_date" IS NULL OR "expiry_date" IS NULL OR "expiry_date" >= "issue_date"`
+  `"issue_date" IS NULL OR "expiry_date" IS NULL OR "expiry_date" >= "issue_date"`,
 )
 @Entity("transaction_passenger_other_documents")
 export class TransactionPassengerOtherDocument extends BaseEntity {
   @Column({ type: "uuid", name: "transaction_id" })
   transactionId: string;
 
-  @ManyToOne(() => Transaction, (transaction) => transaction.passengerOtherDocuments, {
-    nullable: false,
-    onDelete: "CASCADE",
-  })
+  @ManyToOne(
+    () => Transaction,
+    (transaction) => transaction.passengerOtherDocuments,
+    {
+      nullable: false,
+      onDelete: "CASCADE",
+    },
+  )
   @JoinColumn({
     name: "transaction_id",
-    foreignKeyConstraintName: "FK_transaction_passenger_other_documents_transaction_id",
+    foreignKeyConstraintName:
+      "FK_transaction_passenger_other_documents_transaction_id",
   })
   transaction: Transaction;
 

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class UpdateItemTaxRateBasedSummary1784788932781
-  implements MigrationInterface
-{
+export class UpdateItemTaxRateBasedSummary1784788932781 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE OR REPLACE FUNCTION public.calculate_transaction_gst_components(

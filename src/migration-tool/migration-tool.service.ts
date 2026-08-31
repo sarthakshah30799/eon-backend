@@ -1,34 +1,34 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import * as mssql from 'mssql';
-import * as bcrypt from 'bcrypt';
-import * as XLSX from 'xlsx';
-import { createHash, randomUUID } from 'crypto';
-import { DataSourceOptions } from 'typeorm';
-import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
+import { DataSource, Repository } from "typeorm";
+import * as mssql from "mssql";
+import * as bcrypt from "bcrypt";
+import * as XLSX from "xlsx";
+import { createHash, randomUUID } from "crypto";
+import { DataSourceOptions } from "typeorm";
+import { SnakeNamingStrategy } from "typeorm-naming-strategies";
 import {
   MigrationConnectionConfigDto,
   MigrationRunRequestDto,
-} from './dto/migration-run-request.dto';
-import { Company } from '../company/company.entity';
-import { Branch } from '../branches/branch.entity';
-import { BranchCounter } from '../branches/entities/branch-counter.entity';
-import { Counter } from '../counters/counter.entity';
-import { Menu } from '../menu/menu.entity';
-import { Permission } from '../permissions/permission.entity';
-import { User } from '../users/user.entity';
-import { Role } from '../roles/role.entity';
-import { UserRole } from '../user-roles/user-role.entity';
-import { RolesMenuPermission } from '../roles-menu-permission/roles-menu-permission.entity';
-import { SelectOption } from '../category-options/category-option.entity';
-import { Country } from '../country/country.entity';
-import { CountryGroup } from '../country-groups/country-group.entity';
-import { Currency } from '../currencies/currency.entity';
-import { State } from '../state/state.entity';
-import { normalizeMenuPath } from '../menu/menu-path.util';
+} from "./dto/migration-run-request.dto";
+import { Company } from "../company/company.entity";
+import { Branch } from "../branches/branch.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
+import { Counter } from "../counters/counter.entity";
+import { Menu } from "../menu/menu.entity";
+import { Permission } from "../permissions/permission.entity";
+import { User } from "../users/user.entity";
+import { Role } from "../roles/role.entity";
+import { UserRole } from "../user-roles/user-role.entity";
+import { RolesMenuPermission } from "../roles-menu-permission/roles-menu-permission.entity";
+import { SelectOption } from "../category-options/category-option.entity";
+import { Country } from "../country/country.entity";
+import { CountryGroup } from "../country-groups/country-group.entity";
+import { Currency } from "../currencies/currency.entity";
+import { State } from "../state/state.entity";
+import { normalizeMenuPath } from "../menu/menu-path.util";
 
-type MigrationMode = 'mock' | 'real';
+type MigrationMode = "mock" | "real";
 type SourceRow = Record<string, any>;
 
 type MigrationConnectionConfig =
@@ -46,16 +46,16 @@ type MigrationConnectionConfig =
     };
 
 type InternalTask =
-  | 'company'
-  | 'currency'
-  | 'branch'
-  | 'counter'
-  | 'user'
-  | 'role'
-  | 'userRoleLinks'
-  | 'branchCounterLinks'
-  | 'branchUserLinks'
-  | 'counterUserLinks';
+  | "company"
+  | "currency"
+  | "branch"
+  | "counter"
+  | "user"
+  | "role"
+  | "userRoleLinks"
+  | "branchCounterLinks"
+  | "branchUserLinks"
+  | "counterUserLinks";
 
 interface MigrationSummary {
   tables: number;
@@ -117,34 +117,115 @@ interface ResolvedRecord {
   softDeleted?: boolean;
 }
 
-const TEMP_INITIAL_PASSWORD = 'Temp@1234';
+const TEMP_INITIAL_PASSWORD = "Temp@1234";
 
 const TABLE_DEPENDENCIES: Record<string, InternalTask[]> = {
-  company: ['company'],
-  mstcompanyrecord: ['company'],
-  currency: ['currency'],
-  mcurrency: ['currency'],
-  branches: ['company', 'branch'],
-  mstcompany: ['company', 'branch'],
-  counters: ['company', 'branch', 'counter', 'branchCounterLinks'],
-  mstcounter: ['company', 'branch', 'counter', 'branchCounterLinks'],
-  users: ['company', 'branch', 'counter', 'user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks', 'branchCounterLinks'],
-  mstuser: ['company', 'branch', 'counter', 'user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks', 'branchCounterLinks'],
-  roles: ['company', 'branch', 'counter', 'user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks', 'branchCounterLinks'],
-  user_roles: ['company', 'branch', 'counter', 'user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks', 'branchCounterLinks'],
-  'user-roles': ['company', 'branch', 'counter', 'user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks', 'branchCounterLinks'],
-  'user-role': ['company', 'branch', 'counter', 'user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks', 'branchCounterLinks'],
-  mstBranchCounterLink: ['company', 'branch', 'counter', 'branchCounterLinks'],
-  mstBranchUserLink: ['company', 'branch', 'counter', 'user', 'role', 'branchUserLinks', 'userRoleLinks'],
-  mstCounterUserLink: ['company', 'branch', 'counter', 'user', 'role', 'counterUserLinks', 'userRoleLinks'],
+  company: ["company"],
+  mstcompanyrecord: ["company"],
+  currency: ["currency"],
+  mcurrency: ["currency"],
+  branches: ["company", "branch"],
+  mstcompany: ["company", "branch"],
+  counters: ["company", "branch", "counter", "branchCounterLinks"],
+  mstcounter: ["company", "branch", "counter", "branchCounterLinks"],
+  users: [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "userRoleLinks",
+    "branchUserLinks",
+    "counterUserLinks",
+    "branchCounterLinks",
+  ],
+  mstuser: [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "userRoleLinks",
+    "branchUserLinks",
+    "counterUserLinks",
+    "branchCounterLinks",
+  ],
+  roles: [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "userRoleLinks",
+    "branchUserLinks",
+    "counterUserLinks",
+    "branchCounterLinks",
+  ],
+  user_roles: [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "userRoleLinks",
+    "branchUserLinks",
+    "counterUserLinks",
+    "branchCounterLinks",
+  ],
+  "user-roles": [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "userRoleLinks",
+    "branchUserLinks",
+    "counterUserLinks",
+    "branchCounterLinks",
+  ],
+  "user-role": [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "userRoleLinks",
+    "branchUserLinks",
+    "counterUserLinks",
+    "branchCounterLinks",
+  ],
+  mstBranchCounterLink: ["company", "branch", "counter", "branchCounterLinks"],
+  mstBranchUserLink: [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "branchUserLinks",
+    "userRoleLinks",
+  ],
+  mstCounterUserLink: [
+    "company",
+    "branch",
+    "counter",
+    "user",
+    "role",
+    "counterUserLinks",
+    "userRoleLinks",
+  ],
 };
 
 const toBoolean = (value: any): boolean => {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value !== 0;
-  if (typeof value === 'string') {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    return normalized === '1' || normalized === 'true' || normalized === 'y' || normalized === 'yes';
+    return (
+      normalized === "1" ||
+      normalized === "true" ||
+      normalized === "y" ||
+      normalized === "yes"
+    );
   }
   return false;
 };
@@ -167,22 +248,22 @@ const toNullableDate = (value: any): Date | null => {
 };
 
 const toNullableNumber = (value: any): number | null => {
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isNaN(n) ? null : n;
 };
 
 const escapeIdentifier = (value: string): string =>
-  `[${value.replace(/]/g, ']]')}]`;
+  `[${value.replace(/]/g, "]]")}]`;
 
 const normalizeCode = (value: string): string =>
-  value.trim().replace(/\s+/g, '_').toUpperCase();
+  value.trim().replace(/\s+/g, "_").toUpperCase();
 
 const normalizeMatchText = (value: string): string =>
   value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
+    .replace(/[^a-z0-9]+/g, "");
 
 const levenshteinDistance = (a: string, b: string): number => {
   if (a === b) {
@@ -235,14 +316,17 @@ const splitLegacyTokens = (value: any): string[] => {
     return [];
   }
 
-  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+  if (
+    (text.startsWith("{") && text.endsWith("}")) ||
+    (text.startsWith("[") && text.endsWith("]"))
+  ) {
     try {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed)) {
-        return parsed.flatMap(item => splitLegacyTokens(item));
+        return parsed.flatMap((item) => splitLegacyTokens(item));
       }
-      if (parsed && typeof parsed === 'object') {
-        return Object.values(parsed).flatMap(item => splitLegacyTokens(item));
+      if (parsed && typeof parsed === "object") {
+        return Object.values(parsed).flatMap((item) => splitLegacyTokens(item));
       }
       return splitLegacyTokens(parsed);
     } catch {
@@ -252,21 +336,28 @@ const splitLegacyTokens = (value: any): string[] => {
 
   return text
     .split(/[^a-zA-Z0-9_\/.-]+/g)
-    .map(token => token.trim())
-    .filter(token => token.length > 0);
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
 };
 
 const legacyActionAliases: Array<{ code: string; aliases: string[] }> = [
-  { code: 'add', aliases: ['add', 'create', 'insert', 'new'] },
-  { code: 'modify', aliases: ['modify', 'update', 'edit', 'change', 'alter'] },
-  { code: 'delete', aliases: ['delete', 'remove', 'del'] },
-  { code: 'view', aliases: ['view', 'read', 'show', 'list', 'display'] },
-  { code: 'export', aliases: ['export', 'download'] },
-  { code: 'authorized', aliases: ['authorized', 'authorised', 'approve', 'approved', 'authorize'] },
-  { code: 'rejected', aliases: ['rejected', 'reject', 'denied', 'deny'] },
+  { code: "add", aliases: ["add", "create", "insert", "new"] },
+  { code: "modify", aliases: ["modify", "update", "edit", "change", "alter"] },
+  { code: "delete", aliases: ["delete", "remove", "del"] },
+  { code: "view", aliases: ["view", "read", "show", "list", "display"] },
+  { code: "export", aliases: ["export", "download"] },
+  {
+    code: "authorized",
+    aliases: ["authorized", "authorised", "approve", "approved", "authorize"],
+  },
+  { code: "rejected", aliases: ["rejected", "reject", "denied", "deny"] },
 ];
 
-const legacyPermissionActionSet = new Set(legacyActionAliases.flatMap(item => item.aliases.map(alias => normalizeMatchText(alias))));
+const legacyPermissionActionSet = new Set(
+  legacyActionAliases.flatMap((item) =>
+    item.aliases.map((alias) => normalizeMatchText(alias)),
+  ),
+);
 
 interface MenuSeedDefinition {
   path: string;
@@ -285,7 +376,12 @@ const buildCrudMenuSeeds = (params: {
   createPath?: string;
   editPath?: string;
   detailPath?: string;
-  extraChildren?: Array<{ path: string; name: string; sortOrder?: number; isAdmin?: boolean }>;
+  extraChildren?: Array<{
+    path: string;
+    name: string;
+    sortOrder?: number;
+    isAdmin?: boolean;
+  }>;
 }): MenuSeedDefinition[] => {
   const {
     basePath,
@@ -352,292 +448,462 @@ const buildCrudMenuSeeds = (params: {
 };
 
 const PARTY_PROFILE_MENU_TYPES: Array<{ routeType: string; label: string }> = [
-  { routeType: 'corporate-client', label: 'Corporate Client' },
-  { routeType: 'ffmc', label: 'FFMC' },
-  { routeType: 'rf', label: 'RF' },
-  { routeType: 'authorised-dealer', label: 'Authorised Dealer' },
-  { routeType: 'rmc', label: 'RMC' },
-  { routeType: 'franchise', label: 'Franchise' },
-  { routeType: 'agent', label: 'Agent' },
-  { routeType: 'foreign-correspondent', label: 'Foreign Correspondent' },
-  { routeType: 'forex-correspondent', label: 'Forex Correspondent' },
-  { routeType: 'marketing-executive', label: 'Marketing Executive' },
-  { routeType: 'card-issuer-profile', label: 'Card Issuer' },
-  { routeType: 'misc-supplier-profile', label: 'Misc Supplier' },
+  { routeType: "corporate-client", label: "Corporate Client" },
+  { routeType: "ffmc", label: "FFMC" },
+  { routeType: "rf", label: "RF" },
+  { routeType: "authorised-dealer", label: "Authorised Dealer" },
+  { routeType: "rmc", label: "RMC" },
+  { routeType: "franchise", label: "Franchise" },
+  { routeType: "agent", label: "Agent" },
+  { routeType: "foreign-correspondent", label: "Foreign Correspondent" },
+  { routeType: "forex-correspondent", label: "Forex Correspondent" },
+  { routeType: "marketing-executive", label: "Marketing Executive" },
+  { routeType: "card-issuer-profile", label: "Card Issuer" },
+  { routeType: "misc-supplier-profile", label: "Misc Supplier" },
 ];
 
 const buildPartyProfileMenuSeeds = (): MenuSeedDefinition[] =>
   PARTY_PROFILE_MENU_TYPES.map(({ routeType, label }, index) => ({
     path: `/party-profiles/${routeType}`,
     name: `${label} Profile`,
-    parentPath: '/party-profiles',
+    parentPath: "/party-profiles",
     isAdmin: false,
     sortOrder: 20 + index,
   }));
 
 const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
-  { path: '/', name: 'Dashboard', parentPath: null, isAdmin: false, sortOrder: 0 },
+  {
+    path: "/",
+    name: "Dashboard",
+    parentPath: null,
+    isAdmin: false,
+    sortOrder: 0,
+  },
   ...buildCrudMenuSeeds({
-    basePath: '/users/list',
-    name: 'Users',
+    basePath: "/users/list",
+    name: "Users",
     isAdmin: false,
     parentPath: null,
-    createPath: '/users/create',
-    editPath: '/users/edit/:id',
-    detailPath: '/users/:id',
+    createPath: "/users/create",
+    editPath: "/users/edit/:id",
+    detailPath: "/users/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/company-profile',
-    name: 'Company Profile',
+    basePath: "/admin/company-profile",
+    name: "Company Profile",
     isAdmin: true,
-    createPath: '/admin/company-profile/create',
-    editPath: '/admin/company-profile/edit/:id',
+    createPath: "/admin/company-profile/create",
+    editPath: "/admin/company-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/branch-profile',
-    name: 'Branch Profile',
+    basePath: "/admin/branch-profile",
+    name: "Branch Profile",
     isAdmin: true,
-    createPath: '/admin/branch-profile/create',
-    editPath: '/admin/branch-profile/edit/:id',
+    createPath: "/admin/branch-profile/create",
+    editPath: "/admin/branch-profile/edit/:id",
   }),
-  { path: '/review/branch-profile', name: 'Branch Review', parentPath: '/admin/branch-profile', isAdmin: true, sortOrder: 20 },
-  ...buildCrudMenuSeeds({
-    basePath: '/admin/counter-profile',
-    name: 'Counter Profile',
+  {
+    path: "/review/branch-profile",
+    name: "Branch Review",
+    parentPath: "/admin/branch-profile",
     isAdmin: true,
-    createPath: '/admin/counter-profile/create',
-    editPath: '/admin/counter-profile/edit/:id',
-  }),
+    sortOrder: 20,
+  },
   ...buildCrudMenuSeeds({
-    basePath: '/admin/document-profile',
-    name: 'Document Profile',
+    basePath: "/admin/counter-profile",
+    name: "Counter Profile",
     isAdmin: true,
-    createPath: '/admin/document-profile/create',
-    editPath: '/admin/document-profile/edit/:id',
+    createPath: "/admin/counter-profile/create",
+    editPath: "/admin/counter-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/miscellaneous-profile',
-    name: 'Miscellaneous Profile',
+    basePath: "/admin/document-profile",
+    name: "Document Profile",
     isAdmin: true,
-    createPath: '/admin/miscellaneous-profile/create',
-    editPath: '/admin/miscellaneous-profile/edit/:code',
+    createPath: "/admin/document-profile/create",
+    editPath: "/admin/document-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/purpose',
-    name: 'Purpose',
+    basePath: "/admin/miscellaneous-profile",
+    name: "Miscellaneous Profile",
     isAdmin: true,
-    createPath: '/admin/purpose/create',
-    editPath: '/admin/purpose/edit/:id',
+    createPath: "/admin/miscellaneous-profile/create",
+    editPath: "/admin/miscellaneous-profile/edit/:code",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/purpose-group',
-    name: 'Purpose Group',
+    basePath: "/admin/purpose",
+    name: "Purpose",
     isAdmin: true,
-    createPath: '/admin/purpose-group/create',
-    editPath: '/admin/purpose-group/edit/:id',
+    createPath: "/admin/purpose/create",
+    editPath: "/admin/purpose/edit/:id",
   }),
-  { path: '/admin/menu-management', name: 'Menu Management', parentPath: null, isAdmin: true, sortOrder: 40 },
-  { path: '/admin/day-end-start-process', name: 'Day End/Start Process', parentPath: null, isAdmin: true, sortOrder: 41 },
-  { path: '/admin/monthwise-locking', name: 'Monthwise Locking', parentPath: null, isAdmin: true, sortOrder: 42 },
-  { path: '/reports', name: 'Reports', parentPath: null, isAdmin: false, sortOrder: 43 },
-  { path: '/reports/:slug', name: 'Report Detail', parentPath: '/reports', isAdmin: false, sortOrder: 1 },
-  { path: '/reports/currency-balance-report', name: 'Currency Balance', parentPath: '/reports', isAdmin: false, sortOrder: 2 },
-  { path: '/reports/stock-revaluations', name: 'Stock Revaluation', parentPath: '/reports', isAdmin: false, sortOrder: 3 },
-  { path: '/reports/card-unsettled-report', name: 'Unsettled CARD', parentPath: '/reports', isAdmin: false, sortOrder: 4 },
-  { path: '/reports/card-settled-report', name: 'Settled CARD', parentPath: '/reports', isAdmin: false, sortOrder: 5 },
-  { path: '/reports/card-blank-stock-report', name: 'Blank Stock CARD', parentPath: '/reports', isAdmin: false, sortOrder: 6 },
-  { path: '/reports/flm', name: 'FLM', parentPath: '/reports', isAdmin: false, sortOrder: 7 },
-  { path: '/reports/flm1-daily-cn-summary', name: 'FLM1 Daily CN Summary', parentPath: '/reports/flm', isAdmin: false, sortOrder: 1 },
-  { path: '/reports/flm2-daily-et-summary', name: 'Encashed TC Balance', parentPath: '/reports/flm', isAdmin: false, sortOrder: 2 },
-  { path: '/reports/flm3-purchase-from-public', name: 'FLM 3 - Purchase from Public', parentPath: '/reports/flm', isAdmin: false, sortOrder: 3 },
-  { path: '/reports/flm4-purchase-from-ffmc', name: 'FLM 4 - Purchase from FFMC', parentPath: '/reports/flm', isAdmin: false, sortOrder: 4 },
-  { path: '/reports/flm5-sales-to-public', name: 'FLM 5 - Sales to Public', parentPath: '/reports/flm', isAdmin: false, sortOrder: 5 },
-  { path: '/reports/flm6-sales-to-ffmc', name: 'FLM 6 - Sales to FFMC', parentPath: '/reports/flm', isAdmin: false, sortOrder: 6 },
-  { path: '/reports/flm7-surrender-statement', name: 'FLM 7 - Surrender Statement', parentPath: '/reports/flm', isAdmin: false, sortOrder: 7 },
-  { path: '/reports/flm8-cn-statement', name: 'FLM 8 - CN Statement', parentPath: '/reports/flm', isAdmin: false, sortOrder: 8 },
   ...buildCrudMenuSeeds({
-    basePath: '/admin/manual-bill-books',
-    name: 'Manual Bill Books',
+    basePath: "/admin/purpose-group",
+    name: "Purpose Group",
     isAdmin: true,
-    createPath: '/admin/manual-bill-books/create',
+    createPath: "/admin/purpose-group/create",
+    editPath: "/admin/purpose-group/edit/:id",
   }),
-  ...buildCrudMenuSeeds({
-    basePath: '/manual-bill-books',
-    name: 'Manual Bill Books',
+  {
+    path: "/admin/menu-management",
+    name: "Menu Management",
+    parentPath: null,
+    isAdmin: true,
+    sortOrder: 40,
+  },
+  {
+    path: "/admin/day-end-start-process",
+    name: "Day End/Start Process",
+    parentPath: null,
+    isAdmin: true,
+    sortOrder: 41,
+  },
+  {
+    path: "/admin/monthwise-locking",
+    name: "Monthwise Locking",
+    parentPath: null,
+    isAdmin: true,
+    sortOrder: 42,
+  },
+  {
+    path: "/reports",
+    name: "Reports",
+    parentPath: null,
     isAdmin: false,
-    createPath: '/manual-bill-books/create',
+    sortOrder: 43,
+  },
+  {
+    path: "/reports/:slug",
+    name: "Report Detail",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 1,
+  },
+  {
+    path: "/reports/currency-balance-report",
+    name: "Currency Balance",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
+    path: "/reports/stock-revaluations",
+    name: "Stock Revaluation",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 3,
+  },
+  {
+    path: "/reports/card-unsettled-report",
+    name: "Unsettled CARD",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 4,
+  },
+  {
+    path: "/reports/card-settled-report",
+    name: "Settled CARD",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 5,
+  },
+  {
+    path: "/reports/card-blank-stock-report",
+    name: "Blank Stock CARD",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 6,
+  },
+  {
+    path: "/reports/flm",
+    name: "FLM",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 7,
+  },
+  {
+    path: "/reports/flm1-daily-cn-summary",
+    name: "FLM1 Daily CN Summary",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 1,
+  },
+  {
+    path: "/reports/flm2-daily-et-summary",
+    name: "Encashed TC Balance",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
+    path: "/reports/flm3-purchase-from-public",
+    name: "FLM 3 - Purchase from Public",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 3,
+  },
+  {
+    path: "/reports/flm4-purchase-from-ffmc",
+    name: "FLM 4 - Purchase from FFMC",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 4,
+  },
+  {
+    path: "/reports/flm5-sales-to-public",
+    name: "FLM 5 - Sales to Public",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 5,
+  },
+  {
+    path: "/reports/flm6-sales-to-ffmc",
+    name: "FLM 6 - Sales to FFMC",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 6,
+  },
+  {
+    path: "/reports/flm7-surrender-statement",
+    name: "FLM 7 - Surrender Statement",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 7,
+  },
+  {
+    path: "/reports/flm8-cn-statement",
+    name: "FLM 8 - CN Statement",
+    parentPath: "/reports/flm",
+    isAdmin: false,
+    sortOrder: 8,
+  },
+  ...buildCrudMenuSeeds({
+    basePath: "/admin/manual-bill-books",
+    name: "Manual Bill Books",
+    isAdmin: true,
+    createPath: "/admin/manual-bill-books/create",
+  }),
+  ...buildCrudMenuSeeds({
+    basePath: "/manual-bill-books",
+    name: "Manual Bill Books",
+    isAdmin: false,
+    createPath: "/manual-bill-books/create",
     extraChildren: [
-      { path: '/manual-bill-books/acknowledgement', name: 'Branch Acknowledgement', isAdmin: false, sortOrder: 52 },
-      { path: '/manual-bill-books/allocation', name: 'Manager To Cashier Allocation', isAdmin: false, sortOrder: 53 },
-      { path: '/manual-bill-books/dp-mapping', name: 'Manual Bill DP Mapping', isAdmin: false, sortOrder: 54 },
-      { path: '/manual-bill-books/dp-unmapping', name: 'Manual Bill DP Unmapping', isAdmin: false, sortOrder: 55 },
-      { path: '/manual-bill-books/delivery-persons', name: 'Delivery Person Management', isAdmin: false, sortOrder: 56 },
+      {
+        path: "/manual-bill-books/acknowledgement",
+        name: "Branch Acknowledgement",
+        isAdmin: false,
+        sortOrder: 52,
+      },
+      {
+        path: "/manual-bill-books/allocation",
+        name: "Manager To Cashier Allocation",
+        isAdmin: false,
+        sortOrder: 53,
+      },
+      {
+        path: "/manual-bill-books/dp-mapping",
+        name: "Manual Bill DP Mapping",
+        isAdmin: false,
+        sortOrder: 54,
+      },
+      {
+        path: "/manual-bill-books/dp-unmapping",
+        name: "Manual Bill DP Unmapping",
+        isAdmin: false,
+        sortOrder: 55,
+      },
+      {
+        path: "/manual-bill-books/delivery-persons",
+        name: "Delivery Person Management",
+        isAdmin: false,
+        sortOrder: 56,
+      },
     ],
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/chequebooks',
-    name: 'Cheque Books Admin',
+    basePath: "/admin/chequebooks",
+    name: "Cheque Books Admin",
     isAdmin: true,
-    createPath: '/admin/chequebooks/create',
+    createPath: "/admin/chequebooks/create",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/cheque-books',
-    name: 'Cheque Books',
+    basePath: "/cheque-books",
+    name: "Cheque Books",
     isAdmin: false,
-    createPath: '/cheque-books/create',
+    createPath: "/cheque-books/create",
     extraChildren: [
-      { path: '/cheque-books/acknowledgement', name: 'Cheque Book Acknowledgement', isAdmin: false, sortOrder: 60 },
-      { path: '/cheque-books/allocation', name: 'Cheque Book Allocation', isAdmin: false, sortOrder: 61 },
-      { path: '/cheque-books/return', name: 'Cheque Book Return', isAdmin: false, sortOrder: 62 },
+      {
+        path: "/cheque-books/acknowledgement",
+        name: "Cheque Book Acknowledgement",
+        isAdmin: false,
+        sortOrder: 60,
+      },
+      {
+        path: "/cheque-books/allocation",
+        name: "Cheque Book Allocation",
+        isAdmin: false,
+        sortOrder: 61,
+      },
+      {
+        path: "/cheque-books/return",
+        name: "Cheque Book Return",
+        isAdmin: false,
+        sortOrder: 62,
+      },
     ],
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/additional-settings',
-    name: 'Additional Settings',
+    basePath: "/admin/additional-settings",
+    name: "Additional Settings",
     isAdmin: true,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/transaction-account-postings',
-    name: 'Transaction Account Postings',
+    basePath: "/admin/transaction-account-postings",
+    name: "Transaction Account Postings",
     isAdmin: true,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/migrations',
-    name: 'Migration Tool',
+    basePath: "/admin/migrations",
+    name: "Migration Tool",
     isAdmin: true,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/currency-rates',
-    name: 'Currency Rates',
+    basePath: "/admin/currency-rates",
+    name: "Currency Rates",
     isAdmin: true,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/financial-profile',
-    name: 'Financial Profile',
+    basePath: "/financial-profile",
+    name: "Financial Profile",
     isAdmin: false,
-    createPath: '/financial-profile/create',
-    editPath: '/financial-profile/edit/:id',
+    createPath: "/financial-profile/create",
+    editPath: "/financial-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/accounts-profile',
-    name: 'Accounts Profile',
+    basePath: "/admin/accounts-profile",
+    name: "Accounts Profile",
     isAdmin: true,
-    createPath: '/admin/accounts-profile/create',
-    editPath: '/admin/accounts-profile/edit/:id',
+    createPath: "/admin/accounts-profile/create",
+    editPath: "/admin/accounts-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/party-profiles',
-    name: 'Party Profiles',
+    basePath: "/party-profiles",
+    name: "Party Profiles",
     isAdmin: false,
   }),
   ...buildPartyProfileMenuSeeds(),
   ...buildCrudMenuSeeds({
-    basePath: '/ad1',
-    name: 'AD1',
+    basePath: "/ad1",
+    name: "AD1",
     isAdmin: false,
-    createPath: '/ad1/create',
-    editPath: '/ad1/edit/:id',
+    createPath: "/ad1/create",
+    editPath: "/ad1/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/purchase/:slug',
-    name: 'Purchase',
+    basePath: "/purchase/:slug",
+    name: "Purchase",
     isAdmin: false,
-    createPath: '/purchase/:slug/create',
-    editPath: '/purchase/:slug/edit/:id',
+    createPath: "/purchase/:slug/create",
+    editPath: "/purchase/:slug/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/sale/:slug',
-    name: 'Sale',
+    basePath: "/sale/:slug",
+    name: "Sale",
     isAdmin: false,
-    createPath: '/sale/:slug/create',
-    editPath: '/sale/:slug/edit/:id',
+    createPath: "/sale/:slug/create",
+    editPath: "/sale/:slug/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/receipts',
-    name: 'Receipts',
-    isAdmin: false,
-  }),
-  ...buildCrudMenuSeeds({
-    basePath: '/payments',
-    name: 'Payments',
+    basePath: "/receipts",
+    name: "Receipts",
     isAdmin: false,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/journal-vouchers',
-    name: 'Journal Vouchers',
+    basePath: "/payments",
+    name: "Payments",
     isAdmin: false,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/country-profile',
-    name: 'Country Profile',
+    basePath: "/journal-vouchers",
+    name: "Journal Vouchers",
+    isAdmin: false,
+  }),
+  ...buildCrudMenuSeeds({
+    basePath: "/admin/country-profile",
+    name: "Country Profile",
     isAdmin: true,
-    createPath: '/admin/country-profile/create',
-    editPath: '/admin/country-profile/edit/:id',
+    createPath: "/admin/country-profile/create",
+    editPath: "/admin/country-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/state-profile',
-    name: 'State Profile',
+    basePath: "/admin/state-profile",
+    name: "State Profile",
     isAdmin: true,
-    createPath: '/admin/state-profile/create',
-    editPath: '/admin/state-profile/edit/:id',
+    createPath: "/admin/state-profile/create",
+    editPath: "/admin/state-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/expense-booking',
-    name: 'Expense Booking Master',
+    basePath: "/expense-booking",
+    name: "Expense Booking Master",
     isAdmin: false,
-    createPath: '/expense-booking/create',
-    editPath: '/expense-booking/edit/:id',
+    createPath: "/expense-booking/create",
+    editPath: "/expense-booking/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/income-booking',
-    name: 'Income Booking Master',
+    basePath: "/income-booking",
+    name: "Income Booking Master",
     isAdmin: false,
-    createPath: '/income-booking/create',
-    editPath: '/income-booking/edit/:id',
+    createPath: "/income-booking/create",
+    editPath: "/income-booking/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/product-profile',
-    name: 'Product Profile',
+    basePath: "/admin/product-profile",
+    name: "Product Profile",
     isAdmin: true,
-    createPath: '/admin/product-profile/create',
-    editPath: '/admin/product-profile/edit/:id',
+    createPath: "/admin/product-profile/create",
+    editPath: "/admin/product-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/currency-profile',
-    name: 'Currency Profile',
+    basePath: "/currency-profile",
+    name: "Currency Profile",
     isAdmin: false,
-    createPath: '/currency-profile/create',
-    editPath: '/currency-profile/edit/:id',
+    createPath: "/currency-profile/create",
+    editPath: "/currency-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/tds-profile',
-    name: 'TDS Profile',
+    basePath: "/admin/tds-profile",
+    name: "TDS Profile",
     isAdmin: true,
-    createPath: '/admin/tds-profile/create',
-    editPath: '/admin/tds-profile/edit/:id',
+    createPath: "/admin/tds-profile/create",
+    editPath: "/admin/tds-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/master-pages',
-    name: 'Page Builder',
+    basePath: "/admin/master-pages",
+    name: "Page Builder",
     isAdmin: true,
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/user-profile',
-    name: 'User Profile',
+    basePath: "/user-profile",
+    name: "User Profile",
     isAdmin: false,
-    createPath: '/user-profile/create',
-    editPath: '/user-profile/edit/:id',
+    createPath: "/user-profile/create",
+    editPath: "/user-profile/edit/:id",
   }),
   ...buildCrudMenuSeeds({
-    basePath: '/admin/user-role',
-    name: 'User Role',
+    basePath: "/admin/user-role",
+    name: "User Role",
     isAdmin: true,
-    createPath: '/admin/user-role/create',
-    editPath: '/admin/user-role/edit/:id',
+    createPath: "/admin/user-role/create",
+    editPath: "/admin/user-role/edit/:id",
   }),
 ];
 
-type ConnectionSlot = 'currentMaster' | 'currentTransaction' | 'oldMaster' | 'oldTransaction';
+type ConnectionSlot =
+  | "currentMaster"
+  | "currentTransaction"
+  | "oldMaster"
+  | "oldTransaction";
 
 const MAX_WORKBOOK_CELL_LENGTH = 32000;
 
@@ -650,17 +916,17 @@ const sanitizeWorkbookValue = (value: any): any => {
     return value;
   }
 
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     return value.length > MAX_WORKBOOK_CELL_LENGTH
       ? `${value.slice(0, MAX_WORKBOOK_CELL_LENGTH - 20)}...[truncated]`
       : value;
   }
 
-  if (typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === "number" || typeof value === "boolean") {
     return value;
   }
 
-  if (Array.isArray(value) || typeof value === 'object') {
+  if (Array.isArray(value) || typeof value === "object") {
     const text = JSON.stringify(value);
     return text.length > MAX_WORKBOOK_CELL_LENGTH
       ? `${text.slice(0, MAX_WORKBOOK_CELL_LENGTH - 20)}...[truncated]`
@@ -674,7 +940,12 @@ const sanitizeWorkbookValue = (value: any): any => {
 };
 
 const sanitizeWorkbookRow = (row: ReportRow): ReportRow =>
-  Object.fromEntries(Object.entries(row).map(([key, value]) => [key, sanitizeWorkbookValue(value)]));
+  Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      sanitizeWorkbookValue(value),
+    ]),
+  );
 
 interface ResolvedAuditFields {
   deletedAt: Date | null;
@@ -711,7 +982,7 @@ export class MigrationToolService {
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectDataSource()
     private readonly currentMasterDataSource: DataSource,
-    @InjectDataSource('database2')
+    @InjectDataSource("database2")
     private readonly currentTransactionDataSource: DataSource,
   ) {}
 
@@ -827,7 +1098,9 @@ export class MigrationToolService {
     return this.targetDataSource.getRepository(Currency);
   }
 
-  private getConnectionProfiles(dto: MigrationRunRequestDto): Record<ConnectionSlot, MigrationConnectionConfigDto | undefined> {
+  private getConnectionProfiles(
+    dto: MigrationRunRequestDto,
+  ): Record<ConnectionSlot, MigrationConnectionConfigDto | undefined> {
     return {
       currentMaster: dto.currentMasterConnection,
       currentTransaction: dto.currentTransactionConnection,
@@ -836,35 +1109,46 @@ export class MigrationToolService {
     };
   }
 
-  private connectionSummary(connection?: MigrationConnectionConfigDto | null): string {
+  private connectionSummary(
+    connection?: MigrationConnectionConfigDto | null,
+  ): string {
     if (!connection) {
-      return 'not provided';
+      return "not provided";
     }
 
-    if (connection.connectionMode === 'string') {
-      return connection.connectionString?.trim() ? 'connection string' : 'connection string (empty)';
+    if (connection.connectionMode === "string") {
+      return connection.connectionString?.trim()
+        ? "connection string"
+        : "connection string (empty)";
     }
 
-    const host = connection.host?.trim() ?? '';
-    const database = connection.database?.trim() ?? '';
-    return `${host || 'unknown-host'} / ${database || 'unknown-db'}`;
+    const host = connection.host?.trim() ?? "";
+    const database = connection.database?.trim() ?? "";
+    return `${host || "unknown-host"} / ${database || "unknown-db"}`;
   }
 
-  private buildMssqlConfig(connection?: MigrationConnectionConfigDto | null): MigrationConnectionConfig {
+  private buildMssqlConfig(
+    connection?: MigrationConnectionConfigDto | null,
+  ): MigrationConnectionConfig {
     if (!connection) {
-      throw new BadRequestException('Old database connection is required');
+      throw new BadRequestException("Old database connection is required");
     }
 
-    if (connection.connectionMode === 'string') {
+    if (connection.connectionMode === "string") {
       if (!connection.connectionString?.trim()) {
-        throw new BadRequestException('Connection string is required');
+        throw new BadRequestException("Connection string is required");
       }
       return { connectionString: connection.connectionString.trim() };
     }
 
-    if (!connection.host?.trim() || !connection.username?.trim() || !connection.password?.trim() || !connection.database?.trim()) {
+    if (
+      !connection.host?.trim() ||
+      !connection.username?.trim() ||
+      !connection.password?.trim() ||
+      !connection.database?.trim()
+    ) {
       throw new BadRequestException(
-        'Host, port, username, password, and database are required in options mode',
+        "Host, port, username, password, and database are required in options mode",
       );
     }
 
@@ -881,25 +1165,32 @@ export class MigrationToolService {
     };
   }
 
-  private buildPostgresConfig(connection: MigrationConnectionConfigDto): DataSourceOptions {
-    if (connection.connectionMode === 'string') {
+  private buildPostgresConfig(
+    connection: MigrationConnectionConfigDto,
+  ): DataSourceOptions {
+    if (connection.connectionMode === "string") {
       if (!connection.connectionString?.trim()) {
-        throw new BadRequestException('Connection string is required');
+        throw new BadRequestException("Connection string is required");
       }
       return {
-        type: 'postgres',
+        type: "postgres",
         url: connection.connectionString.trim(),
       };
     }
 
-    if (!connection.host?.trim() || !connection.username?.trim() || !connection.password?.trim() || !connection.database?.trim()) {
+    if (
+      !connection.host?.trim() ||
+      !connection.username?.trim() ||
+      !connection.password?.trim() ||
+      !connection.database?.trim()
+    ) {
       throw new BadRequestException(
-        'Host, port, username, password, and database are required in options mode',
+        "Host, port, username, password, and database are required in options mode",
       );
     }
 
     return {
-      type: 'postgres',
+      type: "postgres",
       host: connection.host.trim(),
       port: connection.port ?? 5432,
       username: connection.username.trim(),
@@ -909,23 +1200,32 @@ export class MigrationToolService {
     };
   }
 
-  private async verifyMssqlConnection(label: string, connection?: MigrationConnectionConfigDto | null): Promise<string> {
+  private async verifyMssqlConnection(
+    label: string,
+    connection?: MigrationConnectionConfigDto | null,
+  ): Promise<string> {
     if (!connection) {
       return `${label}: not provided`;
     }
 
-    const pool = new mssql.ConnectionPool(this.buildMssqlConfig(connection) as mssql.config);
+    const pool = new mssql.ConnectionPool(
+      this.buildMssqlConfig(connection) as mssql.config,
+    );
     try {
       await pool.connect();
-      const result = await pool.request().query('SELECT 1 AS ok');
-      const verified = Array.isArray(result.recordset) && result.recordset.length > 0;
-      return `${label}: ${verified ? 'verified' : 'failed verification'}`;
+      const result = await pool.request().query("SELECT 1 AS ok");
+      const verified =
+        Array.isArray(result.recordset) && result.recordset.length > 0;
+      return `${label}: ${verified ? "verified" : "failed verification"}`;
     } finally {
       await pool.close().catch(() => undefined);
     }
   }
 
-  private async verifyPostgresConnection(label: string, connection?: MigrationConnectionConfigDto | null): Promise<string> {
+  private async verifyPostgresConnection(
+    label: string,
+    connection?: MigrationConnectionConfigDto | null,
+  ): Promise<string> {
     if (!connection) {
       return `${label}: not provided`;
     }
@@ -933,7 +1233,7 @@ export class MigrationToolService {
     const dataSource = new DataSource(this.buildPostgresConfig(connection));
     try {
       await dataSource.initialize();
-      await dataSource.query('SELECT 1');
+      await dataSource.query("SELECT 1");
       return `${label}: verified`;
     } finally {
       if (dataSource.isInitialized) {
@@ -945,15 +1245,17 @@ export class MigrationToolService {
   private buildCurrentMasterDataSourceOptions(
     connection: MigrationConnectionConfigDto,
   ): DataSourceOptions {
-    const baseOptions = this.buildPostgresConfig(connection) as DataSourceOptions;
+    const baseOptions = this.buildPostgresConfig(
+      connection,
+    ) as DataSourceOptions;
     return {
       ...baseOptions,
-      type: 'postgres',
+      type: "postgres",
       entities: [
         __dirname +
-          '/../!(manual-bill-books|chequebooks|transactions)/**/*.entity{.ts,.js}',
+          "/../!(manual-bill-books|chequebooks|transactions)/**/*.entity{.ts,.js}",
       ],
-      migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+      migrations: [__dirname + "/../migrations/*{.ts,.js}"],
       synchronize: false,
       namingStrategy: new SnakeNamingStrategy(),
       logging: true,
@@ -963,16 +1265,18 @@ export class MigrationToolService {
   private buildCurrentTransactionDataSourceOptions(
     connection: MigrationConnectionConfigDto,
   ): DataSourceOptions {
-    const baseOptions = this.buildPostgresConfig(connection) as DataSourceOptions;
+    const baseOptions = this.buildPostgresConfig(
+      connection,
+    ) as DataSourceOptions;
     return {
       ...baseOptions,
-      type: 'postgres',
+      type: "postgres",
       entities: [
-        __dirname + '/../manual-bill-books/**/*.entity{.ts,.js}',
-        __dirname + '/../chequebooks/**/*.entity{.ts,.js}',
-        __dirname + '/../transactions/**/*.entity{.ts,.js}',
+        __dirname + "/../manual-bill-books/**/*.entity{.ts,.js}",
+        __dirname + "/../chequebooks/**/*.entity{.ts,.js}",
+        __dirname + "/../transactions/**/*.entity{.ts,.js}",
       ],
-      migrations: [__dirname + '/../migrations2/*{.ts,.js}'],
+      migrations: [__dirname + "/../migrations2/*{.ts,.js}"],
       synchronize: false,
       namingStrategy: new SnakeNamingStrategy(),
       logging: true,
@@ -980,7 +1284,7 @@ export class MigrationToolService {
   }
 
   private async runCurrentDatabaseMigrationsForSlot(
-    label: 'currentMaster' | 'currentTransaction',
+    label: "currentMaster" | "currentTransaction",
     connection?: MigrationConnectionConfigDto | null,
   ): Promise<{ label: string; migrations: string[]; source: string }> {
     if (!connection) {
@@ -990,9 +1294,11 @@ export class MigrationToolService {
     }
 
     const dataSource =
-      label === 'currentMaster'
+      label === "currentMaster"
         ? new DataSource(this.buildCurrentMasterDataSourceOptions(connection))
-        : new DataSource(this.buildCurrentTransactionDataSourceOptions(connection));
+        : new DataSource(
+            this.buildCurrentTransactionDataSourceOptions(connection),
+          );
 
     const source = this.connectionSummary(connection);
     this.logger.log(`[schema-migrate] ${label} starting source=${source}`);
@@ -1004,9 +1310,9 @@ export class MigrationToolService {
       }
 
       const migrations = await dataSource.runMigrations();
-      const names = migrations.map(migration => migration.name);
+      const names = migrations.map((migration) => migration.name);
       this.logger.log(
-        `[schema-migrate] ${label} finished applied=${names.length} names=${names.join(', ') || 'none'}`,
+        `[schema-migrate] ${label} finished applied=${names.length} names=${names.join(", ") || "none"}`,
       );
 
       return {
@@ -1023,16 +1329,28 @@ export class MigrationToolService {
 
   private async withLegacyConnections<T>(
     dto: MigrationRunRequestDto,
-    handler: (connections: { master: mssql.ConnectionPool; transaction: mssql.ConnectionPool }) => Promise<T>,
+    handler: (connections: {
+      master: mssql.ConnectionPool;
+      transaction: mssql.ConnectionPool;
+    }) => Promise<T>,
   ): Promise<T> {
-    const masterConnection = dto.oldMasterConnection ?? dto.oldTransactionConnection;
-    const transactionConnection = dto.oldTransactionConnection ?? dto.oldMasterConnection;
-    const masterPool = new mssql.ConnectionPool(this.buildMssqlConfig(masterConnection) as mssql.config);
-    const transactionPool = new mssql.ConnectionPool(this.buildMssqlConfig(transactionConnection) as mssql.config);
+    const masterConnection =
+      dto.oldMasterConnection ?? dto.oldTransactionConnection;
+    const transactionConnection =
+      dto.oldTransactionConnection ?? dto.oldMasterConnection;
+    const masterPool = new mssql.ConnectionPool(
+      this.buildMssqlConfig(masterConnection) as mssql.config,
+    );
+    const transactionPool = new mssql.ConnectionPool(
+      this.buildMssqlConfig(transactionConnection) as mssql.config,
+    );
 
     try {
       await Promise.all([masterPool.connect(), transactionPool.connect()]);
-      return await handler({ master: masterPool, transaction: transactionPool });
+      return await handler({
+        master: masterPool,
+        transaction: transactionPool,
+      });
     } finally {
       await Promise.all([
         masterPool.close().catch(() => undefined),
@@ -1071,35 +1389,56 @@ export class MigrationToolService {
   async verifyConnection(dto: MigrationRunRequestDto) {
     this.logger.log(`Verify connection started`);
     const connectionResults = await Promise.all([
-      this.verifyPostgresConnection('currentMaster', dto.currentMasterConnection),
-      this.verifyPostgresConnection('currentTransaction', dto.currentTransactionConnection),
-      this.verifyMssqlConnection('oldMaster', dto.oldMasterConnection),
-      this.verifyMssqlConnection('oldTransaction', dto.oldTransactionConnection),
+      this.verifyPostgresConnection(
+        "currentMaster",
+        dto.currentMasterConnection,
+      ),
+      this.verifyPostgresConnection(
+        "currentTransaction",
+        dto.currentTransactionConnection,
+      ),
+      this.verifyMssqlConnection("oldMaster", dto.oldMasterConnection),
+      this.verifyMssqlConnection(
+        "oldTransaction",
+        dto.oldTransactionConnection,
+      ),
     ]);
-    const verified = !connectionResults.some(result => result.includes('failed verification'));
-    this.logger.log(`Verify connection finished verified=${verified} results=${connectionResults.join(' | ')}`);
+    const verified = !connectionResults.some((result) =>
+      result.includes("failed verification"),
+    );
+    this.logger.log(
+      `Verify connection finished verified=${verified} results=${connectionResults.join(" | ")}`,
+    );
     return {
       verified,
-      message: connectionResults.join(' | '),
+      message: connectionResults.join(" | "),
     };
   }
 
   async runCurrentDatabaseMigrations(dto: MigrationRunRequestDto) {
-    this.logger.log('[schema-migrate] current database migration requested');
-    const target = dto.schemaTarget
-      ?? (dto.currentMasterConnection ? 'currentMaster' : 'currentTransaction');
+    this.logger.log("[schema-migrate] current database migration requested");
+    const target =
+      dto.schemaTarget ??
+      (dto.currentMasterConnection ? "currentMaster" : "currentTransaction");
 
     const connection =
-      target === 'currentMaster'
+      target === "currentMaster"
         ? dto.currentMasterConnection
         : dto.currentTransactionConnection;
 
-    const result = await this.runCurrentDatabaseMigrationsForSlot(target, connection);
+    const result = await this.runCurrentDatabaseMigrationsForSlot(
+      target,
+      connection,
+    );
     const message = `${target}: ${
-      result.migrations.length > 0 ? `applied ${result.migrations.length} migration(s)` : 'up to date'
+      result.migrations.length > 0
+        ? `applied ${result.migrations.length} migration(s)`
+        : "up to date"
     }`;
 
-    this.logger.log(`[schema-migrate] current database migration finished ${message}`);
+    this.logger.log(
+      `[schema-migrate] current database migration finished ${message}`,
+    );
 
     return {
       message,
@@ -1120,13 +1459,13 @@ export class MigrationToolService {
       actorUserId,
       selectedTables,
       expandedTables,
-      sourceConnection: 'multi-profile',
+      sourceConnection: "multi-profile",
       connectionSummary: [
         `currentMaster=${this.connectionSummary(profiles.currentMaster)}`,
         `currentTransaction=${this.connectionSummary(profiles.currentTransaction)}`,
         `oldMaster=${this.connectionSummary(profiles.oldMaster)}`,
         `oldTransaction=${this.connectionSummary(profiles.oldTransaction)}`,
-      ].join(' | '),
+      ].join(" | "),
       bootstrapAdminUserId: null,
       bootstrapAdminRoleId: null,
       bootstrapAdminSourceOldId: null,
@@ -1174,7 +1513,7 @@ export class MigrationToolService {
       if (!dependencies) {
         continue;
       }
-      dependencies.forEach(dep => result.add(dep));
+      dependencies.forEach((dep) => result.add(dep));
     }
 
     return [...result];
@@ -1182,26 +1521,26 @@ export class MigrationToolService {
 
   private resolveTargetTableLabel(task: InternalTask): string {
     switch (task) {
-      case 'company':
-        return 'company';
-      case 'currency':
-        return 'currencies';
-      case 'branch':
-        return 'branches';
-      case 'counter':
-        return 'counters';
-      case 'user':
-        return 'users';
-      case 'role':
-        return 'roles';
-      case 'userRoleLinks':
-        return 'user_roles';
-      case 'branchCounterLinks':
-        return 'mstBranchCounterLink';
-      case 'branchUserLinks':
-        return 'mstBranchUserLink';
-      case 'counterUserLinks':
-        return 'mstCounterUserLink';
+      case "company":
+        return "company";
+      case "currency":
+        return "currencies";
+      case "branch":
+        return "branches";
+      case "counter":
+        return "counters";
+      case "user":
+        return "users";
+      case "role":
+        return "roles";
+      case "userRoleLinks":
+        return "user_roles";
+      case "branchCounterLinks":
+        return "mstBranchCounterLink";
+      case "branchUserLinks":
+        return "mstBranchUserLink";
+      case "counterUserLinks":
+        return "mstCounterUserLink";
       default:
         return task;
     }
@@ -1209,31 +1548,34 @@ export class MigrationToolService {
 
   private sourceTableName(task: InternalTask): string {
     switch (task) {
-      case 'company':
-        return 'mstcompanyrecord';
-      case 'currency':
-        return 'mcurrency';
-      case 'branch':
-        return 'mstcompany';
-      case 'counter':
-        return 'mstcounter';
-      case 'user':
-        return 'mstuser';
-      case 'branchCounterLinks':
-        return 'mstBranchCounterLink';
-      case 'branchUserLinks':
-        return 'mstBranchUserLink';
-      case 'counterUserLinks':
-        return 'mstCounterUserLink';
-      case 'role':
-      case 'userRoleLinks':
-        return 'mstuser';
+      case "company":
+        return "mstcompanyrecord";
+      case "currency":
+        return "mcurrency";
+      case "branch":
+        return "mstcompany";
+      case "counter":
+        return "mstcounter";
+      case "user":
+        return "mstuser";
+      case "branchCounterLinks":
+        return "mstBranchCounterLink";
+      case "branchUserLinks":
+        return "mstBranchUserLink";
+      case "counterUserLinks":
+        return "mstCounterUserLink";
+      case "role":
+      case "userRoleLinks":
+        return "mstuser";
       default:
-        return '';
+        return "";
     }
   }
 
-  private isTaskIncluded(context: MigrationContext, task: InternalTask): boolean {
+  private isTaskIncluded(
+    context: MigrationContext,
+    task: InternalTask,
+  ): boolean {
     return context.expandedTables.includes(task);
   }
 
@@ -1245,7 +1587,7 @@ export class MigrationToolService {
       sourceValue: any;
       targetColumn?: string | null;
       targetValue?: any;
-      status: 'saved' | 'transformed' | 'skipped' | 'unmapped';
+      status: "saved" | "transformed" | "skipped" | "unmapped";
       note?: string;
     },
   ) {
@@ -1256,7 +1598,7 @@ export class MigrationToolService {
       targetColumn: params.targetColumn ?? null,
       targetValue: params.targetValue ?? null,
       status: params.status,
-      note: params.note ?? '',
+      note: params.note ?? "",
     });
   }
 
@@ -1278,7 +1620,7 @@ export class MigrationToolService {
       sourceValue: params.sourceValue ?? null,
       targetColumn: params.targetColumn,
       targetValue: params.targetValue ?? null,
-      transformApplied: params.transformApplied ?? '',
+      transformApplied: params.transformApplied ?? "",
       result: params.result,
     });
   }
@@ -1331,8 +1673,8 @@ export class MigrationToolService {
     },
   ) {
     context.warnings.push({
-      sourceTable: params.sourceTable ?? '',
-      sourceColumn: params.sourceColumn ?? '',
+      sourceTable: params.sourceTable ?? "",
+      sourceColumn: params.sourceColumn ?? "",
       note: params.note,
     });
   }
@@ -1352,12 +1694,12 @@ export class MigrationToolService {
       sourceRowIdentifier: params.sourceRowIdentifier,
       fieldName: params.fieldName,
       errorMessage: params.errorMessage,
-      technicalNote: params.technicalNote ?? '',
+      technicalNote: params.technicalNote ?? "",
     });
     context.summary.rowsFailed += 1;
     this.logger.error(
       `[${params.sourceTable}] row=${params.sourceRowIdentifier} field=${params.fieldName} error=${params.errorMessage}` +
-        (params.technicalNote ? ` note=${params.technicalNote}` : ''),
+        (params.technicalNote ? ` note=${params.technicalNote}` : ""),
     );
   }
 
@@ -1431,51 +1773,74 @@ export class MigrationToolService {
   ): ResolvedAuditFields {
     const deletedFlag = toBoolean(row.bIsDeleted ?? row.bIsdeleted);
     const deletedDate =
-      this.getSourceDate(row, ['dDeletedDate', 'dDeleteddate', 'dDeletedAt', 'dDeletedat']) ??
-      this.getSourceDate(row, ['dLastUpdateDate', 'dlastupdatedDate', 'dCreationDate', 'dCreatedDate']) ??
+      this.getSourceDate(row, [
+        "dDeletedDate",
+        "dDeleteddate",
+        "dDeletedAt",
+        "dDeletedat",
+      ]) ??
+      this.getSourceDate(row, [
+        "dLastUpdateDate",
+        "dlastupdatedDate",
+        "dCreationDate",
+        "dCreatedDate",
+      ]) ??
       (deletedFlag ? new Date() : null);
-    const deletedBySource = this.getSourceString(row, ['nDeletedBy', 'nDeletedBY', 'nDeletedby']);
+    const deletedBySource = this.getSourceString(row, [
+      "nDeletedBy",
+      "nDeletedBY",
+      "nDeletedby",
+    ]);
     const deletedBy = deletedBySource
       ? this.resolveAuditUserId(context, deletedBySource, {
           sourceTable: params.sourceTable,
           sourceRowIdentifier: params.sourceRowIdentifier,
-          fieldName: 'nDeletedBy',
+          fieldName: "nDeletedBy",
         })
-      : context.bootstrapAdminUserId ?? context.actorUserId;
+      : (context.bootstrapAdminUserId ?? context.actorUserId);
 
     if (deletedFlag) {
       context.summary.softDeletedRows += 1;
-      const auditSource =
-        this.getSourceDate(row, ['dDeletedDate', 'dDeleteddate', 'dDeletedAt', 'dDeletedat']) ?
-          'source delete date'
-          : this.getSourceDate(row, ['dLastUpdateDate', 'dlastupdatedDate', 'dCreationDate', 'dCreatedDate']) ?
-            'row audit date'
-            : 'current migration timestamp';
+      const auditSource = this.getSourceDate(row, [
+        "dDeletedDate",
+        "dDeleteddate",
+        "dDeletedAt",
+        "dDeletedat",
+      ])
+        ? "source delete date"
+        : this.getSourceDate(row, [
+              "dLastUpdateDate",
+              "dlastupdatedDate",
+              "dCreationDate",
+              "dCreatedDate",
+            ])
+          ? "row audit date"
+          : "current migration timestamp";
 
       this.addFieldStatus(context, {
         sourceTable: params.sourceTable,
-        sourceColumn: 'bIsDeleted',
+        sourceColumn: "bIsDeleted",
         sourceValue: true,
-        targetColumn: 'deletedAt',
+        targetColumn: "deletedAt",
         targetValue: deletedDate,
-        status: 'transformed',
+        status: "transformed",
         note: `Soft-delete inferred from old row; deletedAt resolved from ${auditSource}`,
       });
 
       if (deletedBy) {
         this.addFieldStatus(context, {
           sourceTable: params.sourceTable,
-          sourceColumn: 'nDeletedBy',
+          sourceColumn: "nDeletedBy",
           sourceValue: deletedBySource,
-          targetColumn: 'deletedBy',
+          targetColumn: "deletedBy",
           targetValue: deletedBy,
-          status: 'saved',
-          note: 'Soft-delete actor preserved as source reference only',
+          status: "saved",
+          note: "Soft-delete actor preserved as source reference only",
         });
       } else {
         this.addWarning(context, {
           sourceTable: params.sourceTable,
-          sourceColumn: 'nDeletedBy',
+          sourceColumn: "nDeletedBy",
           note: `Deleted row ${params.sourceRowIdentifier} has no resolvable deletedBy reference`,
         });
       }
@@ -1486,12 +1851,22 @@ export class MigrationToolService {
       deletedBy: deletedFlag ? deletedBy : null,
       wasDeleted: deletedFlag,
       deletedAtSource: deletedFlag
-        ? this.getSourceDate(row, ['dDeletedDate', 'dDeleteddate', 'dDeletedAt', 'dDeletedat'])
-          ? 'source delete date'
-          : this.getSourceDate(row, ['dLastUpdateDate', 'dlastupdatedDate', 'dCreationDate', 'dCreatedDate'])
-            ? 'row audit date'
-            : 'current migration timestamp'
-        : 'not deleted',
+        ? this.getSourceDate(row, [
+            "dDeletedDate",
+            "dDeleteddate",
+            "dDeletedAt",
+            "dDeletedat",
+          ])
+          ? "source delete date"
+          : this.getSourceDate(row, [
+                "dLastUpdateDate",
+                "dlastupdatedDate",
+                "dCreationDate",
+                "dCreatedDate",
+              ])
+            ? "row audit date"
+            : "current migration timestamp"
+        : "not deleted",
     };
   }
 
@@ -1504,22 +1879,26 @@ export class MigrationToolService {
     },
   ) {
     const permissionValue = row.Permission ?? row.permission;
-    if (permissionValue === undefined || permissionValue === null || String(permissionValue).trim() === '') {
+    if (
+      permissionValue === undefined ||
+      permissionValue === null ||
+      String(permissionValue).trim() === ""
+    ) {
       return;
     }
 
     this.addFieldStatus(context, {
       sourceTable: params.sourceTable,
-      sourceColumn: 'Permission',
+      sourceColumn: "Permission",
       sourceValue: permissionValue,
-      targetColumn: 'permissions / roles_menu_permissions',
+      targetColumn: "permissions / roles_menu_permissions",
       targetValue: null,
-      status: 'unmapped',
-      note: 'Legacy sidebar/menu permission blob captured for manual review; exact decode depends on business rule',
+      status: "unmapped",
+      note: "Legacy sidebar/menu permission blob captured for manual review; exact decode depends on business rule",
     });
     this.addWarning(context, {
       sourceTable: params.sourceTable,
-      sourceColumn: 'Permission',
+      sourceColumn: "Permission",
       note: `Permission blob captured for row ${params.sourceRowIdentifier}; review required to map into current permission tables`,
     });
   }
@@ -1586,7 +1965,10 @@ export class MigrationToolService {
     context.sourceCache[task] = rows;
   }
 
-  private getSourceRows(context: MigrationContext, task: InternalTask): SourceRow[] {
+  private getSourceRows(
+    context: MigrationContext,
+    task: InternalTask,
+  ): SourceRow[] {
     return context.sourceCache[task] ?? [];
   }
 
@@ -1606,7 +1988,11 @@ export class MigrationToolService {
         return mapped;
       }
 
-      if (sourceKey !== '0' && sourceKey !== 'null' && sourceKey !== 'undefined') {
+      if (
+        sourceKey !== "0" &&
+        sourceKey !== "null" &&
+        sourceKey !== "undefined"
+      ) {
         this.logger.warn(
           `[${params.sourceTable}] row=${params.sourceRowIdentifier} field=${params.fieldName} unresolved user reference=${sourceKey}; using bootstrap fallback`,
         );
@@ -1622,15 +2008,15 @@ export class MigrationToolService {
     }
 
     const ranked = rows
-      .map(row => {
-        const code = toNullableString(row.vUID)?.toUpperCase() ?? '';
-        const name = toNullableString(row.vName)?.toUpperCase() ?? '';
-        const email = toNullableString(row.vMailID)?.toUpperCase() ?? '';
+      .map((row) => {
+        const code = toNullableString(row.vUID)?.toUpperCase() ?? "";
+        const name = toNullableString(row.vName)?.toUpperCase() ?? "";
+        const email = toNullableString(row.vMailID)?.toUpperCase() ?? "";
         let score = 0;
         if (toBoolean(row.bIsAdministrator)) score += 100;
-        if (code === 'ADMIN' || code === 'HO' || code === 'ALLR') score += 80;
-        if (name.includes('ADMIN') || name.includes('HO')) score += 30;
-        if (email.includes('ADMIN') || email.includes('HO')) score += 20;
+        if (code === "ADMIN" || code === "HO" || code === "ALLR") score += 80;
+        if (name.includes("ADMIN") || name.includes("HO")) score += 30;
+        if (email.includes("ADMIN") || email.includes("HO")) score += 20;
         if (toBoolean(row.bActive)) score += 5;
         if (toBoolean(row.bIsGroup)) score -= 10;
         return { row, score };
@@ -1646,8 +2032,10 @@ export class MigrationToolService {
   ): Promise<ResolvedRecord> {
     const oldId = row.nCompID ?? row.ncompid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vCompanyName) || `company-${oldId}`;
-    const targetTable = 'company';
-    this.logger.log(`[mstcompanyrecord] resolving company oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
+    const targetTable = "company";
+    this.logger.log(
+      `[mstcompanyrecord] resolving company oldId=${String(oldId ?? "")} lookupKey=${lookupKey}`,
+    );
 
     if (this.companyMap.has(String(oldId))) {
       return {
@@ -1660,22 +2048,33 @@ export class MigrationToolService {
     }
 
     const name = toStringOrFallback(row.vCompanyName, `Company ${oldId}`);
-    const panNo = toStringOrFallback(row.cgstno ?? row.panNo ?? row.PANNO, `PAN_PENDING_${oldId}`);
+    const panNo = toStringOrFallback(
+      row.cgstno ?? row.panNo ?? row.PANNO,
+      `PAN_PENDING_${oldId}`,
+    );
     const fromDate = toNullableDate(row.FROMDATE);
     const toDate = toNullableDate(row.TODATE);
-    const createdBy = this.resolveAuditUserId(context, row.nCreatedBy ?? row.vCreatedBy, {
-      sourceTable: 'mstcompanyrecord',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nCreatedBy',
-    });
-    const updatedBy = this.resolveAuditUserId(context, row.nLastupdatedby ?? row.nLastUpdateBy, {
-      sourceTable: 'mstcompanyrecord',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nLastupdatedby',
-    });
+    const createdBy = this.resolveAuditUserId(
+      context,
+      row.nCreatedBy ?? row.vCreatedBy,
+      {
+        sourceTable: "mstcompanyrecord",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nCreatedBy",
+      },
+    );
+    const updatedBy = this.resolveAuditUserId(
+      context,
+      row.nLastupdatedby ?? row.nLastUpdateBy,
+      {
+        sourceTable: "mstcompanyrecord",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nLastupdatedby",
+      },
+    );
     const audit = this.resolveAuditFields(row, context, {
-      sourceTable: 'mstcompanyrecord',
-      sourceRowIdentifier: String(oldId ?? ''),
+      sourceTable: "mstcompanyrecord",
+      sourceRowIdentifier: String(oldId ?? ""),
     });
     const existing = await this.targetCompanyRepository.findOne({
       where: {
@@ -1687,22 +2086,33 @@ export class MigrationToolService {
     });
 
     if (existing) {
-      this.logger.log(`[mstcompanyrecord] reused company oldId=${String(oldId ?? '')} targetId=${existing.id}`);
-      if (audit.wasDeleted && context.mode === 'real') {
+      this.logger.log(
+        `[mstcompanyrecord] reused company oldId=${String(oldId ?? "")} targetId=${existing.id}`,
+      );
+      if (audit.wasDeleted && context.mode === "real") {
         existing.deletedAt = audit.deletedAt;
         existing.deletedBy = audit.deletedBy;
         await this.targetCompanyRepository.save(existing);
-        this.logger.warn(`[mstcompanyrecord] applied soft-delete to reused company id=${existing.id}`);
+        this.logger.warn(
+          `[mstcompanyrecord] applied soft-delete to reused company id=${existing.id}`,
+        );
       }
       this.companyMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
-        oldTable: 'mstcompanyrecord',
+        oldTable: "mstcompanyrecord",
         oldId,
         newTable: targetTable,
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: existing.id,
+        created: false,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
     const company = this.targetCompanyRepository.create({
       name,
@@ -1726,57 +2136,87 @@ export class MigrationToolService {
 
     if (row.vBranchCode) {
       this.addUnmappedColumn(context, {
-        sourceTable: 'mstcompanyrecord',
-        sourceColumn: 'vBranchCode',
+        sourceTable: "mstcompanyrecord",
+        sourceColumn: "vBranchCode",
         sourceValue: row.vBranchCode,
-        reason: 'Branch code is kept for sheet review only and is not stored on company',
+        reason:
+          "Branch code is kept for sheet review only and is not stored on company",
       });
     }
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const saved = await this.targetCompanyRepository.save(company);
       this.logger.log(
-        `[mstcompanyrecord] created company id=${saved.id} version=${String(fromDate ?? '')}..${String(toDate ?? '')}`,
+        `[mstcompanyrecord] created company id=${saved.id} version=${String(fromDate ?? "")}..${String(toDate ?? "")}`,
       );
       this.companyMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
-        oldTable: 'mstcompanyrecord',
+        oldTable: "mstcompanyrecord",
         oldId,
         newTable: targetTable,
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: saved.id,
+        created: true,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const mockId = `mock-company-${oldId ?? randomUUID()}`;
     this.logger.log(
-      `[mstcompanyrecord] mock company id=${mockId} version=${String(fromDate ?? '')}..${String(toDate ?? '')}`,
+      `[mstcompanyrecord] mock company id=${mockId} version=${String(fromDate ?? "")}..${String(toDate ?? "")}`,
     );
     this.companyMap.set(String(oldId), mockId);
     this.addIdMap(context, {
-      oldTable: 'mstcompanyrecord',
+      oldTable: "mstcompanyrecord",
       oldId,
       newTable: targetTable,
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+    return {
+      id: mockId,
+      created: true,
+      sourceId: oldId,
+      targetTable,
+      lookupKey,
+      softDeleted: audit.wasDeleted,
+    };
   }
 
-  private transformBranchCode(row: SourceRow): { value: string; transformed: boolean; sourceField: string } {
-    const raw = toNullableString(row.Prefix) || toNullableString(row.vBranchCode) || 'BRAN';
-    const sourceField = toNullableString(row.Prefix) ? 'Prefix' : 'vBranchCode';
+  private transformBranchCode(row: SourceRow): {
+    value: string;
+    transformed: boolean;
+    sourceField: string;
+  } {
+    const raw =
+      toNullableString(row.Prefix) ||
+      toNullableString(row.vBranchCode) ||
+      "BRAN";
+    const sourceField = toNullableString(row.Prefix) ? "Prefix" : "vBranchCode";
     const base = raw.trim();
     if (base.length === 4) {
-      return { value: base.toUpperCase(), transformed: sourceField === 'Prefix' ? false : false, sourceField };
+      return {
+        value: base.toUpperCase(),
+        transformed: sourceField === "Prefix" ? false : false,
+        sourceField,
+      };
     }
 
     if (base.length > 4) {
-      return { value: base.slice(0, 4).toUpperCase(), transformed: true, sourceField };
+      return {
+        value: base.slice(0, 4).toUpperCase(),
+        transformed: true,
+        sourceField,
+      };
     }
 
-    const padded = base.padEnd(4, '0').slice(0, 4).toUpperCase();
+    const padded = base.padEnd(4, "0").slice(0, 4).toUpperCase();
     return { value: padded, transformed: true, sourceField };
   }
 
@@ -1793,7 +2233,11 @@ export class MigrationToolService {
     row: SourceRow,
     context: MigrationContext,
     oldId: string | number | null | undefined,
-  ): Promise<{ id: string | null; created: boolean; lookupKey: string | null } | null> {
+  ): Promise<{
+    id: string | null;
+    created: boolean;
+    lookupKey: string | null;
+  } | null> {
     const raw = this.getSourceLocationType(row);
     if (!raw) {
       return null;
@@ -1802,36 +2246,36 @@ export class MigrationToolService {
     const lookupKey = `LOCATIONTYPE:${normalizeCode(raw)}`;
     const existing = await this.targetSelectOptionRepository.findOne({
       where: {
-        code: 'LOCATIONTYPE',
+        code: "LOCATIONTYPE",
         value: raw,
       },
     });
 
     if (existing) {
       this.addFieldStatus(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocationType',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocationType",
         sourceValue: raw,
-        targetColumn: 'locationType',
+        targetColumn: "locationType",
         targetValue: existing.id,
-        status: 'saved',
-        note: 'Resolved through category_options.LOCATIONTYPE and reused existing option',
+        status: "saved",
+        note: "Resolved through category_options.LOCATIONTYPE and reused existing option",
       });
       this.addColumnMapping(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocationType',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocationType",
         sourceValue: raw,
-        targetColumn: 'locationType',
+        targetColumn: "locationType",
         targetValue: existing.id,
-        result: 'reused',
+        result: "reused",
       });
       return { id: existing.id, created: false, lookupKey };
     }
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const createdBy = context.bootstrapAdminUserId ?? context.actorUserId;
       const option = this.targetSelectOptionRepository.create({
-        code: 'LOCATIONTYPE',
+        code: "LOCATIONTYPE",
         value: raw,
         label: raw,
         sortOrder: 0,
@@ -1840,28 +2284,30 @@ export class MigrationToolService {
         updatedBy: createdBy,
       });
       const saved = await this.targetSelectOptionRepository.save(option);
-      this.logger.log(`[mstcompany] created lookup category option LOCATIONTYPE value=${raw} id=${saved.id}`);
+      this.logger.log(
+        `[mstcompany] created lookup category option LOCATIONTYPE value=${raw} id=${saved.id}`,
+      );
       this.addFieldStatus(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocationType',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocationType",
         sourceValue: raw,
-        targetColumn: 'locationType',
+        targetColumn: "locationType",
         targetValue: saved.id,
-        status: 'transformed',
-        note: 'Created missing category_options row for branch location type',
+        status: "transformed",
+        note: "Created missing category_options row for branch location type",
       });
       this.addColumnMapping(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocationType',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocationType",
         sourceValue: raw,
-        targetColumn: 'locationType',
+        targetColumn: "locationType",
         targetValue: saved.id,
-        result: 'created',
+        result: "created",
       });
       this.addIdMap(context, {
-        oldTable: 'mstcompany',
+        oldTable: "mstcompany",
         oldId,
-        newTable: 'category_options',
+        newTable: "category_options",
         newUuid: saved.id,
         lookupKey,
       });
@@ -1869,23 +2315,25 @@ export class MigrationToolService {
     }
 
     const mockId = `mock-location-type-${normalizeCode(raw)}-${String(oldId ?? randomUUID())}`;
-    this.logger.log(`[mstcompany] mock create lookup category option LOCATIONTYPE value=${raw} id=${mockId}`);
+    this.logger.log(
+      `[mstcompany] mock create lookup category option LOCATIONTYPE value=${raw} id=${mockId}`,
+    );
     this.addFieldStatus(context, {
-      sourceTable: 'mstcompany',
-      sourceColumn: 'vLocationType',
+      sourceTable: "mstcompany",
+      sourceColumn: "vLocationType",
       sourceValue: raw,
-      targetColumn: 'locationType',
+      targetColumn: "locationType",
       targetValue: mockId,
-      status: 'transformed',
-      note: 'Mock run would create category_options row for branch location type',
+      status: "transformed",
+      note: "Mock run would create category_options row for branch location type",
     });
     this.addColumnMapping(context, {
-      sourceTable: 'mstcompany',
-      sourceColumn: 'vLocationType',
+      sourceTable: "mstcompany",
+      sourceColumn: "vLocationType",
       sourceValue: raw,
-      targetColumn: 'locationType',
+      targetColumn: "locationType",
       targetValue: mockId,
-      result: 'mock-created',
+      result: "mock-created",
     });
     return { id: mockId, created: true, lookupKey };
   }
@@ -1907,7 +2355,7 @@ export class MigrationToolService {
         country: null,
         state: null,
         gstState: city ?? null,
-        note: 'No vLocation value supplied; city preserved as fallback geography text',
+        note: "No vLocation value supplied; city preserved as fallback geography text",
       };
     }
 
@@ -1925,31 +2373,31 @@ export class MigrationToolService {
 
     if (stateMatch) {
       this.addFieldStatus(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocation',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocation",
         sourceValue: rawLocation,
-        targetColumn: 'state_id / country_id / gstState',
+        targetColumn: "state_id / country_id / gstState",
         targetValue: {
           stateId: stateMatch.id,
           countryId: stateMatch.country?.id ?? null,
           gstState: stateMatch.name,
         },
-        status: 'saved',
-        note: 'Resolved branch geography through state lookup',
+        status: "saved",
+        note: "Resolved branch geography through state lookup",
       });
       this.addColumnMapping(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocation',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocation",
         sourceValue: rawLocation,
-        targetColumn: 'state_id',
+        targetColumn: "state_id",
         targetValue: stateMatch.id,
-        result: 'reused',
+        result: "reused",
       });
       return {
         country: stateMatch.country ?? null,
         state: stateMatch,
         gstState: stateMatch.name,
-        note: 'Resolved as state reference',
+        note: "Resolved as state reference",
       };
     }
 
@@ -1967,57 +2415,59 @@ export class MigrationToolService {
 
     if (countryMatch) {
       this.addFieldStatus(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocation',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocation",
         sourceValue: rawLocation,
-        targetColumn: 'country_id / gstState',
+        targetColumn: "country_id / gstState",
         targetValue: {
           countryId: countryMatch.id,
           gstState: city ?? rawLocation,
         },
-        status: 'saved',
-        note: 'Resolved branch geography through country lookup',
+        status: "saved",
+        note: "Resolved branch geography through country lookup",
       });
       this.addColumnMapping(context, {
-        sourceTable: 'mstcompany',
-        sourceColumn: 'vLocation',
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocation",
         sourceValue: rawLocation,
-        targetColumn: 'country_id',
+        targetColumn: "country_id",
         targetValue: countryMatch.id,
-        result: 'reused',
+        result: "reused",
       });
       return {
         country: countryMatch,
         state: null,
         gstState: city ?? rawLocation,
-        note: 'Resolved as country reference',
+        note: "Resolved as country reference",
       };
     }
 
     this.addFieldStatus(context, {
-      sourceTable: 'mstcompany',
-      sourceColumn: 'vLocation',
+      sourceTable: "mstcompany",
+      sourceColumn: "vLocation",
       sourceValue: rawLocation,
-      targetColumn: 'gstState',
+      targetColumn: "gstState",
       targetValue: rawLocation,
-      status: 'unmapped',
-      note: 'No safe state/country match found; raw geography preserved as fallback text',
+      status: "unmapped",
+      note: "No safe state/country match found; raw geography preserved as fallback text",
     });
     this.addUnmappedColumn(context, {
-      sourceTable: 'mstcompany',
-      sourceColumn: 'vLocation',
+      sourceTable: "mstcompany",
+      sourceColumn: "vLocation",
       sourceValue: rawLocation,
-      reason: 'No safe state/country match found in current lookup tables',
+      reason: "No safe state/country match found in current lookup tables",
     });
     return {
       country: null,
       state: null,
       gstState: rawLocation,
-      note: 'Raw location preserved as fallback text',
+      note: "Raw location preserved as fallback text",
     };
   }
 
-  private getLegacyCountryIdentifier(row: SourceRow): string | number | null | undefined {
+  private getLegacyCountryIdentifier(
+    row: SourceRow,
+  ): string | number | null | undefined {
     return (
       row.nCountryID ??
       row.nCountryId ??
@@ -2034,7 +2484,10 @@ export class MigrationToolService {
     return context.sourceCache.legacyCountryCandidates ?? [];
   }
 
-  private async loadLegacyCountryCandidates(pool: mssql.ConnectionPool, context: MigrationContext): Promise<SourceRow[]> {
+  private async loadLegacyCountryCandidates(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<SourceRow[]> {
     const cached = this.getLegacyCountrySourceRows(context);
     if (cached.length > 0) {
       return cached;
@@ -2056,12 +2509,19 @@ export class MigrationToolService {
     } catch (error) {
       this.logger.warn(
         `[mcurrency] could not inspect INFORMATION_SCHEMA.TABLES for country lookup candidates: ${
-          error instanceof Error ? error.message : 'unknown error'
+          error instanceof Error ? error.message : "unknown error"
         }`,
       );
     }
 
-    const fallbackTables = ['mstcountry', 'mcountry', 'country', 'countries', 'mst_country', 'tblcountry'];
+    const fallbackTables = [
+      "mstcountry",
+      "mcountry",
+      "country",
+      "countries",
+      "mst_country",
+      "tblcountry",
+    ];
     const tableNames = [...new Set([...discoveredTables, ...fallbackTables])];
     const rows: SourceRow[] = [];
 
@@ -2077,14 +2537,16 @@ export class MigrationToolService {
       } catch (error) {
         this.logger.warn(
           `[mcurrency] skipping legacy country candidate table ${tableName}: ${
-            error instanceof Error ? error.message : 'unknown error'
+            error instanceof Error ? error.message : "unknown error"
           }`,
         );
       }
     }
 
     context.sourceCache.legacyCountryCandidates = rows;
-    this.logger.log(`[mcurrency] loaded ${rows.length} legacy country candidate row(s)`);
+    this.logger.log(
+      `[mcurrency] loaded ${rows.length} legacy country candidate row(s)`,
+    );
     return rows;
   }
 
@@ -2097,7 +2559,13 @@ export class MigrationToolService {
     },
   ): Promise<CountryGroup | null> {
     const rawName =
-      this.getSourceString(row, ['vCountryGroup', 'countryGroup', 'countryGroupName', 'groupName', 'group']) ?? null;
+      this.getSourceString(row, [
+        "vCountryGroup",
+        "countryGroup",
+        "countryGroupName",
+        "groupName",
+        "group",
+      ]) ?? null;
     if (!rawName) {
       return null;
     }
@@ -2113,23 +2581,34 @@ export class MigrationToolService {
     const group = this.targetCountryGroupRepository.create({
       code: normalizedCode,
       name: rawName,
-      createdBy: this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
-        sourceTable: params.sourceTable,
-        sourceRowIdentifier: params.sourceRowIdentifier,
-        fieldName: 'nCreatedBy',
-      }),
-      updatedBy: this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
-        sourceTable: params.sourceTable,
-        sourceRowIdentifier: params.sourceRowIdentifier,
-        fieldName: 'nLastUpdateBy',
-      }),
+      createdBy: this.resolveAuditUserId(
+        context,
+        row.nCreatedBy ?? row.nCreatedBY,
+        {
+          sourceTable: params.sourceTable,
+          sourceRowIdentifier: params.sourceRowIdentifier,
+          fieldName: "nCreatedBy",
+        },
+      ),
+      updatedBy: this.resolveAuditUserId(
+        context,
+        row.nLastUpdateBy ?? row.nLastupdatedBy,
+        {
+          sourceTable: params.sourceTable,
+          sourceRowIdentifier: params.sourceRowIdentifier,
+          fieldName: "nLastUpdateBy",
+        },
+      ),
     });
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       return this.targetCountryGroupRepository.save(group);
     }
 
-    return { ...group, id: `mock-country-group-${normalizedCode}` } as CountryGroup;
+    return {
+      ...group,
+      id: `mock-country-group-${normalizedCode}`,
+    } as CountryGroup;
   }
 
   private async resolveLegacyCountryReference(
@@ -2141,12 +2620,16 @@ export class MigrationToolService {
       sourceRowIdentifier: string;
     },
   ): Promise<Country | null> {
-    if (legacyCountryId === null || legacyCountryId === undefined || legacyCountryId === '') {
+    if (
+      legacyCountryId === null ||
+      legacyCountryId === undefined ||
+      legacyCountryId === ""
+    ) {
       this.addSkippedRow(context, {
         sourceTable: params.sourceTable,
         sourceRowIdentifier: params.sourceRowIdentifier,
-        reason: 'Currency country reference missing',
-        fallbackAction: 'Currency row skipped',
+        reason: "Currency country reference missing",
+        fallbackAction: "Currency row skipped",
       });
       return null;
     }
@@ -2167,9 +2650,13 @@ export class MigrationToolService {
     }
 
     const candidates = await this.loadLegacyCountryCandidates(pool, context);
-    const sourceRow = candidates.find(candidate => {
+    const sourceRow = candidates.find((candidate) => {
       const candidateId = this.getLegacyCountryIdentifier(candidate);
-      return candidateId !== undefined && candidateId !== null && String(candidateId) === legacyKey;
+      return (
+        candidateId !== undefined &&
+        candidateId !== null &&
+        String(candidateId) === legacyKey
+      );
     });
 
     if (!sourceRow) {
@@ -2177,28 +2664,55 @@ export class MigrationToolService {
         sourceTable: params.sourceTable,
         sourceRowIdentifier: params.sourceRowIdentifier,
         reason: `Could not resolve legacy country id ${legacyKey} from available source tables`,
-        fallbackAction: 'Currency row skipped',
+        fallbackAction: "Currency row skipped",
       });
       this.addUnmappedColumn(context, {
         sourceTable: params.sourceTable,
-        sourceColumn: 'nCountryID',
+        sourceColumn: "nCountryID",
         sourceValue: legacyCountryId,
-        reason: 'Legacy country source row was not found in the connected MSSQL database',
+        reason:
+          "Legacy country source row was not found in the connected MSSQL database",
       });
       return null;
     }
 
-    const sourceTableName = toNullableString(sourceRow.__legacySourceTable) ?? 'legacy-country';
+    const sourceTableName =
+      toNullableString(sourceRow.__legacySourceTable) ?? "legacy-country";
     const countryCode =
-      this.getSourceString(sourceRow, ['vCncode', 'vCountryCode', 'countryCode', 'code', 'isoCode', 'alpha2Code']) ??
-      normalizeCode(this.getSourceString(sourceRow, ['vCnName', 'vCountryName', 'countryName', 'name']) ?? `COUNTRY_${legacyKey}`);
+      this.getSourceString(sourceRow, [
+        "vCncode",
+        "vCountryCode",
+        "countryCode",
+        "code",
+        "isoCode",
+        "alpha2Code",
+      ]) ??
+      normalizeCode(
+        this.getSourceString(sourceRow, [
+          "vCnName",
+          "vCountryName",
+          "countryName",
+          "name",
+        ]) ?? `COUNTRY_${legacyKey}`,
+      );
     const countryName =
-      this.getSourceString(sourceRow, ['vCnName', 'vCountryName', 'countryName', 'name', 'description']) ??
-      countryCode;
-    const countryGroup = await this.resolveCountryGroupFromLegacyRow(sourceRow, context, {
-      sourceTable: sourceTableName,
-      sourceRowIdentifier: String(this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey),
-    });
+      this.getSourceString(sourceRow, [
+        "vCnName",
+        "vCountryName",
+        "countryName",
+        "name",
+        "description",
+      ]) ?? countryCode;
+    const countryGroup = await this.resolveCountryGroupFromLegacyRow(
+      sourceRow,
+      context,
+      {
+        sourceTable: sourceTableName,
+        sourceRowIdentifier: String(
+          this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey,
+        ),
+      },
+    );
     const existing = await this.targetCountryRepository.findOne({
       where: [
         { code: countryCode },
@@ -2212,17 +2726,20 @@ export class MigrationToolService {
     });
 
     if (existing) {
-      if (countryGroup && (!existing.countryGroup || existing.countryGroup.id !== countryGroup.id)) {
+      if (
+        countryGroup &&
+        (!existing.countryGroup || existing.countryGroup.id !== countryGroup.id)
+      ) {
         existing.countryGroup = { id: countryGroup.id } as CountryGroup;
       }
-      if (context.mode === 'real' && countryGroup) {
+      if (context.mode === "real" && countryGroup) {
         await this.targetCountryRepository.save(existing);
       }
       this.countryMap.set(legacyKey, existing.id);
       this.addIdMap(context, {
         oldTable: sourceTableName,
         oldId: this.getLegacyCountryIdentifier(sourceRow),
-        newTable: 'countries',
+        newTable: "countries",
         newUuid: existing.id,
         lookupKey: `${countryCode}:${countryName}`,
       });
@@ -2232,42 +2749,56 @@ export class MigrationToolService {
     const country = {
       code: countryCode,
       name: countryName,
-      countryGroup: countryGroup ? ({ id: countryGroup.id } as CountryGroup) : null,
+      countryGroup: countryGroup
+        ? ({ id: countryGroup.id } as CountryGroup)
+        : null,
       lrsCountryCode: countryCode,
       ctrCountryCode: countryCode,
-      riskCategory: 'low',
+      riskCategory: "low",
       restrictedCountry: false,
       greyListCountry: false,
       baseCountry: false,
-      createdBy: this.resolveAuditUserId(context, sourceRow.nCreatedBy ?? sourceRow.nCreatedBY, {
-        sourceTable: sourceTableName,
-        sourceRowIdentifier: String(this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey),
-        fieldName: 'nCreatedBy',
-      }),
-      updatedBy: this.resolveAuditUserId(context, sourceRow.nLastUpdateBy ?? sourceRow.nLastupdatedBy, {
-        sourceTable: sourceTableName,
-        sourceRowIdentifier: String(this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey),
-        fieldName: 'nLastUpdateBy',
-      }),
+      createdBy: this.resolveAuditUserId(
+        context,
+        sourceRow.nCreatedBy ?? sourceRow.nCreatedBY,
+        {
+          sourceTable: sourceTableName,
+          sourceRowIdentifier: String(
+            this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey,
+          ),
+          fieldName: "nCreatedBy",
+        },
+      ),
+      updatedBy: this.resolveAuditUserId(
+        context,
+        sourceRow.nLastUpdateBy ?? sourceRow.nLastupdatedBy,
+        {
+          sourceTable: sourceTableName,
+          sourceRowIdentifier: String(
+            this.getLegacyCountryIdentifier(sourceRow) ?? legacyKey,
+          ),
+          fieldName: "nLastUpdateBy",
+        },
+      ),
     } as Country;
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const saved = await this.targetCountryRepository.save(country);
       this.countryMap.set(legacyKey, saved.id);
       this.addIdMap(context, {
         oldTable: sourceTableName,
         oldId: this.getLegacyCountryIdentifier(sourceRow),
-        newTable: 'countries',
+        newTable: "countries",
         newUuid: saved.id,
         lookupKey: `${countryCode}:${countryName}`,
       });
       this.addFieldStatus(context, {
         sourceTable: params.sourceTable,
-        sourceColumn: 'nCountryID',
+        sourceColumn: "nCountryID",
         sourceValue: legacyCountryId,
-        targetColumn: 'country_id',
+        targetColumn: "country_id",
         targetValue: saved.id,
-        status: 'saved',
+        status: "saved",
         note: `Resolved and created/reused country from legacy table ${sourceTableName}`,
       });
       return saved;
@@ -2278,17 +2809,17 @@ export class MigrationToolService {
     this.addIdMap(context, {
       oldTable: sourceTableName,
       oldId: this.getLegacyCountryIdentifier(sourceRow),
-      newTable: 'countries',
+      newTable: "countries",
       newUuid: mockId,
       lookupKey: `${countryCode}:${countryName}`,
     });
     this.addFieldStatus(context, {
       sourceTable: params.sourceTable,
-      sourceColumn: 'nCountryID',
+      sourceColumn: "nCountryID",
       sourceValue: legacyCountryId,
-      targetColumn: 'country_id',
+      targetColumn: "country_id",
       targetValue: mockId,
-      status: 'saved',
+      status: "saved",
       note: `Would resolve country from legacy table ${sourceTableName}`,
     });
     return { ...country, id: mockId } as Country;
@@ -2300,8 +2831,10 @@ export class MigrationToolService {
   ): Promise<ResolvedRecord> {
     const oldId = row.nBranchID ?? row.nbranchid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vBranchCode) || `branch-${oldId}`;
-    const targetTable = 'branches';
-    this.logger.log(`[mstcompany] resolving branch oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
+    const targetTable = "branches";
+    this.logger.log(
+      `[mstcompany] resolving branch oldId=${String(oldId ?? "")} lookupKey=${lookupKey}`,
+    );
 
     if (this.branchMap.has(String(oldId))) {
       return {
@@ -2314,64 +2847,93 @@ export class MigrationToolService {
     }
 
     const transformedCode = this.transformBranchCode(row);
-    const branchNumber = toNullableNumber(row.nBranchID) ?? toNullableNumber(oldId) ?? 0;
+    const branchNumber =
+      toNullableNumber(row.nBranchID) ?? toNullableNumber(oldId) ?? 0;
     const companyOldId = row.nCompID ?? row.ncompid;
-    const companyId = companyOldId !== undefined ? this.companyMap.get(String(companyOldId)) ?? null : null;
-    const locationType = await this.resolveBranchLocationType(row, context, oldId);
+    const companyId =
+      companyOldId !== undefined
+        ? (this.companyMap.get(String(companyOldId)) ?? null)
+        : null;
+    const locationType = await this.resolveBranchLocationType(
+      row,
+      context,
+      oldId,
+    );
     const geography = await this.resolveBranchGeography(row, context, oldId);
-    const createdBy = this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY ?? row.vCreatedBy, {
-      sourceTable: 'mstcompany',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nCreatedBy',
-    });
-    const updatedBy = this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
-      sourceTable: 'mstcompany',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nLastUpdateBy',
-    });
+    const createdBy = this.resolveAuditUserId(
+      context,
+      row.nCreatedBy ?? row.nCreatedBY ?? row.vCreatedBy,
+      {
+        sourceTable: "mstcompany",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nCreatedBy",
+      },
+    );
+    const updatedBy = this.resolveAuditUserId(
+      context,
+      row.nLastUpdateBy ?? row.nLastupdatedBy,
+      {
+        sourceTable: "mstcompany",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nLastUpdateBy",
+      },
+    );
     const audit = this.resolveAuditFields(row, context, {
-      sourceTable: 'mstcompany',
-      sourceRowIdentifier: String(oldId ?? ''),
+      sourceTable: "mstcompany",
+      sourceRowIdentifier: String(oldId ?? ""),
     });
     const existing = await this.targetBranchRepository.findOne({
-      where: [
-        { code: transformedCode.value },
-        { branchNumber },
-      ],
+      where: [{ code: transformedCode.value }, { branchNumber }],
     });
 
     if (existing) {
-      this.logger.log(`[mstcompany] reused branch oldId=${String(oldId ?? '')} targetId=${existing.id}`);
-      if (audit.wasDeleted && context.mode === 'real') {
+      this.logger.log(
+        `[mstcompany] reused branch oldId=${String(oldId ?? "")} targetId=${existing.id}`,
+      );
+      if (audit.wasDeleted && context.mode === "real") {
         existing.deletedAt = audit.deletedAt;
         existing.deletedBy = audit.deletedBy;
         await this.targetBranchRepository.save(existing);
-        this.logger.warn(`[mstcompany] applied soft-delete to reused branch id=${existing.id}`);
+        this.logger.warn(
+          `[mstcompany] applied soft-delete to reused branch id=${existing.id}`,
+        );
       }
       this.branchMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
-        oldTable: 'mstcompany',
+        oldTable: "mstcompany",
         oldId,
         newTable: targetTable,
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: existing.id,
+        created: false,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const branch = this.targetBranchRepository.create({
       company: companyId ? ({ id: companyId } as Company) : null,
-      country: geography.country ? ({ id: geography.country.id } as Country) : null,
+      country: geography.country
+        ? ({ id: geography.country.id } as Country)
+        : null,
       state: geography.state ? ({ id: geography.state.id } as State) : null,
       code: transformedCode.value,
-      name: toStringOrFallback(row.vLocation || row.vCity || row.vBranchCode, `Branch ${oldId}`),
+      name: toStringOrFallback(
+        row.vLocation || row.vCity || row.vBranchCode,
+        `Branch ${oldId}`,
+      ),
       branchNumber,
-      address1: toStringOrFallback(row.vAddress1, 'UNKNOWN'),
+      address1: toStringOrFallback(row.vAddress1, "UNKNOWN"),
       address2: toNullableString(row.vAddress2),
       address3: toNullableString(row.vAddress3),
-      city: toStringOrFallback(row.vCity, 'UNKNOWN'),
+      city: toStringOrFallback(row.vCity, "UNKNOWN"),
       gstState: geography.gstState,
-      pinCode: toStringOrFallback(row.vPinCode, '000000'),
+      pinCode: toStringOrFallback(row.vPinCode, "000000"),
       gstNo: toNullableString(row.vServiceTaxRegNo),
       fxRegNo: toNullableString(row.vRBILicenseNo),
       fxRegDate: toNullableDate(row.dRBIRegDate),
@@ -2384,7 +2946,8 @@ export class MigrationToolService {
       cashHoldingTemp: toNullableNumber(row.ntempCashLimit),
       currHolding: toNullableNumber(row.nCurrencyLimit),
       currHoldingTemp: toNullableNumber(row.ntempCurrencyLimit),
-      isHeadOffice: toBoolean(row.IsHubBranch) || transformedCode.value === 'HO',
+      isHeadOffice:
+        toBoolean(row.IsHubBranch) || transformedCode.value === "HO",
       isActive: toBoolean(row.bActive),
       createdBy,
       updatedBy,
@@ -2393,115 +2956,141 @@ export class MigrationToolService {
     });
 
     this.addFieldStatus(context, {
-      sourceTable: 'mstcompany',
-      sourceColumn: 'vLocation',
+      sourceTable: "mstcompany",
+      sourceColumn: "vLocation",
       sourceValue: row.vLocation,
-      targetColumn: 'state_id / country_id / gstState',
+      targetColumn: "state_id / country_id / gstState",
       targetValue: {
         stateId: geography.state?.id ?? null,
         countryId: geography.country?.id ?? null,
         gstState: geography.gstState,
       },
-      status: geography.state || geography.country ? 'saved' : 'unmapped',
+      status: geography.state || geography.country ? "saved" : "unmapped",
       note: geography.note,
     });
 
-    if (row.nAttachedToBranchID !== undefined || row.nWUBranchID !== undefined || row.nReportingBranchID !== undefined || row.nAccountUSERID !== undefined || row.nOperationalUserID !== undefined || row.nBranchBMID !== undefined || row.vBranchID !== undefined) {
+    if (
+      row.nAttachedToBranchID !== undefined ||
+      row.nWUBranchID !== undefined ||
+      row.nReportingBranchID !== undefined ||
+      row.nAccountUSERID !== undefined ||
+      row.nOperationalUserID !== undefined ||
+      row.nBranchBMID !== undefined ||
+      row.vBranchID !== undefined
+    ) {
       const branchRelationFields = [
-        ['nAttachedToBranchID', row.nAttachedToBranchID],
-        ['nWUBranchID', row.nWUBranchID],
-        ['nReportingBranchID', row.nReportingBranchID],
-        ['nAccountUSERID', row.nAccountUSERID],
-        ['nOperationalUserID', row.nOperationalUserID],
-        ['nBranchBMID', row.nBranchBMID],
-        ['vBranchID', row.vBranchID],
+        ["nAttachedToBranchID", row.nAttachedToBranchID],
+        ["nWUBranchID", row.nWUBranchID],
+        ["nReportingBranchID", row.nReportingBranchID],
+        ["nAccountUSERID", row.nAccountUSERID],
+        ["nOperationalUserID", row.nOperationalUserID],
+        ["nBranchBMID", row.nBranchBMID],
+        ["vBranchID", row.vBranchID],
       ] as const;
 
       for (const [fieldName, value] of branchRelationFields) {
-        if (value === undefined || value === null || value === '') {
+        if (value === undefined || value === null || value === "") {
           continue;
         }
 
-        const isUserField = fieldName === 'nAccountUSERID' || fieldName === 'nOperationalUserID';
+        const isUserField =
+          fieldName === "nAccountUSERID" || fieldName === "nOperationalUserID";
         const resolvedValue = isUserField
           ? await this.resolveAuditUserId(context, value, {
-              sourceTable: 'mstcompany',
-              sourceRowIdentifier: String(oldId ?? ''),
+              sourceTable: "mstcompany",
+              sourceRowIdentifier: String(oldId ?? ""),
               fieldName,
             })
-          : this.branchMap.get(String(value)) ?? null;
+          : (this.branchMap.get(String(value)) ?? null);
 
         this.addFieldStatus(context, {
-          sourceTable: 'mstcompany',
+          sourceTable: "mstcompany",
           sourceColumn: fieldName,
           sourceValue: value,
-          targetColumn: 'relation metadata',
+          targetColumn: "relation metadata",
           targetValue: resolvedValue,
-          status: resolvedValue ? 'saved' : 'unmapped',
-          note: 'Relation-only source field logged for branch review; not written directly to branches table',
+          status: resolvedValue ? "saved" : "unmapped",
+          note: "Relation-only source field logged for branch review; not written directly to branches table",
         });
       }
     }
 
     if (transformedCode.transformed) {
       this.addTransformation(context, {
-        sourceTable: 'mstcompany',
+        sourceTable: "mstcompany",
         sourceField: transformedCode.sourceField,
-        ruleName: 'branch-code-normalization',
+        ruleName: "branch-code-normalization",
         originalValue: row[transformedCode.sourceField],
         transformedValue: transformedCode.value,
-        result: 'transformed',
+        result: "transformed",
       });
       this.addFieldStatus(context, {
-        sourceTable: 'mstcompany',
+        sourceTable: "mstcompany",
         sourceColumn: transformedCode.sourceField,
         sourceValue: row[transformedCode.sourceField],
-        targetColumn: 'code',
+        targetColumn: "code",
         targetValue: transformedCode.value,
-        status: 'transformed',
-        note: 'Branch code normalized to four characters',
+        status: "transformed",
+        note: "Branch code normalized to four characters",
       });
     }
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const saved = await this.targetBranchRepository.save(branch);
       this.logger.log(`[mstcompany] created branch id=${saved.id}`);
       this.branchMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
-        oldTable: 'mstcompany',
+        oldTable: "mstcompany",
         oldId,
         newTable: targetTable,
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: saved.id,
+        created: true,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const mockId = `mock-branch-${oldId ?? randomUUID()}`;
     this.logger.log(`[mstcompany] mock branch id=${mockId}`);
     this.branchMap.set(String(oldId), mockId);
     this.addIdMap(context, {
-      oldTable: 'mstcompany',
+      oldTable: "mstcompany",
       oldId,
       newTable: targetTable,
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+    return {
+      id: mockId,
+      created: true,
+      sourceId: oldId,
+      targetTable,
+      lookupKey,
+      softDeleted: audit.wasDeleted,
+    };
   }
 
   private async resolveCounter(
     row: SourceRow,
     context: MigrationContext,
   ): Promise<ResolvedRecord> {
-    const oldId = row.nCounterID ?? row.nCounterId ?? row.ncounterid ?? row.id ?? row.ID;
+    const oldId =
+      row.nCounterID ?? row.nCounterId ?? row.ncounterid ?? row.id ?? row.ID;
     const lookupKey =
       toNullableString(row.vCounterID) ||
       toNullableString(row.vCounterId) ||
       toNullableString(row.vCounterName) ||
       `counter-${oldId}`;
-    const targetTable = 'counters';
-    this.logger.log(`[mstcounter] resolving counter oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
+    const targetTable = "counters";
+    this.logger.log(
+      `[mstcounter] resolving counter oldId=${String(oldId ?? "")} lookupKey=${lookupKey}`,
+    );
 
     if (this.counterMap.has(String(oldId))) {
       return {
@@ -2514,55 +3103,86 @@ export class MigrationToolService {
     }
 
     const branchOldId = row.nBranchID ?? row.nbranchid;
-    const branchId = branchOldId !== undefined ? this.branchMap.get(String(branchOldId)) ?? null : null;
+    const branchId =
+      branchOldId !== undefined
+        ? (this.branchMap.get(String(branchOldId)) ?? null)
+        : null;
     const counterNo =
       toNullableNumber(row.vCounterID) ??
       toNullableNumber(row.vCounterId) ??
       toNullableNumber(row.nCounterID) ??
       toNullableNumber(row.nCounterId) ??
       1;
-    const createdBy = this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
-      sourceTable: 'mstcounter',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nCreatedBy',
-    });
-    const updatedBy = this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
-      sourceTable: 'mstcounter',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nLastUpdateBy',
-    });
+    const createdBy = this.resolveAuditUserId(
+      context,
+      row.nCreatedBy ?? row.nCreatedBY,
+      {
+        sourceTable: "mstcounter",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nCreatedBy",
+      },
+    );
+    const updatedBy = this.resolveAuditUserId(
+      context,
+      row.nLastUpdateBy ?? row.nLastupdatedBy,
+      {
+        sourceTable: "mstcounter",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nLastUpdateBy",
+      },
+    );
     const audit = this.resolveAuditFields(row, context, {
-      sourceTable: 'mstcounter',
-      sourceRowIdentifier: String(oldId ?? ''),
+      sourceTable: "mstcounter",
+      sourceRowIdentifier: String(oldId ?? ""),
     });
     const existing = await this.targetCounterRepository.findOne({
       where: [
-        { counterNo, name: toStringOrFallback(row.vCounterName || row.vDescription, `Counter ${oldId}`) },
+        {
+          counterNo,
+          name: toStringOrFallback(
+            row.vCounterName || row.vDescription,
+            `Counter ${oldId}`,
+          ),
+        },
       ],
     });
 
     if (existing) {
-      this.logger.log(`[mstcounter] reused counter oldId=${String(oldId ?? '')} targetId=${existing.id}`);
-      if (audit.wasDeleted && context.mode === 'real') {
+      this.logger.log(
+        `[mstcounter] reused counter oldId=${String(oldId ?? "")} targetId=${existing.id}`,
+      );
+      if (audit.wasDeleted && context.mode === "real") {
         existing.deletedAt = audit.deletedAt;
         existing.deletedBy = audit.deletedBy;
         await this.targetCounterRepository.save(existing);
-        this.logger.warn(`[mstcounter] applied soft-delete to reused counter id=${existing.id}`);
+        this.logger.warn(
+          `[mstcounter] applied soft-delete to reused counter id=${existing.id}`,
+        );
       }
       this.counterMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
-        oldTable: 'mstcounter',
+        oldTable: "mstcounter",
         oldId,
         newTable: targetTable,
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: existing.id,
+        created: false,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const counter = this.targetCounterRepository.create({
       counterNo,
-      name: toStringOrFallback(row.vCounterName || row.vDescription, `Counter ${oldId}`),
+      name: toStringOrFallback(
+        row.vCounterName || row.vDescription,
+        `Counter ${oldId}`,
+      ),
       isActive: toBoolean(row.bIsActive),
       isRetail: false,
       isBulk: false,
@@ -2573,7 +3193,7 @@ export class MigrationToolService {
       deletedBy: audit.deletedBy,
     });
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const saved = await this.targetCounterRepository.save(counter);
       if (branchId) {
         const existingLink = await this.targetBranchCounterRepository.findOne({
@@ -2593,31 +3213,52 @@ export class MigrationToolService {
       this.logger.log(`[mstcounter] created counter id=${saved.id}`);
       this.counterMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
-        oldTable: 'mstcounter',
+        oldTable: "mstcounter",
         oldId,
         newTable: targetTable,
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: saved.id,
+        created: true,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const mockId = `mock-counter-${oldId ?? randomUUID()}`;
     this.logger.log(`[mstcounter] mock counter id=${mockId}`);
     this.counterMap.set(String(oldId), mockId);
     this.addIdMap(context, {
-      oldTable: 'mstcounter',
+      oldTable: "mstcounter",
       oldId,
       newTable: targetTable,
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+    return {
+      id: mockId,
+      created: true,
+      sourceId: oldId,
+      targetTable,
+      lookupKey,
+      softDeleted: audit.wasDeleted,
+    };
   }
 
-  private getOldIdFromRow(row: SourceRow, primaryKeyFields: string[]): string | number | null | undefined {
+  private getOldIdFromRow(
+    row: SourceRow,
+    primaryKeyFields: string[],
+  ): string | number | null | undefined {
     for (const field of primaryKeyFields) {
-      if (row[field] !== undefined && row[field] !== null && row[field] !== '') {
+      if (
+        row[field] !== undefined &&
+        row[field] !== null &&
+        row[field] !== ""
+      ) {
         return row[field];
       }
     }
@@ -2630,14 +3271,18 @@ export class MigrationToolService {
     oldId: string | number | null | undefined,
     primaryKeyFields: string[],
   ): SourceRow | undefined {
-    if (oldId === null || oldId === undefined || oldId === '') {
+    if (oldId === null || oldId === undefined || oldId === "") {
       return undefined;
     }
 
     const rows = this.getSourceRows(context, task);
-    return rows.find(row => {
+    return rows.find((row) => {
       const candidate = this.getOldIdFromRow(row, primaryKeyFields);
-      return candidate !== undefined && candidate !== null && String(candidate) === String(oldId);
+      return (
+        candidate !== undefined &&
+        candidate !== null &&
+        String(candidate) === String(oldId)
+      );
     });
   }
 
@@ -2646,7 +3291,7 @@ export class MigrationToolService {
     context: MigrationContext,
     oldId: string | number | null | undefined,
   ): Promise<string | null> {
-    if (oldId === null || oldId === undefined || oldId === '') {
+    if (oldId === null || oldId === undefined || oldId === "") {
       return null;
     }
 
@@ -2656,15 +3301,24 @@ export class MigrationToolService {
       return existing;
     }
 
-    this.logger.log(`[mstcompany] lazy resolving branch oldId=${key} from relation context`);
-    if (!this.getSourceRows(context, 'branch').length) {
-      const rows = await this.readSourceRows(pool, 'mstcompany');
-      this.ensureSourceRows(context, 'branch', rows);
+    this.logger.log(
+      `[mstcompany] lazy resolving branch oldId=${key} from relation context`,
+    );
+    if (!this.getSourceRows(context, "branch").length) {
+      const rows = await this.readSourceRows(pool, "mstcompany");
+      this.ensureSourceRows(context, "branch", rows);
     }
 
-    const row = this.findSourceRowByOldId(context, 'branch', oldId, ['nBranchID', 'nbranchid', 'id', 'ID']);
+    const row = this.findSourceRowByOldId(context, "branch", oldId, [
+      "nBranchID",
+      "nbranchid",
+      "id",
+      "ID",
+    ]);
     if (!row) {
-      this.logger.warn(`[mstcompany] could not locate source branch row for oldId=${key}`);
+      this.logger.warn(
+        `[mstcompany] could not locate source branch row for oldId=${key}`,
+      );
       return null;
     }
 
@@ -2677,7 +3331,7 @@ export class MigrationToolService {
     context: MigrationContext,
     oldId: string | number | null | undefined,
   ): Promise<string | null> {
-    if (oldId === null || oldId === undefined || oldId === '') {
+    if (oldId === null || oldId === undefined || oldId === "") {
       return null;
     }
 
@@ -2687,15 +3341,25 @@ export class MigrationToolService {
       return existing;
     }
 
-    this.logger.log(`[mstcounter] lazy resolving counter oldId=${key} from relation context`);
-    if (!this.getSourceRows(context, 'counter').length) {
-      const rows = await this.readSourceRows(pool, 'mstcounter');
-      this.ensureSourceRows(context, 'counter', rows);
+    this.logger.log(
+      `[mstcounter] lazy resolving counter oldId=${key} from relation context`,
+    );
+    if (!this.getSourceRows(context, "counter").length) {
+      const rows = await this.readSourceRows(pool, "mstcounter");
+      this.ensureSourceRows(context, "counter", rows);
     }
 
-    const row = this.findSourceRowByOldId(context, 'counter', oldId, ['nCounterID', 'nCounterId', 'ncounterid', 'id', 'ID']);
+    const row = this.findSourceRowByOldId(context, "counter", oldId, [
+      "nCounterID",
+      "nCounterId",
+      "ncounterid",
+      "id",
+      "ID",
+    ]);
     if (!row) {
-      this.logger.warn(`[mstcounter] could not locate source counter row for oldId=${key}`);
+      this.logger.warn(
+        `[mstcounter] could not locate source counter row for oldId=${key}`,
+      );
       return null;
     }
 
@@ -2708,7 +3372,7 @@ export class MigrationToolService {
     context: MigrationContext,
     oldId: string | number | null | undefined,
   ): Promise<string | null> {
-    if (oldId === null || oldId === undefined || oldId === '') {
+    if (oldId === null || oldId === undefined || oldId === "") {
       return null;
     }
 
@@ -2718,15 +3382,24 @@ export class MigrationToolService {
       return existing;
     }
 
-    this.logger.log(`[mstuser] lazy resolving user oldId=${key} from relation context`);
-    if (!this.getSourceRows(context, 'user').length) {
-      const rows = await this.readSourceRows(pool, 'mstuser');
-      this.ensureSourceRows(context, 'user', rows);
+    this.logger.log(
+      `[mstuser] lazy resolving user oldId=${key} from relation context`,
+    );
+    if (!this.getSourceRows(context, "user").length) {
+      const rows = await this.readSourceRows(pool, "mstuser");
+      this.ensureSourceRows(context, "user", rows);
     }
 
-    const row = this.findSourceRowByOldId(context, 'user', oldId, ['nUserID', 'nuserid', 'id', 'ID']);
+    const row = this.findSourceRowByOldId(context, "user", oldId, [
+      "nUserID",
+      "nuserid",
+      "id",
+      "ID",
+    ]);
     if (!row) {
-      this.logger.warn(`[mstuser] could not locate source user row for oldId=${key}`);
+      this.logger.warn(
+        `[mstuser] could not locate source user row for oldId=${key}`,
+      );
       return null;
     }
 
@@ -2740,8 +3413,12 @@ export class MigrationToolService {
       isMd: false,
       isCompliance: toBoolean(row.bComplianceAuthorization),
       isSrFinance: toBoolean(row.bCreditLimitAuthorization),
-      isFinance: toBoolean(row.bCreditLimitAuthorization) || toBoolean(row.bMiscLimitAuthorization),
-      isBrnMgr: toBoolean(row.bCanClearCounter) || toBoolean(row.bDataEntryAuthorization),
+      isFinance:
+        toBoolean(row.bCreditLimitAuthorization) ||
+        toBoolean(row.bMiscLimitAuthorization),
+      isBrnMgr:
+        toBoolean(row.bCanClearCounter) ||
+        toBoolean(row.bDataEntryAuthorization),
       isHoStaff: toBoolean(row.bCanOptCentralM),
       isExecutive: toBoolean(row.bSpecialRights) || toBoolean(row.bIsGroup),
       isCardStk: false,
@@ -2756,30 +3433,44 @@ export class MigrationToolService {
   }
 
   private getLegacyPermissionText(row: SourceRow): string {
-    return toNullableString(row.Permission ?? row.permission) ?? '';
+    return toNullableString(row.Permission ?? row.permission) ?? "";
   }
 
   private getLegacyPermissionTokens(row: SourceRow): string[] {
-    return [...new Set(splitLegacyTokens(this.getLegacyPermissionText(row)).map(token => token.trim()).filter(Boolean))];
+    return [
+      ...new Set(
+        splitLegacyTokens(this.getLegacyPermissionText(row))
+          .map((token) => token.trim())
+          .filter(Boolean),
+      ),
+    ];
   }
 
   private getLegacyRouteTokens(row: SourceRow): string[] {
     const tokens = this.getLegacyPermissionTokens(row);
-    return tokens.filter(token => !legacyPermissionActionSet.has(normalizeMatchText(token)));
+    return tokens.filter(
+      (token) => !legacyPermissionActionSet.has(normalizeMatchText(token)),
+    );
   }
 
   private getLegacyActions(row: SourceRow): string[] {
-    const tokens = this.getLegacyPermissionTokens(row).map(token => normalizeMatchText(token));
+    const tokens = this.getLegacyPermissionTokens(row).map((token) =>
+      normalizeMatchText(token),
+    );
     const actions = new Set<string>();
 
     for (const { code, aliases } of legacyActionAliases) {
-      if (tokens.some(token => aliases.some(alias => normalizeMatchText(alias) === token))) {
+      if (
+        tokens.some((token) =>
+          aliases.some((alias) => normalizeMatchText(alias) === token),
+        )
+      ) {
         actions.add(code);
       }
     }
 
     if (actions.size === 0) {
-      actions.add('view');
+      actions.add("view");
     }
 
     return [...actions];
@@ -2788,7 +3479,7 @@ export class MigrationToolService {
   private buildRoleSignature(row: SourceRow): string {
     const flags = this.roleFlagsFromUserRow(row);
     const normalizedTokens = this.getLegacyPermissionTokens(row)
-      .map(token => normalizeMatchText(token))
+      .map((token) => normalizeMatchText(token))
       .filter(Boolean)
       .sort();
     return JSON.stringify({
@@ -2799,22 +3490,22 @@ export class MigrationToolService {
 
   private buildRoleCode(row: SourceRow): string {
     const signature = this.buildRoleSignature(row);
-    return `LEGACY_ROLE_${createHash('sha1').update(signature).digest('hex').slice(0, 12).toUpperCase()}`;
+    return `LEGACY_ROLE_${createHash("sha1").update(signature).digest("hex").slice(0, 12).toUpperCase()}`;
   }
 
   private buildRoleName(row: SourceRow): string {
     if (toBoolean(row.bIsAdministrator)) {
-      return 'Legacy Administrator';
+      return "Legacy Administrator";
     }
     if (toBoolean(row.bCanOptCentralM)) {
-      return 'Legacy HO Staff';
+      return "Legacy HO Staff";
     }
-    return toStringOrFallback(row.vDescription || row.vName, 'Legacy Role');
+    return toStringOrFallback(row.vDescription || row.vName, "Legacy Role");
   }
 
   private async ensurePermissionCatalog(): Promise<Permission[]> {
     const permissions = await this.targetPermissionRepository.find({
-      order: { code: 'ASC' },
+      order: { code: "ASC" },
     });
 
     if (permissions.length > 0) {
@@ -2822,35 +3513,75 @@ export class MigrationToolService {
     }
 
     const requiredPermissions = [
-      { code: 'add', name: 'Add', description: 'Permission to add records' },
-      { code: 'modify', name: 'Modify', description: 'Permission to modify records' },
-      { code: 'delete', name: 'Delete', description: 'Permission to delete records' },
-      { code: 'view', name: 'View', description: 'Permission to view records' },
-      { code: 'export', name: 'Export', description: 'Permission to export data' },
-      { code: 'authorized', name: 'Authorized', description: 'Permission to authorize records' },
-      { code: 'rejected', name: 'Rejected', description: 'Permission to reject records' },
+      { code: "add", name: "Add", description: "Permission to add records" },
+      {
+        code: "modify",
+        name: "Modify",
+        description: "Permission to modify records",
+      },
+      {
+        code: "delete",
+        name: "Delete",
+        description: "Permission to delete records",
+      },
+      { code: "view", name: "View", description: "Permission to view records" },
+      {
+        code: "export",
+        name: "Export",
+        description: "Permission to export data",
+      },
+      {
+        code: "authorized",
+        name: "Authorized",
+        description: "Permission to authorize records",
+      },
+      {
+        code: "rejected",
+        name: "Rejected",
+        description: "Permission to reject records",
+      },
     ];
 
     const created = this.targetPermissionRepository.create(
-      requiredPermissions.map(permission => ({
+      requiredPermissions.map((permission) => ({
         ...permission,
-        createdBy: this.activeContext?.bootstrapAdminUserId ?? this.activeContext?.actorUserId ?? '',
-        updatedBy: this.activeContext?.bootstrapAdminUserId ?? this.activeContext?.actorUserId ?? '',
+        createdBy:
+          this.activeContext?.bootstrapAdminUserId ??
+          this.activeContext?.actorUserId ??
+          "",
+        updatedBy:
+          this.activeContext?.bootstrapAdminUserId ??
+          this.activeContext?.actorUserId ??
+          "",
       })),
     );
     const saved = await this.targetPermissionRepository.save(created);
-    this.logger.log(`[mstuser] seeded ${saved.length} permission record(s) for role migration`);
+    this.logger.log(
+      `[mstuser] seeded ${saved.length} permission record(s) for role migration`,
+    );
     return saved;
   }
 
-  private async ensureFrontendMenuCatalog(context: MigrationContext): Promise<void> {
+  private async ensureFrontendMenuCatalog(
+    context: MigrationContext,
+  ): Promise<void> {
     const existingMenus = await this.targetMenuRepository.find({
       relations: { parent: true },
-      order: { sortOrder: 'ASC', name: 'ASC' },
+      order: { sortOrder: "ASC", name: "ASC" },
     });
 
     const existingEntityByPath = new Map<string, Menu>();
-    const materializedByPath = new Map<string, { id: string; path: string; name: string; isAdmin: boolean; sortOrder: number; isActive: boolean }>();
+    const materializedByPath = new Map<
+      string,
+      {
+        id: string;
+        path: string;
+        name: string;
+        isAdmin: boolean;
+        sortOrder: number;
+        isActive: boolean;
+      }
+    >();
 
     for (const menu of existingMenus) {
       const key = normalizeMenuPath(menu.path);
@@ -2878,14 +3609,18 @@ export class MigrationToolService {
         continue;
       }
 
-      const parentPath = seed.parentPath ? normalizeMenuPath(seed.parentPath) : null;
-      const parentRef = parentPath ? materializedByPath.get(parentPath) ?? null : null;
+      const parentPath = seed.parentPath
+        ? normalizeMenuPath(seed.parentPath)
+        : null;
+      const parentRef = parentPath
+        ? (materializedByPath.get(parentPath) ?? null)
+        : null;
       const existing = existingEntityByPath.get(path);
 
       if (seed.parentPath && !parentRef) {
         this.addWarning(context, {
-          sourceTable: 'frontend-menu-seed',
-          sourceColumn: 'parentPath',
+          sourceTable: "frontend-menu-seed",
+          sourceColumn: "parentPath",
           note: `Menu seed ${seed.name} skipped because parent ${seed.parentPath} is missing`,
         });
         continue;
@@ -2896,7 +3631,9 @@ export class MigrationToolService {
         const desiredParentId = parentRef?.id ?? null;
 
         if ((existing.parent?.id ?? null) !== desiredParentId) {
-          existing.parent = desiredParentId ? ({ id: desiredParentId } as Menu) : null;
+          existing.parent = desiredParentId
+            ? ({ id: desiredParentId } as Menu)
+            : null;
           changed = true;
         }
         if (existing.name !== seed.name) {
@@ -2917,7 +3654,7 @@ export class MigrationToolService {
         }
         existing.updatedBy = context.actorUserId;
 
-        if (changed && context.mode === 'real') {
+        if (changed && context.mode === "real") {
           await this.targetMenuRepository.save(existing);
           updated += 1;
         } else {
@@ -2933,15 +3670,15 @@ export class MigrationToolService {
           isActive: existing.isActive,
         });
         this.addFieldStatus(context, {
-          sourceTable: 'frontend-menu-seed',
-          sourceColumn: 'path',
+          sourceTable: "frontend-menu-seed",
+          sourceColumn: "path",
           sourceValue: path,
-          targetColumn: 'menus',
+          targetColumn: "menus",
           targetValue: {
             id: existing.id,
             parentId: parentRef?.id ?? null,
           },
-          status: changed ? 'transformed' : 'saved',
+          status: changed ? "transformed" : "saved",
           note: changed
             ? `Updated menu metadata to align with frontend route catalog (${seed.name})`
             : `Reused existing menu entry for ${seed.name}`,
@@ -2963,7 +3700,7 @@ export class MigrationToolService {
         deletedBy: null,
       });
 
-      if (context.mode === 'real') {
+      if (context.mode === "real") {
         const saved = await this.targetMenuRepository.save(menuEntity);
         materializedByPath.set(path, {
           id: saved.id,
@@ -2975,14 +3712,14 @@ export class MigrationToolService {
         });
         created += 1;
         this.addRowResult(context, {
-          sourceTable: 'frontend-menu-seed',
+          sourceTable: "frontend-menu-seed",
           sourcePrimaryKey: path,
           targetId: saved.id,
-          status: 'inserted',
+          status: "inserted",
           note: `Seeded frontend menu ${seed.name}`,
         });
       } else {
-        const mockId = `mock-menu-${createHash('sha1').update(path).digest('hex').slice(0, 12)}`;
+        const mockId = `mock-menu-${createHash("sha1").update(path).digest("hex").slice(0, 12)}`;
         materializedByPath.set(path, {
           id: mockId,
           path,
@@ -2993,10 +3730,10 @@ export class MigrationToolService {
         });
         created += 1;
         this.addRowResult(context, {
-          sourceTable: 'frontend-menu-seed',
+          sourceTable: "frontend-menu-seed",
           sourcePrimaryKey: path,
           targetId: mockId,
-          status: 'mocked',
+          status: "mocked",
           note: `Would seed frontend menu ${seed.name}`,
         });
       }
@@ -3011,8 +3748,13 @@ export class MigrationToolService {
     row: SourceRow,
     context: MigrationContext,
   ): Promise<string | null> {
-    const explicitCompanyOldId = row.nCompID ?? row.ncompid ?? row.companyId ?? row.company_id;
-    if (explicitCompanyOldId !== undefined && explicitCompanyOldId !== null && explicitCompanyOldId !== '') {
+    const explicitCompanyOldId =
+      row.nCompID ?? row.ncompid ?? row.companyId ?? row.company_id;
+    if (
+      explicitCompanyOldId !== undefined &&
+      explicitCompanyOldId !== null &&
+      explicitCompanyOldId !== ""
+    ) {
       const mapped = this.companyMap.get(String(explicitCompanyOldId));
       if (mapped) {
         return mapped;
@@ -3020,7 +3762,11 @@ export class MigrationToolService {
     }
 
     const branchOldId = row.nBranchID ?? row.nbranchid;
-    if (branchOldId !== undefined && branchOldId !== null && branchOldId !== '') {
+    if (
+      branchOldId !== undefined &&
+      branchOldId !== null &&
+      branchOldId !== ""
+    ) {
       const branchId = this.branchMap.get(String(branchOldId));
       if (branchId) {
         const branch = await this.targetBranchRepository.findOne({
@@ -3035,12 +3781,12 @@ export class MigrationToolService {
 
     const [firstCompany] = await this.targetCompanyRepository.find({
       take: 1,
-      order: { createdAt: 'ASC' },
+      order: { createdAt: "ASC" },
     });
     if (firstCompany) {
       this.addWarning(context, {
-        sourceTable: 'mstuser',
-        sourceColumn: 'company resolution',
+        sourceTable: "mstuser",
+        sourceColumn: "company resolution",
         note: `Role permissions fell back to first migrated company ${firstCompany.id} because no explicit company could be resolved`,
       });
       return firstCompany.id;
@@ -3054,9 +3800,9 @@ export class MigrationToolService {
     context: MigrationContext,
   ): Promise<Menu[]> {
     const menus = await this.targetMenuRepository.find({
-      order: { sortOrder: 'ASC', name: 'ASC' },
+      order: { sortOrder: "ASC", name: "ASC" },
     });
-    const activeMenus = menus.filter(menu => menu.isActive);
+    const activeMenus = menus.filter((menu) => menu.isActive);
     const routeTokens = this.getLegacyRouteTokens(row);
     if (routeTokens.length === 0) {
       return [];
@@ -3071,9 +3817,9 @@ export class MigrationToolService {
         continue;
       }
 
-      const exact = activeMenus.find(menu => {
-        const path = normalizeMatchText(menu.path ?? '');
-        const name = normalizeMatchText(menu.name ?? '');
+      const exact = activeMenus.find((menu) => {
+        const path = normalizeMatchText(menu.path ?? "");
+        const name = normalizeMatchText(menu.name ?? "");
         return normalizedToken === path || normalizedToken === name;
       });
       if (exact) {
@@ -3084,8 +3830,8 @@ export class MigrationToolService {
       let bestMenu: Menu | null = null;
       let bestScore = 0;
       for (const menu of activeMenus) {
-        const pathScore = stringSimilarity(token, menu.path ?? '');
-        const nameScore = stringSimilarity(token, menu.name ?? '');
+        const pathScore = stringSimilarity(token, menu.path ?? "");
+        const nameScore = stringSimilarity(token, menu.name ?? "");
         const score = Math.max(pathScore, nameScore);
         if (score > bestScore) {
           bestScore = score;
@@ -3096,18 +3842,18 @@ export class MigrationToolService {
       if (bestMenu && bestScore >= 0.6) {
         partialMatches.set(bestMenu.id, bestMenu);
         this.addFieldStatus(context, {
-          sourceTable: 'mstuser',
-          sourceColumn: 'Permission',
+          sourceTable: "mstuser",
+          sourceColumn: "Permission",
           sourceValue: token,
-          targetColumn: 'menus.path',
+          targetColumn: "menus.path",
           targetValue: bestMenu.path ?? bestMenu.name,
-          status: 'transformed',
+          status: "transformed",
           note: `Legacy permission token matched by partial route similarity (${Math.round(bestScore * 100)}%)`,
         });
       } else {
         this.addWarning(context, {
-          sourceTable: 'mstuser',
-          sourceColumn: 'Permission',
+          sourceTable: "mstuser",
+          sourceColumn: "Permission",
           note: `No safe route match found for legacy token "${token}"`,
         });
       }
@@ -3129,28 +3875,31 @@ export class MigrationToolService {
     const companyId = await this.resolveRolePermissionCompanyId(row, context);
     if (!companyId) {
       this.addWarning(context, {
-        sourceTable: 'mstuser',
-        sourceColumn: 'company resolution',
+        sourceTable: "mstuser",
+        sourceColumn: "company resolution",
         note: `Role ${role.code} could not resolve a company; menu permissions were not written`,
       });
       return;
     }
 
     const permissions = await this.ensurePermissionCatalog();
-    const permissionMap = new Map(permissions.map(permission => [permission.code, permission]));
-    const isFullAccess = toBoolean(row.bIsAdministrator) || toBoolean(row.bCanOptCentralM);
+    const permissionMap = new Map(
+      permissions.map((permission) => [permission.code, permission]),
+    );
+    const isFullAccess =
+      toBoolean(row.bIsAdministrator) || toBoolean(row.bCanOptCentralM);
     const menus = await this.targetMenuRepository.find({
-      order: { sortOrder: 'ASC', name: 'ASC' },
+      order: { sortOrder: "ASC", name: "ASC" },
     });
 
     const selectedMenus = isFullAccess
-      ? menus.filter(menu => menu.isActive)
+      ? menus.filter((menu) => menu.isActive)
       : await this.findBestMenuMatches(row, context);
 
     if (selectedMenus.length === 0) {
       this.addWarning(context, {
-        sourceTable: 'mstuser',
-        sourceColumn: 'Permission',
+        sourceTable: "mstuser",
+        sourceColumn: "Permission",
         note: `No menus matched legacy permission data for role ${role.code}`,
       });
       context.createdRoleCodes.add(roleCode);
@@ -3159,14 +3908,14 @@ export class MigrationToolService {
 
     const permissionCodes = isFullAccess
       ? [...permissionMap.keys()]
-      : this.getLegacyActions(row).filter(code => permissionMap.has(code));
+      : this.getLegacyActions(row).filter((code) => permissionMap.has(code));
 
     if (permissionCodes.length === 0) {
-      permissionCodes.push('view');
+      permissionCodes.push("view");
     }
 
     const relationRepository = this.targetRolesMenuPermissionRepository;
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       await relationRepository
         .createQueryBuilder()
         .delete()
@@ -3175,50 +3924,52 @@ export class MigrationToolService {
         .execute();
     }
 
-    const relations = selectedMenus.flatMap(menu =>
-      permissionCodes.map(permissionCode => {
-        const permission = permissionMap.get(permissionCode);
-        if (!permission) {
-          return null;
-        }
-        return relationRepository.create({
-          role: { id: role.id } as Role,
-          company: { id: companyId } as Company,
-          menu: { id: menu.id } as Menu,
-          permission: { id: permission.id } as Permission,
-        });
-      }),
-    ).filter(Boolean) as RolesMenuPermission[];
+    const relations = selectedMenus
+      .flatMap((menu) =>
+        permissionCodes.map((permissionCode) => {
+          const permission = permissionMap.get(permissionCode);
+          if (!permission) {
+            return null;
+          }
+          return relationRepository.create({
+            role: { id: role.id } as Role,
+            company: { id: companyId } as Company,
+            menu: { id: menu.id } as Menu,
+            permission: { id: permission.id } as Permission,
+          });
+        }),
+      )
+      .filter(Boolean) as RolesMenuPermission[];
 
     if (relations.length === 0) {
       this.addWarning(context, {
-        sourceTable: 'mstuser',
-        sourceColumn: 'Permission',
+        sourceTable: "mstuser",
+        sourceColumn: "Permission",
         note: `No role menu permission rows could be built for ${role.code}`,
       });
       context.createdRoleCodes.add(roleCode);
       return;
     }
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       await relationRepository.save(relations);
     }
 
     this.addFieldStatus(context, {
-      sourceTable: 'mstuser',
-      sourceColumn: 'Permission',
+      sourceTable: "mstuser",
+      sourceColumn: "Permission",
       sourceValue: this.getLegacyPermissionText(row),
-      targetColumn: 'roles_menu_permissions',
+      targetColumn: "roles_menu_permissions",
       targetValue: {
         roleId: role.id,
         companyId,
         menuCount: selectedMenus.length,
         permissionCodes,
       },
-      status: 'saved',
+      status: "saved",
       note: isFullAccess
-        ? 'Granted full route access for admin/HO role'
-        : 'Mapped legacy permission data to current route permissions',
+        ? "Granted full route access for admin/HO role"
+        : "Mapped legacy permission data to current route permissions",
     });
 
     context.createdRoleCodes.add(roleCode);
@@ -3230,9 +3981,11 @@ export class MigrationToolService {
   ): Promise<ResolvedRecord> {
     const oldId = row.nUserID ?? row.nuserid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vUID) || `user-${oldId}`;
-    const targetTable = 'roles';
+    const targetTable = "roles";
     const roleCode = this.buildRoleCode(row);
-    this.logger.log(`[mstuser] resolving role bundle oldId=${String(oldId ?? '')} roleCode=${roleCode}`);
+    this.logger.log(
+      `[mstuser] resolving role bundle oldId=${String(oldId ?? "")} roleCode=${roleCode}`,
+    );
 
     if (this.roleMap.has(String(oldId))) {
       return {
@@ -3244,76 +3997,111 @@ export class MigrationToolService {
       };
     }
 
-    const existing = await this.targetRoleRepository.findOne({ where: { code: roleCode } });
+    const existing = await this.targetRoleRepository.findOne({
+      where: { code: roleCode },
+    });
     const audit = this.resolveAuditFields(row, context, {
-      sourceTable: 'mstuser',
-      sourceRowIdentifier: String(oldId ?? ''),
+      sourceTable: "mstuser",
+      sourceRowIdentifier: String(oldId ?? ""),
     });
     if (existing) {
-      this.logger.log(`[mstuser] reused role oldId=${String(oldId ?? '')} targetId=${existing.id}`);
-      if (audit.wasDeleted && context.mode === 'real') {
+      this.logger.log(
+        `[mstuser] reused role oldId=${String(oldId ?? "")} targetId=${existing.id}`,
+      );
+      if (audit.wasDeleted && context.mode === "real") {
         existing.deletedAt = audit.deletedAt;
         existing.deletedBy = audit.deletedBy;
         await this.targetRoleRepository.save(existing);
-        this.logger.warn(`[mstuser] applied soft-delete to reused role id=${existing.id}`);
+        this.logger.warn(
+          `[mstuser] applied soft-delete to reused role id=${existing.id}`,
+        );
       }
       this.roleMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
-        oldTable: 'mstuser',
+        oldTable: "mstuser",
         oldId,
         newTable: targetTable,
         newUuid: existing.id,
         lookupKey,
       });
       await this.syncRolePermissionsFromLegacyRow(row, existing, context);
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: existing.id,
+        created: false,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const role = this.targetRoleRepository.create({
       code: roleCode,
       name: this.buildRoleName(row),
       ...this.roleFlagsFromUserRow(row),
-      createdBy: this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
-        sourceTable: 'mstuser',
-        sourceRowIdentifier: String(oldId ?? ''),
-        fieldName: 'nCreatedBy',
-      }),
-      updatedBy: this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
-        sourceTable: 'mstuser',
-        sourceRowIdentifier: String(oldId ?? ''),
-        fieldName: 'nLastUpdateBy',
-      }),
+      createdBy: this.resolveAuditUserId(
+        context,
+        row.nCreatedBy ?? row.nCreatedBY,
+        {
+          sourceTable: "mstuser",
+          sourceRowIdentifier: String(oldId ?? ""),
+          fieldName: "nCreatedBy",
+        },
+      ),
+      updatedBy: this.resolveAuditUserId(
+        context,
+        row.nLastUpdateBy ?? row.nLastupdatedBy,
+        {
+          sourceTable: "mstuser",
+          sourceRowIdentifier: String(oldId ?? ""),
+          fieldName: "nLastUpdateBy",
+        },
+      ),
       deletedAt: audit.deletedAt,
       deletedBy: audit.deletedBy,
     });
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const saved = await this.targetRoleRepository.save(role);
       this.logger.log(`[mstuser] created role id=${saved.id}`);
       this.roleMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
-        oldTable: 'mstuser',
+        oldTable: "mstuser",
         oldId,
         newTable: targetTable,
         newUuid: saved.id,
         lookupKey,
       });
       await this.syncRolePermissionsFromLegacyRow(row, saved, context);
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: saved.id,
+        created: true,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const mockId = `mock-role-${oldId ?? randomUUID()}`;
     this.logger.log(`[mstuser] mock role id=${mockId}`);
     this.roleMap.set(String(oldId), mockId);
     this.addIdMap(context, {
-      oldTable: 'mstuser',
+      oldTable: "mstuser",
       oldId,
       newTable: targetTable,
       newUuid: mockId,
       lookupKey,
     });
     await this.syncRolePermissionsFromLegacyRow(row, role, context);
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+    return {
+      id: mockId,
+      created: true,
+      sourceId: oldId,
+      targetTable,
+      lookupKey,
+      softDeleted: audit.wasDeleted,
+    };
   }
 
   private async resolveUser(
@@ -3322,8 +4110,10 @@ export class MigrationToolService {
   ): Promise<ResolvedRecord> {
     const oldId = row.nUserID ?? row.nuserid ?? row.id ?? row.ID;
     const lookupKey = toNullableString(row.vUID) || `user-${oldId}`;
-    const targetTable = 'users';
-    this.logger.log(`[mstuser] resolving user oldId=${String(oldId ?? '')} lookupKey=${lookupKey}`);
+    const targetTable = "users";
+    this.logger.log(
+      `[mstuser] resolving user oldId=${String(oldId ?? "")} lookupKey=${lookupKey}`,
+    );
 
     if (this.userMap.has(String(oldId))) {
       return {
@@ -3336,40 +4126,62 @@ export class MigrationToolService {
     }
 
     const code = toStringOrFallback(row.vUID, `USER_${oldId}`);
-    const email = toNullableString(row.vMailID) ?? `user-${oldId}@migrated.local`;
-    const createdBy = this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
-      sourceTable: 'mstuser',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nCreatedBy',
-    });
-    const updatedBy = this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
-      sourceTable: 'mstuser',
-      sourceRowIdentifier: String(oldId ?? ''),
-      fieldName: 'nLastUpdateBy',
-    });
+    const email =
+      toNullableString(row.vMailID) ?? `user-${oldId}@migrated.local`;
+    const createdBy = this.resolveAuditUserId(
+      context,
+      row.nCreatedBy ?? row.nCreatedBY,
+      {
+        sourceTable: "mstuser",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nCreatedBy",
+      },
+    );
+    const updatedBy = this.resolveAuditUserId(
+      context,
+      row.nLastUpdateBy ?? row.nLastupdatedBy,
+      {
+        sourceTable: "mstuser",
+        sourceRowIdentifier: String(oldId ?? ""),
+        fieldName: "nLastUpdateBy",
+      },
+    );
     const audit = this.resolveAuditFields(row, context, {
-      sourceTable: 'mstuser',
-      sourceRowIdentifier: String(oldId ?? ''),
+      sourceTable: "mstuser",
+      sourceRowIdentifier: String(oldId ?? ""),
     });
-    const existing = await this.targetUserRepository.findOne({ where: [{ code }, { email }] });
+    const existing = await this.targetUserRepository.findOne({
+      where: [{ code }, { email }],
+    });
 
     if (existing) {
-      this.logger.log(`[mstuser] reused user oldId=${String(oldId ?? '')} targetId=${existing.id}`);
-      if (audit.wasDeleted && context.mode === 'real') {
+      this.logger.log(
+        `[mstuser] reused user oldId=${String(oldId ?? "")} targetId=${existing.id}`,
+      );
+      if (audit.wasDeleted && context.mode === "real") {
         existing.deletedAt = audit.deletedAt;
         existing.deletedBy = audit.deletedBy;
         await this.targetUserRepository.save(existing);
-        this.logger.warn(`[mstuser] applied soft-delete to reused user id=${existing.id}`);
+        this.logger.warn(
+          `[mstuser] applied soft-delete to reused user id=${existing.id}`,
+        );
       }
       this.userMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
-        oldTable: 'mstuser',
+        oldTable: "mstuser",
         oldId,
         newTable: targetTable,
         newUuid: existing.id,
         lookupKey,
       });
-      return { id: existing.id, created: false, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: existing.id,
+        created: false,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const hashedPassword = await bcrypt.hash(TEMP_INITIAL_PASSWORD, 10);
@@ -3398,31 +4210,45 @@ export class MigrationToolService {
       deletedBy: audit.deletedBy,
     });
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const saved = await this.targetUserRepository.save(user);
       this.logger.log(`[mstuser] created user id=${saved.id}`);
       this.userMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
-        oldTable: 'mstuser',
+        oldTable: "mstuser",
         oldId,
         newTable: targetTable,
         newUuid: saved.id,
         lookupKey,
       });
-      return { id: saved.id, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+      return {
+        id: saved.id,
+        created: true,
+        sourceId: oldId,
+        targetTable,
+        lookupKey,
+        softDeleted: audit.wasDeleted,
+      };
     }
 
     const mockId = `mock-user-${oldId ?? randomUUID()}`;
     this.logger.log(`[mstuser] mock user id=${mockId}`);
     this.userMap.set(String(oldId), mockId);
     this.addIdMap(context, {
-      oldTable: 'mstuser',
+      oldTable: "mstuser",
       oldId,
       newTable: targetTable,
       newUuid: mockId,
       lookupKey,
     });
-    return { id: mockId, created: true, sourceId: oldId, targetTable, lookupKey, softDeleted: audit.wasDeleted };
+    return {
+      id: mockId,
+      created: true,
+      sourceId: oldId,
+      targetTable,
+      lookupKey,
+      softDeleted: audit.wasDeleted,
+    };
   }
 
   private async ensureBootstrapAdminUser(
@@ -3440,14 +4266,16 @@ export class MigrationToolService {
 
     const existingAdmin = await this.targetUserRepository.findOne({
       where: { isAdmin: true },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: "ASC" },
     });
 
     if (existingAdmin) {
       context.bootstrapAdminUserId = existingAdmin.id;
       context.bootstrapAdminRoleId = existingAdmin.id;
       context.bootstrapAdminSourceOldId = null;
-      this.logger.log(`[bootstrap] using existing admin user id=${existingAdmin.id}`);
+      this.logger.log(
+        `[bootstrap] using existing admin user id=${existingAdmin.id}`,
+      );
       return {
         userId: existingAdmin.id,
         roleId: existingAdmin.id,
@@ -3456,16 +4284,18 @@ export class MigrationToolService {
       };
     }
 
-    if (!this.getSourceRows(context, 'user').length) {
-      const rows = await this.readSourceRows(pool, 'mstuser');
-      this.ensureSourceRows(context, 'user', rows);
+    if (!this.getSourceRows(context, "user").length) {
+      const rows = await this.readSourceRows(pool, "mstuser");
+      this.ensureSourceRows(context, "user", rows);
     }
 
-    const rows = this.getSourceRows(context, 'user');
+    const rows = this.getSourceRows(context, "user");
     const bootstrapRow = this.pickBootstrapUserRow(rows);
 
     if (!bootstrapRow) {
-      this.logger.warn('[bootstrap] no source user rows found; falling back to current actor for audit ownership');
+      this.logger.warn(
+        "[bootstrap] no source user rows found; falling back to current actor for audit ownership",
+      );
       context.bootstrapAdminUserId = context.actorUserId;
       context.bootstrapAdminRoleId = context.actorUserId;
       context.bootstrapAdminSourceOldId = null;
@@ -3477,13 +4307,20 @@ export class MigrationToolService {
       };
     }
 
-    const sourceOldId = bootstrapRow.nUserID ?? bootstrapRow.nuserid ?? bootstrapRow.id ?? bootstrapRow.ID;
+    const sourceOldId =
+      bootstrapRow.nUserID ??
+      bootstrapRow.nuserid ??
+      bootstrapRow.id ??
+      bootstrapRow.ID;
     this.logger.log(
-      `[bootstrap] seeding admin user from mstuser oldId=${String(sourceOldId ?? '')} uid=${toNullableString(bootstrapRow.vUID) ?? ''}`,
+      `[bootstrap] seeding admin user from mstuser oldId=${String(sourceOldId ?? "")} uid=${toNullableString(bootstrapRow.vUID) ?? ""}`,
     );
 
     const userResolved = await this.resolveUser(bootstrapRow, context);
-    const roleResolved = await this.resolveUserRoleBundle(bootstrapRow, context);
+    const roleResolved = await this.resolveUserRoleBundle(
+      bootstrapRow,
+      context,
+    );
 
     context.bootstrapAdminUserId = userResolved.id;
     context.bootstrapAdminRoleId = roleResolved.id;
@@ -3508,28 +4345,28 @@ export class MigrationToolService {
         deletedAt: null,
         deletedBy: null,
       });
-      if (context.mode === 'real') {
+      if (context.mode === "real") {
         await this.targetUserRoleRepository.save(assignment);
         context.summary.rowsInserted += 1;
       }
       this.logger.log(
-        `[bootstrap] ${context.mode === 'real' ? 'saved' : 'prepared'} admin role assignment userId=${userResolved.id} roleId=${roleResolved.id}`,
+        `[bootstrap] ${context.mode === "real" ? "saved" : "prepared"} admin role assignment userId=${userResolved.id} roleId=${roleResolved.id}`,
       );
     }
 
     this.addRowResult(context, {
-      sourceTable: 'mstuser',
-      sourcePrimaryKey: String(sourceOldId ?? ''),
+      sourceTable: "mstuser",
+      sourcePrimaryKey: String(sourceOldId ?? ""),
       targetId: userResolved.id,
-      status: context.mode === 'real' ? 'inserted' : 'mocked',
-      note: 'Bootstrap admin user seeded before the selected table migration',
+      status: context.mode === "real" ? "inserted" : "mocked",
+      note: "Bootstrap admin user seeded before the selected table migration",
     });
     this.addRowResult(context, {
-      sourceTable: 'roles',
-      sourcePrimaryKey: String(sourceOldId ?? ''),
+      sourceTable: "roles",
+      sourcePrimaryKey: String(sourceOldId ?? ""),
       targetId: roleResolved.id,
-      status: context.mode === 'real' ? 'inserted' : 'mocked',
-      note: 'Bootstrap admin role seeded before the selected table migration',
+      status: context.mode === "real" ? "inserted" : "mocked",
+      note: "Bootstrap admin role seeded before the selected table migration",
     });
 
     return {
@@ -3540,107 +4377,149 @@ export class MigrationToolService {
     };
   }
 
-  private mapCurrencyCalculationMethod(value: any): { value: string; transformed: boolean } {
+  private mapCurrencyCalculationMethod(value: any): {
+    value: string;
+    transformed: boolean;
+  } {
     const text = toNullableString(value);
     if (!text) {
-      return { value: 'MULTIPLICATION', transformed: false };
+      return { value: "MULTIPLICATION", transformed: false };
     }
 
     const normalized = normalizeMatchText(text);
-    if (normalized.includes('div') || normalized.includes('divide')) {
-      return { value: 'DIVISION', transformed: true };
+    if (normalized.includes("div") || normalized.includes("divide")) {
+      return { value: "DIVISION", transformed: true };
     }
 
-    if (normalized.includes('mul') || normalized.includes('mult')) {
-      return { value: 'MULTIPLICATION', transformed: normalized !== 'multiplication' };
+    if (normalized.includes("mul") || normalized.includes("mult")) {
+      return {
+        value: "MULTIPLICATION",
+        transformed: normalized !== "multiplication",
+      };
     }
 
-    if (normalized === 'division' || normalized === 'divide') {
-      return { value: 'DIVISION', transformed: false };
+    if (normalized === "division" || normalized === "divide") {
+      return { value: "DIVISION", transformed: false };
     }
 
-    return { value: 'MULTIPLICATION', transformed: true };
+    return { value: "MULTIPLICATION", transformed: true };
   }
 
   private mapCurrencyProductAllowed(value: any): string {
-    const normalized = toNullableString(value)?.toUpperCase() ?? '';
-    return ['CN', 'CM', 'CC', 'ET', 'TC', 'TM'].includes(normalized) ? normalized : '';
+    const normalized = toNullableString(value)?.toUpperCase() ?? "";
+    return ["CN", "CM", "CC", "ET", "TC", "TM"].includes(normalized)
+      ? normalized
+      : "";
   }
 
-  private async processCurrencies(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'currency')) {
+  private async processCurrencies(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "currency")) {
       return;
     }
 
     this.logger.log(`[mcurrency] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mcurrency');
-    this.ensureSourceRows(context, 'currency', rows);
+    const rows = await this.readSourceRows(pool, "mcurrency");
+    this.ensureSourceRows(context, "currency", rows);
     let inserted = 0;
     let skipped = 0;
     let failed = 0;
 
     for (const row of rows) {
       context.summary.rowsScanned += 1;
-      const oldId = row.nCurrencyID ?? row.nCurrencyId ?? row.ncurrencyid ?? row.id ?? row.ID;
-      const lookupKey = toNullableString(row.vCncode) || toNullableString(row.vCnName) || `currency-${oldId}`;
+      const oldId =
+        row.nCurrencyID ??
+        row.nCurrencyId ??
+        row.ncurrencyid ??
+        row.id ??
+        row.ID;
+      const lookupKey =
+        toNullableString(row.vCncode) ||
+        toNullableString(row.vCnName) ||
+        `currency-${oldId}`;
 
       try {
-        const country = await this.resolveLegacyCountryReference(pool, context, row.nCountryID ?? row.nCountryId ?? row.ncountryid, {
-          sourceTable: 'mcurrency',
-          sourceRowIdentifier: String(oldId ?? ''),
-        });
+        const country = await this.resolveLegacyCountryReference(
+          pool,
+          context,
+          row.nCountryID ?? row.nCountryId ?? row.ncountryid,
+          {
+            sourceTable: "mcurrency",
+            sourceRowIdentifier: String(oldId ?? ""),
+          },
+        );
         if (!country) {
           skipped += 1;
           continue;
         }
 
         const existing = await this.targetCurrencyRepository.findOne({
-          where: { currencyCode: toStringOrFallback(row.vCncode, `CURRENCY_${oldId}`) },
+          where: {
+            currencyCode: toStringOrFallback(row.vCncode, `CURRENCY_${oldId}`),
+          },
           relations: { country: true, pricingGroup: true },
         });
-        const calculationMethod = this.mapCurrencyCalculationMethod(row.vCalculationMethod);
-        const productAllowed = this.mapCurrencyProductAllowed(row.vProductAlloowd);
+        const calculationMethod = this.mapCurrencyCalculationMethod(
+          row.vCalculationMethod,
+        );
+        const productAllowed = this.mapCurrencyProductAllowed(
+          row.vProductAlloowd,
+        );
         const onlyStocking = toBoolean(row.bTradedCurrency);
         const pricingGroupCode = toNullableString(row.nCurrencyGroupID) ?? null;
-        const currencyCode = toStringOrFallback(row.vCncode, `CURRENCY_${oldId}`);
+        const currencyCode = toStringOrFallback(
+          row.vCncode,
+          `CURRENCY_${oldId}`,
+        );
         const currencyName = toStringOrFallback(row.vCnName, currencyCode);
         const resolvedCountryLabel = (country as any).name ?? currencyCode;
-        const createdBy = this.resolveAuditUserId(context, row.nCreatedBy ?? row.nCreatedBY, {
-          sourceTable: 'mcurrency',
-          sourceRowIdentifier: String(oldId ?? ''),
-          fieldName: 'nCreatedBy',
-        });
-        const updatedBy = this.resolveAuditUserId(context, row.nLastUpdateBy ?? row.nLastupdatedBy, {
-          sourceTable: 'mcurrency',
-          sourceRowIdentifier: String(oldId ?? ''),
-          fieldName: 'nLastUpdateBy',
-        });
+        const createdBy = this.resolveAuditUserId(
+          context,
+          row.nCreatedBy ?? row.nCreatedBY,
+          {
+            sourceTable: "mcurrency",
+            sourceRowIdentifier: String(oldId ?? ""),
+            fieldName: "nCreatedBy",
+          },
+        );
+        const updatedBy = this.resolveAuditUserId(
+          context,
+          row.nLastUpdateBy ?? row.nLastupdatedBy,
+          {
+            sourceTable: "mcurrency",
+            sourceRowIdentifier: String(oldId ?? ""),
+            fieldName: "nLastUpdateBy",
+          },
+        );
         const audit = this.resolveAuditFields(row, context, {
-          sourceTable: 'mcurrency',
-          sourceRowIdentifier: String(oldId ?? ''),
+          sourceTable: "mcurrency",
+          sourceRowIdentifier: String(oldId ?? ""),
         });
 
         this.addFieldStatus(context, {
-          sourceTable: 'mcurrency',
-          sourceColumn: 'bTradedCurrency',
+          sourceTable: "mcurrency",
+          sourceColumn: "bTradedCurrency",
           sourceValue: row.bTradedCurrency,
-          targetColumn: 'onlyStocking',
+          targetColumn: "onlyStocking",
           targetValue: onlyStocking,
-          status: 'saved',
-          note: 'Legacy traded currency flag mapped to onlyStocking',
+          status: "saved",
+          note: "Legacy traded currency flag mapped to onlyStocking",
         });
 
         if (row.vProductAlloowd !== undefined && row.vProductAlloowd !== null) {
           this.addFieldStatus(context, {
-            sourceTable: 'mcurrency',
-            sourceColumn: 'vProductAlloowd',
+            sourceTable: "mcurrency",
+            sourceColumn: "vProductAlloowd",
             sourceValue: row.vProductAlloowd,
-            targetColumn: 'productAllowed',
-            targetValue: onlyStocking ? productAllowed || '' : '',
-            status: onlyStocking && productAllowed ? 'saved' : 'unmapped',
-            note: onlyStocking && productAllowed
-              ? 'Mapped to current productAllowed code'
-              : 'Legacy product allowance is not valid for the current currency rules',
+            targetColumn: "productAllowed",
+            targetValue: onlyStocking ? productAllowed || "" : "",
+            status: onlyStocking && productAllowed ? "saved" : "unmapped",
+            note:
+              onlyStocking && productAllowed
+                ? "Mapped to current productAllowed code"
+                : "Legacy product allowance is not valid for the current currency rules",
           });
         }
 
@@ -3650,40 +4529,82 @@ export class MigrationToolService {
             existing.currencyName = currencyName;
             changed = true;
           }
-          if (String(existing.country?.id ?? '') !== String(country.id)) {
+          if (String(existing.country?.id ?? "") !== String(country.id)) {
             existing.country = { id: country.id } as Country;
             changed = true;
           }
-          if (existing.priority !== toStringOrFallback(row.nPriority, existing.priority)) {
-            existing.priority = toStringOrFallback(row.nPriority, existing.priority);
+          if (
+            existing.priority !==
+            toStringOrFallback(row.nPriority, existing.priority)
+          ) {
+            existing.priority = toStringOrFallback(
+              row.nPriority,
+              existing.priority,
+            );
             changed = true;
           }
-          if (existing.ratePer !== toStringOrFallback(row.nRatePer, existing.ratePer)) {
-            existing.ratePer = toStringOrFallback(row.nRatePer, existing.ratePer);
+          if (
+            existing.ratePer !==
+            toStringOrFallback(row.nRatePer, existing.ratePer)
+          ) {
+            existing.ratePer = toStringOrFallback(
+              row.nRatePer,
+              existing.ratePer,
+            );
             changed = true;
           }
-          if (existing.defaultMinRate !== toStringOrFallback(row.nDefaultMinRate, existing.defaultMinRate)) {
-            existing.defaultMinRate = toStringOrFallback(row.nDefaultMinRate, existing.defaultMinRate);
+          if (
+            existing.defaultMinRate !==
+            toStringOrFallback(row.nDefaultMinRate, existing.defaultMinRate)
+          ) {
+            existing.defaultMinRate = toStringOrFallback(
+              row.nDefaultMinRate,
+              existing.defaultMinRate,
+            );
             changed = true;
           }
-          if (existing.defaultMaxRate !== toStringOrFallback(row.nDefaultMaxRate, existing.defaultMaxRate)) {
-            existing.defaultMaxRate = toStringOrFallback(row.nDefaultMaxRate, existing.defaultMaxRate);
+          if (
+            existing.defaultMaxRate !==
+            toStringOrFallback(row.nDefaultMaxRate, existing.defaultMaxRate)
+          ) {
+            existing.defaultMaxRate = toStringOrFallback(
+              row.nDefaultMaxRate,
+              existing.defaultMaxRate,
+            );
             changed = true;
           }
           if (existing.calculationMethod !== calculationMethod.value) {
             existing.calculationMethod = calculationMethod.value as any;
             changed = true;
           }
-          if (existing.openRatePremium !== toStringOrFallback(row.nOpenRatePremium, existing.openRatePremium)) {
-            existing.openRatePremium = toStringOrFallback(row.nOpenRatePremium, existing.openRatePremium);
+          if (
+            existing.openRatePremium !==
+            toStringOrFallback(row.nOpenRatePremium, existing.openRatePremium)
+          ) {
+            existing.openRatePremium = toStringOrFallback(
+              row.nOpenRatePremium,
+              existing.openRatePremium,
+            );
             changed = true;
           }
-          if (existing.gulfDiscFactor !== toStringOrFallback(row.nGulfDiscFactor, existing.gulfDiscFactor)) {
-            existing.gulfDiscFactor = toStringOrFallback(row.nGulfDiscFactor, existing.gulfDiscFactor);
+          if (
+            existing.gulfDiscFactor !==
+            toStringOrFallback(row.nGulfDiscFactor, existing.gulfDiscFactor)
+          ) {
+            existing.gulfDiscFactor = toStringOrFallback(
+              row.nGulfDiscFactor,
+              existing.gulfDiscFactor,
+            );
             changed = true;
           }
-          if (existing.amexMapCode !== toStringOrFallback(row.vAmexCode, existing.amexMapCode)) {
-            existing.amexMapCode = toStringOrFallback(row.vAmexCode, existing.amexMapCode);
+          if (
+            existing.amexMapCode !==
+            toStringOrFallback(row.vAmexCode, existing.amexMapCode)
+          ) {
+            existing.amexMapCode = toStringOrFallback(
+              row.vAmexCode,
+              existing.amexMapCode,
+            );
             changed = true;
           }
           if (existing.active !== toBoolean(row.bIsActive)) {
@@ -3694,57 +4615,61 @@ export class MigrationToolService {
             existing.onlyStocking = onlyStocking;
             changed = true;
           }
-          const desiredProductAllowed = onlyStocking ? productAllowed : '';
+          const desiredProductAllowed = onlyStocking ? productAllowed : "";
           if (existing.productAllowed !== desiredProductAllowed) {
             existing.productAllowed = desiredProductAllowed as any;
             changed = true;
           }
           if (pricingGroupCode) {
             this.addUnmappedColumn(context, {
-              sourceTable: 'mcurrency',
-              sourceColumn: 'nCurrencyGroupID',
+              sourceTable: "mcurrency",
+              sourceColumn: "nCurrencyGroupID",
               sourceValue: pricingGroupCode,
-              reason: 'Pricing group mapping is not yet confirmed; logged for review only',
+              reason:
+                "Pricing group mapping is not yet confirmed; logged for review only",
             });
           }
           if (row.VIssuerAllowed !== undefined) {
             this.addUnmappedColumn(context, {
-              sourceTable: 'mcurrency',
-              sourceColumn: 'VIssuerAllowed',
+              sourceTable: "mcurrency",
+              sourceColumn: "VIssuerAllowed",
               sourceValue: row.VIssuerAllowed,
-              reason: 'Issuer allowance is not mapped to a current currency column',
+              reason:
+                "Issuer allowance is not mapped to a current currency column",
             });
           }
           if (row.vBranchCode !== undefined) {
             this.addUnmappedColumn(context, {
-              sourceTable: 'mcurrency',
-              sourceColumn: 'vBranchCode',
+              sourceTable: "mcurrency",
+              sourceColumn: "vBranchCode",
               sourceValue: row.vBranchCode,
-              reason: 'Branch code is logged for review only',
+              reason: "Branch code is logged for review only",
             });
           }
-          if (changed && context.mode === 'real') {
+          if (changed && context.mode === "real") {
             existing.createdBy = createdBy;
             existing.updatedBy = updatedBy;
             existing.deletedAt = audit.deletedAt;
             existing.deletedBy = audit.deletedBy;
             await this.targetCurrencyRepository.save(existing);
-            this.logger.log(`[mcurrency] updated existing currency id=${existing.id}`);
+            this.logger.log(
+              `[mcurrency] updated existing currency id=${existing.id}`,
+            );
           }
 
           this.currencyMap.set(String(oldId), existing.id);
           this.addIdMap(context, {
-            oldTable: 'mcurrency',
+            oldTable: "mcurrency",
             oldId,
-            newTable: 'currencies',
+            newTable: "currencies",
             newUuid: existing.id,
             lookupKey,
           });
           this.addRowResult(context, {
-            sourceTable: 'mcurrency',
-            sourcePrimaryKey: String(oldId ?? ''),
+            sourceTable: "mcurrency",
+            sourcePrimaryKey: String(oldId ?? ""),
             targetId: existing.id,
-            status: changed ? 'updated' : 'mapped',
+            status: changed ? "updated" : "mapped",
             note: `Reused currency ${currencyCode} for country ${country.id}`,
           });
           continue;
@@ -3754,19 +4679,19 @@ export class MigrationToolService {
           currencyCode,
           currencyName,
           country: { id: country.id } as Country,
-          priority: toStringOrFallback(row.nPriority, '0'),
-          ratePer: toStringOrFallback(row.nRatePer, '1'),
-          defaultMinRate: toStringOrFallback(row.nDefaultMinRate, '0'),
-          defaultMaxRate: toStringOrFallback(row.nDefaultMaxRate, '0'),
+          priority: toStringOrFallback(row.nPriority, "0"),
+          ratePer: toStringOrFallback(row.nRatePer, "1"),
+          defaultMinRate: toStringOrFallback(row.nDefaultMinRate, "0"),
+          defaultMaxRate: toStringOrFallback(row.nDefaultMaxRate, "0"),
           calculationMethod: calculationMethod.value as any,
-          openRatePremium: toStringOrFallback(row.nOpenRatePremium, '0'),
-          gulfDiscFactor: toStringOrFallback(row.nGulfDiscFactor, '0'),
-          amexMapCode: toStringOrFallback(row.vAmexCode, ''),
-          group: 'ASIA',
+          openRatePremium: toStringOrFallback(row.nOpenRatePremium, "0"),
+          gulfDiscFactor: toStringOrFallback(row.nGulfDiscFactor, "0"),
+          amexMapCode: toStringOrFallback(row.vAmexCode, ""),
+          group: "ASIA",
           pricingGroup: null,
           active: toBoolean(row.bIsActive),
           onlyStocking,
-          productAllowed: (onlyStocking ? productAllowed : '') as any,
+          productAllowed: (onlyStocking ? productAllowed : "") as any,
           createdBy,
           updatedBy,
           deletedAt: audit.deletedAt,
@@ -3775,65 +4700,67 @@ export class MigrationToolService {
 
         if (pricingGroupCode) {
           this.addUnmappedColumn(context, {
-            sourceTable: 'mcurrency',
-            sourceColumn: 'nCurrencyGroupID',
+            sourceTable: "mcurrency",
+            sourceColumn: "nCurrencyGroupID",
             sourceValue: pricingGroupCode,
-            reason: 'Pricing group mapping is not yet confirmed; logged for review only',
+            reason:
+              "Pricing group mapping is not yet confirmed; logged for review only",
           });
         }
         if (row.VIssuerAllowed !== undefined) {
           this.addUnmappedColumn(context, {
-            sourceTable: 'mcurrency',
-            sourceColumn: 'VIssuerAllowed',
+            sourceTable: "mcurrency",
+            sourceColumn: "VIssuerAllowed",
             sourceValue: row.VIssuerAllowed,
-            reason: 'Issuer allowance is not mapped to a current currency column',
+            reason:
+              "Issuer allowance is not mapped to a current currency column",
           });
         }
         if (row.vBranchCode !== undefined) {
           this.addUnmappedColumn(context, {
-            sourceTable: 'mcurrency',
-            sourceColumn: 'vBranchCode',
+            sourceTable: "mcurrency",
+            sourceColumn: "vBranchCode",
             sourceValue: row.vBranchCode,
-            reason: 'Branch code is logged for review only',
+            reason: "Branch code is logged for review only",
           });
         }
 
         if (calculationMethod.transformed) {
           this.addTransformation(context, {
-            sourceTable: 'mcurrency',
-            sourceField: 'vCalculationMethod',
-            ruleName: 'currency-calculation-method-normalization',
+            sourceTable: "mcurrency",
+            sourceField: "vCalculationMethod",
+            ruleName: "currency-calculation-method-normalization",
             originalValue: row.vCalculationMethod,
             transformedValue: calculationMethod.value,
-            result: 'transformed',
+            result: "transformed",
           });
         }
 
         this.addFieldStatus(context, {
-          sourceTable: 'mcurrency',
-          sourceColumn: 'nCountryID',
+          sourceTable: "mcurrency",
+          sourceColumn: "nCountryID",
           sourceValue: row.nCountryID,
-          targetColumn: 'country_id',
+          targetColumn: "country_id",
           targetValue: country.id,
-          status: 'saved',
+          status: "saved",
           note: `Resolved via legacy country lookup for currency ${currencyCode}`,
         });
 
-        if (context.mode === 'real') {
+        if (context.mode === "real") {
           const saved = await this.targetCurrencyRepository.save(currency);
           this.currencyMap.set(String(oldId), saved.id);
           this.addIdMap(context, {
-            oldTable: 'mcurrency',
+            oldTable: "mcurrency",
             oldId,
-            newTable: 'currencies',
+            newTable: "currencies",
             newUuid: saved.id,
             lookupKey,
           });
           this.addRowResult(context, {
-            sourceTable: 'mcurrency',
-            sourcePrimaryKey: String(oldId ?? ''),
+            sourceTable: "mcurrency",
+            sourcePrimaryKey: String(oldId ?? ""),
             targetId: saved.id,
-            status: 'inserted',
+            status: "inserted",
             note: `Currency created for ${resolvedCountryLabel}`,
           });
           inserted += 1;
@@ -3841,17 +4768,17 @@ export class MigrationToolService {
           const mockId = `mock-currency-${oldId ?? randomUUID()}`;
           this.currencyMap.set(String(oldId), mockId);
           this.addIdMap(context, {
-            oldTable: 'mcurrency',
+            oldTable: "mcurrency",
             oldId,
-            newTable: 'currencies',
+            newTable: "currencies",
             newUuid: mockId,
             lookupKey,
           });
           this.addRowResult(context, {
-            sourceTable: 'mcurrency',
-            sourcePrimaryKey: String(oldId ?? ''),
+            sourceTable: "mcurrency",
+            sourcePrimaryKey: String(oldId ?? ""),
             targetId: mockId,
-            status: 'saved',
+            status: "saved",
             note: `Would create currency for ${resolvedCountryLabel}`,
           });
           inserted += 1;
@@ -3859,10 +4786,13 @@ export class MigrationToolService {
       } catch (error) {
         failed += 1;
         this.addError(context, {
-          sourceTable: 'mcurrency',
-          sourceRowIdentifier: String(oldId ?? ''),
-          fieldName: 'currency',
-          errorMessage: error instanceof Error ? error.message : 'Unknown currency migration failure',
+          sourceTable: "mcurrency",
+          sourceRowIdentifier: String(oldId ?? ""),
+          fieldName: "currency",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown currency migration failure",
         });
       }
     }
@@ -3871,25 +4801,32 @@ export class MigrationToolService {
     context.summary.rowsSkipped += skipped;
     context.summary.rowsFailed += failed;
     this.addTableResult(context, {
-      sourceTable: 'mcurrency',
-      targetTable: 'currencies',
+      sourceTable: "mcurrency",
+      targetTable: "currencies",
       rowCountScanned: rows.length,
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
       rowCountFailed: failed,
-      note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
+      note: context.mode === "mock" ? "Preview only" : "Persisted to target db",
     });
-    this.logger.log(`[mcurrency] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
+    this.logger.log(
+      `[mcurrency] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
   }
 
-  private async processCompanies(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'company')) {
+  private async processCompanies(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "company")) {
       return;
     }
 
-    this.logger.log(`[mstcompanyrecord] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstcompanyrecord');
-    this.ensureSourceRows(context, 'company', rows);
+    this.logger.log(
+      `[mstcompanyrecord] table migration started mode=${context.mode}`,
+    );
+    const rows = await this.readSourceRows(pool, "mstcompanyrecord");
+    this.ensureSourceRows(context, "company", rows);
     let inserted = 0;
     let skipped = 0;
     let failed = 0;
@@ -3899,11 +4836,12 @@ export class MigrationToolService {
       try {
         const resolved = await this.resolveCompany(row, context);
         this.addRowResult(context, {
-          sourceTable: 'mstcompanyrecord',
-          sourcePrimaryKey: String(row.nCompID ?? row.id ?? row.ID ?? ''),
+          sourceTable: "mstcompanyrecord",
+          sourcePrimaryKey: String(row.nCompID ?? row.id ?? row.ID ?? ""),
           targetId: resolved.id,
-          status: context.mode === 'real' && resolved.created ? 'inserted' : 'mocked',
-          note: `${resolved.created ? 'Company created or mapped' : 'Company reused from target db'}${resolved.softDeleted ? ' Source row marked deleted.' : ''}`,
+          status:
+            context.mode === "real" && resolved.created ? "inserted" : "mocked",
+          note: `${resolved.created ? "Company created or mapped" : "Company reused from target db"}${resolved.softDeleted ? " Source row marked deleted." : ""}`,
         });
         if (resolved.created) {
           inserted += 1;
@@ -3911,35 +4849,45 @@ export class MigrationToolService {
       } catch (error) {
         failed += 1;
         this.addError(context, {
-          sourceTable: 'mstcompanyrecord',
-          sourceRowIdentifier: String(row.nCompID ?? row.id ?? row.ID ?? ''),
-          fieldName: 'company',
-          errorMessage: error instanceof Error ? error.message : 'Unknown company migration failure',
+          sourceTable: "mstcompanyrecord",
+          sourceRowIdentifier: String(row.nCompID ?? row.id ?? row.ID ?? ""),
+          fieldName: "company",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown company migration failure",
         });
       }
     }
 
     context.summary.rowsInserted += inserted;
     this.addTableResult(context, {
-      sourceTable: 'mstcompanyrecord',
-      targetTable: 'company',
+      sourceTable: "mstcompanyrecord",
+      targetTable: "company",
       rowCountScanned: rows.length,
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
       rowCountFailed: failed,
-      note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
+      note: context.mode === "mock" ? "Preview only" : "Persisted to target db",
     });
-    this.logger.log(`[mstcompanyrecord] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
+    this.logger.log(
+      `[mstcompanyrecord] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
   }
 
-  private async processBranches(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'branch')) {
+  private async processBranches(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "branch")) {
       return;
     }
 
-    this.logger.log(`[mstcompany] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstcompany');
-    this.ensureSourceRows(context, 'branch', rows);
+    this.logger.log(
+      `[mstcompany] table migration started mode=${context.mode}`,
+    );
+    const rows = await this.readSourceRows(pool, "mstcompany");
+    this.ensureSourceRows(context, "branch", rows);
     let inserted = 0;
     let skipped = 0;
     let failed = 0;
@@ -3950,10 +4898,10 @@ export class MigrationToolService {
         const companyOldId = row.nCompID ?? row.ncompid;
         if (!companyOldId || !this.companyMap.has(String(companyOldId))) {
           this.addSkippedRow(context, {
-            sourceTable: 'mstcompany',
-            sourceRowIdentifier: String(row.nBranchID ?? row.id ?? ''),
-            reason: 'Parent company not resolved yet',
-            fallbackAction: 'Branch row skipped until company exists',
+            sourceTable: "mstcompany",
+            sourceRowIdentifier: String(row.nBranchID ?? row.id ?? ""),
+            reason: "Parent company not resolved yet",
+            fallbackAction: "Branch row skipped until company exists",
           });
           skipped += 1;
           continue;
@@ -3961,11 +4909,11 @@ export class MigrationToolService {
 
         const resolved = await this.resolveBranch(row, context);
         this.addRowResult(context, {
-          sourceTable: 'mstcompany',
-          sourcePrimaryKey: String(row.nBranchID ?? row.id ?? row.ID ?? ''),
+          sourceTable: "mstcompany",
+          sourcePrimaryKey: String(row.nBranchID ?? row.id ?? row.ID ?? ""),
           targetId: resolved.id,
-          status: resolved.created ? 'inserted' : 'reused',
-          note: `${resolved.created ? 'Branch created or mapped' : 'Branch reused from target db'}${resolved.softDeleted ? ' Source row marked deleted.' : ''}`,
+          status: resolved.created ? "inserted" : "reused",
+          note: `${resolved.created ? "Branch created or mapped" : "Branch reused from target db"}${resolved.softDeleted ? " Source row marked deleted." : ""}`,
         });
         if (resolved.created) {
           inserted += 1;
@@ -3973,10 +4921,13 @@ export class MigrationToolService {
       } catch (error) {
         failed += 1;
         this.addError(context, {
-          sourceTable: 'mstcompany',
-          sourceRowIdentifier: String(row.nBranchID ?? row.id ?? row.ID ?? ''),
-          fieldName: 'branch',
-          errorMessage: error instanceof Error ? error.message : 'Unknown branch migration failure',
+          sourceTable: "mstcompany",
+          sourceRowIdentifier: String(row.nBranchID ?? row.id ?? row.ID ?? ""),
+          fieldName: "branch",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown branch migration failure",
         });
       }
     }
@@ -3985,25 +4936,32 @@ export class MigrationToolService {
     context.summary.rowsSkipped += skipped;
     context.summary.rowsFailed += failed;
     this.addTableResult(context, {
-      sourceTable: 'mstcompany',
-      targetTable: 'branches',
+      sourceTable: "mstcompany",
+      targetTable: "branches",
       rowCountScanned: rows.length,
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
       rowCountFailed: failed,
-      note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
+      note: context.mode === "mock" ? "Preview only" : "Persisted to target db",
     });
-    this.logger.log(`[mstcompany] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
+    this.logger.log(
+      `[mstcompany] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
   }
 
-  private async processCounters(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'counter')) {
+  private async processCounters(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "counter")) {
       return;
     }
 
-    this.logger.log(`[mstcounter] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstcounter');
-    this.ensureSourceRows(context, 'counter', rows);
+    this.logger.log(
+      `[mstcounter] table migration started mode=${context.mode}`,
+    );
+    const rows = await this.readSourceRows(pool, "mstcounter");
+    this.ensureSourceRows(context, "counter", rows);
     let inserted = 0;
     let skipped = 0;
     let failed = 0;
@@ -4013,11 +4971,13 @@ export class MigrationToolService {
       try {
         const resolved = await this.resolveCounter(row, context);
         this.addRowResult(context, {
-          sourceTable: 'mstcounter',
-      sourcePrimaryKey: String(row.nCounterID ?? row.nCounterId ?? row.id ?? row.ID ?? ''),
+          sourceTable: "mstcounter",
+          sourcePrimaryKey: String(
+            row.nCounterID ?? row.nCounterId ?? row.id ?? row.ID ?? "",
+          ),
           targetId: resolved.id,
-          status: resolved.created ? 'inserted' : 'reused',
-          note: `${resolved.created ? 'Counter created or mapped' : 'Counter reused from target db'}${resolved.softDeleted ? ' Source row marked deleted.' : ''}`,
+          status: resolved.created ? "inserted" : "reused",
+          note: `${resolved.created ? "Counter created or mapped" : "Counter reused from target db"}${resolved.softDeleted ? " Source row marked deleted." : ""}`,
         });
         if (resolved.created) {
           inserted += 1;
@@ -4025,10 +4985,15 @@ export class MigrationToolService {
       } catch (error) {
         failed += 1;
         this.addError(context, {
-          sourceTable: 'mstcounter',
-      sourceRowIdentifier: String(row.nCounterID ?? row.nCounterId ?? row.id ?? row.ID ?? ''),
-          fieldName: 'counter',
-          errorMessage: error instanceof Error ? error.message : 'Unknown counter migration failure',
+          sourceTable: "mstcounter",
+          sourceRowIdentifier: String(
+            row.nCounterID ?? row.nCounterId ?? row.id ?? row.ID ?? "",
+          ),
+          fieldName: "counter",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown counter migration failure",
         });
       }
     }
@@ -4037,25 +5002,33 @@ export class MigrationToolService {
     context.summary.rowsSkipped += skipped;
     context.summary.rowsFailed += failed;
     this.addTableResult(context, {
-      sourceTable: 'mstcounter',
-      targetTable: 'counters',
+      sourceTable: "mstcounter",
+      targetTable: "counters",
       rowCountScanned: rows.length,
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
       rowCountFailed: failed,
-      note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
+      note: context.mode === "mock" ? "Preview only" : "Persisted to target db",
     });
-    this.logger.log(`[mstcounter] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
+    this.logger.log(
+      `[mstcounter] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
   }
 
-  private async processUsers(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'user') && !this.isTaskIncluded(context, 'role')) {
+  private async processUsers(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (
+      !this.isTaskIncluded(context, "user") &&
+      !this.isTaskIncluded(context, "role")
+    ) {
       return;
     }
 
     this.logger.log(`[mstuser] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstuser');
-    this.ensureSourceRows(context, 'user', rows);
+    const rows = await this.readSourceRows(pool, "mstuser");
+    this.ensureSourceRows(context, "user", rows);
     let insertedUsers = 0;
     let insertedRoles = 0;
     let failed = 0;
@@ -4069,34 +5042,40 @@ export class MigrationToolService {
         sourceOldId !== undefined &&
         String(sourceOldId) === String(context.bootstrapAdminSourceOldId)
       ) {
-        this.logger.log(`[mstuser] skipping bootstrap user row oldId=${String(sourceOldId)} because it was seeded earlier`);
+        this.logger.log(
+          `[mstuser] skipping bootstrap user row oldId=${String(sourceOldId)} because it was seeded earlier`,
+        );
         continue;
       }
       try {
         this.logLegacyPermissionBlob(row, context, {
-          sourceTable: 'mstuser',
-          sourceRowIdentifier: String(sourceOldId ?? ''),
+          sourceTable: "mstuser",
+          sourceRowIdentifier: String(sourceOldId ?? ""),
         });
         const userResolved = await this.resolveUser(row, context);
         const roleResolved = await this.resolveUserRoleBundle(row, context);
         context.userRows.push(row);
 
-        const userDeletedSuffix = userResolved.softDeleted ? ' Source row marked deleted.' : '';
-        const roleDeletedSuffix = roleResolved.softDeleted ? ' Source row marked deleted.' : '';
+        const userDeletedSuffix = userResolved.softDeleted
+          ? " Source row marked deleted."
+          : "";
+        const roleDeletedSuffix = roleResolved.softDeleted
+          ? " Source row marked deleted."
+          : "";
 
         this.addRowResult(context, {
-          sourceTable: 'mstuser',
-          sourcePrimaryKey: String(sourceOldId ?? ''),
+          sourceTable: "mstuser",
+          sourcePrimaryKey: String(sourceOldId ?? ""),
           targetId: userResolved.id,
-          status: userResolved.created ? 'inserted' : 'reused',
-          note: `${userResolved.created ? 'User created or mapped' : 'User reused from target db'}${userDeletedSuffix}`,
+          status: userResolved.created ? "inserted" : "reused",
+          note: `${userResolved.created ? "User created or mapped" : "User reused from target db"}${userDeletedSuffix}`,
         });
         this.addRowResult(context, {
-          sourceTable: 'mstuser',
-          sourcePrimaryKey: String(sourceOldId ?? ''),
+          sourceTable: "mstuser",
+          sourcePrimaryKey: String(sourceOldId ?? ""),
           targetId: roleResolved.id,
-          status: roleResolved.created ? 'inserted' : 'reused',
-          note: `${roleResolved.created ? 'Role created from user access bundle' : 'Role reused from target db'}${roleDeletedSuffix}`,
+          status: roleResolved.created ? "inserted" : "reused",
+          note: `${roleResolved.created ? "Role created from user access bundle" : "Role reused from target db"}${roleDeletedSuffix}`,
         });
 
         if (userResolved.created) insertedUsers += 1;
@@ -4104,10 +5083,13 @@ export class MigrationToolService {
       } catch (error) {
         failed += 1;
         this.addError(context, {
-          sourceTable: 'mstuser',
-          sourceRowIdentifier: String(row.nUserID ?? row.id ?? row.ID ?? ''),
-          fieldName: 'user',
-          errorMessage: error instanceof Error ? error.message : 'Unknown user migration failure',
+          sourceTable: "mstuser",
+          sourceRowIdentifier: String(row.nUserID ?? row.id ?? row.ID ?? ""),
+          fieldName: "user",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown user migration failure",
         });
       }
     }
@@ -4115,15 +5097,17 @@ export class MigrationToolService {
     context.summary.rowsInserted += insertedUsers + insertedRoles;
     context.summary.rowsFailed += failed;
     this.addTableResult(context, {
-      sourceTable: 'mstuser',
-      targetTable: 'users / roles',
+      sourceTable: "mstuser",
+      targetTable: "users / roles",
       rowCountScanned: rows.length,
       rowCountInserted: insertedUsers + insertedRoles,
       rowCountSkipped: 0,
       rowCountFailed: failed,
-      note: context.mode === 'mock' ? 'Preview only' : 'Persisted to target db',
+      note: context.mode === "mock" ? "Preview only" : "Persisted to target db",
     });
-    this.logger.log(`[mstuser] table migration finished scanned=${rows.length} inserted=${insertedUsers + insertedRoles} failed=${failed}`);
+    this.logger.log(
+      `[mstuser] table migration finished scanned=${rows.length} inserted=${insertedUsers + insertedRoles} failed=${failed}`,
+    );
   }
 
   private async ensureBranchCounterRelation(
@@ -4148,9 +5132,11 @@ export class MigrationToolService {
     if (!branchId || !counterId) {
       this.addSkippedRow(context, {
         sourceTable,
-        sourceRowIdentifier: String(row.nCBLId ?? row.nBranchUserID ?? row.nUserID ?? row.id ?? ''),
-        reason: 'Branch or counter relation missing',
-        fallbackAction: 'Relation logged only',
+        sourceRowIdentifier: String(
+          row.nCBLId ?? row.nBranchUserID ?? row.nUserID ?? row.id ?? "",
+        ),
+        reason: "Branch or counter relation missing",
+        fallbackAction: "Relation logged only",
       });
       return null;
     }
@@ -4165,12 +5151,12 @@ export class MigrationToolService {
       context.branchMainCounter.set(key, counterId);
     }
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       const existingLink = await this.targetBranchCounterRepository.findOne({
         where: { branchId, counterId },
       });
       if (!existingLink) {
-        const actorId = '00000000-0000-0000-0000-000000000000';
+        const actorId = "00000000-0000-0000-0000-000000000000";
         await this.targetBranchCounterRepository.save(
           this.targetBranchCounterRepository.create({
             branchId,
@@ -4184,12 +5170,17 @@ export class MigrationToolService {
         );
         this.addFieldStatus(context, {
           sourceTable,
-          sourceColumn: 'nBranchID / nCounterID',
-          sourceValue: { nBranchID: branchOldId, nCounterID: counterOldId, bMainCounter: toBoolean(row.bMainCounter) },
-          targetColumn: 'branch_counters.branch_id / branch_counters.counter_id',
+          sourceColumn: "nBranchID / nCounterID",
+          sourceValue: {
+            nBranchID: branchOldId,
+            nCounterID: counterOldId,
+            bMainCounter: toBoolean(row.bMainCounter),
+          },
+          targetColumn:
+            "branch_counters.branch_id / branch_counters.counter_id",
           targetValue: { branchId, counterId },
-          status: 'saved',
-          note: 'Branch-counter link created from mstBranchCounterLink',
+          status: "saved",
+          note: "Branch-counter link created from mstBranchCounterLink",
         });
       }
     }
@@ -4197,14 +5188,19 @@ export class MigrationToolService {
     return { branchId, counterId };
   }
 
-  private async processBranchCounterLinks(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'branchCounterLinks')) {
+  private async processBranchCounterLinks(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "branchCounterLinks")) {
       return;
     }
 
-    this.logger.log(`[mstBranchCounterLink] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstBranchCounterLink');
-    this.ensureSourceRows(context, 'branchCounterLinks', rows);
+    this.logger.log(
+      `[mstBranchCounterLink] table migration started mode=${context.mode}`,
+    );
+    const rows = await this.readSourceRows(pool, "mstBranchCounterLink");
+    this.ensureSourceRows(context, "branchCounterLinks", rows);
     let inserted = 0;
     let skipped = 0;
     let failed = 0;
@@ -4212,27 +5208,35 @@ export class MigrationToolService {
     for (const row of rows) {
       context.summary.rowsScanned += 1;
       try {
-        const relation = await this.ensureBranchCounterRelation(row, context, 'mstBranchCounterLink', pool);
+        const relation = await this.ensureBranchCounterRelation(
+          row,
+          context,
+          "mstBranchCounterLink",
+          pool,
+        );
         if (!relation) {
           skipped += 1;
           continue;
         }
 
         this.addRowResult(context, {
-          sourceTable: 'mstBranchCounterLink',
-          sourcePrimaryKey: String(row.nCBLId ?? row.id ?? row.ID ?? ''),
+          sourceTable: "mstBranchCounterLink",
+          sourcePrimaryKey: String(row.nCBLId ?? row.id ?? row.ID ?? ""),
           targetId: `${relation.branchId}:${relation.counterId}`,
-          status: 'mapped',
-          note: 'Branch-counter relationship resolved',
+          status: "mapped",
+          note: "Branch-counter relationship resolved",
         });
         inserted += 1;
       } catch (error) {
         failed += 1;
         this.addError(context, {
-          sourceTable: 'mstBranchCounterLink',
-          sourceRowIdentifier: String(row.nCBLId ?? row.id ?? row.ID ?? ''),
-          fieldName: 'branch-counter',
-          errorMessage: error instanceof Error ? error.message : 'Unknown branch-counter relation failure',
+          sourceTable: "mstBranchCounterLink",
+          sourceRowIdentifier: String(row.nCBLId ?? row.id ?? row.ID ?? ""),
+          fieldName: "branch-counter",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown branch-counter relation failure",
         });
       }
     }
@@ -4241,73 +5245,98 @@ export class MigrationToolService {
     context.summary.rowsSkipped += skipped;
     context.summary.rowsFailed += failed;
     this.addTableResult(context, {
-      sourceTable: 'mstBranchCounterLink',
-      targetTable: 'branch-counter relation',
+      sourceTable: "mstBranchCounterLink",
+      targetTable: "branch-counter relation",
       rowCountScanned: rows.length,
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
       rowCountFailed: failed,
-      note: context.mode === 'mock' ? 'Preview only' : 'Persisted as relation metadata',
+      note:
+        context.mode === "mock"
+          ? "Preview only"
+          : "Persisted as relation metadata",
     });
-    this.logger.log(`[mstBranchCounterLink] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`);
+    this.logger.log(
+      `[mstBranchCounterLink] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
   }
 
-  private async processBranchUserLinks(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'branchUserLinks')) {
+  private async processBranchUserLinks(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "branchUserLinks")) {
       return;
     }
 
-    this.logger.log(`[mstBranchUserLink] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstBranchUserLink');
-    this.ensureSourceRows(context, 'branchUserLinks', rows);
+    this.logger.log(
+      `[mstBranchUserLink] table migration started mode=${context.mode}`,
+    );
+    const rows = await this.readSourceRows(pool, "mstBranchUserLink");
+    this.ensureSourceRows(context, "branchUserLinks", rows);
     context.branchUserLinks = rows;
 
     for (const row of rows) {
       context.summary.rowsScanned += 1;
       const branchOldId = row.nBranchID ?? row.nbranchid;
       const userOldId = row.nUserID ?? row.nuserid;
-      const branchId = branchOldId ? await this.resolveBranchByOldId(pool, context, branchOldId) : undefined;
-      const userId = userOldId ? await this.resolveUserByOldId(pool, context, userOldId) : undefined;
+      const branchId = branchOldId
+        ? await this.resolveBranchByOldId(pool, context, branchOldId)
+        : undefined;
+      const userId = userOldId
+        ? await this.resolveUserByOldId(pool, context, userOldId)
+        : undefined;
 
       if (!branchId || !userId) {
         this.addSkippedRow(context, {
-          sourceTable: 'mstBranchUserLink',
-          sourceRowIdentifier: String(row.nBranchUserID ?? row.id ?? row.ID ?? ''),
-          reason: 'User or branch not resolved',
-          fallbackAction: 'Will retry during user-role flush',
+          sourceTable: "mstBranchUserLink",
+          sourceRowIdentifier: String(
+            row.nBranchUserID ?? row.id ?? row.ID ?? "",
+          ),
+          reason: "User or branch not resolved",
+          fallbackAction: "Will retry during user-role flush",
         });
         continue;
       }
 
       this.addRowResult(context, {
-        sourceTable: 'mstBranchUserLink',
-        sourcePrimaryKey: String(row.nBranchUserID ?? row.id ?? row.ID ?? ''),
+        sourceTable: "mstBranchUserLink",
+        sourcePrimaryKey: String(row.nBranchUserID ?? row.id ?? row.ID ?? ""),
         targetId: `${userId}:${branchId}`,
-        status: 'mapped',
-        note: 'Branch-user relation captured',
+        status: "mapped",
+        note: "Branch-user relation captured",
       });
     }
 
     this.addTableResult(context, {
-      sourceTable: 'mstBranchUserLink',
-      targetTable: 'user relation context',
+      sourceTable: "mstBranchUserLink",
+      targetTable: "user relation context",
       rowCountScanned: rows.length,
       rowCountInserted: 0,
-      rowCountSkipped: context.skippedRows.filter(row => row.sourceTable === 'mstBranchUserLink').length,
+      rowCountSkipped: context.skippedRows.filter(
+        (row) => row.sourceTable === "mstBranchUserLink",
+      ).length,
       rowCountFailed: 0,
-      note: 'Used later for user-role assignments',
+      note: "Used later for user-role assignments",
     });
-    this.logger.log(`[mstBranchUserLink] table migration finished scanned=${rows.length} skipped=${context.skippedRows.filter(row => row.sourceTable === 'mstBranchUserLink').length}`);
+    this.logger.log(
+      `[mstBranchUserLink] table migration finished scanned=${rows.length} skipped=${context.skippedRows.filter((row) => row.sourceTable === "mstBranchUserLink").length}`,
+    );
   }
 
-  private async processCounterUserLinks(pool: mssql.ConnectionPool, context: MigrationContext): Promise<void> {
-    if (!this.isTaskIncluded(context, 'counterUserLinks')) {
+  private async processCounterUserLinks(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "counterUserLinks")) {
       return;
     }
 
-    this.logger.log(`[mstCounterUserLink] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, 'mstCounterUserLink');
-    this.ensureSourceRows(context, 'counterUserLinks', rows);
+    this.logger.log(
+      `[mstCounterUserLink] table migration started mode=${context.mode}`,
+    );
+    const rows = await this.readSourceRows(pool, "mstCounterUserLink");
+    this.ensureSourceRows(context, "counterUserLinks", rows);
     context.counterUserLinks = rows;
 
     for (const row of rows) {
@@ -4315,51 +5344,71 @@ export class MigrationToolService {
       const branchOldId = row.nBranchID ?? row.nbranchid;
       const counterOldId = row.nCounterID ?? row.ncounterid;
       const userOldId = row.nUserID ?? row.nuserid;
-      const branchId = branchOldId ? await this.resolveBranchByOldId(pool, context, branchOldId) : undefined;
-      const counterId = counterOldId ? await this.resolveCounterByOldId(pool, context, counterOldId) : undefined;
-      const userId = userOldId ? await this.resolveUserByOldId(pool, context, userOldId) : undefined;
+      const branchId = branchOldId
+        ? await this.resolveBranchByOldId(pool, context, branchOldId)
+        : undefined;
+      const counterId = counterOldId
+        ? await this.resolveCounterByOldId(pool, context, counterOldId)
+        : undefined;
+      const userId = userOldId
+        ? await this.resolveUserByOldId(pool, context, userOldId)
+        : undefined;
 
       if (!branchId || !counterId || !userId) {
         this.addSkippedRow(context, {
-          sourceTable: 'mstCounterUserLink',
-          sourceRowIdentifier: String(row.id ?? row.nTrackingID ?? ''),
-          reason: 'User, branch, or counter not resolved',
-          fallbackAction: 'Will retry during user-role flush',
+          sourceTable: "mstCounterUserLink",
+          sourceRowIdentifier: String(row.id ?? row.nTrackingID ?? ""),
+          reason: "User, branch, or counter not resolved",
+          fallbackAction: "Will retry during user-role flush",
         });
         continue;
       }
 
       this.addRowResult(context, {
-        sourceTable: 'mstCounterUserLink',
-        sourcePrimaryKey: String(row.id ?? row.nTrackingID ?? ''),
+        sourceTable: "mstCounterUserLink",
+        sourcePrimaryKey: String(row.id ?? row.nTrackingID ?? ""),
         targetId: `${userId}:${branchId}:${counterId}`,
-        status: 'mapped',
-        note: 'Counter-user relation captured',
+        status: "mapped",
+        note: "Counter-user relation captured",
       });
     }
 
     this.addTableResult(context, {
-      sourceTable: 'mstCounterUserLink',
-      targetTable: 'user relation context',
+      sourceTable: "mstCounterUserLink",
+      targetTable: "user relation context",
       rowCountScanned: rows.length,
       rowCountInserted: 0,
-      rowCountSkipped: context.skippedRows.filter(row => row.sourceTable === 'mstCounterUserLink').length,
+      rowCountSkipped: context.skippedRows.filter(
+        (row) => row.sourceTable === "mstCounterUserLink",
+      ).length,
       rowCountFailed: 0,
-      note: 'Used later for user-role assignments',
+      note: "Used later for user-role assignments",
     });
-    this.logger.log(`[mstCounterUserLink] table migration finished scanned=${rows.length} skipped=${context.skippedRows.filter(row => row.sourceTable === 'mstCounterUserLink').length}`);
+    this.logger.log(
+      `[mstCounterUserLink] table migration finished scanned=${rows.length} skipped=${context.skippedRows.filter((row) => row.sourceTable === "mstCounterUserLink").length}`,
+    );
   }
 
-  private getBranchCounterForBranch(branchId: string, context: MigrationContext): string | null {
+  private getBranchCounterForBranch(
+    branchId: string,
+    context: MigrationContext,
+  ): string | null {
     const mainCounter = context.branchMainCounter.get(branchId);
     if (mainCounter) return mainCounter;
     const counters = context.branchCounters.get(branchId);
     return counters && counters.length > 0 ? counters[0] : null;
   }
 
-  private async flushUserRoleAssignments(context: MigrationContext): Promise<void> {
-    const shouldFlush = ['user', 'role', 'userRoleLinks', 'branchUserLinks', 'counterUserLinks']
-      .some(task => this.isTaskIncluded(context, task as InternalTask));
+  private async flushUserRoleAssignments(
+    context: MigrationContext,
+  ): Promise<void> {
+    const shouldFlush = [
+      "user",
+      "role",
+      "userRoleLinks",
+      "branchUserLinks",
+      "counterUserLinks",
+    ].some((task) => this.isTaskIncluded(context, task as InternalTask));
     if (!shouldFlush) {
       return;
     }
@@ -4368,7 +5417,13 @@ export class MigrationToolService {
     const uniqueAssignments = new Map<string, UserRole>();
     const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
 
-    const addAssignment = (userId: string, roleId: string, branchId: string, counterId: string, note: string) => {
+    const addAssignment = (
+      userId: string,
+      roleId: string,
+      branchId: string,
+      counterId: string,
+      note: string,
+    ) => {
       const key = `${userId}:${roleId}:${branchId}:${counterId}`;
       if (uniqueAssignments.has(key)) {
         return;
@@ -4387,20 +5442,26 @@ export class MigrationToolService {
 
       uniqueAssignments.set(key, entity);
       context.rowResults.push({
-        sourceTable: 'user_roles',
+        sourceTable: "user_roles",
         sourcePrimaryKey: key,
         targetId: key,
-        status: context.mode === 'real' ? 'inserted' : 'mocked',
+        status: context.mode === "real" ? "inserted" : "mocked",
         note,
       });
     };
 
     for (const row of context.userRows) {
       const oldUserId = row.nUserID ?? row.nuserid;
-      const userId = oldUserId ? context.userMap.get(String(oldUserId)) : undefined;
-      const roleId = oldUserId ? context.roleMap.get(String(oldUserId)) : undefined;
+      const userId = oldUserId
+        ? context.userMap.get(String(oldUserId))
+        : undefined;
+      const roleId = oldUserId
+        ? context.roleMap.get(String(oldUserId))
+        : undefined;
       const branchOldId = row.nBranchID ?? row.nbranchid;
-      const branchId = branchOldId ? context.branchMap.get(String(branchOldId)) : undefined;
+      const branchId = branchOldId
+        ? context.branchMap.get(String(branchOldId))
+        : undefined;
       if (!userId || !roleId || !branchId) {
         continue;
       }
@@ -4408,59 +5469,92 @@ export class MigrationToolService {
       const counterId = this.getBranchCounterForBranch(branchId, context);
       if (!counterId) {
         this.addWarning(context, {
-          sourceTable: 'mstuser',
-          sourceColumn: 'nBranchID',
+          sourceTable: "mstuser",
+          sourceColumn: "nBranchID",
           note: `No counter found for branch ${branchId}; user-role assignment deferred`,
         });
         continue;
       }
 
-      addAssignment(userId, roleId, branchId, counterId, 'Derived from mstuser row');
+      addAssignment(
+        userId,
+        roleId,
+        branchId,
+        counterId,
+        "Derived from mstuser row",
+      );
     }
 
     for (const row of context.branchUserLinks) {
       const oldUserId = row.nUserID ?? row.nuserid;
       const oldBranchId = row.nBranchID ?? row.nbranchid;
-      const userId = oldUserId ? context.userMap.get(String(oldUserId)) : undefined;
-      const branchId = oldBranchId ? context.branchMap.get(String(oldBranchId)) : undefined;
+      const userId = oldUserId
+        ? context.userMap.get(String(oldUserId))
+        : undefined;
+      const branchId = oldBranchId
+        ? context.branchMap.get(String(oldBranchId))
+        : undefined;
       if (!userId || !branchId) {
         continue;
       }
-      const roleId = oldUserId ? context.roleMap.get(String(oldUserId)) : undefined;
-      const counterId = this.getBranchCounterForBranch(branchId, context) ?? null;
+      const roleId = oldUserId
+        ? context.roleMap.get(String(oldUserId))
+        : undefined;
+      const counterId =
+        this.getBranchCounterForBranch(branchId, context) ?? null;
       if (!roleId || !counterId) {
         continue;
       }
-      addAssignment(userId, roleId, branchId, counterId, 'Derived from mstBranchUserLink');
+      addAssignment(
+        userId,
+        roleId,
+        branchId,
+        counterId,
+        "Derived from mstBranchUserLink",
+      );
     }
 
     for (const row of context.counterUserLinks) {
       const oldUserId = row.nUserID ?? row.nuserid;
       const oldBranchId = row.nBranchID ?? row.nbranchid;
       const oldCounterId = row.nCounterID ?? row.ncounterid;
-      const userId = oldUserId ? context.userMap.get(String(oldUserId)) : undefined;
-      const branchId = oldBranchId ? context.branchMap.get(String(oldBranchId)) : undefined;
-      const counterId = oldCounterId ? context.counterMap.get(String(oldCounterId)) : undefined;
+      const userId = oldUserId
+        ? context.userMap.get(String(oldUserId))
+        : undefined;
+      const branchId = oldBranchId
+        ? context.branchMap.get(String(oldBranchId))
+        : undefined;
+      const counterId = oldCounterId
+        ? context.counterMap.get(String(oldCounterId))
+        : undefined;
       if (!userId || !branchId || !counterId) {
         continue;
       }
-      const roleId = oldUserId ? context.roleMap.get(String(oldUserId)) : undefined;
+      const roleId = oldUserId
+        ? context.roleMap.get(String(oldUserId))
+        : undefined;
       if (!roleId) {
         continue;
       }
-      addAssignment(userId, roleId, branchId, counterId, 'Derived from mstCounterUserLink');
+      addAssignment(
+        userId,
+        roleId,
+        branchId,
+        counterId,
+        "Derived from mstCounterUserLink",
+      );
     }
 
     const entities = [...uniqueAssignments.values()];
     if (entities.length === 0) {
       this.addWarning(context, {
-        note: 'No user-role assignments were resolved from the selected tables.',
+        note: "No user-role assignments were resolved from the selected tables.",
       });
       this.logger.warn(`[user_roles] no assignments resolved`);
       return;
     }
 
-    if (context.mode === 'real') {
+    if (context.mode === "real") {
       await this.targetUserRoleRepository.save(entities);
       this.logger.log(`[user_roles] saved ${entities.length} assignment(s)`);
     }
@@ -4468,26 +5562,32 @@ export class MigrationToolService {
   }
 
   private buildWorkbook(context: MigrationContext) {
-    this.logger.log(`Building workbook for ${context.mode} run with ${context.summary.tables} table result(s)`);
+    this.logger.log(
+      `Building workbook for ${context.mode} run with ${context.summary.tables} table result(s)`,
+    );
     const workbook = XLSX.utils.book_new();
     const addSheet = (name: string, rows: ReportRow[]) => {
-      const safeRows = (rows.length > 0 ? rows : [{ message: 'No rows' }]).map(sanitizeWorkbookRow);
+      const safeRows = (rows.length > 0 ? rows : [{ message: "No rows" }]).map(
+        sanitizeWorkbookRow,
+      );
       const sheet = XLSX.utils.json_to_sheet(safeRows);
       XLSX.utils.book_append_sheet(workbook, sheet, name.slice(0, 31));
     };
 
-    addSheet('Summary', [
+    addSheet("Summary", [
       {
         mode: context.mode,
-        runLabel: context.mode === 'mock' ? 'soft run / preview' : 'real migration',
+        runLabel:
+          context.mode === "mock" ? "soft run / preview" : "real migration",
         connectionMode: context.sourceConnection,
         connectionSummary: context.connectionSummary,
-        selectedTables: context.selectedTables.join(', '),
-        expandedTables: context.expandedTables.join(', '),
-        bootstrapAdminUserId: context.bootstrapAdminUserId ?? '',
-        bootstrapAdminRoleId: context.bootstrapAdminRoleId ?? '',
-        bootstrapAdminSourceOldId: context.bootstrapAdminSourceOldId ?? '',
-        sharedAuditColumns: 'createdAt, createdBy, updatedAt, updatedBy, deletedAt, deletedBy',
+        selectedTables: context.selectedTables.join(", "),
+        expandedTables: context.expandedTables.join(", "),
+        bootstrapAdminUserId: context.bootstrapAdminUserId ?? "",
+        bootstrapAdminRoleId: context.bootstrapAdminRoleId ?? "",
+        bootstrapAdminSourceOldId: context.bootstrapAdminSourceOldId ?? "",
+        sharedAuditColumns:
+          "createdAt, createdBy, updatedAt, updatedBy, deletedAt, deletedBy",
         tables: context.summary.tables,
         rowsScanned: context.summary.rowsScanned,
         rowsInserted: context.summary.rowsInserted,
@@ -4498,32 +5598,36 @@ export class MigrationToolService {
       },
     ]);
     addSheet(
-      'Selected Tables',
+      "Selected Tables",
       context.selectedTables.map((table, index) => ({
         tableName: table,
         migrationOrder: index + 1,
-        dependencyIncluded: context.expandedTables.includes(table) ? 'yes' : 'no',
+        dependencyIncluded: context.expandedTables.includes(table)
+          ? "yes"
+          : "no",
       })),
     );
-    addSheet('Source Connection', [
+    addSheet("Source Connection", [
       {
         connectionMode: context.sourceConnection,
         connectionSummary: context.connectionSummary,
         verified: true,
       },
     ]);
-    addSheet('Table Results', context.tableResults);
-    addSheet('Row Results', context.rowResults);
-    addSheet('Column Mapping', context.columnMappings);
-    addSheet('Transformations', context.transformations);
-    addSheet('Unmapped Old Columns', context.unmappedOldColumns);
-    addSheet('Skipped Rows', context.skippedRows);
-    addSheet('Errors', context.errors);
-    addSheet('Warnings', context.warnings);
-    addSheet('ID Map', context.idMap);
-    addSheet('Field Status Log', context.fieldStatus);
+    addSheet("Table Results", context.tableResults);
+    addSheet("Row Results", context.rowResults);
+    addSheet("Column Mapping", context.columnMappings);
+    addSheet("Transformations", context.transformations);
+    addSheet("Unmapped Old Columns", context.unmappedOldColumns);
+    addSheet("Skipped Rows", context.skippedRows);
+    addSheet("Errors", context.errors);
+    addSheet("Warnings", context.warnings);
+    addSheet("ID Map", context.idMap);
+    addSheet("Field Status Log", context.fieldStatus);
 
-    this.logger.log(`Workbook built with ${workbook.SheetNames.length} sheet(s)`);
+    this.logger.log(
+      `Workbook built with ${workbook.SheetNames.length} sheet(s)`,
+    );
     return workbook;
   }
 
@@ -4533,69 +5637,82 @@ export class MigrationToolService {
     actorUserId: string,
   ): Promise<{ filename: string; buffer: Buffer; summary: MigrationSummary }> {
     if (!dto.selectedTables || dto.selectedTables.length === 0) {
-      throw new BadRequestException('Please select at least one legacy table before running migration');
+      throw new BadRequestException(
+        "Please select at least one legacy table before running migration",
+      );
     }
     const context = this.createContext(dto, mode, actorUserId);
     this.activeContext = context;
-    this.logger.log(`Migration run started mode=${mode} actor=${actorUserId} selectedTables=${dto.selectedTables.join(',')}`);
+    this.logger.log(
+      `Migration run started mode=${mode} actor=${actorUserId} selectedTables=${dto.selectedTables.join(",")}`,
+    );
 
     try {
-      await this.withTargetDatabase(dto, async targetDataSource => {
-        await this.withLegacyConnections(dto, async pools => {
-          const sourcePool = dto.oldTransactionConnection ? pools.transaction : pools.master;
+      await this.withTargetDatabase(dto, async (targetDataSource) => {
+        await this.withLegacyConnections(dto, async (pools) => {
+          const sourcePool = dto.oldTransactionConnection
+            ? pools.transaction
+            : pools.master;
           const selectedSet = new Set(context.expandedTables);
-          this.logger.log(`Expanded migration tables: ${context.expandedTables.join(', ')}`);
-          this.logger.log(`[target-db] using ${this.connectionSummary(dto.currentMasterConnection)} for data writes`);
+          this.logger.log(
+            `Expanded migration tables: ${context.expandedTables.join(", ")}`,
+          );
+          this.logger.log(
+            `[target-db] using ${this.connectionSummary(dto.currentMasterConnection)} for data writes`,
+          );
           await this.ensureFrontendMenuCatalog(context);
           await this.ensureBootstrapAdminUser(pools.master, context);
           this.logger.log(
-            `[bootstrap] adminUserId=${context.bootstrapAdminUserId ?? 'n/a'} adminRoleId=${context.bootstrapAdminRoleId ?? 'n/a'} sourceOldId=${String(context.bootstrapAdminSourceOldId ?? '')}`,
+            `[bootstrap] adminUserId=${context.bootstrapAdminUserId ?? "n/a"} adminRoleId=${context.bootstrapAdminRoleId ?? "n/a"} sourceOldId=${String(context.bootstrapAdminSourceOldId ?? "")}`,
           );
           const taskOrder: InternalTask[] = [
-            'company',
-            'currency',
-            'branch',
-            'counter',
-            'user',
-            'role',
-            'branchCounterLinks',
-            'branchUserLinks',
-            'counterUserLinks',
-            'userRoleLinks',
+            "company",
+            "currency",
+            "branch",
+            "counter",
+            "user",
+            "role",
+            "branchCounterLinks",
+            "branchUserLinks",
+            "counterUserLinks",
+            "userRoleLinks",
           ];
 
           for (const task of taskOrder) {
-            if (!selectedSet.has(task) && !this.shouldRunImplicitTask(task, selectedSet)) {
+            if (
+              !selectedSet.has(task) &&
+              !this.shouldRunImplicitTask(task, selectedSet)
+            ) {
               continue;
             }
 
             switch (task) {
-              case 'company':
+              case "company":
                 await this.processCompanies(pools.master, context);
                 break;
-              case 'currency':
+              case "currency":
                 await this.processCurrencies(sourcePool, context);
                 break;
-              case 'branch':
+              case "branch":
                 await this.processBranches(sourcePool, context);
                 break;
-              case 'counter':
+              case "counter":
                 await this.processCounters(sourcePool, context);
                 break;
-              case 'user':
-              case 'role':
+              case "user":
+              case "role":
                 await this.processUsers(sourcePool, context);
                 break;
-              case 'branchCounterLinks':
+              case "branchCounterLinks":
                 await this.processBranchCounterLinks(sourcePool, context);
                 break;
-              case 'branchUserLinks':
+              case "branchUserLinks":
                 await this.processBranchUserLinks(sourcePool, context);
                 break;
-              case 'counterUserLinks':
+              case "counterUserLinks":
                 await this.processCounterUserLinks(sourcePool, context);
                 break;
-              case 'userRoleLinks':
+              case "userRoleLinks":
                 break;
             }
           }
@@ -4606,9 +5723,12 @@ export class MigrationToolService {
       });
 
       const workbook = this.buildWorkbook(context);
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-      const suffix = mode === 'mock' ? 'mock' : 'real';
-      const filename = `migration-${suffix === 'mock' ? 'soft-run' : suffix}-${new Date().toISOString().replace(/[:.]/g, '-')}.xlsx`;
+      const buffer = XLSX.write(workbook, {
+        type: "buffer",
+        bookType: "xlsx",
+      }) as Buffer;
+      const suffix = mode === "mock" ? "mock" : "real";
+      const filename = `migration-${suffix === "mock" ? "soft-run" : suffix}-${new Date().toISOString().replace(/[:.]/g, "-")}.xlsx`;
       this.logger.log(
         `Migration run finished mode=${mode} rowsScanned=${context.summary.rowsScanned} rowsInserted=${context.summary.rowsInserted} rowsSkipped=${context.summary.rowsSkipped} rowsFailed=${context.summary.rowsFailed} filename=${filename}`,
       );
@@ -4620,18 +5740,77 @@ export class MigrationToolService {
     }
   }
 
-  private shouldRunImplicitTask(task: InternalTask, selectedSet: Set<string>): boolean {
+  private shouldRunImplicitTask(
+    task: InternalTask,
+    selectedSet: Set<string>,
+  ): boolean {
     // If any selected table implies this task, allow it to run.
-    if (task === 'company' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('company'))) return true;
-    if (task === 'currency' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('currency'))) return true;
-    if (task === 'branch' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('branch'))) return true;
-    if (task === 'counter' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('counter'))) return true;
-    if (task === 'user' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('user'))) return true;
-    if (task === 'role' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('role'))) return true;
-    if (task === 'branchCounterLinks' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('branchCounterLinks'))) return true;
-    if (task === 'branchUserLinks' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('branchUserLinks'))) return true;
-    if (task === 'counterUserLinks' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('counterUserLinks'))) return true;
-    if (task === 'userRoleLinks' && [...selectedSet].some(sel => TABLE_DEPENDENCIES[sel]?.includes('userRoleLinks'))) return true;
+    if (
+      task === "company" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("company"),
+      )
+    )
+      return true;
+    if (
+      task === "currency" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("currency"),
+      )
+    )
+      return true;
+    if (
+      task === "branch" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("branch"),
+      )
+    )
+      return true;
+    if (
+      task === "counter" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("counter"),
+      )
+    )
+      return true;
+    if (
+      task === "user" &&
+      [...selectedSet].some((sel) => TABLE_DEPENDENCIES[sel]?.includes("user"))
+    )
+      return true;
+    if (
+      task === "role" &&
+      [...selectedSet].some((sel) => TABLE_DEPENDENCIES[sel]?.includes("role"))
+    )
+      return true;
+    if (
+      task === "branchCounterLinks" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("branchCounterLinks"),
+      )
+    )
+      return true;
+    if (
+      task === "branchUserLinks" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("branchUserLinks"),
+      )
+    )
+      return true;
+    if (
+      task === "counterUserLinks" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("counterUserLinks"),
+      )
+    )
+      return true;
+    if (
+      task === "userRoleLinks" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("userRoleLinks"),
+      )
+    )
+      return true;
     return false;
   }
 }

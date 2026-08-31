@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, In, Between } from "typeorm";
 import { ChequeBook } from "./entities/cheque-book.entity";
@@ -17,6 +21,14 @@ import {
   ReassignChequeBookDto,
   AuthorizedUserRole,
 } from "./dto/chequebook.dto";
+import { ChequeBookListQueryDto } from "./dto/chequebook-list-query.dto";
+import { ChequeBookSelectablePagesQueryDto } from "./dto/chequebook-selectable-pages-query.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 const isUuid = (val: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
@@ -28,8 +40,6 @@ type UserLookup = {
 
 @Injectable()
 export class ChequeBookService {
-  private readonly logger = new Logger(ChequeBookService.name);
-
   constructor(
     @InjectRepository(ChequeBook, "database2")
     private readonly checkBookRepository: Repository<ChequeBook>,
@@ -79,33 +89,33 @@ export class ChequeBookService {
 
     // Check for overlapping book number ranges (global, exclude REJECTED books)
     const overlappingBookNo = await this.checkBookRepository
-      .createQueryBuilder('book')
-      .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom", {
         bookNoFrom,
         bookNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
+      .andWhere("book.status != :rejected", { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
       throw new BadRequestException(
-        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}]`
+        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}]`,
       );
     }
 
     // Check for overlapping page number ranges (exclude REJECTED books)
     const overlapping = await this.checkBookRepository
-      .createQueryBuilder('book')
-      .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom", {
         mvNoFrom,
         mvNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
+      .andWhere("book.status != :rejected", { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {
       throw new BadRequestException(
-        `Page number range [${mvNoFrom} - ${mvNoTo}] overlaps with existing book [${overlapping.no}] with range [${overlapping.mvNoFrom} - ${overlapping.mvNoTo}]`
+        `Page number range [${mvNoFrom} - ${mvNoTo}] overlaps with existing book [${overlapping.no}] with range [${overlapping.mvNoFrom} - ${overlapping.mvNoTo}]`,
       );
     }
 
@@ -184,25 +194,34 @@ export class ChequeBookService {
   }
 
   async findAll(
-    branchId?: string,
-    status?: string,
-    bankAccountCode?: string,
+    query?: ChequeBookListQueryDto,
     assignedTo?: string,
-  ): Promise<any[]> {
-    const where: any = {};
-    if (branchId) where.branchId = branchId;
-    if (status) where.status = status;
-    if (bankAccountCode && bankAccountCode !== "ALL")
-      where.bankAccountCode = bankAccountCode;
-    if (assignedTo) where.assignedTo = assignedTo;
+  ): Promise<PaginatedResponseDto<any>> {
+    const pagination = normalizePagination(query);
+    const qb = this.checkBookRepository
+      .createQueryBuilder("book")
+      .orderBy("book.createdAt", "DESC");
 
-    const books = await this.checkBookRepository.find({
-      where,
-      order: { createdAt: "DESC" },
-    });
+    if (query?.branchId) {
+      qb.andWhere("book.branchId = :branchId", { branchId: query.branchId });
+    }
+    if (query?.status) {
+      qb.andWhere("book.status = :status", { status: query.status });
+    }
+    if (query?.bankAccountCode && query.bankAccountCode !== "ALL") {
+      qb.andWhere("book.bankAccountCode = :bankAccountCode", {
+        bankAccountCode: query.bankAccountCode,
+      });
+    }
+    if (assignedTo) {
+      qb.andWhere("book.assignedTo = :assignedTo", { assignedTo });
+    }
+
+    applyPagination(qb, pagination);
+    const [books, total] = await qb.getManyAndCount();
 
     if (books.length === 0) {
-      return [];
+      return buildPaginatedResponse([], total, pagination);
     }
 
     // Fetch branch profiles from DB1 in a single query
@@ -236,24 +255,28 @@ export class ChequeBookService {
     }
     const userMap = new Map(assignedUsers.map((u) => [u.id, u]));
 
-    return books.map((book) => {
-      const branch = branchMap.get(book.branchId);
-      const account = accountMap.get(book.bankAccountCode);
-      const assignedUser = userMap.get(book.assignedTo);
-      return {
-        ...book,
-        branchName: branch ? branch.name : "Unknown Branch",
-        branchCode: branch ? branch.code : "",
-        bankAccountCodeLabel: account
-          ? `${account.accountCode} - ${account.accountName}`
-          : "Unknown Bank Account",
-        bankAccountCodeName: account ? account.accountCode : "",
-        assignedTo: {
-          id: assignedUser ? assignedUser.id : book.assignedTo,
-          name: assignedUser ? assignedUser.name : book.assignedTo,
-        },
-      };
-    });
+    return buildPaginatedResponse(
+      books.map((book) => {
+        const branch = branchMap.get(book.branchId);
+        const account = accountMap.get(book.bankAccountCode);
+        const assignedUser = userMap.get(book.assignedTo);
+        return {
+          ...book,
+          branchName: branch ? branch.name : "Unknown Branch",
+          branchCode: branch ? branch.code : "",
+          bankAccountCodeLabel: account
+            ? `${account.accountCode} - ${account.accountName}`
+            : "Unknown Bank Account",
+          bankAccountCodeName: account ? account.accountCode : "",
+          assignedTo: {
+            id: assignedUser ? assignedUser.id : book.assignedTo,
+            name: assignedUser ? assignedUser.name : book.assignedTo,
+          },
+        };
+      }),
+      total,
+      pagination,
+    );
   }
 
   async approveOrReject(
@@ -296,14 +319,19 @@ export class ChequeBookService {
     return results;
   }
 
-  async getAuthorizedUsers(branchId: string, role?: AuthorizedUserRole, search?: string): Promise<any[]> {
+  async getAuthorizedUsers(
+    branchId: string,
+    role?: AuthorizedUserRole,
+    search?: string,
+  ): Promise<any[]> {
     const allowedColumns = Object.values(AuthorizedUserRole) as string[];
-    const roleFilter = role && allowedColumns.includes(role)
-      ? `r.${role} = true`
-      : `r.${AuthorizedUserRole.CASHIER} = true`;
+    const roleFilter =
+      role && allowedColumns.includes(role)
+        ? `r.${role} = true`
+        : `r.${AuthorizedUserRole.CASHIER} = true`;
 
     const params: any[] = [branchId];
-    let searchClause = '';
+    let searchClause = "";
     if (search?.trim()) {
       params.push(`%${search.trim()}%`);
       searchClause = ` AND u.name ILIKE $${params.length}`;
@@ -325,32 +353,14 @@ export class ChequeBookService {
     );
   }
 
-  async getBranchManagers(branchId: string, search?: string): Promise<UserLookup[]> {
-    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'}`);
-    const diagnostics = await this.branchRepository.manager.query(
-      `
-      SELECT
-        COUNT(*)::int AS role_rows,
-        COUNT(DISTINCT ur.user_id)::int AS distinct_users,
-        COUNT(*) FILTER (WHERE u.is_active = true)::int AS active_user_rows,
-        COUNT(*) FILTER (WHERE r.is_brn_mgr = true)::int AS branch_manager_rows,
-        COUNT(*) FILTER (WHERE r.is_cashier = true)::int AS cashier_rows,
-        COUNT(*) FILTER (WHERE r.is_delivery_boy = true)::int AS delivery_boy_rows,
-        COUNT(*) FILTER (WHERE r.is_admin = true)::int AS admin_rows
-      FROM user_roles ur
-      JOIN users u ON u.id = ur.user_id
-      JOIN roles r ON r.id = ur.role_id
-      WHERE ur.branch_id = $1
-      `,
-      [branchId],
-    );
-    this.logger.log(
-      `[DEBUG] getBranchManagers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
-    );
-    const searchFilter = search?.trim()
-      ? ` AND u.name ILIKE $2`
-      : '';
-    const params = search?.trim() ? [branchId, `%${search.trim()}%`] : [branchId];
+  async getBranchManagers(
+    branchId: string,
+    search?: string,
+  ): Promise<UserLookup[]> {
+    const searchFilter = search?.trim() ? ` AND u.name ILIKE $2` : "";
+    const params = search?.trim()
+      ? [branchId, `%${search.trim()}%`]
+      : [branchId];
     const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
@@ -363,9 +373,6 @@ export class ChequeBookService {
         ${searchFilter}
       `,
       params,
-    );
-    this.logger.log(
-      `[DEBUG] getBranchManagers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
     );
     return rows as UserLookup[];
   }
@@ -553,7 +560,9 @@ export class ChequeBookService {
     branchId?: string,
     accountId?: string,
     userId?: string,
-  ): Promise<any[]> {
+    paginationQuery?: ChequeBookSelectablePagesQueryDto,
+  ): Promise<PaginatedResponseDto<any>> {
+    const pagination = normalizePagination(paginationQuery);
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.checkBook", "book")
@@ -579,16 +588,22 @@ export class ChequeBookService {
       )`,
     );
 
-    const pages = await query
+    applyPagination(query, pagination);
+
+    const [pages, total] = await query
       .orderBy("book.dispatchDate", "DESC")
       .addOrderBy("book.no", "DESC")
       .addOrderBy("book.bookNoFrom", "ASC")
       .addOrderBy("pt.pageNo", "ASC")
-      .getMany();
+      .getManyAndCount();
 
     // Resolve assignedBy names
     const assignedByIds = Array.from(
-      new Set(pages.map((p) => p.assignedBy).filter((id): id is string => !!id && isUuid(id)))
+      new Set(
+        pages
+          .map((p) => p.assignedBy)
+          .filter((id): id is string => !!id && isUuid(id)),
+      ),
     );
     let assignedByUsers: Array<{ id: string; name: string }> = [];
     if (assignedByIds.length > 0) {
@@ -615,12 +630,14 @@ export class ChequeBookService {
         : [];
     const accountMap = new Map(accounts.map((a) => [a.id, a]));
 
-    return pages.map((page) => ({
+    const data = pages.map((page) => ({
       id: page.id,
       checkBookId: page.checkBookId,
       userId: page.userId,
       assignedBy: page.assignedBy ?? null,
-      assignedByName: page.assignedBy ? (assignedByMap.get(page.assignedBy) ?? null) : null,
+      assignedByName: page.assignedBy
+        ? (assignedByMap.get(page.assignedBy) ?? null)
+        : null,
       pageNo: page.pageNo,
       remarks: page.remarks ?? null,
       checkBook: page.checkBook
@@ -636,7 +653,9 @@ export class ChequeBookService {
             bankAccountCode: page.checkBook.bankAccountCode ?? null,
             bankAccountCodeLabel: page.checkBook.bankAccountCode
               ? (() => {
-                  const account = accountMap.get(page.checkBook!.bankAccountCode!);
+                  const account = accountMap.get(
+                    page.checkBook!.bankAccountCode!,
+                  );
                   return account
                     ? `${account.accountCode} - ${account.accountName}`
                     : page.checkBook!.bankAccountCode;
@@ -645,6 +664,8 @@ export class ChequeBookService {
           }
         : null,
     }));
+
+    return buildPaginatedResponse(data, total, pagination);
   }
 
   async searchCashierReturn(params: {
@@ -773,12 +794,12 @@ export class ChequeBookService {
     bookNoTo: number,
   ): Promise<{ valid: boolean; error?: string }> {
     const overlappingBookNo = await this.checkBookRepository
-      .createQueryBuilder('book')
-      .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom", {
         bookNoFrom,
         bookNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
+      .andWhere("book.status != :rejected", { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
@@ -795,12 +816,12 @@ export class ChequeBookService {
     mvNoTo: number,
   ): Promise<{ valid: boolean; error?: string }> {
     const overlapping = await this.checkBookRepository
-      .createQueryBuilder('book')
-      .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom", {
         mvNoFrom,
         mvNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
+      .andWhere("book.status != :rejected", { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {
@@ -820,7 +841,11 @@ export class ChequeBookService {
     return book;
   }
 
-  async reassignDispatch(id: string, dto: ReassignChequeBookDto, userId: string): Promise<ChequeBook> {
+  async reassignDispatch(
+    id: string,
+    dto: ReassignChequeBookDto,
+    userId: string,
+  ): Promise<ChequeBook> {
     const book = await this.checkBookRepository.findOne({ where: { id } });
     if (!book) {
       throw new NotFoundException(`Check Book entry with ID ${id} not found`);
@@ -828,10 +853,12 @@ export class ChequeBookService {
 
     book.assignedTo = dto.assignedTo;
     if (dto.dispatchDate !== undefined) book.dispatchDate = dto.dispatchDate;
-    if (dto.bankAccountCode !== undefined) book.bankAccountCode = dto.bankAccountCode;
+    if (dto.bankAccountCode !== undefined)
+      book.bankAccountCode = dto.bankAccountCode;
     if (dto.bookNoFrom !== undefined) book.bookNoFrom = dto.bookNoFrom;
     if (dto.bookNoTo !== undefined) book.bookNoTo = dto.bookNoTo;
-    if (dto.vouchersPerBook !== undefined) book.vouchersPerBook = dto.vouchersPerBook;
+    if (dto.vouchersPerBook !== undefined)
+      book.vouchersPerBook = dto.vouchersPerBook;
     if (dto.mvNoFrom !== undefined) book.mvNoFrom = dto.mvNoFrom;
     if (dto.mvNoTo !== undefined) book.mvNoTo = dto.mvNoTo;
     if (dto.remarks !== undefined) book.remarks = dto.remarks;

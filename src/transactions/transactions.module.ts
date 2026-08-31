@@ -104,9 +104,6 @@ import { VoucherModule } from "../vouchers/voucher.module";
     TransactionBalanceCurrencyWorker,
     PurchaseRuleService,
   ],
-  exports: [
-      TypeOrmModule,
-    TransactionsService,
-  ],
+  exports: [TypeOrmModule, TransactionsService],
 })
 export class TransactionsModule {}

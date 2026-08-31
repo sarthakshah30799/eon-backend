@@ -1,19 +1,42 @@
-import { Controller, Post, Get, Delete, Body, Req, Res, UseGuards, Session, NotFoundException, UnauthorizedException, Query } from '@nestjs/common';
-import { Request, Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiBody } from '@nestjs/swagger';
-import { AuthService } from './auth.service';
-import { LoginUserDto } from '../users/dto/login-user.dto';
-import { CreateUserDto } from '../users/dto/create-user.dto';
-import { UserResponseDto } from '../users/dto/user-response.dto';
-import { SendOtpDto, VerifyOtpDto } from './dto/otp.dto';
-import { ForgotPasswordDto, ResetPasswordDto, SetupPasswordDto } from './dto/password-reset.dto';
-import { UserService } from '../users/user.service';
-import { AuthenticatedGuard } from './guards/authenticated.guard';
-import { SetWorkplaceDto } from './dto/set-workplace.dto';
-import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  Req,
+  Res,
+  UseGuards,
+  Session,
+  NotFoundException,
+  UnauthorizedException,
+  Query,
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiCookieAuth,
+  ApiBody,
+} from "@nestjs/swagger";
+import { AuthService } from "./auth.service";
+import { LoginUserDto } from "../users/dto/login-user.dto";
+import { CreateUserDto } from "../users/dto/create-user.dto";
+import { UserResponseDto } from "../users/dto/user-response.dto";
+import { SendOtpDto, VerifyOtpDto } from "./dto/otp.dto";
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  SetupPasswordDto,
+} from "./dto/password-reset.dto";
+import { UserService } from "../users/user.service";
+import { AuthenticatedGuard } from "./guards/authenticated.guard";
+import { SetWorkplaceDto } from "./dto/set-workplace.dto";
+import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
 
-@ApiTags('auth')
-@Controller('auth')
+@ApiTags("auth")
+@Controller("auth")
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
@@ -21,36 +44,42 @@ export class AuthController {
     private readonly dayEndStartProcessService: DayEndStartProcessService,
   ) {}
 
-  @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({ status: 201, description: 'User successfully registered', type: UserResponseDto })
-  @ApiResponse({ status: 409, description: 'User with this email already exists' })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @Post("register")
+  @ApiOperation({ summary: "Register a new user" })
+  @ApiResponse({
+    status: 201,
+    description: "User successfully registered",
+    type: UserResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: "User with this email already exists",
+  })
+  @ApiResponse({ status: 400, description: "Invalid input data" })
   @ApiBody({ type: CreateUserDto })
-  async register(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
+  async register(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<UserResponseDto> {
     return this.userService.create(createUserDto);
   }
 
-  @Post('login')
-  @ApiOperation({ summary: 'Login user and create session' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @Post("login")
+  @ApiOperation({ summary: "Login user and create session" })
+  @ApiResponse({ status: 200, description: "Login successful" })
+  @ApiResponse({ status: 401, description: "Invalid credentials" })
+  @ApiResponse({ status: 400, description: "Invalid input data" })
   @ApiBody({ type: LoginUserDto })
-  async login(
-    @Body() loginUserDto: LoginUserDto,
-    @Session() session: any,
-  ) {
+  async login(@Body() loginUserDto: LoginUserDto, @Session() session: any) {
     const user = await this.authService.validateUser(loginUserDto);
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     if (user.mustChangePassword) {
       session.pendingPasswordSetupUserId = user.id;
       session.pendingPasswordSetupEmail = user.email;
       return {
-        message: 'Password setup required',
+        message: "Password setup required",
         requiresPasswordChange: true,
       };
     }
@@ -58,117 +87,117 @@ export class AuthController {
     return this.authService.login(user, session);
   }
 
-  @Post('send-otp')
-  @ApiOperation({ summary: 'Send OTP to mobile number' })
-  @ApiResponse({ status: 200, description: 'OTP sent successfully' })
+  @Post("send-otp")
+  @ApiOperation({ summary: "Send OTP to mobile number" })
+  @ApiResponse({ status: 200, description: "OTP sent successfully" })
   @ApiBody({ type: SendOtpDto })
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     // Check if user exists
-    const user = await this.userService.findByMobileNumber(sendOtpDto.countryCode, sendOtpDto.mobileNumber);
+    const user = await this.userService.findByMobileNumber(
+      sendOtpDto.countryCode,
+      sendOtpDto.mobileNumber,
+    );
     if (!user) {
-      throw new NotFoundException('User not found. Please register first.');
+      throw new NotFoundException("User not found. Please register first.");
     }
 
     // In a real app, integrate SMS provider here.
-    return { message: 'OTP sent successfully' };
+    return { message: "OTP sent successfully" };
   }
 
-  @Post('verify-otp')
-  @ApiOperation({ summary: 'Login user via OTP and create session' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 401, description: 'Invalid OTP or user not found' })
+  @Post("verify-otp")
+  @ApiOperation({ summary: "Login user via OTP and create session" })
+  @ApiResponse({ status: 200, description: "Login successful" })
+  @ApiResponse({ status: 401, description: "Invalid OTP or user not found" })
   @ApiBody({ type: VerifyOtpDto })
-  async verifyOtp(
-    @Body() verifyOtpDto: VerifyOtpDto,
-    @Session() session: any,
-  ) {
+  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto, @Session() session: any) {
     const user = await this.authService.validateOtpUser(verifyOtpDto);
     if (!user) {
-      throw new UnauthorizedException('Invalid OTP or user not found');
+      throw new UnauthorizedException("Invalid OTP or user not found");
     }
     return this.authService.login(user, session);
   }
 
-  @Post('logout')
-  @ApiOperation({ summary: 'Logout user and destroy session' })
-  @ApiResponse({ status: 200, description: 'Logout successful' })
+  @Post("logout")
+  @ApiOperation({ summary: "Logout user and destroy session" })
+  @ApiResponse({ status: 200, description: "Logout successful" })
   async logout(@Session() session: any) {
     return this.authService.logout(session);
   }
 
-  @Get('workplace')
+  @Get("workplace")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get current workplace selection from session' })
-  @ApiResponse({ status: 200, description: 'Current workplace selection' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Get current workplace selection from session" })
+  @ApiResponse({ status: 200, description: "Current workplace selection" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async getWorkplace(@Session() session: any) {
     return this.authService.getWorkplace(session);
   }
 
-  @Post('workplace')
+  @Post("workplace")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Set current workplace selection in session' })
-  @ApiResponse({ status: 200, description: 'Workplace updated successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid workplace selection' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Set current workplace selection in session" })
+  @ApiResponse({ status: 200, description: "Workplace updated successfully" })
+  @ApiResponse({ status: 400, description: "Invalid workplace selection" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiBody({ type: SetWorkplaceDto })
-  async setWorkplace(
-    @Body() dto: SetWorkplaceDto,
-    @Session() session: any,
-  ) {
+  async setWorkplace(@Body() dto: SetWorkplaceDto, @Session() session: any) {
     return this.authService.setWorkplace(session, dto);
   }
 
-  @Delete('workplace')
+  @Delete("workplace")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Clear current workplace selection from session' })
-  @ApiResponse({ status: 200, description: 'Workplace cleared successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Clear current workplace selection from session" })
+  @ApiResponse({ status: 200, description: "Workplace cleared successfully" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async clearWorkplace(@Session() session: any) {
     return this.authService.clearWorkplace(session);
   }
 
-  @Post('forgot-password')
-  @ApiOperation({ summary: 'Request password reset' })
-  @ApiResponse({ status: 200, description: 'Password reset link successfully generated and logged' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @Post("forgot-password")
+  @ApiOperation({ summary: "Request password reset" })
+  @ApiResponse({
+    status: 200,
+    description: "Password reset link successfully generated and logged",
+  })
+  @ApiResponse({ status: 404, description: "User not found" })
   @ApiBody({ type: ForgotPasswordDto })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
   }
 
-  @Post('reset-password')
-  @ApiOperation({ summary: 'Reset user password' })
-  @ApiResponse({ status: 200, description: 'Password successfully reset' })
-  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  @Post("reset-password")
+  @ApiOperation({ summary: "Reset user password" })
+  @ApiResponse({ status: 200, description: "Password successfully reset" })
+  @ApiResponse({ status: 400, description: "Invalid or expired token" })
   @ApiBody({ type: ResetPasswordDto })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.email, dto.token, dto.password);
   }
 
-  @Post('setup-password')
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Complete initial password setup' })
-  @ApiResponse({ status: 200, description: 'Password successfully updated' })
-  @ApiResponse({ status: 400, description: 'Invalid password setup session' })
+  @Post("setup-password")
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Complete initial password setup" })
+  @ApiResponse({ status: 200, description: "Password successfully updated" })
+  @ApiResponse({ status: 400, description: "Invalid password setup session" })
   @ApiBody({ type: SetupPasswordDto })
-  async setupPassword(
-    @Body() dto: SetupPasswordDto,
-    @Session() session: any,
-  ) {
+  async setupPassword(@Body() dto: SetupPasswordDto, @Session() session: any) {
     return this.authService.completeInitialPasswordSetup(session, dto.password);
   }
 
-
-  @Get('me')
+  @Get("me")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get current authenticated user' })
-  @ApiResponse({ status: 200, description: 'Current user data', type: UserResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Get current authenticated user" })
+  @ApiResponse({
+    status: 200,
+    description: "Current user data",
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async getCurrentUser(@Session() session: any): Promise<UserResponseDto> {
     return this.userService.findById(session.userId, session.userId, {
       activeBranchId: session?.activeBranchId ?? null,
@@ -176,26 +205,38 @@ export class AuthController {
     });
   }
 
-  @Get('policy-context')
+  @Get("policy-context")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get the current EOD/BOD and back-date policy context' })
-  @ApiResponse({ status: 200, description: 'Current policy context' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({
+    summary: "Get the current EOD/BOD and back-date policy context",
+  })
+  @ApiResponse({ status: 200, description: "Current policy context" })
   async getPolicyContext(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('counterId') counterId?: string,
+    @Query("branchId") branchId?: string,
+    @Query("counterId") counterId?: string,
   ) {
-    const canSelectBranch = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
-    const effectiveSession = canSelectBranch && branchId?.trim()
-      ? { ...session, activeBranchId: branchId.trim(), activeCounterId: counterId?.trim() || session.activeCounterId }
-      : session;
-    return this.dayEndStartProcessService.getPolicyContext(effectiveSession, false);
+    const canSelectBranch = Boolean(
+      session?.isAdmin || session?.isHo || session?.isHoStaff,
+    );
+    const effectiveSession =
+      canSelectBranch && branchId?.trim()
+        ? {
+            ...session,
+            activeBranchId: branchId.trim(),
+            activeCounterId: counterId?.trim() || session.activeCounterId,
+          }
+        : session;
+    return this.dayEndStartProcessService.getPolicyContext(
+      effectiveSession,
+      false,
+    );
   }
 
-  @Get('check')
-  @ApiOperation({ summary: 'Check authentication status' })
-  @ApiResponse({ status: 200, description: 'Authentication status' })
+  @Get("check")
+  @ApiOperation({ summary: "Check authentication status" })
+  @ApiResponse({ status: 200, description: "Authentication status" })
   async checkAuth(@Session() session: any) {
     return {
       authenticated: !!session.userId,
@@ -205,15 +246,15 @@ export class AuthController {
     };
   }
 
-  @Get('sessions')
+  @Get("sessions")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get all active sessions for current user' })
-  @ApiResponse({ status: 200, description: 'Active sessions list' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Get all active sessions for current user" })
+  @ApiResponse({ status: 200, description: "Active sessions list" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async getActiveSessions(@Session() session: any) {
     if (!session.userId) {
-      throw new Error('Not authenticated');
+      throw new Error("Not authenticated");
     }
     return this.authService.getActiveSessions(session.userId);
   }

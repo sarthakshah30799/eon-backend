@@ -96,12 +96,20 @@ export class AccountProfileResponseDto {
   static fromEntity(entity: AccountProfile): AccountProfileResponseDto {
     const dto = new AccountProfileResponseDto();
     dto.id = entity.id;
-    dto.divisionDept = entity.divisionDept ? SelectOptionResponseDto.fromEntity(entity.divisionDept) : null;
+    dto.divisionDept = entity.divisionDept
+      ? SelectOptionResponseDto.fromEntity(entity.divisionDept)
+      : null;
     dto.accountCode = entity.accountCode;
     dto.accountName = entity.accountName;
-    dto.accountType = entity.accountType ? SelectOptionResponseDto.fromEntity(entity.accountType) : null;
-    dto.subLedger = entity.subLedger ? SelectOptionResponseDto.fromEntity(entity.subLedger) : null;
-    dto.bankNature = entity.bankNature ? SelectOptionResponseDto.fromEntity(entity.bankNature) : null;
+    dto.accountType = entity.accountType
+      ? SelectOptionResponseDto.fromEntity(entity.accountType)
+      : null;
+    dto.subLedger = entity.subLedger
+      ? SelectOptionResponseDto.fromEntity(entity.subLedger)
+      : null;
+    dto.bankNature = entity.bankNature
+      ? SelectOptionResponseDto.fromEntity(entity.bankNature)
+      : null;
     dto.currencyId = entity.currencyId;
     dto.currencyCode = entity.currency?.currencyCode;
     dto.financialCodeId = entity.financialCodeId;

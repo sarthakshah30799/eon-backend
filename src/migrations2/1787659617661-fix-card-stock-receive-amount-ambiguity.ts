@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class FixCardStockReceiveAmountAmbiguity1787659617661 implements MigrationInterface {
-    name = "FixCardStockReceiveAmountAmbiguity1787659617661";
+  name = "FixCardStockReceiveAmountAmbiguity1787659617661";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_card_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$
             DECLARE
               r record;
@@ -42,10 +42,10 @@ export class FixCardStockReceiveAmountAmbiguity1787659617661 implements Migratio
             END;
             $fn$
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_card_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$
             DECLARE
               r record;
@@ -83,5 +83,5 @@ export class FixCardStockReceiveAmountAmbiguity1787659617661 implements Migratio
             END;
             $fn$
         `);
-    }
+  }
 }

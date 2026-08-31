@@ -24,8 +24,8 @@ import { CreateAccountProfileDto } from "./dto/create-account-profile.dto";
 import { UpdateAccountProfileDto } from "./dto/update-account-profile.dto";
 import { AccountProfileResponseDto } from "./dto/account-profile-response.dto";
 import { AccountProfileListQueryDto } from "./dto/account-profile-list-query.dto";
-import { AccountProfileListResponseDto } from "./dto/account-profile-list-response.dto";
 import { AccountProfileService } from "./account-profile.service";
+import { PaginatedResponseDto } from "../common/pagination";
 
 @ApiTags("account-profiles")
 @ApiCookieAuth("sessionId")
@@ -40,9 +40,10 @@ export class AccountProfileController {
   @ApiResponse({
     status: 200,
     description: "Paginated list of account profiles",
-    type: AccountProfileListResponseDto,
   })
-  async findAll(@Query() query: AccountProfileListQueryDto): Promise<AccountProfileListResponseDto> {
+  async findAll(
+    @Query() query: AccountProfileListQueryDto,
+  ): Promise<PaginatedResponseDto<AccountProfileResponseDto>> {
     return this.accountProfileService.findAll(query);
   }
 

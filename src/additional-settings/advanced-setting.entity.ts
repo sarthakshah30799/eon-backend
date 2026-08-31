@@ -1,4 +1,12 @@
-import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from "typeorm";
+import {
+  Check,
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+} from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { TransactionTypeProfileEnum } from "../transactions/transactions.enums";
 
@@ -23,8 +31,10 @@ export enum ValueType {
 @Check(
   "CHK_advanced_settings_transaction_number_series_length",
   `UPPER("code") NOT IN (${Object.values(TransactionTypeProfileEnum)
-    .map(code => `'${code}'`)
-    .join(', ')}) OR "value_number" IS NULL OR "value_number" BETWEEN 0 AND 99999999`
+    .map((code) => `'${code}'`)
+    .join(
+      ", ",
+    )}) OR "value_number" IS NULL OR "value_number" BETWEEN 0 AND 99999999`,
 )
 @Entity("advanced_settings")
 export class AdvancedSetting extends BaseEntity {

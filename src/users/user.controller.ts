@@ -1,126 +1,181 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, Query, UseGuards, Session } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiBody, ApiParam } from '@nestjs/swagger';
-import { UserService } from './user.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UserResponseDto } from './dto/user-response.dto';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Session,
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiCookieAuth,
+  ApiBody,
+  ApiParam,
+} from "@nestjs/swagger";
+import { UserService } from "./user.service";
+import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { UserResponseDto } from "./dto/user-response.dto";
+import { UserListQueryDto } from "./dto/user-list-query.dto";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import {
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
-@ApiTags('users')
-@Controller('users')
+@ApiTags("users")
+@Controller("users")
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get()
   @UseGuards(AuthenticatedGuard, PermissionsGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get all users' })
-  @ApiResponse({ status: 200, description: 'List of users', type: [UserResponseDto] })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Get all users" })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of users",
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async findAll(
     @Session() session: any,
-    @Query('activeOnly') activeOnly = 'true',
-    @Query('search') search?: string,
-    @Query('roleFilter') roleFilter?: string,
-  ): Promise<UserResponseDto[]> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+    @Query() query: UserListQueryDto,
+  ): Promise<PaginatedResponseDto<UserResponseDto>> {
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const effectiveBranchId = session.activeBranchId;
     if (user.isAdmin || user.isHoStaff) {
-      return this.userService.findAll(
-        session.userId,
-        activeOnly !== 'false',
-        search,
-        effectiveBranchId,
-        roleFilter,
-      );
+      return this.userService.findAll(session.userId, query, effectiveBranchId);
     }
 
-    const canViewUsers = user.permissions?.['/user-profile']?.includes('view') === true;
+    const canViewUsers =
+      user.permissions?.["/user-profile"]?.includes("view") === true;
 
     if (!canViewUsers) {
-      return [];
+      return buildPaginatedResponse([], 0, normalizePagination(query));
     }
 
-    return this.userService.findAll(
-      session.userId,
-      activeOnly !== 'false',
-      search,
-      effectiveBranchId,
-      roleFilter,
-    );
+    return this.userService.findAll(session.userId, query, effectiveBranchId);
   }
 
-  @Get(':id')
+  @Get(":id")
   @UseGuards(AuthenticatedGuard, PermissionsGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get user by ID' })
-  @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'User details', type: UserResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async findById(@Param('id') id: string, @Session() session: any): Promise<UserResponseDto> {
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Get user by ID" })
+  @ApiParam({ name: "id", description: "User UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "User details",
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "User not found" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  async findById(
+    @Param("id") id: string,
+    @Session() session: any,
+  ): Promise<UserResponseDto> {
     return this.userService.findById(id, session.userId);
   }
 
-  @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({ status: 201, description: 'User successfully registered', type: UserResponseDto })
-  @ApiResponse({ status: 409, description: 'User with this email already exists' })
-  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @Post("register")
+  @ApiOperation({ summary: "Register a new user" })
+  @ApiResponse({
+    status: 201,
+    description: "User successfully registered",
+    type: UserResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: "User with this email already exists",
+  })
+  @ApiResponse({ status: 400, description: "Invalid input data" })
   @ApiBody({ type: CreateUserDto })
-  async register(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
+  async register(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<UserResponseDto> {
     return this.userService.create(createUserDto);
   }
 
   @Post()
   @UseGuards(AuthenticatedGuard, PermissionsGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Create a new user (admin)' })
-  @ApiResponse({ status: 201, description: 'User created', type: UserResponseDto })
-  @ApiResponse({ status: 409, description: 'User with this email/code already exists' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Create a new user (admin)" })
+  @ApiResponse({
+    status: 201,
+    description: "User created",
+    type: UserResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: "User with this email/code already exists",
+  })
   @ApiBody({ type: CreateUserDto })
-  async create(@Body() createUserDto: CreateUserDto, @Session() session: any): Promise<UserResponseDto> {
+  async create(
+    @Body() createUserDto: CreateUserDto,
+    @Session() session: any,
+  ): Promise<UserResponseDto> {
     return this.userService.create(createUserDto, session.userId);
   }
 
-  @Put(':id')
+  @Put(":id")
   @UseGuards(AuthenticatedGuard, PermissionsGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Update a user' })
-  @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'User updated', type: UserResponseDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Update a user" })
+  @ApiParam({ name: "id", description: "User UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "User updated",
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "User not found" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() updateUserDto: UpdateUserDto,
     @Session() session: any,
   ): Promise<UserResponseDto> {
     return this.userService.update(id, updateUserDto, session.userId);
   }
 
-  @Delete(':id')
+  @Delete(":id")
   @UseGuards(AuthenticatedGuard, PermissionsGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Delete a user' })
-  @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'User deleted' })
-  @ApiResponse({ status: 404, description: 'User not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async delete(@Param('id') id: string, @Session() session: any): Promise<{ message: string }> {
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Delete a user" })
+  @ApiParam({ name: "id", description: "User UUID" })
+  @ApiResponse({ status: 200, description: "User deleted" })
+  @ApiResponse({ status: 404, description: "User not found" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  async delete(
+    @Param("id") id: string,
+    @Session() session: any,
+  ): Promise<{ message: string }> {
     return this.userService.delete(id, session.userId);
   }
 
-  @Get('profile/me')
+  @Get("profile/me")
   @UseGuards(AuthenticatedGuard)
-  @ApiCookieAuth('sessionId')
-  @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'User profile data', type: UserResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiCookieAuth("sessionId")
+  @ApiOperation({ summary: "Get current user profile" })
+  @ApiResponse({
+    status: 200,
+    description: "User profile data",
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
   async getProfile(@Session() session: any): Promise<UserResponseDto> {
     return this.userService.findById(session.userId, session.userId, {
       activeBranchId: session?.activeBranchId ?? null,

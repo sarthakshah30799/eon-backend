@@ -242,9 +242,7 @@ export const resolveCardSettlementReportFilters = (
   }
 
   const startDate = query.startDate ? toUtcDateOnly(query.startDate) : null;
-  const endDateExclusive = query.endDate
-    ? toUtcNextDate(query.endDate)
-    : null;
+  const endDateExclusive = query.endDate ? toUtcNextDate(query.endDate) : null;
 
   if (query.startDate && Number.isNaN(startDate?.getTime() ?? Number.NaN)) {
     throw new BadRequestException("Invalid startDate");

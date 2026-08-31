@@ -88,13 +88,25 @@ export class AddTransactionTcsSchemaGenerated1784909098035 implements MigrationI
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" DROP CONSTRAINT IF EXISTS "FK_transaction_tcs_breakdowns_transaction_id";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_transaction_tcs_breakdowns_purpose_id";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_transaction_tcs_breakdowns_transaction_id";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_transaction_tcs_breakdowns_transaction_line";`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "transaction_tcs_breakdowns";`);
+    await queryRunner.query(
+      `ALTER TABLE "transaction_tcs_breakdowns" DROP CONSTRAINT IF EXISTS "FK_transaction_tcs_breakdowns_transaction_id";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "public"."IDX_transaction_tcs_breakdowns_purpose_id";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "public"."IDX_transaction_tcs_breakdowns_transaction_id";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "public"."IDX_transaction_tcs_breakdowns_transaction_line";`,
+    );
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "transaction_tcs_breakdowns";`,
+    );
 
-    await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_transactions_passenger_travel_id";`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "public"."IDX_transactions_passenger_travel_id";`,
+    );
     await queryRunner.query(`
       ALTER TABLE "transactions"
         DROP COLUMN IF EXISTS "is_proprietorship",

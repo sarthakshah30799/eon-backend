@@ -4,10 +4,11 @@ import { Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { TransactionBalanceCurrency } from "../transactions/entities/transaction-balance-currency.entity";
 import { TradeMode } from "../transactions/transactions.enums";
+import { resolveCurrencyBalanceTradeMode } from "../transactions/transaction-balance-profile.util";
 import {
-  resolveCurrencyBalanceTradeMode,
-} from "../transactions/transaction-balance-profile.util";
-import { CurrencyBalanceReportFormat, CurrencyBalanceReportQueryDto } from "./dto/currency-balance-report-query.dto";
+  CurrencyBalanceReportFormat,
+  CurrencyBalanceReportQueryDto,
+} from "./dto/currency-balance-report-query.dto";
 
 type ReportColumn = {
   key: string;
@@ -79,9 +80,9 @@ const formatDateKey = (value: Date | string) => {
     timeZone: "Asia/Kolkata",
   }).formatToParts(date);
 
-  const year = parts.find(part => part.type === "year")?.value ?? "";
-  const month = parts.find(part => part.type === "month")?.value ?? "";
-  const day = parts.find(part => part.type === "day")?.value ?? "";
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
 
   return `${year}-${month}-${day}`;
 };
@@ -100,7 +101,9 @@ const formatDateLabel = (value: Date | string) => {
   }).format(date);
 };
 
-const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotLabel = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -118,7 +121,7 @@ const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) 
 
 const buildWorkbook = (columns: ReportColumn[], rows: ReportRow[]) => {
   const worksheet = XLSX.utils.json_to_sheet(
-    rows.map(row =>
+    rows.map((row) =>
       columns.reduce<Record<string, string>>((acc, column) => {
         acc[column.label] = row[column.key as keyof ReportRow] ?? "";
         return acc;
@@ -137,7 +140,9 @@ export class CurrencyBalanceReportService {
     private readonly transactionBalanceCurrencyRepository: Repository<TransactionBalanceCurrency>,
   ) {}
 
-  private resolveFilters(query: CurrencyBalanceReportQueryDto): ResolvedFilters {
+  private resolveFilters(
+    query: CurrencyBalanceReportQueryDto,
+  ): ResolvedFilters {
     const startDate = query.startDate ? new Date(query.startDate) : null;
     const endDate = query.endDate ? new Date(query.endDate) : null;
 
@@ -168,7 +173,9 @@ export class CurrencyBalanceReportService {
       .where("balance.deletedAt IS NULL");
 
     if (filters.startDate) {
-      qb.andWhere("balance.date >= :startDate", { startDate: filters.startDate });
+      qb.andWhere("balance.date >= :startDate", {
+        startDate: filters.startDate,
+      });
     }
 
     if (filters.endDate) {
@@ -176,15 +183,21 @@ export class CurrencyBalanceReportService {
     }
 
     if (filters.branchIds.length > 0) {
-      qb.andWhere("balance.branchId IN (:...branchIds)", { branchIds: filters.branchIds });
+      qb.andWhere("balance.branchId IN (:...branchIds)", {
+        branchIds: filters.branchIds,
+      });
     }
 
     if (filters.counterIds.length > 0) {
-      qb.andWhere("balance.counterId IN (:...counterIds)", { counterIds: filters.counterIds });
+      qb.andWhere("balance.counterId IN (:...counterIds)", {
+        counterIds: filters.counterIds,
+      });
     }
 
     if (filters.currencyIds.length > 0) {
-      qb.andWhere("balance.currencyId IN (:...currencyIds)", { currencyIds: filters.currencyIds });
+      qb.andWhere("balance.currencyId IN (:...currencyIds)", {
+        currencyIds: filters.currencyIds,
+      });
     }
 
     return qb
@@ -218,9 +231,13 @@ export class CurrencyBalanceReportService {
       };
     }
 
-    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }) as Buffer;
+    const buffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "buffer",
+    }) as Buffer;
     return {
-      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       filename: "currency-balance-report.xlsx",
       buffer,
     };
@@ -311,10 +328,7 @@ export class CurrencyBalanceReportService {
       }
 
       state.runningRs = Number(
-        formatNumber(
-          state.runningRs + purchase - sell,
-          2,
-        ),
+        formatNumber(state.runningRs + purchase - sell, 2),
       );
       state.currentRow.closing = formatNumber(state.runningRs, 2);
     }

@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ILike, Repository } from "typeorm";
 import { SelectOption } from "./category-option.entity";
@@ -11,6 +16,12 @@ import {
   getStaticSelectOptions,
   type StaticSelectOption,
 } from "./category-option-static-options";
+import { SelectOptionListQueryDto } from "./dto/select-option-list-query.dto";
+import {
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 type CacheEntry = {
   expiresAt: number;
@@ -19,9 +30,12 @@ type CacheEntry = {
 
 @Injectable()
 export class SelectOptionService {
-  private readonly systemUserId = '00000000-0000-0000-0000-000000000000';
+  private readonly systemUserId = "00000000-0000-0000-0000-000000000000";
   private readonly cache = new Map<string, CacheEntry>();
-  private readonly inflight = new Map<string, Promise<SelectOptionResponseDto[]>>();
+  private readonly inflight = new Map<
+    string,
+    Promise<SelectOptionResponseDto[]>
+  >();
   private readonly cacheTtlMs = 5 * 60 * 1000;
 
   constructor(
@@ -30,11 +44,17 @@ export class SelectOptionService {
   ) {}
 
   private getCacheKey(code: string): string {
-    return code.trim().replace(/[_\s-]/g, '').toLowerCase();
+    return code
+      .trim()
+      .replace(/[_\s-]/g, "")
+      .toLowerCase();
   }
 
   private normalizeCode(code: string): string {
-    return code.trim().replace(/[_\s-]/g, '').toUpperCase();
+    return code
+      .trim()
+      .replace(/[_\s-]/g, "")
+      .toUpperCase();
   }
 
   private resolveStaticOptions(code: string): StaticSelectOption[] | null {
@@ -50,14 +70,16 @@ export class SelectOptionService {
 
     const normalizedValue = this.normalizeComparableStaticValue(value);
     const allowedValues = new Set(
-      staticOptions.map(option => this.normalizeComparableStaticValue(option.value)),
+      staticOptions.map((option) =>
+        this.normalizeComparableStaticValue(option.value),
+      ),
     );
 
     if (!allowedValues.has(normalizedValue)) {
       throw new BadRequestException(
         `Invalid value for static code ${this.normalizeCode(code)}. Allowed values: ${staticOptions
-          .map(option => option.value)
-          .join(', ')}`,
+          .map((option) => option.value)
+          .join(", ")}`,
       );
     }
   }
@@ -72,16 +94,19 @@ export class SelectOptionService {
     const normalizedValue = this.normalizeComparableStaticValue(value);
     return (
       staticOptions.find(
-        option =>
-          this.normalizeComparableStaticValue(option.value) === normalizedValue ||
+        (option) =>
+          this.normalizeComparableStaticValue(option.value) ===
+            normalizedValue ||
           this.normalizeComparableStaticValue(option.label) === normalizedValue,
-      )?.label ??
-      normalizedValue
+      )?.label ?? normalizedValue
     );
   }
 
   private normalizeComparableStaticValue(value: string): string {
-    return value.trim().replace(/[_\s-]/g, '').toUpperCase();
+    return value
+      .trim()
+      .replace(/[_\s-]/g, "")
+      .toUpperCase();
   }
 
   private resolveStaticValue(code: string, value: string): string {
@@ -93,7 +118,7 @@ export class SelectOptionService {
 
     const normalizedValue = this.normalizeComparableStaticValue(value);
     const matchedOption = staticOptions.find(
-      option =>
+      (option) =>
         this.normalizeComparableStaticValue(option.value) === normalizedValue ||
         this.normalizeComparableStaticValue(option.label) === normalizedValue,
     );
@@ -113,7 +138,9 @@ export class SelectOptionService {
     this.inflight.delete(cacheKey);
   }
 
-  private async loadOptionsByCode(code: string): Promise<SelectOptionResponseDto[]> {
+  private async loadOptionsByCode(
+    code: string,
+  ): Promise<SelectOptionResponseDto[]> {
     const normalizedCode = this.normalizeCode(code);
     const cacheKey = this.getCacheKey(normalizedCode);
     const cached = this.cache.get(cacheKey);
@@ -136,7 +163,7 @@ export class SelectOptionService {
       .orderBy("selectOption.sortOrder", "ASC")
       .addOrderBy("selectOption.label", "ASC")
       .getMany()
-      .then(options => {
+      .then((options) => {
         const data = options.map(SelectOptionResponseDto.fromEntity);
         this.cache.set(cacheKey, {
           expiresAt: Date.now() + this.cacheTtlMs,
@@ -145,7 +172,7 @@ export class SelectOptionService {
         this.inflight.delete(cacheKey);
         return data;
       })
-      .catch(error => {
+      .catch((error) => {
         this.inflight.delete(cacheKey);
         throw error;
       });
@@ -172,18 +199,29 @@ export class SelectOptionService {
     return staticOptions.map(StaticSelectOptionResponseDto.fromValue);
   }
 
-  async getAllOptions(search?: string): Promise<SelectOptionResponseDto[]> {
-    const normalizedSearch = search?.trim();
-    const options = await this.selectOptionRepository.find({
-      where: normalizedSearch ? { code: ILike(`%${normalizedSearch}%`) } : undefined,
+  async getAllOptions(
+    query: SelectOptionListQueryDto = {},
+  ): Promise<PaginatedResponseDto<SelectOptionResponseDto>> {
+    const pagination = normalizePagination(query);
+    const normalizedSearch = query.search?.trim();
+    const [options, total] = await this.selectOptionRepository.findAndCount({
+      where: normalizedSearch
+        ? { code: ILike(`%${normalizedSearch}%`) }
+        : undefined,
       order: {
-        code: 'ASC',
-        sortOrder: 'ASC',
-        label: 'ASC',
+        code: "ASC",
+        sortOrder: "ASC",
+        label: "ASC",
       },
+      skip: pagination.offset,
+      take: pagination.limit,
     });
 
-    return options.map(SelectOptionResponseDto.fromEntity);
+    return buildPaginatedResponse(
+      options.map(SelectOptionResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async getOptionById(id: string): Promise<SelectOptionResponseDto> {
@@ -202,7 +240,10 @@ export class SelectOptionService {
   ): Promise<SelectOptionResponseDto> {
     const normalizedCode = this.normalizeCode(dto.code);
     const normalizedValue = this.resolveStaticValue(normalizedCode, dto.value);
-    const normalizedLabel = this.normalizeStaticLabel(normalizedCode, dto.label);
+    const normalizedLabel = this.normalizeStaticLabel(
+      normalizedCode,
+      dto.label,
+    );
 
     this.ensureStaticValueIsAllowed(normalizedCode, normalizedValue);
 
@@ -217,7 +258,9 @@ export class SelectOptionService {
       .getOne();
 
     if (existing) {
-      throw new ConflictException("Select option already exists for this code and value");
+      throw new ConflictException(
+        "Select option already exists for this code and value",
+      );
     }
 
     const option = this.selectOptionRepository.create({
@@ -277,8 +320,14 @@ export class SelectOptionService {
 
     for (const item of options) {
       const normalizedCode = this.normalizeCode(item.code);
-      const normalizedValue = this.resolveStaticValue(normalizedCode, item.value);
-      const normalizedLabel = this.normalizeStaticLabel(normalizedCode, item.label);
+      const normalizedValue = this.resolveStaticValue(
+        normalizedCode,
+        item.value,
+      );
+      const normalizedLabel = this.normalizeStaticLabel(
+        normalizedCode,
+        item.label,
+      );
 
       this.ensureStaticValueIsAllowed(normalizedCode, normalizedValue);
       const existing = await this.selectOptionRepository
@@ -327,6 +376,8 @@ export class SelectOptionService {
       .orderBy("selectOption.code", "ASC")
       .getRawMany<{ code: string }>();
 
-    return [...new Set(rows.map(row => this.normalizeCode(row.code)))] as CategoryOptionCodeEnum[];
+    return [
+      ...new Set(rows.map((row) => this.normalizeCode(row.code))),
+    ] as CategoryOptionCodeEnum[];
   }
 }

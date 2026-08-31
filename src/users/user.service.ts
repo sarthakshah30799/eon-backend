@@ -1,34 +1,47 @@
-import { Injectable, ConflictException, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Not, Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
-import { User } from './user.entity';
-import { Role } from '../roles/role.entity';
-import { UserRole } from '../user-roles/user-role.entity';
-import { CounterMenuRestriction } from '../counter-menu-restrictions/counter-menu-restriction.entity';
-import { BranchCounter } from '../branches/entities/branch-counter.entity';
-import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { LoginUserDto } from './dto/login-user.dto';
-import { UserResponseDto } from './dto/user-response.dto';
-import { UserAssignmentDto } from './dto/user-assignment.dto';
-import { uppercaseFields } from '../utils/uppercase.util';
-import { PasswordPolicyService } from '../password-policy/password-policy.service';
-import { normalizeMenuPath } from '../menu/menu-path.util';
+import {
+  Injectable,
+  ConflictException,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, Not, Repository } from "typeorm";
+import * as bcrypt from "bcrypt";
+import { User } from "./user.entity";
+import { Role } from "../roles/role.entity";
+import { UserRole } from "../user-roles/user-role.entity";
+import { CounterMenuRestriction } from "../counter-menu-restrictions/counter-menu-restriction.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
+import { assertCounterBelongsToBranch } from "../branches/branch-counter.access";
+import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
+import { LoginUserDto } from "./dto/login-user.dto";
+import { UserResponseDto } from "./dto/user-response.dto";
+import { UserAssignmentDto } from "./dto/user-assignment.dto";
+import { uppercaseFields } from "../utils/uppercase.util";
+import { PasswordPolicyService } from "../password-policy/password-policy.service";
+import { normalizeMenuPath } from "../menu/menu-path.util";
+import { UserListQueryDto } from "./dto/user-list-query.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 const USER_RELATIONS = [
-  'userRoles',
-  'userRoles.role',
-  'userRoles.role.menuPermissions',
-  'userRoles.role.menuPermissions.menu',
-  'userRoles.role.menuPermissions.permission',
-  'userRoles.branch',
-  'userRoles.branch.company',
-  'userRoles.counter',
+  "userRoles",
+  "userRoles.role",
+  "userRoles.role.menuPermissions",
+  "userRoles.role.menuPermissions.menu",
+  "userRoles.role.menuPermissions.permission",
+  "userRoles.branch",
+  "userRoles.branch.company",
+  "userRoles.counter",
 ];
 
-const TEMP_INITIAL_PASSWORD = 'Temp@1234';
+const TEMP_INITIAL_PASSWORD = "Temp@1234";
 
 type WorkplaceSelection = {
   activeBranchId?: string | null;
@@ -59,14 +72,15 @@ export class UserService {
       return userDto;
     }
 
-    const counterRestrictions = await this.counterMenuRestrictionRepository.find({
-      where: {
-        counter: {
-          id: workplace.activeCounterId,
-        } as CounterMenuRestriction['counter'],
-      },
-      relations: ['menu', 'permission'],
-    });
+    const counterRestrictions =
+      await this.counterMenuRestrictionRepository.find({
+        where: {
+          counter: {
+            id: workplace.activeCounterId,
+          } as CounterMenuRestriction["counter"],
+        },
+        relations: ["menu", "permission"],
+      });
 
     if (counterRestrictions.length === 0) {
       return userDto;
@@ -78,14 +92,17 @@ export class UserService {
     }
 
     for (const restriction of counterRestrictions) {
-      const menuPath = normalizeMenuPath(restriction.menu?.path) || restriction.menu?.name;
+      const menuPath =
+        normalizeMenuPath(restriction.menu?.path) || restriction.menu?.name;
       const permissionCode = restriction.permission?.code;
 
       if (!menuPath || !permissionCode || !nextPermissions[menuPath]) {
         continue;
       }
 
-      nextPermissions[menuPath] = nextPermissions[menuPath].filter(code => code !== permissionCode);
+      nextPermissions[menuPath] = nextPermissions[menuPath].filter(
+        (code) => code !== permissionCode,
+      );
 
       if (nextPermissions[menuPath].length === 0) {
         delete nextPermissions[menuPath];
@@ -126,19 +143,23 @@ export class UserService {
       return false;
     }
 
-    return user.userRoles?.some(userRole => userRole.role?.isBrnMgr) || false;
+    return user.userRoles?.some((userRole) => userRole.role?.isBrnMgr) || false;
   }
 
   private normalizeAssignments(
-    dto: Partial<CreateUserDto> & { assignments?: UserAssignmentDto[] }
+    dto: Partial<CreateUserDto> & { assignments?: UserAssignmentDto[] },
   ): UserAssignmentDto[] {
     const assignments = dto.assignments ?? [];
 
     if (assignments.length > 0) {
       const seen = new Set<string>();
 
-      return assignments.filter(assignment => {
-        if (!assignment.roleId || !assignment.branchId || !assignment.counterId) {
+      return assignments.filter((assignment) => {
+        if (
+          !assignment.roleId ||
+          !assignment.branchId ||
+          !assignment.counterId
+        ) {
           return false;
         }
 
@@ -167,9 +188,11 @@ export class UserService {
 
   private async ensureRolesAreAssignable(
     assignments: UserAssignmentDto[],
-    requesterIsAdmin: boolean
+    requesterIsAdmin: boolean,
   ): Promise<void> {
-    const uniqueRoleIds = [...new Set(assignments.map(assignment => assignment.roleId))];
+    const uniqueRoleIds = [
+      ...new Set(assignments.map((assignment) => assignment.roleId)),
+    ];
 
     for (const roleId of uniqueRoleIds) {
       const role = await this.roleRepository.findOne({ where: { id: roleId } });
@@ -179,7 +202,9 @@ export class UserService {
       }
 
       if (role.isAdmin && !requesterIsAdmin) {
-        throw new ConflictException('Admin role cannot be assigned to non-admin users');
+        throw new ConflictException(
+          "Admin role cannot be assigned to non-admin users",
+        );
       }
     }
   }
@@ -192,7 +217,7 @@ export class UserService {
         this.branchCounterRepository,
         assignment.branchId,
         assignment.counterId,
-        'Selected counter does not belong to the selected branch for this user assignment',
+        "Selected counter does not belong to the selected branch for this user assignment",
       );
     }
   }
@@ -200,22 +225,22 @@ export class UserService {
   private async syncUserRoles(
     userId: string,
     assignments: UserAssignmentDto[],
-    actorUserId?: string
+    actorUserId?: string,
   ): Promise<void> {
     await this.userRoleRepository
       .createQueryBuilder()
       .delete()
       .from(UserRole)
-      .where('user_id = :userId', { userId })
+      .where("user_id = :userId", { userId })
       .execute();
 
     if (assignments.length === 0) {
       return;
     }
 
-    const actorId = actorUserId || '00000000-0000-0000-0000-000000000000';
+    const actorId = actorUserId || "00000000-0000-0000-0000-000000000000";
 
-    const userRoles = assignments.map(assignment =>
+    const userRoles = assignments.map((assignment) =>
       this.userRoleRepository.create({
         user: { id: userId } as any,
         role: { id: assignment.roleId } as any,
@@ -223,7 +248,7 @@ export class UserService {
         counter: { id: assignment.counterId } as any,
         createdBy: actorId,
         updatedBy: actorId,
-      })
+      }),
     );
 
     await this.userRoleRepository.save(userRoles);
@@ -241,85 +266,103 @@ export class UserService {
 
   async findAll(
     currentUserId?: string,
-    activeOnly = true,
-    search?: string,
+    query?: UserListQueryDto,
     branchId?: string,
-    roleFilter?: string,
-  ): Promise<UserResponseDto[]> {
+  ): Promise<PaginatedResponseDto<UserResponseDto>> {
+    const pagination = normalizePagination(query);
     const requesterIsAdmin = await this.isRequesterAdmin(currentUserId);
-    const requesterIsBranchManager = await this.isRequesterBranchManager(currentUserId);
-    const trimmedSearch = search?.trim();
+    const requesterIsBranchManager =
+      await this.isRequesterBranchManager(currentUserId);
+    const trimmedSearch = query?.search?.trim();
+    const activeOnly = query?.activeOnly !== false;
 
-    const query = this.userRepository
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.userRoles', 'userRole')
-      .leftJoinAndSelect('userRole.role', 'role')
-      .leftJoinAndSelect('role.menuPermissions', 'menuPermission')
-      .leftJoinAndSelect('menuPermission.menu', 'menu')
-      .leftJoinAndSelect('menuPermission.permission', 'permission')
-      .leftJoinAndSelect('userRole.branch', 'branch')
-      .leftJoinAndSelect('branch.company', 'company')
-      .leftJoinAndSelect('userRole.counter', 'counter')
-      .orderBy('user.createdAt', 'DESC');
+    const qb = this.userRepository
+      .createQueryBuilder("user")
+      .leftJoinAndSelect("user.userRoles", "userRole")
+      .leftJoinAndSelect("userRole.role", "role")
+      .leftJoinAndSelect("role.menuPermissions", "menuPermission")
+      .leftJoinAndSelect("menuPermission.menu", "menu")
+      .leftJoinAndSelect("menuPermission.permission", "permission")
+      .leftJoinAndSelect("userRole.branch", "branch")
+      .leftJoinAndSelect("branch.company", "company")
+      .leftJoinAndSelect("userRole.counter", "counter")
+      .orderBy("user.createdAt", "DESC");
 
     if (activeOnly) {
-      query.andWhere('user.isActive = :isActive', { isActive: true });
+      qb.andWhere("user.isActive = :isActive", { isActive: true });
     }
 
     if (!requesterIsAdmin) {
-      query.andWhere('user.isAdmin = :isAdmin', { isAdmin: false });
+      qb.andWhere("user.isAdmin = :isAdmin", { isAdmin: false });
     }
 
-    if (!requesterIsAdmin && !requesterIsBranchManager && !activeOnly && currentUserId) {
-      query.andWhere('user.createdBy = :currentUserId', { currentUserId });
+    if (
+      !requesterIsAdmin &&
+      !requesterIsBranchManager &&
+      !activeOnly &&
+      currentUserId
+    ) {
+      qb.andWhere("user.createdBy = :currentUserId", { currentUserId });
     }
 
     if (trimmedSearch) {
-      query.andWhere(
-        new Brackets(subQuery => {
+      qb.andWhere(
+        new Brackets((subQuery) => {
           subQuery
-            .where('user.code ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('user.name ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('user.email ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('user.contactNo ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('user.designation ILIKE :search', { search: `%${trimmedSearch}%` });
-        })
+            .where("user.code ILIKE :search", { search: `%${trimmedSearch}%` })
+            .orWhere("user.name ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            })
+            .orWhere("user.email ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            })
+            .orWhere("user.contactNo ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            })
+            .orWhere("user.designation ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            });
+        }),
       );
     }
 
     if (branchId) {
-      query.andWhere('branch.id = :branchId', { branchId });
+      qb.andWhere("branch.id = :branchId", { branchId });
     }
 
-    if (roleFilter) {
-      const normalizedRoleFilter = roleFilter.trim().toUpperCase();
-      if (normalizedRoleFilter === 'CASHIER') {
-        query.andWhere(
-          'role.isCashier = :isCashier',
-          { isCashier: true }
-        );
-      } else if (normalizedRoleFilter === 'DELIVERY_BOY') {
-        query.andWhere(
-          'role.isDeliveryBoy = :isDeliveryBoy',
-          { isDeliveryBoy: true }
-        );
+    if (query?.roleFilter) {
+      const normalizedRoleFilter = query.roleFilter.trim().toUpperCase();
+      if (normalizedRoleFilter === "CASHIER") {
+        qb.andWhere("role.isCashier = :isCashier", { isCashier: true });
+      } else if (normalizedRoleFilter === "DELIVERY_BOY") {
+        qb.andWhere("role.isDeliveryBoy = :isDeliveryBoy", {
+          isDeliveryBoy: true,
+        });
       } else {
-        query.andWhere('1 = 0');
+        qb.andWhere("1 = 0");
       }
     }
 
-    const users = await query.getMany();
-    return users.map(user => UserResponseDto.fromEntity(user));
+    applyPagination(qb, pagination);
+    const [users, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      users.map((user) => UserResponseDto.fromEntity(user)),
+      total,
+      pagination,
+    );
   }
 
-  async create(createUserDto: CreateUserDto, userId?: string): Promise<UserResponseDto> {
+  async create(
+    createUserDto: CreateUserDto,
+    userId?: string,
+  ): Promise<UserResponseDto> {
     const uppercased = uppercaseFields(createUserDto);
     const existingUser = await this.userRepository.findOne({
       where: { email: uppercased.email },
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+      throw new ConflictException("User with this email already exists");
     }
 
     const existingCode = await this.userRepository.findOne({
@@ -327,7 +370,7 @@ export class UserService {
     });
 
     if (existingCode) {
-      throw new ConflictException('User with this user code already exists');
+      throw new ConflictException("User with this user code already exists");
     }
 
     const assignments = this.normalizeAssignments(uppercased);
@@ -350,8 +393,8 @@ export class UserService {
       mustChangePassword: true,
       isAdmin: false,
       isActive: uppercased.isActive !== false,
-      createdBy: userId || '00000000-0000-0000-0000-000000000000',
-      updatedBy: userId || '00000000-0000-0000-0000-000000000000',
+      createdBy: userId || "00000000-0000-0000-0000-000000000000",
+      updatedBy: userId || "00000000-0000-0000-0000-000000000000",
     });
 
     const savedUser = await this.userRepository.save(user);
@@ -361,7 +404,11 @@ export class UserService {
     return this.loadUserResponse(savedUser.id);
   }
 
-  async update(id: string, dto: UpdateUserDto, userId: string): Promise<UserResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateUserDto,
+    userId: string,
+  ): Promise<UserResponseDto> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException(`User with id ${id} not found`);
@@ -392,7 +439,7 @@ export class UserService {
         where: { email: uppercased.email, id: Not(id) },
       });
       if (existing) {
-        throw new ConflictException('User with this email already exists');
+        throw new ConflictException("User with this email already exists");
       }
     }
 
@@ -443,7 +490,10 @@ export class UserService {
     }
 
     const policy = await this.passwordPolicyService.getPasswordPolicy();
-    const isPasswordValid = await bcrypt.compare(loginUserDto.password, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      loginUserDto.password,
+      user.password,
+    );
 
     if (!isPasswordValid) {
       if (policy.maxInvalidAttempts <= 0) {
@@ -492,14 +542,15 @@ export class UserService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     if (user.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
       throw new NotFoundException(`User with id ${id} not found`);
     }
 
-    const requesterIsBranchManager = await this.isRequesterBranchManager(currentUserId);
+    const requesterIsBranchManager =
+      await this.isRequesterBranchManager(currentUserId);
 
     if (!(await this.isRequesterAdmin(currentUserId))) {
       if (currentUserId === id) {
@@ -509,7 +560,9 @@ export class UserService {
       const activeBranchId = workplace?.activeBranchId ?? null;
       const isInCurrentBranch =
         Boolean(activeBranchId) &&
-        user.userRoles?.some(userRole => userRole.branch?.id === activeBranchId);
+        user.userRoles?.some(
+          (userRole) => userRole.branch?.id === activeBranchId,
+        );
 
       if (!isInCurrentBranch) {
         throw new NotFoundException(`User with id ${id} not found`);
@@ -534,7 +587,10 @@ export class UserService {
     });
   }
 
-  async findByMobileNumber(countryCode: string, phoneNumber: string): Promise<User | null> {
+  async findByMobileNumber(
+    countryCode: string,
+    phoneNumber: string,
+  ): Promise<User | null> {
     // Standard ERP contactNo
     return this.userRepository.findOne({
       where: { contactNo: phoneNumber },
@@ -542,7 +598,11 @@ export class UserService {
     });
   }
 
-  async validateOtpUser(countryCode: string, phoneNumber: string, otp: string): Promise<User | null> {
+  async validateOtpUser(
+    countryCode: string,
+    phoneNumber: string,
+    otp: string,
+  ): Promise<User | null> {
     const user = await this.userRepository.findOne({
       where: { contactNo: phoneNumber },
       relations: USER_RELATIONS,
@@ -556,7 +616,7 @@ export class UserService {
       throw this.passwordPolicyService.lockedAccountException();
     }
 
-    if (otp !== '123456') {
+    if (otp !== "123456") {
       return null;
     }
 

@@ -1,19 +1,21 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddStatusUpdatedByToCorporateClients1782133333737 implements MigrationInterface {
-    name = 'AddStatusUpdatedByToCorporateClients1782133333737'
+  name = "AddStatusUpdatedByToCorporateClients1782133333737";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        const partyProfilesExists = await queryRunner.hasTable("party_profiles");
-        const tableName = partyProfilesExists ? "party_profiles" : "corporate_clients";
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    const partyProfilesExists = await queryRunner.hasTable("party_profiles");
+    const tableName = partyProfilesExists
+      ? "party_profiles"
+      : "corporate_clients";
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             ALTER TABLE "${tableName}"
                 ADD COLUMN IF NOT EXISTS "status_updated_by_id" uuid,
                 ADD COLUMN IF NOT EXISTS "status_updated_at" TIMESTAMPTZ
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -26,32 +28,34 @@ export class AddStatusUpdatedByToCorporateClients1782133333737 implements Migrat
             END $$;
         `);
 
-        if (!partyProfilesExists) {
-            await queryRunner.query(`
+    if (!partyProfilesExists) {
+      await queryRunner.query(`
                 ALTER TABLE "corporate_clients" RENAME TO "party_profiles"
             `);
-        }
     }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        const partyProfilesExists = await queryRunner.hasTable("party_profiles");
-        const tableName = partyProfilesExists ? "party_profiles" : "corporate_clients";
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    const partyProfilesExists = await queryRunner.hasTable("party_profiles");
+    const tableName = partyProfilesExists
+      ? "party_profiles"
+      : "corporate_clients";
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             ALTER TABLE "${tableName}"
                 DROP CONSTRAINT IF EXISTS "FK_party_profiles_status_updated_by_id"
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             ALTER TABLE "${tableName}"
                 DROP COLUMN IF EXISTS "status_updated_at",
                 DROP COLUMN IF EXISTS "status_updated_by_id"
         `);
 
-        if (partyProfilesExists) {
-            await queryRunner.query(`
+    if (partyProfilesExists) {
+      await queryRunner.query(`
                 ALTER TABLE "party_profiles" RENAME TO "corporate_clients"
             `);
-        }
     }
+  }
 }

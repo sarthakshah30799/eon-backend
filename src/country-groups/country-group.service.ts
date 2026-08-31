@@ -5,12 +5,19 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ILike, Repository } from "typeorm";
+import { Brackets, Repository } from "typeorm";
 import { CountryGroup } from "./country-group.entity";
 import { CreateCountryGroupDto } from "./dto/create-country-group.dto";
 import { UpdateCountryGroupDto } from "./dto/update-country-group.dto";
 import { CountryGroupResponseDto } from "./dto/country-group-response.dto";
+import { CountryGroupListQueryDto } from "./dto/country-group-list-query.dto";
 import { Currency } from "../currencies/currency.entity";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 @Injectable()
 export class CountryGroupService {
@@ -68,21 +75,35 @@ export class CountryGroupService {
     }
   }
 
-  async findAll(search?: string): Promise<CountryGroupResponseDto[]> {
-    const where = search?.trim()
-      ? [
-          { name: ILike(`%${search.trim()}%`) },
-          { code: ILike(`%${search.trim()}%`) },
-        ]
-      : undefined;
-    const groups = await this.countryGroupRepository.find({
-      where,
-      relations: {
-        sellLimitCurrency: true,
-      },
-      order: { createdAt: "DESC" },
-    });
-    return groups.map(CountryGroupResponseDto.fromEntity);
+  async findAll(
+    query?: CountryGroupListQueryDto,
+  ): Promise<PaginatedResponseDto<CountryGroupResponseDto>> {
+    const pagination = normalizePagination(query);
+    const qb = this.countryGroupRepository
+      .createQueryBuilder("countryGroup")
+      .leftJoinAndSelect("countryGroup.sellLimitCurrency", "sellLimitCurrency")
+      .orderBy("countryGroup.createdAt", "DESC");
+
+    const search = query?.search?.trim();
+    if (search) {
+      qb.andWhere(
+        new Brackets((searchQb) => {
+          searchQb
+            .where("countryGroup.name ILIKE :search", { search: `%${search}%` })
+            .orWhere("countryGroup.code ILIKE :search", {
+              search: `%${search}%`,
+            });
+        }),
+      );
+    }
+
+    applyPagination(qb, pagination);
+    const [groups, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      groups.map(CountryGroupResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<CountryGroupResponseDto> {
@@ -98,9 +119,14 @@ export class CountryGroupService {
     return CountryGroupResponseDto.fromEntity(group);
   }
 
-  async create(dto: CreateCountryGroupDto, userId: string): Promise<CountryGroupResponseDto> {
+  async create(
+    dto: CreateCountryGroupDto,
+    userId: string,
+  ): Promise<CountryGroupResponseDto> {
     const name = dto.name.trim();
-    const code = dto.code ? dto.code.trim().toUpperCase() : this.generateCode(name);
+    const code = dto.code
+      ? dto.code.trim().toUpperCase()
+      : this.generateCode(name);
     const sellLimitAmount = dto.sellLimitAmount ?? null;
     const sellLimitCurrencyId = dto.sellLimitCurrencyId ?? null;
     const minTravelDays = dto.minTravelDays ?? null;
@@ -117,7 +143,9 @@ export class CountryGroupService {
       where: { code },
     });
     if (existingCode) {
-      throw new ConflictException(`Country Group with code "${code}" already exists`);
+      throw new ConflictException(
+        `Country Group with code "${code}" already exists`,
+      );
     }
 
     // Validate uniqueness of name
@@ -125,7 +153,9 @@ export class CountryGroupService {
       where: { name },
     });
     if (existingName) {
-      throw new ConflictException(`Country Group with name "${name}" already exists`);
+      throw new ConflictException(
+        `Country Group with name "${name}" already exists`,
+      );
     }
 
     const group = this.countryGroupRepository.create({
@@ -149,7 +179,11 @@ export class CountryGroupService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateCountryGroupDto, userId: string): Promise<CountryGroupResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateCountryGroupDto,
+    userId: string,
+  ): Promise<CountryGroupResponseDto> {
     const group = await this.countryGroupRepository.findOne({ where: { id } });
     if (!group) {
       throw new NotFoundException(`Country Group with id ${id} not found`);
@@ -157,15 +191,23 @@ export class CountryGroupService {
 
     const nextName = dto.name !== undefined ? dto.name.trim() : group.name;
     const nextSellLimitAmount =
-      dto.sellLimitAmount !== undefined ? dto.sellLimitAmount : (group.sellLimitAmount === null ? null : Number(group.sellLimitAmount));
+      dto.sellLimitAmount !== undefined
+        ? dto.sellLimitAmount
+        : group.sellLimitAmount === null
+          ? null
+          : Number(group.sellLimitAmount);
     const nextSellLimitCurrencyId =
       dto.sellLimitCurrencyId !== undefined
-        ? dto.sellLimitCurrencyId ?? null
+        ? (dto.sellLimitCurrencyId ?? null)
         : group.sellLimitCurrencyId;
     const nextMinTravelDays =
-      dto.minTravelDays !== undefined ? dto.minTravelDays ?? null : group.minTravelDays;
+      dto.minTravelDays !== undefined
+        ? (dto.minTravelDays ?? null)
+        : group.minTravelDays;
     const nextMaxTravelDays =
-      dto.maxTravelDays !== undefined ? dto.maxTravelDays ?? null : group.maxTravelDays;
+      dto.maxTravelDays !== undefined
+        ? (dto.maxTravelDays ?? null)
+        : group.maxTravelDays;
 
     this.validateLimitPair(nextSellLimitAmount, nextSellLimitCurrencyId);
     this.validateTravelDays(nextMinTravelDays, nextMaxTravelDays);
@@ -179,7 +221,9 @@ export class CountryGroupService {
           where: { name: nextName },
         });
         if (existingName) {
-          throw new ConflictException(`Country Group with name "${nextName}" already exists`);
+          throw new ConflictException(
+            `Country Group with name "${nextName}" already exists`,
+          );
         }
       }
       group.name = nextName;
@@ -222,7 +266,7 @@ export class CountryGroupService {
     } catch (error) {
       if (error.code === "23503") {
         throw new ConflictException(
-          "Cannot delete Country Group because it is mapped to one or more Countries"
+          "Cannot delete Country Group because it is mapped to one or more Countries",
         );
       }
       throw error;

@@ -9,39 +9,53 @@ import {
   UseGuards,
   Session,
   Query,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
-import { MenuService } from './menu.service';
-import { CreateMenuDto } from './dto/create-menu.dto';
-import { UpdateMenuDto } from './dto/update-menu.dto';
-import { MenuResponseDto } from './dto/menu-response.dto';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { UserService } from '../users/user.service';
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiCookieAuth,
+  ApiParam,
+} from "@nestjs/swagger";
+import { MenuService } from "./menu.service";
+import { CreateMenuDto } from "./dto/create-menu.dto";
+import { UpdateMenuDto } from "./dto/update-menu.dto";
+import { MenuResponseDto } from "./dto/menu-response.dto";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { UserService } from "../users/user.service";
 
-@ApiTags('menus')
-@ApiCookieAuth('sessionId')
+@ApiTags("menus")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard)
-@Controller('menus')
+@Controller("menus")
 export class MenuController {
   constructor(
     private readonly menuService: MenuService,
     private readonly userService: UserService,
   ) {}
 
-  @Get('tree')
-  @ApiOperation({ summary: 'Get menu tree (nested hierarchy for sidebar)' })
-  @ApiResponse({ status: 200, description: 'Menu tree', type: [MenuResponseDto] })
+  @Get("tree")
+  @ApiOperation({ summary: "Get menu tree (nested hierarchy for sidebar)" })
+  @ApiResponse({
+    status: 200,
+    description: "Menu tree",
+    type: [MenuResponseDto],
+  })
   async findTree(
     @Session() session: any,
-    @Query('includeAdmin') includeAdmin?: string,
+    @Query("includeAdmin") includeAdmin?: string,
   ): Promise<MenuResponseDto[]> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     const shouldIncludeAdmin =
-      includeAdmin === undefined ? isFullAccessUser : includeAdmin === 'true';
+      includeAdmin === undefined ? isFullAccessUser : includeAdmin === "true";
     return this.menuService.findTree(
       shouldIncludeAdmin,
       isFullAccessUser,
@@ -49,55 +63,86 @@ export class MenuController {
     );
   }
 
-  @Get('rights-tree')
-  @ApiOperation({ summary: 'Get menu tree for rights management' })
-  @ApiResponse({ status: 200, description: 'Menu tree for rights management', type: [MenuResponseDto] })
+  @Get("rights-tree")
+  @ApiOperation({ summary: "Get menu tree for rights management" })
+  @ApiResponse({
+    status: 200,
+    description: "Menu tree for rights management",
+    type: [MenuResponseDto],
+  })
   async findRightsTree(): Promise<MenuResponseDto[]> {
     return this.menuService.findRightsTree();
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all menus (flat list)' })
-  @ApiResponse({ status: 200, description: 'List of menus', type: [MenuResponseDto] })
+  @ApiOperation({ summary: "Get all menus (flat list)" })
+  @ApiResponse({
+    status: 200,
+    description: "List of menus",
+    type: [MenuResponseDto],
+  })
   async findAll(
     @Session() session: any,
-    @Query('includeAdmin') includeAdmin?: string,
+    @Query("includeAdmin") includeAdmin?: string,
   ): Promise<MenuResponseDto[]> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     const shouldIncludeAdmin =
-      includeAdmin === undefined ? isFullAccessUser : includeAdmin === 'true';
-    return this.menuService.findAll(
-      shouldIncludeAdmin,
-      isFullAccessUser,
-    );
+      includeAdmin === undefined ? isFullAccessUser : includeAdmin === "true";
+    return this.menuService.findAll(shouldIncludeAdmin, isFullAccessUser);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get menu by ID' })
-  @ApiParam({ name: 'id', description: 'Menu UUID' })
-  @ApiResponse({ status: 200, description: 'Menu details', type: MenuResponseDto })
-  @ApiResponse({ status: 404, description: 'Menu not found' })
-  async findById(@Param('id') id: string, @Session() session: any): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+  @Get(":id")
+  @ApiOperation({ summary: "Get menu by ID" })
+  @ApiParam({ name: "id", description: "Menu UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Menu details",
+    type: MenuResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Menu not found" })
+  async findById(
+    @Param("id") id: string,
+    @Session() session: any,
+  ): Promise<MenuResponseDto> {
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     return this.menuService.findById(id, isFullAccessUser, isFullAccessUser);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new menu item' })
-  @ApiResponse({ status: 201, description: 'Menu created', type: MenuResponseDto })
-  async create(@Body() dto: CreateMenuDto, @Session() session: any): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+  @ApiOperation({ summary: "Create a new menu item" })
+  @ApiResponse({
+    status: 201,
+    description: "Menu created",
+    type: MenuResponseDto,
+  })
+  async create(
+    @Body() dto: CreateMenuDto,
+    @Session() session: any,
+  ): Promise<MenuResponseDto> {
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     return this.menuService.create(
       dto,
@@ -107,20 +152,28 @@ export class MenuController {
     );
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update a menu item' })
-  @ApiParam({ name: 'id', description: 'Menu UUID' })
-  @ApiResponse({ status: 200, description: 'Menu updated', type: MenuResponseDto })
-  @ApiResponse({ status: 404, description: 'Menu not found' })
+  @Put(":id")
+  @ApiOperation({ summary: "Update a menu item" })
+  @ApiParam({ name: "id", description: "Menu UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Menu updated",
+    type: MenuResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Menu not found" })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: UpdateMenuDto,
     @Session() session: any,
   ): Promise<MenuResponseDto> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     return this.menuService.update(
       id,
@@ -131,19 +184,23 @@ export class MenuController {
     );
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a menu item' })
-  @ApiParam({ name: 'id', description: 'Menu UUID' })
-  @ApiResponse({ status: 200, description: 'Menu deleted' })
-  @ApiResponse({ status: 404, description: 'Menu not found' })
+  @Delete(":id")
+  @ApiOperation({ summary: "Delete a menu item" })
+  @ApiParam({ name: "id", description: "Menu UUID" })
+  @ApiResponse({ status: 200, description: "Menu deleted" })
+  @ApiResponse({ status: 404, description: "Menu not found" })
   async delete(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Session() session: any,
   ): Promise<{ message: string }> {
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session?.activeBranchId ?? null,
-      activeCounterId: session?.activeCounterId ?? null,
-    });
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+      },
+    );
     const isFullAccessUser = user.isAdmin === true || user.isHoStaff === true;
     return this.menuService.delete(id, isFullAccessUser, isFullAccessUser);
   }

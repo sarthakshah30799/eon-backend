@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { SessionPolicyCodeEnum } from './session-policy.enum';
+import { ApiProperty } from "@nestjs/swagger";
+import { SessionPolicyCodeEnum } from "./session-policy.enum";
 
 export interface SessionPolicyConfig {
   allowMultipleLogin?: boolean;
@@ -9,11 +9,11 @@ export interface SessionPolicyConfig {
 export const SESSION_POLICY_CHILDREN = [
   {
     code: SessionPolicyCodeEnum.AllowMultipleLogin,
-    label: 'Allow Multiple Login',
+    label: "Allow Multiple Login",
   },
   {
     code: SessionPolicyCodeEnum.IdleTimeoutSeconds,
-    label: 'Idle Timeout Seconds',
+    label: "Idle Timeout Seconds",
   },
 ] as const;
 

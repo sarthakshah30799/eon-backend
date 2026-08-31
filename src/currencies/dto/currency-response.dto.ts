@@ -1,7 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Currency } from '../currency.entity';
-import { Country } from '../../country/country.entity';
-import { CurrencyRateGroupResponseDto } from '../../currency-rates/dto/currency-rate-group-response.dto';
+import { ApiProperty } from "@nestjs/swagger";
+import { Currency } from "../currency.entity";
+import { Country } from "../../country/country.entity";
+import { CurrencyRateGroupResponseDto } from "../../currency-rates/dto/currency-rate-group-response.dto";
 
 export class CurrencyResponseDto {
   @ApiProperty()
@@ -46,7 +46,11 @@ export class CurrencyResponseDto {
   @ApiProperty()
   group: string;
 
-  @ApiProperty({ required: false, nullable: true, type: () => CurrencyRateGroupResponseDto })
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: () => CurrencyRateGroupResponseDto,
+  })
   pricingGroup?: CurrencyRateGroupResponseDto | null;
 
   @ApiProperty({ required: false })

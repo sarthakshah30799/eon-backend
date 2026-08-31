@@ -8,7 +8,14 @@ import { FinancialCodeController } from "./financial-code.controller";
 import { UserModule } from "../users/user.module";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([FinancialCode, FinancialSubProfile, SelectOption]), UserModule],
+  imports: [
+    TypeOrmModule.forFeature([
+      FinancialCode,
+      FinancialSubProfile,
+      SelectOption,
+    ]),
+    UserModule,
+  ],
   providers: [FinancialCodeService],
   controllers: [FinancialCodeController],
   exports: [FinancialCodeService, TypeOrmModule],

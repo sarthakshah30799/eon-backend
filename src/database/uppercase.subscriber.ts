@@ -3,7 +3,7 @@ import {
   EventSubscriber,
   InsertEvent,
   UpdateEvent,
-} from 'typeorm';
+} from "typeorm";
 
 @EventSubscriber()
 export class UppercaseSubscriber implements EntitySubscriberInterface {
@@ -28,22 +28,29 @@ export class UppercaseSubscriber implements EntitySubscriberInterface {
 
     // Verify it is one of our core user-facing entities
     const entityClassName = entity.constructor?.name || metadata.targetName;
-    const targetEntities = ['Company', 'Branch', 'Counter', 'Currency', 'Role', 'User'];
+    const targetEntities = [
+      "Company",
+      "Branch",
+      "Counter",
+      "Currency",
+      "Role",
+      "User",
+    ];
     if (!targetEntities.includes(entityClassName)) {
       return;
     }
 
     // Skip technical, structural, or sensitive fields
     const skipFields = [
-      'password',
-      'logo',
-      'website',
-      'id',
-      'createdBy',
-      'updatedBy',
-      'deletedBy',
-      'createdAt',
-      'updatedAt',
+      "password",
+      "logo",
+      "website",
+      "id",
+      "createdBy",
+      "updatedBy",
+      "deletedBy",
+      "createdAt",
+      "updatedAt",
     ];
 
     for (const key of Object.keys(entity)) {
@@ -51,7 +58,7 @@ export class UppercaseSubscriber implements EntitySubscriberInterface {
         continue;
       }
       const val = entity[key];
-      if (typeof val === 'string') {
+      if (typeof val === "string") {
         entity[key] = val.toUpperCase();
       }
     }

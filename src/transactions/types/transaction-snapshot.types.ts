@@ -7,8 +7,7 @@ export interface TransactionReferenceSnapshot {
 }
 
 export type TransactionReferenceSnapshotValue =
-  | TransactionReferenceSnapshot
-  | null;
+  TransactionReferenceSnapshot | null;
 
 export interface TransactionItemSnapshot extends TransactionReferenceSnapshot {}
 
@@ -21,8 +20,7 @@ export interface TransactionPricingRuleSnapshot {
 }
 
 export type TransactionPricingRuleSnapshotValue =
-  | TransactionPricingRuleSnapshot
-  | null;
+  TransactionPricingRuleSnapshot | null;
 
 export interface TransactionPassengerSnapshot extends TransactionReferenceSnapshot {
   entityType?: string | null;
@@ -54,8 +52,7 @@ export interface TransactionPassengerSnapshot extends TransactionReferenceSnapsh
 }
 
 export type TransactionPassengerSnapshotValue =
-  | TransactionPassengerSnapshot
-  | null;
+  TransactionPassengerSnapshot | null;
 
 export interface TransactionPassengerTravelSnapshot extends TransactionReferenceSnapshot {
   airlineTt?: TransactionReferenceSnapshotValue;
@@ -71,5 +68,4 @@ export interface TransactionPassengerTravelSnapshot extends TransactionReference
 }
 
 export type TransactionPassengerTravelSnapshotValue =
-  | TransactionPassengerTravelSnapshot
-  | null;
+  TransactionPassengerTravelSnapshot | null;

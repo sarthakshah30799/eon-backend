@@ -4,48 +4,60 @@ import {
   Injectable,
   NotFoundException,
   Logger,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
-import { Branch } from '../branches/branch.entity';
-import { BranchCounter } from '../branches/entities/branch-counter.entity';
-import { assertCounterBelongsToBranch } from '../branches/branch-counter.access';
-import { Counter } from '../counters/counter.entity';
-import { Company } from '../company/company.entity';
-import { User } from '../users/user.entity';
-import { UserRole } from '../user-roles/user-role.entity';
-import { MailService } from '../mail/mail.service';
-import { AdditionalSettingService } from '../additional-settings/additional-setting.service';
-import { AccountProfile } from '../account-profiles/account-profile.entity';
-import { Product } from '../products/product.entity';
-import { Currency } from '../currencies/currency.entity';
-import { ProductCurrencyRate } from '../currency-rates/product-currency-rate.entity';
-import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
-import { requireCompanyForDate } from '../common/snapshot/company-snapshot.util';
-import { toUtcDateOnly } from '../common/date/date.util';
-import { CompanyService } from '../company/company.service';
-import { TransactionReferenceSnapshotValue } from '../transactions/types/transaction-snapshot.types';
-import { Transaction } from '../transactions/entities/transaction.entity';
-import { TransactionItem } from '../transactions/entities/transaction-item.entity';
-import { TransactionsService } from '../transactions/transactions.service';
-import { CurrencyTransfer, CurrencyTransferItem } from './entities';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { EntityManager, In, Repository } from "typeorm";
+import { Branch } from "../branches/branch.entity";
+import { BranchCounter } from "../branches/entities/branch-counter.entity";
+import { assertCounterBelongsToBranch } from "../branches/branch-counter.access";
+import { Counter } from "../counters/counter.entity";
+import { Company } from "../company/company.entity";
+import { User } from "../users/user.entity";
+import { UserRole } from "../user-roles/user-role.entity";
+import { MailService } from "../mail/mail.service";
+import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
+import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { Product } from "../products/product.entity";
+import { Currency } from "../currencies/currency.entity";
+import { ProductCurrencyRate } from "../currency-rates/product-currency-rate.entity";
+import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
+import { toUtcDateOnly } from "../common/date/date.util";
+import { CompanyService } from "../company/company.service";
+import { TransactionReferenceSnapshotValue } from "../transactions/types/transaction-snapshot.types";
+import { Transaction } from "../transactions/entities/transaction.entity";
+import { TransactionItem } from "../transactions/entities/transaction-item.entity";
+import { TransactionsService } from "../transactions/transactions.service";
+import { CurrencyTransfer, CurrencyTransferItem } from "./entities";
 import {
   CurrencyTransferStatus,
   CurrencyTransferType,
-} from './transfers.enums';
+} from "./transfers.enums";
 import {
   CreateTransferRequestPayload,
   TransferRequestItemPayload,
-} from './dto/transfer-request.dto';
-import { RecordTransferPrintDto, TransferPrintCopyType } from './dto/record-transfer-print.dto';
+} from "./dto/transfer-request.dto";
+import {
+  RecordTransferPrintDto,
+  TransferPrintCopyType,
+} from "./dto/record-transfer-print.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 import {
   TradeMode,
   TransactionPartyProfileTypeEnum,
   TransactionStatus,
   TransactionType,
-} from '../transactions/transactions.enums';
-import { resolveProductTransactionAccount, roundMoney } from '../transactions/transaction-accounting.util';
-import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
+} from "../transactions/transactions.enums";
+import {
+  resolveProductTransactionAccount,
+  roundMoney,
+} from "../transactions/transaction-accounting.util";
+import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
 
 type TransferSeriesMapping = {
   source: string;
@@ -54,20 +66,19 @@ type TransferSeriesMapping = {
 
 const TRANSFER_SERIES: Record<CurrencyTransferType, TransferSeriesMapping> = {
   COUNTER: {
-    source: 'COUNTER_TRANSFER_SELL',
-    destination: 'COUNTER_TRANSFER_PURCHASE',
+    source: "COUNTER_TRANSFER_SELL",
+    destination: "COUNTER_TRANSFER_PURCHASE",
   },
   BRANCH: {
-    source: 'BRANCH_TRANSFER_SELL',
-    destination: 'BRANCH_TRANSFER_PURCHASE',
+    source: "BRANCH_TRANSFER_SELL",
+    destination: "BRANCH_TRANSFER_PURCHASE",
   },
 };
 
-const normalizeString = (value: unknown): string =>
-  String(value ?? '').trim();
+const normalizeString = (value: unknown): string => String(value ?? "").trim();
 
 const toNumber = (value: unknown): number => {
-  const parsed = Number(String(value ?? '').trim());
+  const parsed = Number(String(value ?? "").trim());
   return Number.isFinite(parsed) ? parsed : NaN;
 };
 
@@ -83,13 +94,13 @@ export class TransfersService {
   private readonly logger = new Logger(TransfersService.name);
 
   constructor(
-    @InjectRepository(CurrencyTransfer, 'database2')
+    @InjectRepository(CurrencyTransfer, "database2")
     private readonly transferRepository: Repository<CurrencyTransfer>,
-    @InjectRepository(CurrencyTransferItem, 'database2')
+    @InjectRepository(CurrencyTransferItem, "database2")
     private readonly transferItemRepository: Repository<CurrencyTransferItem>,
-    @InjectRepository(Transaction, 'database2')
+    @InjectRepository(Transaction, "database2")
     private readonly transactionRepository: Repository<Transaction>,
-    @InjectRepository(TransactionItem, 'database2')
+    @InjectRepository(TransactionItem, "database2")
     private readonly transactionItemRepository: Repository<TransactionItem>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
@@ -114,9 +125,15 @@ export class TransfersService {
     private readonly companyService: CompanyService,
   ) {}
 
-  private async resolveTransferNumber(transferType: CurrencyTransferType, branchCode: string): Promise<string> {
+  private async resolveTransferNumber(
+    transferType: CurrencyTransferType,
+    branchCode: string,
+  ): Promise<string> {
     const seriesCode = TRANSFER_SERIES[transferType].source;
-    return this.additionalSettingService.reserveTransactionNumber(seriesCode, branchCode);
+    return this.additionalSettingService.reserveTransactionNumber(
+      seriesCode,
+      branchCode,
+    );
   }
 
   private async assertBranchCounterAccess(params: {
@@ -144,18 +161,25 @@ export class TransfersService {
 
     if (!isAdmin && !isHoStaff) {
       if (!activeBranchId || !activeCounterId) {
-        throw new ForbiddenException('Active branch and counter are required');
+        throw new ForbiddenException("Active branch and counter are required");
       }
 
-      if (sourceBranchId !== activeBranchId || sourceCounterId !== activeCounterId) {
-        throw new ForbiddenException('You can only create transfers from your active branch and counter');
+      if (
+        sourceBranchId !== activeBranchId ||
+        sourceCounterId !== activeCounterId
+      ) {
+        throw new ForbiddenException(
+          "You can only create transfers from your active branch and counter",
+        );
       }
 
       if (
         transferType === CurrencyTransferType.COUNTER &&
         destinationBranchId !== activeBranchId
       ) {
-        throw new ForbiddenException('Counter transfers must stay within the active branch');
+        throw new ForbiddenException(
+          "Counter transfers must stay within the active branch",
+        );
       }
     }
   }
@@ -182,11 +206,16 @@ export class TransfersService {
     }
 
     if (!activeBranchId || !activeCounterId) {
-      throw new ForbiddenException('Active branch and counter are required');
+      throw new ForbiddenException("Active branch and counter are required");
     }
 
-    if (destinationBranchId !== activeBranchId || destinationCounterId !== activeCounterId) {
-      throw new ForbiddenException('Only the destination branch and counter can approve or reject this transfer');
+    if (
+      destinationBranchId !== activeBranchId ||
+      destinationCounterId !== activeCounterId
+    ) {
+      throw new ForbiddenException(
+        "Only the destination branch and counter can approve or reject this transfer",
+      );
     }
   }
 
@@ -208,7 +237,12 @@ export class TransfersService {
       destinationCounterId,
     } = params;
 
-    const [sourceBranchSnapshot, sourceCounterSnapshot, destinationBranchSnapshot, destinationCounterSnapshot] = await Promise.all([
+    const [
+      sourceBranchSnapshot,
+      sourceCounterSnapshot,
+      destinationBranchSnapshot,
+      destinationCounterSnapshot,
+    ] = await Promise.all([
       loadEntitySnapshot(this.branchRepository, sourceBranchId),
       loadEntitySnapshot(this.counterRepository, sourceCounterId),
       loadEntitySnapshot(this.branchRepository, destinationBranchId),
@@ -216,37 +250,59 @@ export class TransfersService {
     ]);
 
     if (!sourceBranchSnapshot) {
-      throw new NotFoundException(`Source branch with id ${sourceBranchId} not found`);
+      throw new NotFoundException(
+        `Source branch with id ${sourceBranchId} not found`,
+      );
     }
     if (!sourceCounterSnapshot) {
-      throw new NotFoundException(`Source counter with id ${sourceCounterId} not found`);
+      throw new NotFoundException(
+        `Source counter with id ${sourceCounterId} not found`,
+      );
     }
     if (!destinationBranchSnapshot) {
-      throw new NotFoundException(`Destination branch with id ${destinationBranchId} not found`);
+      throw new NotFoundException(
+        `Destination branch with id ${destinationBranchId} not found`,
+      );
     }
     if (!destinationCounterSnapshot) {
-      throw new NotFoundException(`Destination counter with id ${destinationCounterId} not found`);
+      throw new NotFoundException(
+        `Destination counter with id ${destinationCounterId} not found`,
+      );
     }
 
     return {
-      sourceBranchSnapshot: sourceBranchSnapshot as TransactionReferenceSnapshotValue,
-      sourceCounterSnapshot: sourceCounterSnapshot as TransactionReferenceSnapshotValue,
-      destinationBranchSnapshot: destinationBranchSnapshot as TransactionReferenceSnapshotValue,
-      destinationCounterSnapshot: destinationCounterSnapshot as TransactionReferenceSnapshotValue,
+      sourceBranchSnapshot:
+        sourceBranchSnapshot as TransactionReferenceSnapshotValue,
+      sourceCounterSnapshot:
+        sourceCounterSnapshot as TransactionReferenceSnapshotValue,
+      destinationBranchSnapshot:
+        destinationBranchSnapshot as TransactionReferenceSnapshotValue,
+      destinationCounterSnapshot:
+        destinationCounterSnapshot as TransactionReferenceSnapshotValue,
     };
   }
 
   private async resolveItemSnapshots(item: TransferRequestItemPayload) {
     const [currencySnapshot, productSnapshot] = await Promise.all([
-      loadEntitySnapshot(this.currencyRepository, normalizeString(item.currencyId)),
-      loadEntitySnapshot(this.productRepository, normalizeString(item.productId)),
+      loadEntitySnapshot(
+        this.currencyRepository,
+        normalizeString(item.currencyId),
+      ),
+      loadEntitySnapshot(
+        this.productRepository,
+        normalizeString(item.productId),
+      ),
     ]);
 
     if (!currencySnapshot) {
-      throw new NotFoundException(`Currency with id ${normalizeString(item.currencyId)} not found`);
+      throw new NotFoundException(
+        `Currency with id ${normalizeString(item.currencyId)} not found`,
+      );
     }
     if (!productSnapshot) {
-      throw new NotFoundException(`Product with id ${normalizeString(item.productId)} not found`);
+      throw new NotFoundException(
+        `Product with id ${normalizeString(item.productId)} not found`,
+      );
     }
 
     return {
@@ -265,7 +321,10 @@ export class TransfersService {
     }>;
   }) {
     const { branchId, counterId, items } = params;
-    const groupedItems = new Map<string, { currencyId: string; productId: string; quantity: number }>();
+    const groupedItems = new Map<
+      string,
+      { currencyId: string; productId: string; quantity: number }
+    >();
 
     for (const item of items) {
       const key = `${item.currencyId}:${item.productId}`;
@@ -283,12 +342,13 @@ export class TransfersService {
     }
 
     for (const item of groupedItems.values()) {
-      const availability = await this.transactionsService.getQuantityAvailability(
-        branchId,
-        counterId,
-        item.currencyId,
-        item.productId,
-      );
+      const availability =
+        await this.transactionsService.getQuantityAvailability(
+          branchId,
+          counterId,
+          item.currencyId,
+          item.productId,
+        );
 
       const availableQuantity = Number(availability.availableQuantity ?? 0);
       if (item.quantity > availableQuantity) {
@@ -300,51 +360,90 @@ export class TransfersService {
   }
 
   private async validateTransferRates(
-    items: Array<{ currencyId: string; productId: string; quantity: number; per: number; rate: number }>,
+    items: Array<{
+      currencyId: string;
+      productId: string;
+      quantity: number;
+      per: number;
+      rate: number;
+    }>,
     branchId: string,
     counterId: string,
   ) {
     const configured = String(
-      await this.additionalSettingService.getSettingTextValue('TRANSFER_SETTINGS', 'TRANSFER_RATE_EDITABLE') ?? '',
-    ).trim().toLowerCase();
-    const rateEditable = configured === 'true' || configured === 'yes';
+      (await this.additionalSettingService.getSettingTextValue(
+        "TRANSFER_SETTINGS",
+        "TRANSFER_RATE_EDITABLE",
+      )) ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    const rateEditable = configured === "true" || configured === "yes";
 
     for (const [index, item] of items.entries()) {
-      const holdCost = await this.transactionsService.getCounterHoldCost(branchId, counterId, item.currencyId);
+      const holdCost = await this.transactionsService.getCounterHoldCost(
+        branchId,
+        counterId,
+        item.currencyId,
+      );
       const holdCostRate = Number(holdCost.holdCostRate ?? 0);
       if (!Number.isFinite(holdCostRate) || holdCostRate <= 0) {
-        throw new BadRequestException(`Item ${index + 1}: source counter hold cost is unavailable`);
+        throw new BadRequestException(
+          `Item ${index + 1}: source counter hold cost is unavailable`,
+        );
       }
 
       if (!Number.isFinite(item.rate) || item.rate <= 0) {
-        throw new BadRequestException(`Item ${index + 1}: rate must be greater than zero`);
+        throw new BadRequestException(
+          `Item ${index + 1}: rate must be greater than zero`,
+        );
       }
 
       if (!rateEditable) {
         const expectedRate = holdCostRate * item.per;
         if (Math.abs(item.rate - expectedRate) > 0.0000001) {
-          throw new BadRequestException(`Item ${index + 1}: rate must match the source counter hold cost of ${(expectedRate).toFixed(7)}`);
+          throw new BadRequestException(
+            `Item ${index + 1}: rate must match the source counter hold cost of ${expectedRate.toFixed(7)}`,
+          );
         }
         continue;
       }
 
       const rule = await this.productCurrencyRateRepository.findOne({
-        where: { productId: item.productId, currencyId: item.currencyId, isActive: true },
+        where: {
+          productId: item.productId,
+          currencyId: item.currencyId,
+          isActive: true,
+        },
       });
       const minRate = Number(rule?.saleMinRate ?? 0);
       const maxRate = Number(rule?.saleMaxRate ?? 0);
-      if (rule?.saleMinRate && Number.isFinite(minRate) && item.rate < minRate) {
-        throw new BadRequestException(`Item ${index + 1}: rate cannot be lower than ${minRate.toFixed(7)}`);
+      if (
+        rule?.saleMinRate &&
+        Number.isFinite(minRate) &&
+        item.rate < minRate
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: rate cannot be lower than ${minRate.toFixed(7)}`,
+        );
       }
-      if (rule?.saleMaxRate && Number.isFinite(maxRate) && item.rate > maxRate) {
-        throw new BadRequestException(`Item ${index + 1}: rate cannot be higher than ${maxRate.toFixed(7)}`);
+      if (
+        rule?.saleMaxRate &&
+        Number.isFinite(maxRate) &&
+        item.rate > maxRate
+      ) {
+        throw new BadRequestException(
+          `Item ${index + 1}: rate cannot be higher than ${maxRate.toFixed(7)}`,
+        );
       }
     }
   }
 
-  private normalizeTransferItems(items: TransferRequestItemPayload[] | undefined) {
+  private normalizeTransferItems(
+    items: TransferRequestItemPayload[] | undefined,
+  ) {
     if (!Array.isArray(items) || items.length === 0) {
-      throw new BadRequestException('At least one transfer item is required');
+      throw new BadRequestException("At least one transfer item is required");
     }
 
     return items.map((item, index) => {
@@ -363,8 +462,10 @@ export class TransfersService {
 
       const amount = Number.isFinite(toNumber(item.amount))
         ? toNumber(item.amount)
-        : quantity * rate / per;
-      const roundOff = Number.isFinite(toNumber(item.roundOff)) ? toNumber(item.roundOff) : 0;
+        : (quantity * rate) / per;
+      const roundOff = Number.isFinite(toNumber(item.roundOff))
+        ? toNumber(item.roundOff)
+        : 0;
       const finalAmount = Number.isFinite(toNumber(item.finalAmount))
         ? toNumber(item.finalAmount)
         : amount + roundOff;
@@ -386,7 +487,7 @@ export class TransfersService {
   private buildTransferPartySnapshot(params: {
     snapshot: TransactionReferenceSnapshotValue;
     transferType: CurrencyTransferType;
-    transferSide: 'source' | 'destination';
+    transferSide: "source" | "destination";
   }): TransactionReferenceSnapshotValue {
     const { snapshot, transferType, transferSide } = params;
 
@@ -394,13 +495,15 @@ export class TransfersService {
       return null;
     }
 
-    const code = String(snapshot.code ?? '').trim();
-    const name = String(snapshot.name ?? '').trim();
-    const label = String(snapshot.label ?? '').trim() || [code, name].filter(Boolean).join(' - ');
+    const code = String(snapshot.code ?? "").trim();
+    const name = String(snapshot.name ?? "").trim();
+    const label =
+      String(snapshot.label ?? "").trim() ||
+      [code, name].filter(Boolean).join(" - ");
 
     return {
       ...snapshot,
-      id: String(snapshot.id ?? ''),
+      id: String(snapshot.id ?? ""),
       code: code || null,
       name: name || null,
       label: label || name || code || null,
@@ -450,16 +553,20 @@ export class TransfersService {
       companySnapshot,
     } = params;
 
-    const branchCode = String(branchSnapshot?.code ?? '').trim();
+    const branchCode = String(branchSnapshot?.code ?? "").trim();
     if (!branchCode) {
-      throw new BadRequestException('Branch code is required to generate transaction number');
+      throw new BadRequestException(
+        "Branch code is required to generate transaction number",
+      );
     }
 
-    const number = requestedNumber ?? (await this.additionalSettingService.reserveTransactionNumber(
-      seriesCode,
-      branchCode,
-      transactionDate,
-    ));
+    const number =
+      requestedNumber ??
+      (await this.additionalSettingService.reserveTransactionNumber(
+        seriesCode,
+        branchCode,
+        transactionDate,
+      ));
 
     const transactionPartyProfileType =
       transferType === CurrencyTransferType.BRANCH
@@ -468,7 +575,10 @@ export class TransfersService {
 
     const transactionRepo = manager.getRepository(Transaction);
     const transactionItemRepo = manager.getRepository(TransactionItem);
-    const totalFinalAmount = items.reduce((sum, item) => sum + Number(item.finalAmount ?? 0), 0);
+    const totalFinalAmount = items.reduce(
+      (sum, item) => sum + Number(item.finalAmount ?? 0),
+      0,
+    );
 
     const transaction = await transactionRepo.save(
       transactionRepo.create({
@@ -516,22 +626,22 @@ export class TransfersService {
         byTransfer: roundMoney(totalFinalAmount),
         byOther: null,
         taxRatePercent: null,
-        preTcsFinalAmount: '0.00',
-        tcsRatePercent: '0.00',
+        preTcsFinalAmount: "0.00",
+        tcsRatePercent: "0.00",
         tcsRateType: null,
-        tcsAmount: '0.00',
-        commissionAmount: '0.00',
-        tdsAmount: '0.00',
-        taxableAmount: '0.00',
-        itemBaseAmount: '0.00',
-        itemTaxableAmount: '0.00',
-        itemTaxAmount: '0.00',
-        additionalChargeBaseAmount: '0.00',
-        additionalChargeTaxAmount: '0.00',
-        igstAmount: '0.00',
-        cgstAmount: '0.00',
-        sgstAmount: '0.00',
-        finalAmount: '0.00',
+        tcsAmount: "0.00",
+        commissionAmount: "0.00",
+        tdsAmount: "0.00",
+        taxableAmount: "0.00",
+        itemBaseAmount: "0.00",
+        itemTaxableAmount: "0.00",
+        itemTaxAmount: "0.00",
+        additionalChargeBaseAmount: "0.00",
+        additionalChargeTaxAmount: "0.00",
+        igstAmount: "0.00",
+        cgstAmount: "0.00",
+        sgstAmount: "0.00",
+        finalAmount: "0.00",
         loanAmount: null,
         declaredAmount: null,
         itrFiled: null,
@@ -550,30 +660,49 @@ export class TransfersService {
     const transactionItemRows = await Promise.all(
       items.map(async (item, index) => {
         const [currencySnapshot, productSnapshot] = await Promise.all([
-          loadEntitySnapshot(this.currencyRepository, normalizeString(item.currencyId)),
-          loadEntitySnapshot(this.productRepository, normalizeString(item.productId)),
+          loadEntitySnapshot(
+            this.currencyRepository,
+            normalizeString(item.currencyId),
+          ),
+          loadEntitySnapshot(
+            this.productRepository,
+            normalizeString(item.productId),
+          ),
         ]);
 
         if (!currencySnapshot) {
-          throw new NotFoundException(`Currency with id ${normalizeString(item.currencyId)} not found`);
+          throw new NotFoundException(
+            `Currency with id ${normalizeString(item.currencyId)} not found`,
+          );
         }
         if (!productSnapshot) {
-          throw new NotFoundException(`Product with id ${normalizeString(item.productId)} not found`);
+          throw new NotFoundException(
+            `Product with id ${normalizeString(item.productId)} not found`,
+          );
         }
 
         const productEntity = await this.productRepository.findOne({
           where: { id: normalizeString(item.productId) },
-          relations: ['bulkPurAc', 'purchaseAc', 'bulkSaleAc', 'saleAc', 'bulkProficAc', 'profitAc'],
+          relations: [
+            "bulkPurAc",
+            "purchaseAc",
+            "bulkSaleAc",
+            "saleAc",
+            "bulkProficAc",
+            "profitAc",
+          ],
         });
         if (!productEntity) {
-          throw new NotFoundException(`Product with id ${normalizeString(item.productId)} not found`);
+          throw new NotFoundException(
+            `Product with id ${normalizeString(item.productId)} not found`,
+          );
         }
 
         const itemAccount = resolveProductTransactionAccount(
           productEntity,
           transactionType,
           TradeMode.BULK,
-          transactionType === TransactionType.SALE ? 'sale' : 'purchase',
+          transactionType === TransactionType.SALE ? "sale" : "purchase",
         );
 
         if (!itemAccount) {
@@ -601,7 +730,8 @@ export class TransfersService {
           per: String(item.per),
           rate: String(item.rate),
           commission: null,
-          currencySnapshot: currencySnapshot as TransactionReferenceSnapshotValue,
+          currencySnapshot:
+            currencySnapshot as TransactionReferenceSnapshotValue,
           productSnapshot: productSnapshot as TransactionReferenceSnapshotValue,
           currencyRateSnapshot: null,
           productCurrencyRateSnapshot: null,
@@ -628,30 +758,42 @@ export class TransfersService {
     isHoStaff = false,
   ): Promise<CurrencyTransfer> {
     if (!performedById) {
-      throw new BadRequestException('User session not found');
+      throw new BadRequestException("User session not found");
     }
 
     const transferType = body.transferType;
     if (!transferType || !TRANSFER_SERIES[transferType]) {
-      throw new BadRequestException('Transfer type is required');
+      throw new BadRequestException("Transfer type is required");
     }
 
-    const sourceBranchId = normalizeString(body.sourceBranchId) || activeBranchId || '';
-    const sourceCounterId = normalizeString(body.sourceCounterId) || activeCounterId || '';
-    const destinationBranchId = normalizeString(body.destinationBranchId) || sourceBranchId;
+    const sourceBranchId =
+      normalizeString(body.sourceBranchId) || activeBranchId || "";
+    const sourceCounterId =
+      normalizeString(body.sourceCounterId) || activeCounterId || "";
+    const destinationBranchId =
+      normalizeString(body.destinationBranchId) || sourceBranchId;
     const destinationCounterId = normalizeString(body.destinationCounterId);
 
-    if (!sourceBranchId || !sourceCounterId || !destinationBranchId || !destinationCounterId) {
-      throw new BadRequestException('Source branch, source counter, destination branch, and destination counter are required');
+    if (
+      !sourceBranchId ||
+      !sourceCounterId ||
+      !destinationBranchId ||
+      !destinationCounterId
+    ) {
+      throw new BadRequestException(
+        "Source branch, source counter, destination branch, and destination counter are required",
+      );
     }
 
-    const requestedTransactionDate = normalizeString(body.transactionDate) || undefined;
-    const sourceDatePolicy = await this.dayEndStartProcessService.assertTransactionDateAllowed(
-      sourceBranchId,
-      performedById,
-      requestedTransactionDate,
-      sourceCounterId,
-    );
+    const requestedTransactionDate =
+      normalizeString(body.transactionDate) || undefined;
+    const sourceDatePolicy =
+      await this.dayEndStartProcessService.assertTransactionDateAllowed(
+        sourceBranchId,
+        performedById,
+        requestedTransactionDate,
+        sourceCounterId,
+      );
     await this.dayEndStartProcessService.assertTransactionDateAllowed(
       destinationBranchId,
       performedById,
@@ -671,39 +813,63 @@ export class TransfersService {
       activeCounterId,
     });
 
-    const sourceBranch = await this.branchRepository.findOne({ where: { id: sourceBranchId } });
+    const sourceBranch = await this.branchRepository.findOne({
+      where: { id: sourceBranchId },
+    });
     if (!sourceBranch) {
       throw new NotFoundException(`Branch with id ${sourceBranchId} not found`);
     }
-    const destinationBranch = await this.branchRepository.findOne({ where: { id: destinationBranchId } });
+    const destinationBranch = await this.branchRepository.findOne({
+      where: { id: destinationBranchId },
+    });
     if (!destinationBranch) {
-      throw new NotFoundException(`Branch with id ${destinationBranchId} not found`);
+      throw new NotFoundException(
+        `Branch with id ${destinationBranchId} not found`,
+      );
     }
-    const sourceCounter = await this.counterRepository.findOne({ where: { id: sourceCounterId } });
+    const sourceCounter = await this.counterRepository.findOne({
+      where: { id: sourceCounterId },
+    });
     if (!sourceCounter) {
-      throw new NotFoundException(`Counter with id ${sourceCounterId} not found`);
+      throw new NotFoundException(
+        `Counter with id ${sourceCounterId} not found`,
+      );
     }
-    const destinationCounter = await this.counterRepository.findOne({ where: { id: destinationCounterId } });
+    const destinationCounter = await this.counterRepository.findOne({
+      where: { id: destinationCounterId },
+    });
     if (!destinationCounter) {
-      throw new NotFoundException(`Counter with id ${destinationCounterId} not found`);
+      throw new NotFoundException(
+        `Counter with id ${destinationCounterId} not found`,
+      );
     }
     await assertCounterBelongsToBranch(
       this.branchCounterRepository,
       sourceBranchId,
       sourceCounterId,
-      'Source counter does not belong to the selected source branch',
+      "Source counter does not belong to the selected source branch",
     );
     await assertCounterBelongsToBranch(
       this.branchCounterRepository,
       destinationBranchId,
       destinationCounterId,
-      'Destination counter does not belong to the selected destination branch',
+      "Destination counter does not belong to the selected destination branch",
     );
-    if (transferType === CurrencyTransferType.BRANCH && sourceBranchId === destinationBranchId) {
-      throw new BadRequestException('Branch transfers must move between different branches');
+    if (
+      transferType === CurrencyTransferType.BRANCH &&
+      sourceBranchId === destinationBranchId
+    ) {
+      throw new BadRequestException(
+        "Branch transfers must move between different branches",
+      );
     }
-    if (sourceBranchId === destinationBranchId && sourceCounterId === destinationCounterId) {
-      throw new BadRequestException('Source and destination counters must be different');
+    if (
+      sourceBranchId === destinationBranchId &&
+      sourceCounterId === destinationCounterId
+    ) {
+      throw new BadRequestException(
+        "Source and destination counters must be different",
+      );
     }
 
     const items = this.normalizeTransferItems(body.items);
@@ -729,7 +895,9 @@ export class TransfersService {
         number: transferNumber,
         transferType,
         status: CurrencyTransferStatus.HELD,
-        transactionDate: new Date(`${sourceDatePolicy.allowedDate}T00:00:00.000Z`),
+        transactionDate: new Date(
+          `${sourceDatePolicy.allowedDate}T00:00:00.000Z`,
+        ),
         billReference: normalizeString(body.billReference) || null,
         sourceBranchId,
         sourceBranchSnapshot: snapshots.sourceBranchSnapshot,
@@ -754,7 +922,8 @@ export class TransfersService {
 
     const transferItems = await Promise.all(
       items.map(async (item, index) => {
-        const { currencySnapshot, productSnapshot } = await this.resolveItemSnapshots(item);
+        const { currencySnapshot, productSnapshot } =
+          await this.resolveItemSnapshots(item);
         return this.transferItemRepository.create({
           transferId: transfer.id,
           lineNo: index + 1,
@@ -781,7 +950,7 @@ export class TransfersService {
     await this.notifyCounterUsers({
       branchId: destinationBranchId,
       counterId: destinationCounterId,
-      subject: `Transfer request ${transfer.number ?? ''}`.trim(),
+      subject: `Transfer request ${transfer.number ?? ""}`.trim(),
       text: `A ${transferType.toLowerCase()} transfer request has been held for approval.`,
     });
 
@@ -794,49 +963,66 @@ export class TransfersService {
     counterId?: string;
     status?: CurrencyTransferStatus;
     search?: string;
-  }): Promise<CurrencyTransfer[]> {
+    limit?: number;
+    offset?: number;
+  }): Promise<PaginatedResponseDto<CurrencyTransfer>> {
+    const pagination = normalizePagination(params);
     const query = this.transferRepository
-      .createQueryBuilder('transfer')
-      .leftJoinAndSelect('transfer.items', 'items')
-      .orderBy('transfer.createdAt', 'DESC')
-      .addOrderBy('items.lineNo', 'ASC');
+      .createQueryBuilder("transfer")
+      .leftJoinAndSelect("transfer.items", "items")
+      .orderBy("transfer.createdAt", "DESC")
+      .addOrderBy("items.lineNo", "ASC");
 
     if (params?.transferType) {
-      query.andWhere('transfer.transferType = :transferType', { transferType: params.transferType });
+      query.andWhere("transfer.transferType = :transferType", {
+        transferType: params.transferType,
+      });
     }
     if (params?.branchId) {
-      query.andWhere('(transfer.sourceBranchId = :branchId OR transfer.destinationBranchId = :branchId)', {
-        branchId: params.branchId,
-      });
+      query.andWhere(
+        "(transfer.sourceBranchId = :branchId OR transfer.destinationBranchId = :branchId)",
+        {
+          branchId: params.branchId,
+        },
+      );
     }
     if (params?.counterId) {
-      query.andWhere('(transfer.sourceCounterId = :counterId OR transfer.destinationCounterId = :counterId)', {
-        counterId: params.counterId,
-      });
+      query.andWhere(
+        "(transfer.sourceCounterId = :counterId OR transfer.destinationCounterId = :counterId)",
+        {
+          counterId: params.counterId,
+        },
+      );
     }
     if (params?.status) {
-      query.andWhere('transfer.status = :status', { status: params.status });
+      query.andWhere("transfer.status = :status", { status: params.status });
     }
     if (params?.search) {
       query.andWhere(
-        '(transfer.number ILIKE :search OR transfer.billReference ILIKE :search)',
+        "(transfer.number ILIKE :search OR transfer.billReference ILIKE :search)",
         { search: `%${params.search}%` },
       );
     }
 
-    return this.hydrateWorkplaceRelations(await query.getMany());
+    applyPagination(query, pagination);
+    const [transfers, total] = await query.getManyAndCount();
+    return buildPaginatedResponse(
+      await this.hydrateWorkplaceRelations(transfers),
+      total,
+      pagination,
+    );
   }
 
   private async hydrateWorkplaceRelations(
     transfers: CurrencyTransfer[],
   ): Promise<CurrencyTransfer[]> {
     const branchIds = [
-      ...transfers.map(transfer => transfer.sourceBranchId),
-      ...transfers.map(transfer => transfer.destinationBranchId),
+      ...transfers.map((transfer) => transfer.sourceBranchId),
+      ...transfers.map((transfer) => transfer.destinationBranchId),
     ];
     const counterIds = [
-      ...transfers.map(transfer => transfer.sourceCounterId),
-      ...transfers.map(transfer => transfer.destinationCounterId),
+      ...transfers.map((transfer) => transfer.sourceCounterId),
+      ...transfers.map((transfer) => transfer.destinationCounterId),
     ];
 
     if (transfers.length === 0) {
@@ -847,14 +1033,19 @@ export class TransfersService {
       this.branchRepository.find({ where: { id: In(branchIds) } }),
       this.counterRepository.find({ where: { id: In(counterIds) } }),
     ]);
-    const branchById = new Map(branches.map(branch => [branch.id, branch]));
-    const counterById = new Map(counters.map(counter => [counter.id, counter]));
+    const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+    const counterById = new Map(
+      counters.map((counter) => [counter.id, counter]),
+    );
 
-    return transfers.map(transfer => {
+    return transfers.map((transfer) => {
       transfer.sourceBranch = branchById.get(transfer.sourceBranchId) ?? null;
-      transfer.sourceCounter = counterById.get(transfer.sourceCounterId) ?? null;
-      transfer.destinationBranch = branchById.get(transfer.destinationBranchId) ?? null;
-      transfer.destinationCounter = counterById.get(transfer.destinationCounterId) ?? null;
+      transfer.sourceCounter =
+        counterById.get(transfer.sourceCounterId) ?? null;
+      transfer.destinationBranch =
+        branchById.get(transfer.destinationBranchId) ?? null;
+      transfer.destinationCounter =
+        counterById.get(transfer.destinationCounterId) ?? null;
       return transfer;
     });
   }
@@ -885,7 +1076,11 @@ export class TransfersService {
     activeCounterId: string | null,
     isAdmin = false,
     isHoStaff = false,
-  ): Promise<{ message: string; copyType: TransferPrintCopyType; printCount: number }> {
+  ): Promise<{
+    message: string;
+    copyType: TransferPrintCopyType;
+    printCount: number;
+  }> {
     const transfer = await this.transferRepository.findOne({
       where: { id },
       relations: {
@@ -900,12 +1095,12 @@ export class TransfersService {
     }
 
     if (transfer.status !== CurrencyTransferStatus.ACCEPTED) {
-      throw new BadRequestException('Only accepted transfers can be printed');
+      throw new BadRequestException("Only accepted transfers can be printed");
     }
 
     if (!isAdmin && !isHoStaff) {
       if (!activeBranchId || !activeCounterId) {
-        throw new ForbiddenException('Active branch and counter are required');
+        throw new ForbiddenException("Active branch and counter are required");
       }
 
       const canAccessAsSource =
@@ -916,26 +1111,34 @@ export class TransfersService {
         transfer.destinationCounterId === activeCounterId;
 
       if (!canAccessAsSource && !canAccessAsDestination) {
-        throw new ForbiddenException('You can only print transfers for your active branch and counter');
+        throw new ForbiddenException(
+          "You can only print transfers for your active branch and counter",
+        );
       }
     }
 
     const existingPrintCount = transfer.printCount ?? 0;
-    const copyType = existingPrintCount === 0
-      ? TransferPrintCopyType.CUSTOMER_COPY
-      : TransferPrintCopyType.DUPLICATE_COPY;
+    const copyType =
+      existingPrintCount === 0
+        ? TransferPrintCopyType.CUSTOMER_COPY
+        : TransferPrintCopyType.DUPLICATE_COPY;
     transfer.printCount = existingPrintCount + 1;
     await this.transferRepository.update(id, {
       printCount: transfer.printCount,
       updatedBy: _performedById ?? transfer.updatedBy,
     });
-    const printLabel = copyType === TransferPrintCopyType.DUPLICATE_COPY ? 'Duplicate copy printed' : 'Original copy printed';
+    const printLabel =
+      copyType === TransferPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
 
     if (dto.sendEmail) {
       const subject =
-        dto.subject || `Transfer ${transfer.number ?? ''} - ${copyType === TransferPrintCopyType.DUPLICATE_COPY ? 'Duplicate Copy' : 'Original Copy'}`;
+        dto.subject ||
+        `Transfer ${transfer.number ?? ""} - ${copyType === TransferPrintCopyType.DUPLICATE_COPY ? "Duplicate Copy" : "Original Copy"}`;
       const text =
-        dto.text || `Please find the ${copyType === TransferPrintCopyType.DUPLICATE_COPY ? 'duplicate' : 'original'} copy for transfer ${transfer.number ?? ''}.`;
+        dto.text ||
+        `Please find the ${copyType === TransferPrintCopyType.DUPLICATE_COPY ? "duplicate" : "original"} copy for transfer ${transfer.number ?? ""}.`;
 
       if (dto.recipientEmail) {
         await this.mailService.sendEmail({
@@ -980,7 +1183,7 @@ export class TransfersService {
     }
 
     if (transfer.status !== CurrencyTransferStatus.HELD) {
-      throw new BadRequestException('Only held transfers can be accepted');
+      throw new BadRequestException("Only held transfers can be accepted");
     }
 
     this.assertApprovalAccess({
@@ -997,11 +1200,18 @@ export class TransfersService {
     const destinationBranchSnapshot = transfer.destinationBranchSnapshot;
     const destinationCounterSnapshot = transfer.destinationCounterSnapshot;
 
-    if (!sourceBranchSnapshot || !sourceCounterSnapshot || !destinationBranchSnapshot || !destinationCounterSnapshot) {
-      throw new BadRequestException('Unable to resolve transfer branch or counter snapshots');
+    if (
+      !sourceBranchSnapshot ||
+      !sourceCounterSnapshot ||
+      !destinationBranchSnapshot ||
+      !destinationCounterSnapshot
+    ) {
+      throw new BadRequestException(
+        "Unable to resolve transfer branch or counter snapshots",
+      );
     }
     if (!transfer.companyId || !transfer.companySnapshot) {
-      throw new BadRequestException('Current company not found');
+      throw new BadRequestException("Current company not found");
     }
 
     const sourceItems = await this.normalizeTransferItems(
@@ -1023,7 +1233,11 @@ export class TransfersService {
       counterId: transfer.sourceCounterId,
       items: sourceItems,
     });
-    await this.validateTransferRates(sourceItems, transfer.sourceBranchId, transfer.sourceCounterId);
+    await this.validateTransferRates(
+      sourceItems,
+      transfer.sourceBranchId,
+      transfer.sourceCounterId,
+    );
 
     const acceptedAt = new Date();
     const transactionDate = toUtcDateOnly(transfer.transactionDate);
@@ -1048,7 +1262,7 @@ export class TransfersService {
             ? (destinationBranchSnapshot as TransactionReferenceSnapshotValue)
             : (destinationCounterSnapshot as TransactionReferenceSnapshotValue),
         transferType: transfer.transferType,
-        transferSide: 'source',
+        transferSide: "source",
       });
       const destinationCounterpartySnapshot = this.buildTransferPartySnapshot({
         snapshot:
@@ -1056,7 +1270,7 @@ export class TransfersService {
             ? (sourceBranchSnapshot as TransactionReferenceSnapshotValue)
             : (sourceCounterSnapshot as TransactionReferenceSnapshotValue),
         transferType: transfer.transferType,
-        transferSide: 'destination',
+        transferSide: "destination",
       });
 
       const sourceTransaction = await this.createTransferTransaction({
@@ -1067,12 +1281,14 @@ export class TransfersService {
         seriesCode:
           transfer.sourceNumberSeriesCode ??
           (transfer.transferType === CurrencyTransferType.BRANCH
-            ? 'BRANCH_TRANSFER_SELL'
-            : 'COUNTER_TRANSFER_SELL'),
+            ? "BRANCH_TRANSFER_SELL"
+            : "COUNTER_TRANSFER_SELL"),
         branchId: transfer.sourceBranchId,
-        branchSnapshot: sourceBranchSnapshot as TransactionReferenceSnapshotValue,
+        branchSnapshot:
+          sourceBranchSnapshot as TransactionReferenceSnapshotValue,
         counterId: transfer.sourceCounterId,
-        counterSnapshot: sourceCounterSnapshot as TransactionReferenceSnapshotValue,
+        counterSnapshot:
+          sourceCounterSnapshot as TransactionReferenceSnapshotValue,
         counterpartyId:
           transfer.transferType === CurrencyTransferType.BRANCH
             ? transfer.destinationBranchId
@@ -1081,7 +1297,9 @@ export class TransfersService {
         performedById,
         items: sourceItems,
         transactionDate,
-        remarks: transfer.remarks ?? `Transfer request ${transfer.number ?? ''}`.trim(),
+        remarks:
+          transfer.remarks ??
+          `Transfer request ${transfer.number ?? ""}`.trim(),
         number: transfer.number,
         companyId: transfer.companyId,
         companySnapshot: transfer.companySnapshot,
@@ -1095,12 +1313,14 @@ export class TransfersService {
         seriesCode:
           transfer.destinationNumberSeriesCode ??
           (transfer.transferType === CurrencyTransferType.BRANCH
-            ? 'BRANCH_TRANSFER_PURCHASE'
-            : 'COUNTER_TRANSFER_PURCHASE'),
+            ? "BRANCH_TRANSFER_PURCHASE"
+            : "COUNTER_TRANSFER_PURCHASE"),
         branchId: transfer.destinationBranchId,
-        branchSnapshot: destinationBranchSnapshot as TransactionReferenceSnapshotValue,
+        branchSnapshot:
+          destinationBranchSnapshot as TransactionReferenceSnapshotValue,
         counterId: transfer.destinationCounterId,
-        counterSnapshot: destinationCounterSnapshot as TransactionReferenceSnapshotValue,
+        counterSnapshot:
+          destinationCounterSnapshot as TransactionReferenceSnapshotValue,
         counterpartyId:
           transfer.transferType === CurrencyTransferType.BRANCH
             ? transfer.sourceBranchId
@@ -1109,7 +1329,9 @@ export class TransfersService {
         performedById,
         items: sourceItems,
         transactionDate,
-        remarks: transfer.remarks ?? `Transfer request ${transfer.number ?? ''}`.trim(),
+        remarks:
+          transfer.remarks ??
+          `Transfer request ${transfer.number ?? ""}`.trim(),
         companyId: transfer.companyId,
         companySnapshot: transfer.companySnapshot,
       });
@@ -1127,8 +1349,8 @@ export class TransfersService {
     await this.notifyCounterUsers({
       branchId: transfer.sourceBranchId,
       counterId: transfer.sourceCounterId,
-      subject: `Transfer accepted ${transfer.number ?? ''}`.trim(),
-      text: `Transfer request ${transfer.number ?? ''} has been accepted.`,
+      subject: `Transfer accepted ${transfer.number ?? ""}`.trim(),
+      text: `Transfer request ${transfer.number ?? ""} has been accepted.`,
     });
 
     return this.findById(transfer.id);
@@ -1153,12 +1375,12 @@ export class TransfersService {
     }
 
     if (transfer.status !== CurrencyTransferStatus.HELD) {
-      throw new BadRequestException('Only held transfers can be rejected');
+      throw new BadRequestException("Only held transfers can be rejected");
     }
 
     const rejectionReason = normalizeString(remarks);
     if (!rejectionReason) {
-      throw new BadRequestException('Rejection reason is required');
+      throw new BadRequestException("Rejection reason is required");
     }
 
     this.assertApprovalAccess({
@@ -1189,20 +1411,20 @@ export class TransfersService {
   }) {
     try {
       const userRoles = await this.userRoleRepository
-        .createQueryBuilder('userRole')
-        .leftJoinAndSelect('userRole.user', 'user')
-        .leftJoinAndSelect('userRole.branch', 'branch')
-        .leftJoinAndSelect('userRole.counter', 'counter')
-        .where('branch.id = :branchId', { branchId: params.branchId })
-        .andWhere('counter.id = :counterId', { counterId: params.counterId })
+        .createQueryBuilder("userRole")
+        .leftJoinAndSelect("userRole.user", "user")
+        .leftJoinAndSelect("userRole.branch", "branch")
+        .leftJoinAndSelect("userRole.counter", "counter")
+        .where("branch.id = :branchId", { branchId: params.branchId })
+        .andWhere("counter.id = :counterId", { counterId: params.counterId })
         .getMany();
 
       const recipients = Array.from(
         new Map(
           userRoles
-            .map(userRole => userRole.user)
+            .map((userRole) => userRole.user)
             .filter((user): user is User => Boolean(user?.email))
-            .map(user => [user.id, user] as const),
+            .map((user) => [user.id, user] as const),
         ).values(),
       );
 
@@ -1215,7 +1437,9 @@ export class TransfersService {
         });
       }
     } catch (error) {
-      this.logger.warn(`Transfer notification failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `Transfer notification failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 }

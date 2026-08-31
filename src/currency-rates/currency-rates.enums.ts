@@ -1,15 +1,15 @@
 export const CurrencyRateProvider = {
-  TICKER: 'TICKER',
-  FOREX: 'FOREX',
-  MANUAL: 'MANUAL',
+  TICKER: "TICKER",
+  FOREX: "FOREX",
+  MANUAL: "MANUAL",
 } as const;
 
 export type CurrencyRateProvider =
   (typeof CurrencyRateProvider)[keyof typeof CurrencyRateProvider];
 
 export const CurrencyRateMarginType = {
-  PERCENT: 'PERCENT',
-  PAISA: 'PAISA',
+  PERCENT: "PERCENT",
+  PAISA: "PAISA",
 } as const;
 
 export type CurrencyRateMarginType =

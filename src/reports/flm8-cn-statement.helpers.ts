@@ -53,7 +53,9 @@ const joinLetters = (count: number) =>
 const stripLeadingLetter = (label: string) =>
   label.replace(/^[a-z]\.\s*/i, "").trim();
 
-const toHorizontalColumns = (templateRows: Flm1ReportRow[]): Flm1ReportColumn[] => {
+const toHorizontalColumns = (
+  templateRows: Flm1ReportRow[],
+): Flm1ReportColumn[] => {
   const saleGroupRows = templateRows.filter((row) =>
     row.lineKey.startsWith(SALE_GROUP_PREFIX),
   );
@@ -67,7 +69,9 @@ const toHorizontalColumns = (templateRows: Flm1ReportRow[]): Flm1ReportColumn[] 
     ...templateRows.map((row) => {
       const key = row.lineKey;
       const trimmed = row.particulars.trim();
-      const purchaseIndex = (PURCHASE_LINE_KEYS as readonly string[]).indexOf(key);
+      const purchaseIndex = (PURCHASE_LINE_KEYS as readonly string[]).indexOf(
+        key,
+      );
 
       if (key === "opening") {
         return { key, label: HORIZONTAL_HEADER.opening };
@@ -292,7 +296,10 @@ export const buildFlm8CnStatementExport = (
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "FLM8");
   return {
-    buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer,
+    buffer: XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    }) as Buffer,
     contentType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     filename: "flm8-cn-statement.xlsx",

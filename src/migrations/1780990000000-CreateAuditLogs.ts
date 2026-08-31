@@ -1,11 +1,11 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateAuditLogs1780990000000 implements MigrationInterface {
-    name = 'CreateAuditLogs1780990000000'
+  name = "CreateAuditLogs1780990000000";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        // 1. Create audit_logs table
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // 1. Create audit_logs table
+    await queryRunner.query(`
             CREATE TABLE "audit_logs" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "table_name" character varying NOT NULL,
@@ -19,8 +19,8 @@ export class CreateAuditLogs1780990000000 implements MigrationInterface {
             )
         `);
 
-        // 2. Create PL/pgSQL trigger function
-        await queryRunner.query(`
+    // 2. Create PL/pgSQL trigger function
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION audit_trigger_func()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -71,23 +71,25 @@ export class CreateAuditLogs1780990000000 implements MigrationInterface {
             $$ LANGUAGE plpgsql;
         `);
 
-        // 3. Create AFTER trigger on company table
-        await queryRunner.query(`
+    // 3. Create AFTER trigger on company table
+    await queryRunner.query(`
             CREATE TRIGGER company_audit_trigger
             AFTER INSERT OR UPDATE OR DELETE ON "company"
             FOR EACH ROW
             EXECUTE FUNCTION audit_trigger_func();
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        // 1. Drop trigger on company table
-        await queryRunner.query(`DROP TRIGGER IF EXISTS company_audit_trigger ON "company"`);
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    // 1. Drop trigger on company table
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS company_audit_trigger ON "company"`,
+    );
 
-        // 2. Drop PL/pgSQL function
-        await queryRunner.query(`DROP FUNCTION IF EXISTS audit_trigger_func()`);
+    // 2. Drop PL/pgSQL function
+    await queryRunner.query(`DROP FUNCTION IF EXISTS audit_trigger_func()`);
 
-        // 3. Drop audit_logs table
-        await queryRunner.query(`DROP TABLE IF EXISTS "audit_logs"`);
-    }
+    // 3. Drop audit_logs table
+    await queryRunner.query(`DROP TABLE IF EXISTS "audit_logs"`);
+  }
 }

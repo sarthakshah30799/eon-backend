@@ -19,7 +19,7 @@ import { SessionMiddleware } from "./auth/session.middleware";
 import { SilentEmptyListInterceptor } from "./auth/interceptors/silent-empty-list.interceptor";
 import { FinancialCodeModule } from "./financial-codes/financial-code.module";
 import { FinancialSubProfileModule } from "./financial-sub-profiles/financial-sub-profile.module";
-import { StockRevaluationModule } from './stock-revaluation/stock-revaluation.module';
+import { StockRevaluationModule } from "./stock-revaluation/stock-revaluation.module";
 import { AccountProfileModule } from "./account-profiles/account-profile.module";
 import { CountryGroupModule } from "./country-groups/country-group.module";
 import { PartyProfileModule } from "./party-profiles/party-profile.module";
@@ -42,7 +42,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { PassengerModule } from "./passengers/passenger.module";
 import { PurposeModule } from "./purpose/purpose.module";
 import { TransfersModule } from "./transfers/transfers.module";
-import { CardStockModule } from './card-stock/card-stock.module';
+import { CardStockModule } from "./card-stock/card-stock.module";
 import { VoucherModule } from "./vouchers/voucher.module";
 
 @Module({
@@ -90,7 +90,10 @@ import { VoucherModule } from "./vouchers/voucher.module";
     AuditLogModule,
     StorageModule,
   ],
-  providers: [SessionMiddleware, { provide: APP_INTERCEPTOR, useClass: SilentEmptyListInterceptor }],
+  providers: [
+    SessionMiddleware,
+    { provide: APP_INTERCEPTOR, useClass: SilentEmptyListInterceptor },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

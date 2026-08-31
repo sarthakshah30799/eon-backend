@@ -1,4 +1,6 @@
-export function parseDateValue(value: string | Date | null | undefined): Date | null {
+export function parseDateValue(
+  value: string | Date | null | undefined,
+): Date | null {
   if (!value) {
     return null;
   }
@@ -34,7 +36,9 @@ export function toUtcDateOnly(value: string | Date | null | undefined): Date {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
-export function toUtcNextDate(value: string | Date | null | undefined): Date | null {
+export function toUtcNextDate(
+  value: string | Date | null | undefined,
+): Date | null {
   const isoDate = toDateOnlyString(value);
   if (!isoDate) {
     return null;

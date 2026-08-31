@@ -46,19 +46,21 @@ export class Flm8CnStatementService {
 
   private isApConnectEnabled(query: Flm8CnStatementQueryDto) {
     return (
-      query.profileType === PurposeGroupProfileType.AD && Boolean(query.apConnect)
+      query.profileType === PurposeGroupProfileType.AD &&
+      Boolean(query.apConnect)
     );
   }
 
   private async loadSaleGroups(
     profileType: Flm8CnStatementQueryDto["profileType"],
   ): Promise<Flm1SaleGroup[]> {
-    const groups = await this.purposeGroupService.findAll({ profileType });
+    const groups = await this.purposeGroupService.listMatching({ profileType });
     return groups
       .slice()
       .sort(
         (left, right) =>
-          left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
+          left.sortOrder - right.sortOrder ||
+          left.name.localeCompare(right.name),
       )
       .map((group) => ({
         id: group.id,
@@ -88,7 +90,10 @@ export class Flm8CnStatementService {
         const label =
           currencyName && countryName
             ? `${currencyName}(${countryName})`
-            : currencyName || countryName || currency.currencyCode || currency.id;
+            : currencyName ||
+              countryName ||
+              currency.currencyCode ||
+              currency.id;
         return [currency.id, label];
       }),
     );
@@ -99,15 +104,13 @@ export class Flm8CnStatementService {
       query.startDate,
       query.endDate,
     );
-    const startLabel = (query.startDate || startDate.toISOString().slice(0, 10)).slice(
+    const startLabel = (
+      query.startDate || startDate.toISOString().slice(0, 10)
+    ).slice(0, 10);
+    const endLabel = (query.endDate || query.startDate || startLabel).slice(
       0,
       10,
     );
-    const endLabel = (
-      query.endDate ||
-      query.startDate ||
-      startLabel
-    ).slice(0, 10);
     const resolvedBranchIds = await this.resolveAccessibleBranchIds(
       query.branchIds ?? [],
       session,
@@ -185,7 +188,9 @@ export class Flm8CnStatementService {
     }
 
     const assignedBranchIdSet = new Set(assignedBranchIds);
-    return requestedBranchIds.filter((branchId) => assignedBranchIdSet.has(branchId));
+    return requestedBranchIds.filter((branchId) =>
+      assignedBranchIdSet.has(branchId),
+    );
   }
 
   private async loadAssignedBranchIds(userId?: string | null) {
@@ -207,7 +212,9 @@ export class Flm8CnStatementService {
     ];
   }
 
-  private async loadSelectedBranches(branchIds: string[]): Promise<Flm1BranchMeta[]> {
+  private async loadSelectedBranches(
+    branchIds: string[],
+  ): Promise<Flm1BranchMeta[]> {
     if (!branchIds.length) {
       return [];
     }
@@ -238,7 +245,10 @@ export class Flm8CnStatementService {
       FLM1_DEFAULT_CURRENCY_COLUMNS,
     );
     return clampCurrencyColumnCount(
-      Math.min(FLM1_MAX_CURRENCY_COLUMNS, Math.max(FLM1_MIN_CURRENCY_COLUMNS, stored)),
+      Math.min(
+        FLM1_MAX_CURRENCY_COLUMNS,
+        Math.max(FLM1_MIN_CURRENCY_COLUMNS, stored),
+      ),
     );
   }
 }

@@ -1,7 +1,8 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsEnum } from 'class-validator';
-import { Transform } from 'class-transformer';
-import { CurrencyProductAllowed } from '../currency.entity';
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { IsOptional, IsString, IsBoolean, IsEnum } from "class-validator";
+import { Transform } from "class-transformer";
+import { PaginationQueryDto } from "../../common/pagination";
+import { CurrencyProductAllowed } from "../currency.entity";
 
 const parseBooleanQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
@@ -23,16 +24,17 @@ const parseBooleanQuery = ({ value }: { value: unknown }) => {
   return undefined;
 };
 
-export class CurrencyListQueryDto {
+export class CurrencyListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    description: 'Global search across currency code, currency name, and country name',
+    description:
+      "Global search across currency code, currency name, and country name",
   })
   @IsString()
   @IsOptional()
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by active status',
+    description: "Filter by active status",
     default: true,
   })
   @IsBoolean()
@@ -42,7 +44,7 @@ export class CurrencyListQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'When true, include only-stocking currencies. Default false excludes them from sale/purchase lists.',
+      "When true, include only-stocking currencies. Default false excludes them from sale/purchase lists.",
     default: false,
   })
   @IsBoolean()
@@ -52,7 +54,7 @@ export class CurrencyListQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'When includeOnlyStocking is true, optionally restrict only-stocking rows to this productAllowed code (e.g. CM).',
+      "When includeOnlyStocking is true, optionally restrict only-stocking rows to this productAllowed code (e.g. CM).",
     enum: CurrencyProductAllowed,
   })
   @IsEnum(CurrencyProductAllowed)

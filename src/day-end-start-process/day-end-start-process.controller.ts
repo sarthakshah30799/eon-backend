@@ -10,14 +10,22 @@ import { DayEndStartProcessService } from "./day-end-start-process.service";
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller("day-end-start-process")
 export class DayEndStartProcessController {
-  constructor(private readonly dayEndStartProcessService: DayEndStartProcessService) {}
+  constructor(
+    private readonly dayEndStartProcessService: DayEndStartProcessService,
+  ) {}
 
   @Post("start")
-  @ApiOperation({ summary: "Start the current day and save the checklist answers" })
+  @ApiOperation({
+    summary: "Start the current day and save the checklist answers",
+  })
   async startDay(@Body() dto: CompleteDayEndDto, @Session() session: any) {
-    const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
+    const canSelectWorkplace = Boolean(
+      session?.isAdmin || session?.isHo || session?.isHoStaff,
+    );
     return this.dayEndStartProcessService.startDay(
-      canSelectWorkplace ? dto.branchId ?? "" : session?.activeBranchId ?? "",
+      canSelectWorkplace
+        ? (dto.branchId ?? "")
+        : (session?.activeBranchId ?? ""),
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",
@@ -26,10 +34,17 @@ export class DayEndStartProcessController {
 
   @Post("complete")
   @ApiOperation({ summary: "Complete the current day-end checklist" })
-  async completeDayEnd(@Body() dto: CompleteDayEndDto, @Session() session: any) {
-    const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
+  async completeDayEnd(
+    @Body() dto: CompleteDayEndDto,
+    @Session() session: any,
+  ) {
+    const canSelectWorkplace = Boolean(
+      session?.isAdmin || session?.isHo || session?.isHoStaff,
+    );
     return this.dayEndStartProcessService.completeDayEnd(
-      canSelectWorkplace ? dto.branchId ?? "" : session?.activeBranchId ?? "",
+      canSelectWorkplace
+        ? (dto.branchId ?? "")
+        : (session?.activeBranchId ?? ""),
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",

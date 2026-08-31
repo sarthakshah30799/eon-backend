@@ -1,14 +1,24 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsBoolean,
+  MaxLength,
+} from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateRoleDto {
-  @ApiProperty({ description: 'Role Code', example: 'ADMIN', maxLength: 20 })
+  @ApiProperty({ description: "Role Code", example: "ADMIN", maxLength: 20 })
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
   code: string;
 
-  @ApiProperty({ description: 'Role Name', example: 'Administrator', maxLength: 250 })
+  @ApiProperty({
+    description: "Role Name",
+    example: "Administrator",
+    maxLength: 250,
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)

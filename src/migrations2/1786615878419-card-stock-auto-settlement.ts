@@ -1,24 +1,52 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CardStockAutoSettlement1786615878419 implements MigrationInterface {
-    name = 'CardStockAutoSettlement1786615878419'
+  name = "CardStockAutoSettlement1786615878419";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE TYPE "public"."card_stock_settlements_status_enum" AS ENUM('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED', 'CANCELLED')`);
-        await queryRunner.query(`CREATE TABLE "card_stock_settlements" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "card_id" uuid NOT NULL, "transaction_id" uuid NOT NULL, "transaction_item_id" uuid NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "ho_branch_id" uuid NOT NULL, "ho_branch_snapshot" jsonb NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "product_id" uuid NOT NULL, "product_snapshot" jsonb NOT NULL, "passenger_id" uuid, "passenger_snapshot" jsonb, "series" citext NOT NULL, "denomination" numeric(18,2) NOT NULL, "buy_rate" numeric(18,7) NOT NULL, "buy_rate_snapshot" jsonb NOT NULL, "settlement_amount" numeric(18,2) NOT NULL, "sale_date" date NOT NULL, "branch_settlement_date" TIMESTAMP WITH TIME ZONE, "branch_settlement_entry_id" uuid, "issuer_settlement_date" date, "issuer_reference" citext, "issuer_settlement_entry_id" uuid, "status" "public"."card_stock_settlements_status_enum" NOT NULL, "cancelled_at" TIMESTAMP WITH TIME ZONE, "cancelled_by_id" uuid, "cancellation_reason" text, CONSTRAINT "PK_6e9eb592e46813fc64b8ef1a100" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE UNIQUE INDEX "UQ_card_stock_settlements_card_item" ON "card_stock_settlements" ("card_id", "transaction_item_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlements_sale_date" ON "card_stock_settlements" ("sale_date") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlements_issuer" ON "card_stock_settlements" ("issuer_party_profile_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlements_branch" ON "card_stock_settlements" ("branch_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlements_status" ON "card_stock_settlements" ("status") `);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD "settle_date" TIMESTAMP WITH TIME ZONE`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD "settle_rate" numeric(18,7) NOT NULL DEFAULT '0'`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD "settle_amount" numeric(18,2) NOT NULL DEFAULT '0'`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD "settle_entry_id" uuid`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" RENAME COLUMN "receive_transaction_id" TO "receive_entry_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" RENAME COLUMN "transfer_transaction_id" TO "transfer_entry_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" RENAME COLUMN "sell_transaction_id" TO "sell_entry_id"`);
-        await queryRunner.query(`UPDATE "card_stock_balance" balance SET "receive_entry_id" = (
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `CREATE TYPE "public"."card_stock_settlements_status_enum" AS ENUM('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED', 'CANCELLED')`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "card_stock_settlements" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "card_id" uuid NOT NULL, "transaction_id" uuid NOT NULL, "transaction_item_id" uuid NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "ho_branch_id" uuid NOT NULL, "ho_branch_snapshot" jsonb NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "product_id" uuid NOT NULL, "product_snapshot" jsonb NOT NULL, "passenger_id" uuid, "passenger_snapshot" jsonb, "series" citext NOT NULL, "denomination" numeric(18,2) NOT NULL, "buy_rate" numeric(18,7) NOT NULL, "buy_rate_snapshot" jsonb NOT NULL, "settlement_amount" numeric(18,2) NOT NULL, "sale_date" date NOT NULL, "branch_settlement_date" TIMESTAMP WITH TIME ZONE, "branch_settlement_entry_id" uuid, "issuer_settlement_date" date, "issuer_reference" citext, "issuer_settlement_entry_id" uuid, "status" "public"."card_stock_settlements_status_enum" NOT NULL, "cancelled_at" TIMESTAMP WITH TIME ZONE, "cancelled_by_id" uuid, "cancellation_reason" text, CONSTRAINT "PK_6e9eb592e46813fc64b8ef1a100" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "UQ_card_stock_settlements_card_item" ON "card_stock_settlements" ("card_id", "transaction_item_id") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlements_sale_date" ON "card_stock_settlements" ("sale_date") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlements_issuer" ON "card_stock_settlements" ("issuer_party_profile_id") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlements_branch" ON "card_stock_settlements" ("branch_id") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlements_status" ON "card_stock_settlements" ("status") `,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD "settle_date" TIMESTAMP WITH TIME ZONE`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD "settle_rate" numeric(18,7) NOT NULL DEFAULT '0'`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD "settle_amount" numeric(18,2) NOT NULL DEFAULT '0'`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD "settle_entry_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" RENAME COLUMN "receive_transaction_id" TO "receive_entry_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" RENAME COLUMN "transfer_transaction_id" TO "transfer_entry_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" RENAME COLUMN "sell_transaction_id" TO "sell_entry_id"`,
+    );
+    await queryRunner.query(`UPDATE "card_stock_balance" balance SET "receive_entry_id" = (
           SELECT entry."id" FROM "card_stock_transaction_entries" entry
           WHERE entry."transaction_id" = balance."receive_entry_id"
             AND entry."card_id" = balance."card_id"
@@ -27,7 +55,7 @@ export class CardStockAutoSettlement1786615878419 implements MigrationInterface 
             AND entry."operation_type" IN ('STOCK', 'TRANSFER_IN', 'CARD_STOCK_LOAD')
           ORDER BY entry."created_at" DESC LIMIT 1
         ) WHERE balance."receive_entry_id" IS NOT NULL`);
-        await queryRunner.query(`UPDATE "card_stock_balance" balance SET "transfer_entry_id" = (
+    await queryRunner.query(`UPDATE "card_stock_balance" balance SET "transfer_entry_id" = (
           SELECT entry."id" FROM "card_stock_transaction_entries" entry
           WHERE entry."transaction_id" = balance."transfer_entry_id"
             AND entry."card_id" = balance."card_id"
@@ -36,7 +64,7 @@ export class CardStockAutoSettlement1786615878419 implements MigrationInterface 
             AND entry."operation_type" = 'TRANSFER_OUT'
           ORDER BY entry."created_at" DESC LIMIT 1
         ) WHERE balance."transfer_entry_id" IS NOT NULL`);
-        await queryRunner.query(`UPDATE "card_stock_balance" balance SET "sell_entry_id" = (
+    await queryRunner.query(`UPDATE "card_stock_balance" balance SET "sell_entry_id" = (
           SELECT entry."id" FROM "card_stock_transaction_entries" entry
           WHERE entry."transaction_id" = balance."sell_entry_id"
             AND entry."card_id" = balance."card_id"
@@ -45,13 +73,25 @@ export class CardStockAutoSettlement1786615878419 implements MigrationInterface 
             AND entry."operation_type" = 'SELL'
           ORDER BY entry."created_at" DESC LIMIT 1
         ) WHERE balance."sell_entry_id" IS NOT NULL`);
-        await queryRunner.query(`DROP FUNCTION IF EXISTS public.card_stock_insert_entry(uuid,uuid,public.card_stock_reference_type_enum,uuid,public.card_stock_transaction_entries_operation_type_enum,uuid,jsonb,uuid,jsonb,uuid,jsonb,uuid,jsonb,citext,timestamptz,numeric,numeric,uuid)`);
-        await queryRunner.query(`ALTER TYPE "public"."card_stock_reference_type_enum" RENAME TO "card_stock_reference_type_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."card_stock_reference_type_enum" AS ENUM('CARD_STOCK_RECEIPT','CARD_TRANSFER_REQUEST','CARD_SALE','CARD_BRANCH_SETTLEMENT','CARD_ISSUER_SETTLEMENT','CARD_SETTLEMENT','CARD_RETURN','CARD_VOID')`);
-        await queryRunner.query(`ALTER TABLE "card_stock_transaction_entries" ALTER COLUMN "reference_type" TYPE "public"."card_stock_reference_type_enum" USING "reference_type"::text::"public"."card_stock_reference_type_enum"`);
-        await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "card_stock_reference_type" TYPE "public"."card_stock_reference_type_enum" USING "card_stock_reference_type"::text::"public"."card_stock_reference_type_enum"`);
-        await queryRunner.query(`DROP TYPE "public"."card_stock_reference_type_enum_old"`);
-        await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_insert_entry(
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.card_stock_insert_entry(uuid,uuid,public.card_stock_reference_type_enum,uuid,public.card_stock_transaction_entries_operation_type_enum,uuid,jsonb,uuid,jsonb,uuid,jsonb,uuid,jsonb,citext,timestamptz,numeric,numeric,uuid)`,
+    );
+    await queryRunner.query(
+      `ALTER TYPE "public"."card_stock_reference_type_enum" RENAME TO "card_stock_reference_type_enum_old"`,
+    );
+    await queryRunner.query(
+      `CREATE TYPE "public"."card_stock_reference_type_enum" AS ENUM('CARD_STOCK_RECEIPT','CARD_TRANSFER_REQUEST','CARD_SALE','CARD_BRANCH_SETTLEMENT','CARD_ISSUER_SETTLEMENT','CARD_SETTLEMENT','CARD_RETURN','CARD_VOID')`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_transaction_entries" ALTER COLUMN "reference_type" TYPE "public"."card_stock_reference_type_enum" USING "reference_type"::text::"public"."card_stock_reference_type_enum"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transactions" ALTER COLUMN "card_stock_reference_type" TYPE "public"."card_stock_reference_type_enum" USING "card_stock_reference_type"::text::"public"."card_stock_reference_type_enum"`,
+    );
+    await queryRunner.query(
+      `DROP TYPE "public"."card_stock_reference_type_enum_old"`,
+    );
+    await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_insert_entry(
           p_card uuid, p_tx uuid, p_ref_type public.card_stock_reference_type_enum, p_ref_id uuid, p_op public.card_stock_transaction_entries_operation_type_enum,
           p_branch uuid, p_branch_snapshot jsonb, p_currency uuid, p_currency_snapshot jsonb, p_product uuid, p_product_snapshot jsonb,
           p_issuer uuid, p_issuer_snapshot jsonb, p_series citext, p_date timestamptz, p_rate numeric, p_amount numeric, p_created_by uuid
@@ -61,16 +101,34 @@ export class CardStockAutoSettlement1786615878419 implements MigrationInterface 
           ON CONFLICT (card_id,operation_type,reference_type,reference_id) DO NOTHING RETURNING id INTO result_id;
           RETURN result_id;
         END; $fn$`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_receive_entry" FOREIGN KEY ("receive_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_transfer_entry" FOREIGN KEY ("transfer_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_sell_entry" FOREIGN KEY ("sell_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_settle_entry" FOREIGN KEY ("settle_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_transaction" FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_transaction_item" FOREIGN KEY ("transaction_item_id") REFERENCES "transaction_items"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_branch_entry" FOREIGN KEY ("branch_settlement_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_issuer_entry" FOREIGN KEY ("issuer_settlement_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_on_card_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_receive_entry" FOREIGN KEY ("receive_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_transfer_entry" FOREIGN KEY ("transfer_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_sell_entry" FOREIGN KEY ("sell_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" ADD CONSTRAINT "FK_card_stock_balance_settle_entry" FOREIGN KEY ("settle_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_transaction" FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_transaction_item" FOREIGN KEY ("transaction_item_id") REFERENCES "transaction_items"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_branch_entry" FOREIGN KEY ("branch_settlement_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_issuer_entry" FOREIGN KEY ("issuer_settlement_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_on_card_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$
           DECLARE r record; entry_id uuid; BEGIN
             SELECT receipt.id AS receipt_id, receipt.receipt_date, i.currency_id, i.currency_snapshot, i.product_id, i.product_snapshot, i.issuer_party_profile_id, i.issuer_party_profile_snapshot, receipt.ho_branch_id, receipt.ho_branch_snapshot, receipt.created_by, technical.id AS technical_transaction_id INTO r
             FROM card_stock_receipt_items i JOIN card_stock_receipts receipt ON receipt.id=i.receipt_id LEFT JOIN transactions technical ON technical.card_stock_reference_type='CARD_STOCK_RECEIPT' AND technical.card_stock_reference_id=receipt.id AND technical.status='APPROVED' AND technical.slug='CARD_STOCK' WHERE i.id=NEW.receipt_item_id;
@@ -82,7 +140,7 @@ export class CardStockAutoSettlement1786615878419 implements MigrationInterface 
               ON CONFLICT (card_id,branch_id) WHERE is_active=true DO NOTHING;
             END IF; RETURN NEW;
           END; $fn$`);
-        await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_item() RETURNS trigger LANGUAGE plpgsql AS $fn$
+    await queryRunner.query(`CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_item() RETURNS trigger LANGUAGE plpgsql AS $fn$
           DECLARE t record; c record; b record; r record; entry_id uuid; next_series citext; operation public.card_stock_transaction_entries_operation_type_enum; ref_type public.card_stock_reference_type_enum; ref_id uuid; op_rate numeric := 0; op_amount numeric := 0;
           BEGIN
             SELECT * INTO t FROM transactions WHERE id=NEW.transaction_id;
@@ -142,35 +200,84 @@ export class CardStockAutoSettlement1786615878419 implements MigrationInterface 
             END IF;
             RETURN NEW;
           END; $fn$`);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_issuer_entry"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_branch_entry"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_transaction_item"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_transaction"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_card"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_settle_entry"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_sell_entry"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_transfer_entry"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_receive_entry"`);
-        await queryRunner.query(`UPDATE "card_stock_balance" balance SET "receive_entry_id" = entry."transaction_id" FROM "card_stock_transaction_entries" entry WHERE entry."id" = balance."receive_entry_id"`);
-        await queryRunner.query(`UPDATE "card_stock_balance" balance SET "transfer_entry_id" = entry."transaction_id" FROM "card_stock_transaction_entries" entry WHERE entry."id" = balance."transfer_entry_id"`);
-        await queryRunner.query(`UPDATE "card_stock_balance" balance SET "sell_entry_id" = entry."transaction_id" FROM "card_stock_transaction_entries" entry WHERE entry."id" = balance."sell_entry_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" RENAME COLUMN "sell_entry_id" TO "sell_transaction_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" RENAME COLUMN "transfer_entry_id" TO "transfer_transaction_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" RENAME COLUMN "receive_entry_id" TO "receive_transaction_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP COLUMN "settle_entry_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP COLUMN "settle_amount"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP COLUMN "settle_rate"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_balance" DROP COLUMN "settle_date"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlements_status"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlements_branch"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlements_issuer"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlements_sale_date"`);
-        await queryRunner.query(`DROP INDEX "public"."UQ_card_stock_settlements_card_item"`);
-        await queryRunner.query(`DROP TABLE "card_stock_settlements"`);
-        await queryRunner.query(`DROP TYPE "public"."card_stock_settlements_status_enum"`);
-    }
-
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_issuer_entry"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_branch_entry"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_transaction_item"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_transaction"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_card"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_settle_entry"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_sell_entry"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_transfer_entry"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP CONSTRAINT "FK_card_stock_balance_receive_entry"`,
+    );
+    await queryRunner.query(
+      `UPDATE "card_stock_balance" balance SET "receive_entry_id" = entry."transaction_id" FROM "card_stock_transaction_entries" entry WHERE entry."id" = balance."receive_entry_id"`,
+    );
+    await queryRunner.query(
+      `UPDATE "card_stock_balance" balance SET "transfer_entry_id" = entry."transaction_id" FROM "card_stock_transaction_entries" entry WHERE entry."id" = balance."transfer_entry_id"`,
+    );
+    await queryRunner.query(
+      `UPDATE "card_stock_balance" balance SET "sell_entry_id" = entry."transaction_id" FROM "card_stock_transaction_entries" entry WHERE entry."id" = balance."sell_entry_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" RENAME COLUMN "sell_entry_id" TO "sell_transaction_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" RENAME COLUMN "transfer_entry_id" TO "transfer_transaction_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" RENAME COLUMN "receive_entry_id" TO "receive_transaction_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP COLUMN "settle_entry_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP COLUMN "settle_amount"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP COLUMN "settle_rate"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_balance" DROP COLUMN "settle_date"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlements_status"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlements_branch"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlements_issuer"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlements_sale_date"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."UQ_card_stock_settlements_card_item"`,
+    );
+    await queryRunner.query(`DROP TABLE "card_stock_settlements"`);
+    await queryRunner.query(
+      `DROP TYPE "public"."card_stock_settlements_status_enum"`,
+    );
+  }
 }

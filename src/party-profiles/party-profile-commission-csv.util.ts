@@ -6,7 +6,10 @@ import {
 } from "./types/party-profile-commission-rule.types";
 
 const normalizeHeader = (value: string) =>
-  value.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
 
 const escapeCsvCell = (value: string) => {
   if (!/[",\n\r]/.test(value)) {
@@ -18,7 +21,7 @@ const escapeCsvCell = (value: string) => {
 
 const parseCsvLine = (line: string) => {
   const cells: string[] = [];
-  let current = '';
+  let current = "";
   let inQuotes = false;
 
   for (let i = 0; i < line.length; i += 1) {
@@ -36,9 +39,9 @@ const parseCsvLine = (line: string) => {
       continue;
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === "," && !inQuotes) {
       cells.push(current.trim());
-      current = '';
+      current = "";
       continue;
     }
 
@@ -64,7 +67,7 @@ const normalizeCommissionRows = (
       ]),
     );
 
-  return rows.map(row => {
+  return rows.map((row) => {
     const normalizedRow = normalizeRecord(row);
     const rawType = String(
       normalizedRow.commissiontype ?? normalizedRow.rate ?? "",
@@ -86,8 +89,12 @@ const normalizeCommissionRows = (
     }
 
     return {
-      currencyCode: String(normalizedRow.currencycode ?? "").trim().toUpperCase(),
-      productCode: String(normalizedRow.productcode ?? "").trim().toUpperCase(),
+      currencyCode: String(normalizedRow.currencycode ?? "")
+        .trim()
+        .toUpperCase(),
+      productCode: String(normalizedRow.productcode ?? "")
+        .trim()
+        .toUpperCase(),
       commissionType,
       commissionValue: String(normalizedRow.commissionvalue ?? "").trim(),
     } satisfies PartyProfileCommissionRuleValue;
@@ -98,28 +105,28 @@ export const serializeCommissionRulesToCsv = (
   rules: PartyProfileCommissionRuleValue[],
 ) => {
   const header = [
-    'currencyCode',
-    'productCode',
-    'commissionType',
-    'commissionValue',
+    "currencyCode",
+    "productCode",
+    "commissionType",
+    "commissionValue",
   ];
 
-  const rows = rules.map(rule =>
+  const rows = rules.map((rule) =>
     [
       rule.currencyCode,
       rule.productCode,
       rule.commissionType,
       rule.commissionValue,
     ]
-      .map(value => escapeCsvCell(String(value ?? '')))
-      .join(','),
+      .map((value) => escapeCsvCell(String(value ?? "")))
+      .join(","),
   );
 
-  return [header.join(','), ...rows].join('\n');
+  return [header.join(","), ...rows].join("\n");
 };
 
 export const parseCommissionRulesCsv = (content: string) => {
-  const normalized = content.replace(/^\uFEFF/, '').trim();
+  const normalized = content.replace(/^\uFEFF/, "").trim();
 
   if (!normalized) {
     return [] as PartyProfileCommissionRuleValue[];
@@ -127,7 +134,7 @@ export const parseCommissionRulesCsv = (content: string) => {
 
   const lines = normalized
     .split(/\r?\n/)
-    .map(line => line.trim())
+    .map((line) => line.trim())
     .filter(Boolean);
 
   if (lines.length < 2) {
@@ -136,38 +143,42 @@ export const parseCommissionRulesCsv = (content: string) => {
 
   const headers = parseCsvLine(lines[0]).map(normalizeHeader);
   const columnIndex = {
-    currencyCode: headers.indexOf('currencycode'),
-    productCode: headers.indexOf('productcode'),
+    currencyCode: headers.indexOf("currencycode"),
+    productCode: headers.indexOf("productcode"),
     commissionType:
-      headers.indexOf('commissiontype') >= 0
-        ? headers.indexOf('commissiontype')
-        : headers.indexOf('rate'),
-    commissionValue: headers.indexOf('commissionvalue'),
+      headers.indexOf("commissiontype") >= 0
+        ? headers.indexOf("commissiontype")
+        : headers.indexOf("rate"),
+    commissionValue: headers.indexOf("commissionvalue"),
   };
 
-  return lines.slice(1).map(line => {
+  return lines.slice(1).map((line) => {
     const values = parseCsvLine(line);
-    const rawType = String(values[columnIndex.commissionType] ?? '')
+    const rawType = String(values[columnIndex.commissionType] ?? "")
       .trim()
       .toUpperCase();
     const commissionType =
-      rawType === 'PERCENT' || rawType === 'PERCENTAGE'
+      rawType === "PERCENT" || rawType === "PERCENTAGE"
         ? PartyProfileCommissionTypeEnum.PERCENTAGE
-        : rawType === 'RATE' || rawType === 'PAISA'
+        : rawType === "RATE" || rawType === "PAISA"
           ? PartyProfileCommissionTypeEnum.PAISA
           : null;
 
     if (!commissionType) {
       throw new BadRequestException(
-        `Unsupported commission type "${values[columnIndex.commissionType] ?? ''}"`,
+        `Unsupported commission type "${values[columnIndex.commissionType] ?? ""}"`,
       );
     }
 
     return {
-      currencyCode: String(values[columnIndex.currencyCode] ?? '').trim().toUpperCase(),
-      productCode: String(values[columnIndex.productCode] ?? '').trim().toUpperCase(),
+      currencyCode: String(values[columnIndex.currencyCode] ?? "")
+        .trim()
+        .toUpperCase(),
+      productCode: String(values[columnIndex.productCode] ?? "")
+        .trim()
+        .toUpperCase(),
       commissionType,
-      commissionValue: String(values[columnIndex.commissionValue] ?? '').trim(),
+      commissionValue: String(values[columnIndex.commissionValue] ?? "").trim(),
     } satisfies PartyProfileCommissionRuleValue;
   });
 };

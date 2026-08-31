@@ -5,10 +5,10 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * product gate accepts CC and CM, insert_entry conflicts on currency_id.
  */
 export class CardStockMultiCurrencyTriggers1787759218940 implements MigrationInterface {
-    name = "CardStockMultiCurrencyTriggers1787759218940";
+  name = "CardStockMultiCurrencyTriggers1787759218940";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_insert_entry(
               p_card uuid, p_tx uuid, p_ref_type public.card_stock_reference_type_enum, p_ref_id uuid, p_op public.card_stock_transaction_entries_operation_type_enum,
               p_branch uuid, p_branch_snapshot jsonb, p_currency uuid, p_currency_snapshot jsonb, p_product uuid, p_product_snapshot jsonb,
@@ -33,7 +33,7 @@ export class CardStockMultiCurrencyTriggers1787759218940 implements MigrationInt
             $fn$
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_item() RETURNS trigger LANGUAGE plpgsql AS $fn$
             DECLARE
               t record;
@@ -202,11 +202,11 @@ export class CardStockMultiCurrencyTriggers1787759218940 implements MigrationInt
             END;
             $fn$
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        // Trigger bodies restored by re-running prior lifecycle migrations if needed.
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    // Trigger bodies restored by re-running prior lifecycle migrations if needed.
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_insert_entry(
               p_card uuid, p_tx uuid, p_ref_type public.card_stock_reference_type_enum, p_ref_id uuid, p_op public.card_stock_transaction_entries_operation_type_enum,
               p_branch uuid, p_branch_snapshot jsonb, p_currency uuid, p_currency_snapshot jsonb, p_product uuid, p_product_snapshot jsonb,
@@ -230,5 +230,5 @@ export class CardStockMultiCurrencyTriggers1787759218940 implements MigrationInt
             END;
             $fn$
         `);
-    }
+  }
 }

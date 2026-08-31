@@ -97,7 +97,9 @@ export class CardStockTransactionService {
     if (input.items?.length) {
       const itemRepository = input.manager.getRepository(TransactionItem);
       const sortedItems = [...input.items].sort((left, right) =>
-        String(left.referenceId ?? left.cardId ?? '').localeCompare(String(right.referenceId ?? right.cardId ?? ''))
+        String(left.referenceId ?? left.cardId ?? "").localeCompare(
+          String(right.referenceId ?? right.cardId ?? ""),
+        ),
       );
       for (const [index, item] of sortedItems.entries()) {
         await itemRepository.save(

@@ -18,6 +18,13 @@ import {
   TransactionType,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
+import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 import { TransactionItem } from "./entities/transaction-item.entity";
 import { TransactionDocument } from "./entities/transaction-document.entity";
 import { TransactionAdditionalCharge } from "./entities/transaction-additional-charge.entity";
@@ -173,9 +180,9 @@ const hasCompletePassengerPan = (
 ) =>
   Boolean(
     passenger &&
-      hasPassengerIdentityText(passenger.panNumber) &&
-      hasPassengerIdentityText(passenger.panHolderName) &&
-      hasPassengerIdentityText(passenger.panDob),
+    hasPassengerIdentityText(passenger.panNumber) &&
+    hasPassengerIdentityText(passenger.panHolderName) &&
+    hasPassengerIdentityText(passenger.panDob),
   );
 
 const hasCompletePassengerPassport = (
@@ -183,10 +190,10 @@ const hasCompletePassengerPassport = (
 ) =>
   Boolean(
     passenger &&
-      hasPassengerIdentityText(passenger.passportNumber) &&
-      hasPassengerIdentityText(passenger.passportIssueAt) &&
-      hasPassengerIdentityText(passenger.passportIssueDate) &&
-      hasPassengerIdentityText(passenger.passportExpiryDate),
+    hasPassengerIdentityText(passenger.passportNumber) &&
+    hasPassengerIdentityText(passenger.passportIssueAt) &&
+    hasPassengerIdentityText(passenger.passportIssueDate) &&
+    hasPassengerIdentityText(passenger.passportExpiryDate),
   );
 
 const addMonthsUtc = (date: Date, months: number) => {
@@ -940,50 +947,48 @@ export class TransactionsService {
   }
 
   async getTransactions(
-    slug?: string,
+    query?: TransactionListQueryDto,
     branchId?: string,
-    search?: string,
-    status?: TransactionStatus,
-    partyProfileId?: string,
-    transactionType?: TransactionType,
-  ): Promise<Transaction[]> {
-    const query = this.transactionRepository
+  ): Promise<PaginatedResponseDto<Transaction>> {
+    const pagination = normalizePagination(query);
+    const qb = this.transactionRepository
       .createQueryBuilder("transaction")
       .where("transaction.isLatest = true");
 
-    if (slug) {
-      query.andWhere("transaction.slug = :slug", { slug });
+    if (query?.slug) {
+      qb.andWhere("transaction.slug = :slug", { slug: query.slug });
     }
 
     if (branchId) {
-      query.andWhere("transaction.branchId = :branchId", { branchId });
+      qb.andWhere("transaction.branchId = :branchId", { branchId });
     }
 
-    if (status) {
-      query.andWhere("transaction.status = :status", { status });
+    if (query?.status) {
+      qb.andWhere("transaction.status = :status", { status: query.status });
     }
 
-    if (partyProfileId) {
-      query.andWhere("transaction.partyProfileId = :partyProfileId", {
-        partyProfileId,
+    if (query?.partyProfileId) {
+      qb.andWhere("transaction.partyProfileId = :partyProfileId", {
+        partyProfileId: query.partyProfileId,
       });
     }
 
-    if (transactionType) {
-      query.andWhere("transaction.transactionType = :transactionType", {
-        transactionType,
+    if (query?.transactionType) {
+      qb.andWhere("transaction.transactionType = :transactionType", {
+        transactionType: query.transactionType,
       });
     }
 
-    const trimmedSearch = search?.trim();
+    const trimmedSearch = query?.search?.trim();
     if (trimmedSearch) {
-      query.andWhere("transaction.number ILIKE :search", {
+      qb.andWhere("transaction.number ILIKE :search", {
         search: `%${trimmedSearch}%`,
       });
     }
 
-    query.orderBy("transaction.createdAt", "DESC");
-    const transactions = await query.getMany();
+    qb.orderBy("transaction.createdAt", "DESC");
+    applyPagination(qb, pagination);
+    const [transactions, total] = await qb.getManyAndCount();
     const partyProfileIds = [
       ...new Set(
         transactions
@@ -993,7 +998,7 @@ export class TransactionsService {
     ];
 
     if (!partyProfileIds.length) {
-      return transactions;
+      return buildPaginatedResponse(transactions, total, pagination);
     }
 
     const partyProfiles = await Promise.all(
@@ -1007,21 +1012,25 @@ export class TransactionsService {
     );
     const partyProfileById = new Map(partyProfiles);
 
-    return transactions.map((transaction) => {
-      if (transaction.partyProfileSnapshot) {
-        return transaction;
-      }
+    return buildPaginatedResponse(
+      transactions.map((transaction) => {
+        if (transaction.partyProfileSnapshot) {
+          return transaction;
+        }
 
-      const partyProfile = partyProfileById.get(transaction.partyProfileId);
-      if (!partyProfile) {
-        return transaction;
-      }
+        const partyProfile = partyProfileById.get(transaction.partyProfileId);
+        if (!partyProfile) {
+          return transaction;
+        }
 
-      return {
-        ...transaction,
-        partyProfileSnapshot: partyProfile,
-      } as Transaction;
-    }) as Transaction[];
+        return {
+          ...transaction,
+          partyProfileSnapshot: partyProfile,
+        } as Transaction;
+      }) as Transaction[],
+      total,
+      pagination,
+    );
   }
 
   async getQuantityAvailability(
@@ -1200,7 +1209,7 @@ export class TransactionsService {
         transactionPayload.branchSnapshot &&
         typeof transactionPayload.branchSnapshot === "object" &&
         "id" in transactionPayload.branchSnapshot
-          ? (transactionPayload.branchSnapshot as { id?: string }).id ?? null
+          ? ((transactionPayload.branchSnapshot as { id?: string }).id ?? null)
           : null,
       resolvedBranchId,
       resolvedCounterId,
@@ -1348,12 +1357,13 @@ export class TransactionsService {
     const requestedTransactionDate = transactionPayload.transactionDate?.trim()
       ? transactionPayload.transactionDate.trim()
       : policyContext.transactionDate?.trim() || undefined;
-    const datePolicy = await this.dayEndStartProcessService.assertTransactionDateAllowed(
-      resolvedBranchId,
-      performedById,
-      requestedTransactionDate,
-      resolvedCounterId,
-    );
+    const datePolicy =
+      await this.dayEndStartProcessService.assertTransactionDateAllowed(
+        resolvedBranchId,
+        performedById,
+        requestedTransactionDate,
+        resolvedCounterId,
+      );
     const resolvedTransactionDate = (
       requestedTransactionDate || datePolicy.allowedDate
     ).slice(0, 10);
@@ -1362,10 +1372,7 @@ export class TransactionsService {
     }
 
     const { company: currentCompany, snapshot: currentCompanySnapshot } =
-      await requireCompanyForDate(
-        this.companyService,
-        resolvedTransactionDate,
-      );
+      await requireCompanyForDate(this.companyService, resolvedTransactionDate);
 
     const gstRatePercent = await this.resolveGstRatePercent();
 
@@ -1529,7 +1536,10 @@ export class TransactionsService {
         passengerPayload.nationalityType === PassengerNationalityType.NRI ||
         passengerPayload.nationalityType === PassengerNationalityType.FOREIGNER;
 
-      if (isForeignPassenger && !hasCompletePassengerPassport(passengerPayload)) {
+      if (
+        isForeignPassenger &&
+        !hasCompletePassengerPassport(passengerPayload)
+      ) {
         throw new BadRequestException(
           "Passport details are required for NRI and foreign passengers",
         );
@@ -1773,9 +1783,7 @@ export class TransactionsService {
       agentProfileSnapshot,
       manualBookPageId: transactionPayload.manualBookPageId ?? null,
       manualBookPageSnapshot,
-      transactionDate: new Date(
-        `${resolvedTransactionDate}T00:00:00.000Z`,
-      ),
+      transactionDate: new Date(`${resolvedTransactionDate}T00:00:00.000Z`),
       transactionType: transactionPayload.transactionType,
       tradeMode: transactionPayload.tradeMode,
       status: persistedTransactionStatus,

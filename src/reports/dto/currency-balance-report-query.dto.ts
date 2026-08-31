@@ -1,6 +1,12 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString } from "class-validator";
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+} from "class-validator";
 
 export enum CurrencyBalanceReportFormat {
   CSV = "csv",
@@ -13,7 +19,7 @@ const parseArrayQuery = ({ value }: { value: unknown }) => {
   }
 
   const values = Array.isArray(value) ? value : String(value).split(",");
-  return values.map(item => String(item).trim()).filter(Boolean);
+  return values.map((item) => String(item).trim()).filter(Boolean);
 };
 
 export class CurrencyBalanceReportQueryDto {
@@ -48,7 +54,10 @@ export class CurrencyBalanceReportQueryDto {
   @IsOptional()
   currencyIds?: string[];
 
-  @ApiPropertyOptional({ description: "Export format", enum: CurrencyBalanceReportFormat })
+  @ApiPropertyOptional({
+    description: "Export format",
+    enum: CurrencyBalanceReportFormat,
+  })
   @IsEnum(CurrencyBalanceReportFormat)
   @IsOptional()
   format?: CurrencyBalanceReportFormat;

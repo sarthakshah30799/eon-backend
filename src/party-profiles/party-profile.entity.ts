@@ -1,4 +1,11 @@
-import { Entity, Column, Index, ManyToOne, JoinColumn, OneToMany } from "typeorm";
+import {
+  Entity,
+  Column,
+  Index,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+} from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { State } from "../state/state.entity";
@@ -37,7 +44,7 @@ export class PartyProfile extends BaseEntity {
 
   @OneToMany(
     () => ProductCardIssuer,
-    cardIssuerLink => cardIssuerLink.partyProfile,
+    (cardIssuerLink) => cardIssuerLink.partyProfile,
   )
   productCardIssuerLinks: ProductCardIssuer[];
 
@@ -202,7 +209,7 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "boolean", default: false })
   purchase: boolean;
 
-  @OneToMany(() => PartyProfileCommissionRule, rule => rule.partyProfile)
+  @OneToMany(() => PartyProfileCommissionRule, (rule) => rule.partyProfile)
   commissionRules: PartyProfileCommissionRule[];
 
   @Column({ type: "boolean", default: false })
@@ -289,6 +296,10 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "integer", name: "card_number_length", nullable: true })
   cardNumberLength: number | null;
 
-  @Column({ type: "boolean", name: "allow_card_number_masking", default: false })
+  @Column({
+    type: "boolean",
+    name: "allow_card_number_masking",
+    default: false,
+  })
   allowCardNumberMasking: boolean;
 }

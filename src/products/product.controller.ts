@@ -9,55 +9,67 @@ import {
   Query,
   UseGuards,
   Session,
-} from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam } from '@nestjs/swagger';
-import { ProductService } from './product.service';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiCookieAuth,
+  ApiParam,
+} from "@nestjs/swagger";
+import { ProductService } from "./product.service";
+import { CreateProductDto } from "./dto/create-product.dto";
+import { UpdateProductDto } from "./dto/update-product.dto";
+import { ProductResponseDto } from "./dto/product-response.dto";
+import { ProductListQueryDto } from "./dto/product-list-query.dto";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { PaginatedResponseDto } from "../common/pagination";
 
-@ApiTags('products')
-@ApiCookieAuth('sessionId')
+@ApiTags("products")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('products')
+@Controller("products")
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all products' })
-  @ApiResponse({ status: 200, description: 'List of products', type: [ProductResponseDto] })
+  @ApiOperation({ summary: "Get all products" })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of products",
+  })
   async findAll(
-    @Query('bulkBuying') bulkBuying?: string,
-    @Query('bulkSelling') bulkSelling?: string,
-    @Query('otherTransaction') otherTransaction?: string,
-    @Query('search') search?: string,
-    @Query('activeOnly') activeOnly?: string,
-  ): Promise<ProductResponseDto[]> {
-    return this.productService.findAll({
-      bulkBuying: bulkBuying === 'true',
-      bulkSelling: bulkSelling === 'true',
-      otherTransaction: otherTransaction === 'true',
-      search,
-      activeOnly: activeOnly !== 'false',
-    });
+    @Query() query: ProductListQueryDto,
+  ): Promise<PaginatedResponseDto<ProductResponseDto>> {
+    return this.productService.findAll(query);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get product by ID' })
-  @ApiParam({ name: 'id', description: 'Product UUID' })
-  @ApiResponse({ status: 200, description: 'Product details', type: ProductResponseDto })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  async findById(@Param('id') id: string): Promise<ProductResponseDto> {
+  @Get(":id")
+  @ApiOperation({ summary: "Get product by ID" })
+  @ApiParam({ name: "id", description: "Product UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Product details",
+    type: ProductResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Product not found" })
+  async findById(@Param("id") id: string): Promise<ProductResponseDto> {
     return this.productService.findById(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new product' })
-  @ApiResponse({ status: 201, description: 'Product created', type: ProductResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
-  @ApiResponse({ status: 409, description: 'Conflict - Duplicate product code' })
+  @ApiOperation({ summary: "Create a new product" })
+  @ApiResponse({
+    status: 201,
+    description: "Product created",
+    type: ProductResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Invalid input" })
+  @ApiResponse({
+    status: 409,
+    description: "Conflict - Duplicate product code",
+  })
   async create(
     @Body() dto: CreateProductDto,
     @Session() session: any,
@@ -65,26 +77,33 @@ export class ProductController {
     return this.productService.create(dto, session.userId);
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update a product' })
-  @ApiParam({ name: 'id', description: 'Product UUID' })
-  @ApiResponse({ status: 200, description: 'Product updated', type: ProductResponseDto })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  @ApiResponse({ status: 409, description: 'Conflict - Duplicate product code' })
+  @Put(":id")
+  @ApiOperation({ summary: "Update a product" })
+  @ApiParam({ name: "id", description: "Product UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Product updated",
+    type: ProductResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Product not found" })
+  @ApiResponse({
+    status: 409,
+    description: "Conflict - Duplicate product code",
+  })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: UpdateProductDto,
     @Session() session: any,
   ): Promise<ProductResponseDto> {
     return this.productService.update(id, dto, session.userId);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a product' })
-  @ApiParam({ name: 'id', description: 'Product UUID' })
-  @ApiResponse({ status: 200, description: 'Product deleted' })
-  @ApiResponse({ status: 404, description: 'Product not found' })
-  async delete(@Param('id') id: string): Promise<{ message: string }> {
+  @Delete(":id")
+  @ApiOperation({ summary: "Delete a product" })
+  @ApiParam({ name: "id", description: "Product UUID" })
+  @ApiResponse({ status: 200, description: "Product deleted" })
+  @ApiResponse({ status: 404, description: "Product not found" })
+  async delete(@Param("id") id: string): Promise<{ message: string }> {
     return this.productService.delete(id);
   }
 }

@@ -4,9 +4,13 @@ import { Country } from "../country.entity";
 import { Branch } from "../../branches/branch.entity";
 import { User } from "../../users/user.entity";
 
-@Index("IDX_unblock_country_access_country_branch_user", ["countryId", "branchId", "userId"], {
-  unique: true,
-})
+@Index(
+  "IDX_unblock_country_access_country_branch_user",
+  ["countryId", "branchId", "userId"],
+  {
+    unique: true,
+  },
+)
 @Entity("unblock_country_access")
 export class UnblockCountryAccess extends BaseEntity {
   @Column({ type: "uuid", name: "country_id" })

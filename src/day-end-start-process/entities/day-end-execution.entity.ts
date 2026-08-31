@@ -7,9 +7,13 @@ export enum DayEndExecutionStatus {
   EOD_COMPLETED = "EOD_COMPLETED",
 }
 
-@Index("IDX_day_end_executions_branch_business_date", ["branchId", "businessDate"], {
-  unique: true,
-})
+@Index(
+  "IDX_day_end_executions_branch_business_date",
+  ["branchId", "businessDate"],
+  {
+    unique: true,
+  },
+)
 @Entity("day_end_executions")
 export class DayEndExecution extends BaseEntity {
   @Column({ type: "uuid", name: "branch_id" })

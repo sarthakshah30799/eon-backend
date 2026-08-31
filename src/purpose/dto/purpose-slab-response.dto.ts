@@ -1,6 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PurposeSlab } from '../purpose-slab.entity';
-import { PurposeRateType } from '../purpose.enums';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { PurposeSlab } from "../purpose-slab.entity";
+import { PurposeRateType } from "../purpose.enums";
 
 export class PurposeSlabResponseDto {
   @ApiProperty()

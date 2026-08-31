@@ -3,22 +3,28 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
-import { SelectOption } from '../category-options/category-option.entity';
-import { DocumentProfile } from './document-profile.entity';
-import { CreateDocumentProfileDto } from './dto/create-document-profile.dto';
-import { UpdateDocumentProfileDto } from './dto/update-document-profile.dto';
-import { DocumentProfileResponseDto } from './dto/document-profile-response.dto';
-import { DocumentProfileListQueryDto } from './dto/document-profile-list-query.dto';
-import { ResolveDocumentProfilesDto } from './dto/resolve-document-profile-rules.dto';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, Repository } from "typeorm";
+import { SelectOption } from "../category-options/category-option.entity";
+import { DocumentProfile } from "./document-profile.entity";
+import { CreateDocumentProfileDto } from "./dto/create-document-profile.dto";
+import { UpdateDocumentProfileDto } from "./dto/update-document-profile.dto";
+import { DocumentProfileResponseDto } from "./dto/document-profile-response.dto";
+import { DocumentProfileListQueryDto } from "./dto/document-profile-list-query.dto";
+import { ResolveDocumentProfilesDto } from "./dto/resolve-document-profile-rules.dto";
 import {
   applyDocumentProfileFilters,
   normalizeDocumentProfilePayload,
-} from './document-profile.utils';
-import { DOCUMENT_TYPE_OPTIONS } from './document-profile.constants';
-import { DocumentSpecificationType } from './document-profile.entity';
+} from "./document-profile.utils";
+import { DOCUMENT_TYPE_OPTIONS } from "./document-profile.constants";
+import { DocumentSpecificationType } from "./document-profile.entity";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 @Injectable()
 export class DocumentProfileService {
@@ -29,27 +35,36 @@ export class DocumentProfileService {
 
   async findAll(
     query?: DocumentProfileListQueryDto,
-  ): Promise<DocumentProfileResponseDto[]> {
+  ): Promise<PaginatedResponseDto<DocumentProfileResponseDto>> {
+    const pagination = normalizePagination(query);
     const queryBuilder = this.documentProfileRepository
-      .createQueryBuilder('document_profile')
-      .leftJoinAndSelect('document_profile.type', 'type')
-      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
-      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection');
+      .createQueryBuilder("document_profile")
+      .leftJoinAndSelect("document_profile.type", "type")
+      .leftJoinAndSelect("document_profile.groupSelection", "groupSelection")
+      .leftJoinAndSelect("document_profile.entitySelection", "entitySelection")
+      .leftJoinAndSelect(
+        "document_profile.financialYearSelection",
+        "financialYearSelection",
+      );
 
     if (query?.search?.trim()) {
       const search = `%${query.search.trim()}%`;
       queryBuilder.andWhere(
-        new Brackets(brackets => {
+        new Brackets((brackets) => {
           brackets
-            .where('"document_profile"."document_code" ILIKE :search', { search })
-            .orWhere('"document_profile"."specification_type"::text ILIKE :search', {
+            .where('"document_profile"."document_code" ILIKE :search', {
               search,
             })
-            .orWhere('type.label ILIKE :search', { search })
-            .orWhere('type.value ILIKE :search', { search })
-            .orWhere('entitySelection.label ILIKE :search', { search })
-            .orWhere('entitySelection.value ILIKE :search', { search })
+            .orWhere(
+              '"document_profile"."specification_type"::text ILIKE :search',
+              {
+                search,
+              },
+            )
+            .orWhere("type.label ILIKE :search", { search })
+            .orWhere("type.value ILIKE :search", { search })
+            .orWhere("entitySelection.label ILIKE :search", { search })
+            .orWhere("entitySelection.value ILIKE :search", { search })
             .orWhere(
               `EXISTS (
                 SELECT 1
@@ -62,21 +77,29 @@ export class DocumentProfileService {
       );
     }
 
-    const profiles = await queryBuilder.getMany();
+    applyPagination(queryBuilder, pagination);
+    const [profiles, total] = await queryBuilder.getManyAndCount();
 
-    return profiles.map(profile =>
-      DocumentProfileResponseDto.fromEntity(profile),
+    return buildPaginatedResponse(
+      profiles.map((profile) =>
+        DocumentProfileResponseDto.fromEntity(profile),
+      ),
+      total,
+      pagination,
     );
   }
 
   async findById(id: string): Promise<DocumentProfileResponseDto> {
     const profile = await this.documentProfileRepository
-      .createQueryBuilder('document_profile')
-      .leftJoinAndSelect('document_profile.type', 'type')
-      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
-      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection')
-      .where('document_profile.id = :id', { id })
+      .createQueryBuilder("document_profile")
+      .leftJoinAndSelect("document_profile.type", "type")
+      .leftJoinAndSelect("document_profile.groupSelection", "groupSelection")
+      .leftJoinAndSelect("document_profile.entitySelection", "entitySelection")
+      .leftJoinAndSelect(
+        "document_profile.financialYearSelection",
+        "financialYearSelection",
+      )
+      .where("document_profile.id = :id", { id })
       .getOne();
 
     if (!profile) {
@@ -132,7 +155,9 @@ export class DocumentProfileService {
       throw new NotFoundException(`Document profile with id ${id} not found`);
     }
 
-    const nextCode = (dto.documentCode ?? profile.documentCode).trim().toUpperCase();
+    const nextCode = (dto.documentCode ?? profile.documentCode)
+      .trim()
+      .toUpperCase();
     if (nextCode !== profile.documentCode) {
       await this.ensureDocumentCodeIsUnique(nextCode, id);
     }
@@ -146,7 +171,8 @@ export class DocumentProfileService {
       profile,
       normalizeDocumentProfilePayload({
         documentCode: nextCode,
-        documentDescription: dto.documentDescription ?? profile.documentDescription,
+        documentDescription:
+          dto.documentDescription ?? profile.documentDescription,
         documentType: nextDocumentType,
         isRequired: dto.isRequired ?? profile.isRequired,
         maxSizeMb: dto.maxSizeMb ?? profile.maxSizeMb,
@@ -190,14 +216,17 @@ export class DocumentProfileService {
     query: ResolveDocumentProfilesDto,
   ): Promise<DocumentProfileResponseDto[]> {
     const queryBuilder = this.documentProfileRepository
-      .createQueryBuilder('document_profile')
-      .leftJoinAndSelect('document_profile.type', 'type')
-      .leftJoinAndSelect('document_profile.groupSelection', 'groupSelection')
-      .leftJoinAndSelect('document_profile.entitySelection', 'entitySelection')
-      .leftJoinAndSelect('document_profile.financialYearSelection', 'financialYearSelection')
-      .where('1 = 1');
+      .createQueryBuilder("document_profile")
+      .leftJoinAndSelect("document_profile.type", "type")
+      .leftJoinAndSelect("document_profile.groupSelection", "groupSelection")
+      .leftJoinAndSelect("document_profile.entitySelection", "entitySelection")
+      .leftJoinAndSelect(
+        "document_profile.financialYearSelection",
+        "financialYearSelection",
+      )
+      .where("1 = 1");
 
-    applyDocumentProfileFilters(queryBuilder, 'document_profile', {
+    applyDocumentProfileFilters(queryBuilder, "document_profile", {
       specificationType: query.specificationType,
       type: query.type,
       groupSelection: query.groupSelection,
@@ -206,12 +235,12 @@ export class DocumentProfileService {
     });
 
     queryBuilder
-      .orderBy('document_profile.sortOrder', 'ASC')
-      .addOrderBy('document_profile.documentCode', 'ASC');
+      .orderBy("document_profile.sortOrder", "ASC")
+      .addOrderBy("document_profile.documentCode", "ASC");
 
     const profiles = await queryBuilder.getMany();
 
-    return profiles.map(profile =>
+    return profiles.map((profile) =>
       DocumentProfileResponseDto.fromEntity(profile),
     );
   }
@@ -233,11 +262,14 @@ export class DocumentProfileService {
 
   private ensureValidDocumentTypes(documentTypes: string[]) {
     const invalidType = documentTypes.find(
-      type => !DOCUMENT_TYPE_OPTIONS.includes(type.trim().toUpperCase() as never),
+      (type) =>
+        !DOCUMENT_TYPE_OPTIONS.includes(type.trim().toUpperCase() as never),
     );
 
     if (invalidType) {
-      throw new BadRequestException(`Unsupported document type "${invalidType}"`);
+      throw new BadRequestException(
+        `Unsupported document type "${invalidType}"`,
+      );
     }
   }
 }

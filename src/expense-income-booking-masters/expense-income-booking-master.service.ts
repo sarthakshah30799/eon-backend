@@ -3,14 +3,23 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
-import { ExpenseIncomeBookingMaster } from './expense-income-booking-master.entity';
-import { CreateExpenseIncomeBookingMasterDto, BookingMasterType } from './dto/create-expense-income-booking-master.dto';
-import { ExpenseIncomeBookingMasterListQueryDto } from './dto/expense-income-booking-master-list-query.dto';
-import { UpdateExpenseIncomeBookingMasterDto } from './dto/update-expense-income-booking-master.dto';
-import { ExpenseIncomeBookingMasterResponseDto } from './dto/expense-income-booking-master-response.dto';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, Repository } from "typeorm";
+import { ExpenseIncomeBookingMaster } from "./expense-income-booking-master.entity";
+import {
+  CreateExpenseIncomeBookingMasterDto,
+  BookingMasterType,
+} from "./dto/create-expense-income-booking-master.dto";
+import { ExpenseIncomeBookingMasterListQueryDto } from "./dto/expense-income-booking-master-list-query.dto";
+import { UpdateExpenseIncomeBookingMasterDto } from "./dto/update-expense-income-booking-master.dto";
+import { ExpenseIncomeBookingMasterResponseDto } from "./dto/expense-income-booking-master-response.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 @Injectable()
 export class ExpenseIncomeBookingMasterService {
@@ -19,40 +28,54 @@ export class ExpenseIncomeBookingMasterService {
     private readonly repository: Repository<ExpenseIncomeBookingMaster>,
   ) {}
 
-  async findAll(query?: ExpenseIncomeBookingMasterListQueryDto): Promise<ExpenseIncomeBookingMasterResponseDto[]> {
+  async findAll(
+    query?: ExpenseIncomeBookingMasterListQueryDto,
+  ): Promise<PaginatedResponseDto<ExpenseIncomeBookingMasterResponseDto>> {
+    const pagination = normalizePagination(query);
     const qb = this.repository
-      .createQueryBuilder('master')
-      .leftJoinAndSelect('master.tdsAccount', 'tdsAccount')
-      .orderBy('master.code', 'ASC');
+      .createQueryBuilder("master")
+      .leftJoinAndSelect("master.tdsAccount", "tdsAccount")
+      .orderBy("master.code", "ASC");
 
     if (query?.type) {
-      qb.andWhere('master.type = :type', { type: query.type });
+      qb.andWhere("master.type = :type", { type: query.type });
     }
 
     const trimmedSearch = query?.search?.trim();
     if (trimmedSearch) {
       qb.andWhere(
-        new Brackets(searchQb => {
+        new Brackets((searchQb) => {
           searchQb
-            .where('master.code ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('master.description ILIKE :search', { search: `%${trimmedSearch}%` });
+            .where("master.code ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            })
+            .orWhere("master.description ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            });
         }),
       );
     }
 
-    const masters = await qb.getMany();
+    applyPagination(qb, pagination);
+    const [masters, total] = await qb.getManyAndCount();
 
-    return masters.map(ExpenseIncomeBookingMasterResponseDto.fromEntity);
+    return buildPaginatedResponse(
+      masters.map(ExpenseIncomeBookingMasterResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<ExpenseIncomeBookingMasterResponseDto> {
     const master = await this.repository.findOne({
       where: { id },
-      relations: ['tdsAccount'],
+      relations: ["tdsAccount"],
     });
 
     if (!master) {
-      throw new NotFoundException(`Expense/Income Booking Master with id ${id} not found`);
+      throw new NotFoundException(
+        `Expense/Income Booking Master with id ${id} not found`,
+      );
     }
 
     return ExpenseIncomeBookingMasterResponseDto.fromEntity(master);
@@ -70,17 +93,32 @@ export class ExpenseIncomeBookingMasterService {
       type: dto.type,
       code,
       description: dto.description?.trim() || null,
-      applicableCustomer: dto.type === BookingMasterType.INCOME ? (dto.applicableCustomer ?? false) : false,
-      applicableVendor: dto.type === BookingMasterType.EXPENSE ? (dto.applicableVendor ?? false) : false,
-      applicableEmployee: dto.type === BookingMasterType.EXPENSE ? (dto.applicableEmployee ?? false) : false,
-      applicableAgent: dto.type === BookingMasterType.EXPENSE ? (dto.applicableAgent ?? false) : false,
+      applicableCustomer:
+        dto.type === BookingMasterType.INCOME
+          ? (dto.applicableCustomer ?? false)
+          : false,
+      applicableVendor:
+        dto.type === BookingMasterType.EXPENSE
+          ? (dto.applicableVendor ?? false)
+          : false,
+      applicableEmployee:
+        dto.type === BookingMasterType.EXPENSE
+          ? (dto.applicableEmployee ?? false)
+          : false,
+      applicableAgent:
+        dto.type === BookingMasterType.EXPENSE
+          ? (dto.applicableAgent ?? false)
+          : false,
       applicableCardIssuer: dto.applicableCardIssuer ?? false,
       active: dto.active ?? true,
-      allowRecPay: dto.type === BookingMasterType.INCOME ? (dto.allowRecPay ?? false) : false,
-      totalGst: dto.totalGst ?? 0.00,
+      allowRecPay:
+        dto.type === BookingMasterType.INCOME
+          ? (dto.allowRecPay ?? false)
+          : false,
+      totalGst: dto.totalGst ?? 0.0,
       tdsApplicable: dto.tdsApplicable ?? false,
-      tdsValue: dto.tdsValue ?? 0.00,
-      tdsAccountId: dto.tdsApplicable ? (dto.tdsAccountId || null) : null,
+      tdsValue: dto.tdsValue ?? 0.0,
+      tdsAccountId: dto.tdsApplicable ? dto.tdsAccountId || null : null,
       from: dto.from ? new Date(dto.from) : null,
       to: dto.to ? new Date(dto.to) : null,
       createdBy: userId,
@@ -101,7 +139,9 @@ export class ExpenseIncomeBookingMasterService {
     });
 
     if (!master) {
-      throw new NotFoundException(`Expense/Income Booking Master with id ${id} not found`);
+      throw new NotFoundException(
+        `Expense/Income Booking Master with id ${id} not found`,
+      );
     }
 
     const { code: _code, ...updatableFields } = dto;
@@ -171,18 +211,25 @@ export class ExpenseIncomeBookingMasterService {
 
     // Clear tds fields if tds is no longer applicable
     if (master.tdsApplicable === false) {
-      master.tdsValue = 0.00;
+      master.tdsValue = 0.0;
       master.tdsAccountId = null;
     }
 
-    if (updatableFields.from !== undefined || updatableFields.to !== undefined) {
+    if (
+      updatableFields.from !== undefined ||
+      updatableFields.to !== undefined
+    ) {
       const nextFrom =
         updatableFields.from !== undefined
-          ? (updatableFields.from ? new Date(updatableFields.from) : null)
+          ? updatableFields.from
+            ? new Date(updatableFields.from)
+            : null
           : master.from;
       const nextTo =
         updatableFields.to !== undefined
-          ? (updatableFields.to ? new Date(updatableFields.to) : null)
+          ? updatableFields.to
+            ? new Date(updatableFields.to)
+            : null
           : master.to;
       this.ensureValidDateRange(
         nextFrom ? nextFrom.toISOString() : null,
@@ -206,20 +253,30 @@ export class ExpenseIncomeBookingMasterService {
     const master = await this.repository.findOne({ where: { id } });
 
     if (!master) {
-      throw new NotFoundException(`Expense/Income Booking Master with id ${id} not found`);
+      throw new NotFoundException(
+        `Expense/Income Booking Master with id ${id} not found`,
+      );
     }
 
     await this.repository.remove(master);
-    return { message: `Expense/Income Booking Master with id ${id} deleted successfully` };
+    return {
+      message: `Expense/Income Booking Master with id ${id} deleted successfully`,
+    };
   }
 
-  private async ensureCodeIsUnique(code: string, type: BookingMasterType, excludeId?: string) {
+  private async ensureCodeIsUnique(
+    code: string,
+    type: BookingMasterType,
+    excludeId?: string,
+  ) {
     const existing = await this.repository.findOne({
       where: { code, type },
     });
 
     if (existing && existing.id !== excludeId) {
-      throw new ConflictException(`${type} Booking Master with code "${code}" already exists`);
+      throw new ConflictException(
+        `${type} Booking Master with code "${code}" already exists`,
+      );
     }
   }
 
@@ -231,11 +288,13 @@ export class ExpenseIncomeBookingMasterService {
     const fromDate = new Date(from);
     const toDate = new Date(to);
     if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-      throw new BadRequestException('Invalid date range');
+      throw new BadRequestException("Invalid date range");
     }
 
     if (fromDate.getTime() > toDate.getTime()) {
-      throw new BadRequestException('"from" date cannot be later than "to" date');
+      throw new BadRequestException(
+        '"from" date cannot be later than "to" date',
+      );
     }
   }
 }

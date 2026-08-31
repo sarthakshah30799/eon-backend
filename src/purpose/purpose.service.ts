@@ -1,14 +1,25 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, Repository } from 'typeorm';
-import { Purpose } from './purpose.entity';
-import { PurposeSlab } from './purpose-slab.entity';
-import { PurposeGroupPurpose } from './purpose-group-purpose.entity';
-import { CreatePurposeDto } from './dto/create-purpose.dto';
-import { UpdatePurposeDto } from './dto/update-purpose.dto';
-import { PurposeResponseDto } from './dto/purpose-response.dto';
-import { PurposeListQueryDto } from './dto/purpose-list-query.dto';
-import { TransactionType } from '../transactions/transactions.enums';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, DataSource, Repository } from "typeorm";
+import { Purpose } from "./purpose.entity";
+import { PurposeSlab } from "./purpose-slab.entity";
+import { PurposeGroupPurpose } from "./purpose-group-purpose.entity";
+import { CreatePurposeDto } from "./dto/create-purpose.dto";
+import { UpdatePurposeDto } from "./dto/update-purpose.dto";
+import { PurposeResponseDto } from "./dto/purpose-response.dto";
+import { PurposeListQueryDto } from "./dto/purpose-list-query.dto";
+import { TransactionType } from "../transactions/transactions.enums";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 @Injectable()
 export class PurposeService {
@@ -27,16 +38,18 @@ export class PurposeService {
   }
 
   private normalizeText(value?: string | null): string {
-    return String(value ?? '').trim();
+    return String(value ?? "").trim();
   }
 
   private ensureCodeLength(code: string): void {
     if (code.length !== 2) {
-      throw new BadRequestException('Purpose code must be exactly 2 characters');
+      throw new BadRequestException(
+        "Purpose code must be exactly 2 characters",
+      );
     }
   }
 
-  private ensureSlabRules(slabs?: CreatePurposeDto['slabs']): void {
+  private ensureSlabRules(slabs?: CreatePurposeDto["slabs"]): void {
     if (!slabs || slabs.length === 0) {
       return;
     }
@@ -44,27 +57,44 @@ export class PurposeService {
     const seenSortOrders = new Set<number>();
     for (const slab of slabs) {
       if (seenSortOrders.has(slab.sortOrder)) {
-        throw new BadRequestException(`Duplicate slab sort order ${slab.sortOrder}`);
+        throw new BadRequestException(
+          `Duplicate slab sort order ${slab.sortOrder}`,
+        );
       }
       seenSortOrders.add(slab.sortOrder);
 
-      if (slab.toAmount !== undefined && slab.toAmount !== null && slab.toAmount < slab.fromAmount) {
-        throw new BadRequestException(`Slab sort order ${slab.sortOrder}: toAmount cannot be less than fromAmount`);
+      if (
+        slab.toAmount !== undefined &&
+        slab.toAmount !== null &&
+        slab.toAmount < slab.fromAmount
+      ) {
+        throw new BadRequestException(
+          `Slab sort order ${slab.sortOrder}: toAmount cannot be less than fromAmount`,
+        );
       }
     }
   }
 
-  private ensureScopeRules(scope: Pick<Purpose, 'corporate' | 'individual' | 'sell' | 'purchase'>): void {
+  private ensureScopeRules(
+    scope: Pick<Purpose, "corporate" | "individual" | "sell" | "purchase">,
+  ): void {
     if (!scope.corporate && !scope.individual) {
-      throw new BadRequestException('Purpose must apply to at least one party profile type');
+      throw new BadRequestException(
+        "Purpose must apply to at least one party profile type",
+      );
     }
 
     if (!scope.sell && !scope.purchase) {
-      throw new BadRequestException('Purpose must apply to at least one transaction type');
+      throw new BadRequestException(
+        "Purpose must apply to at least one transaction type",
+      );
     }
   }
 
-  private async ensureUniqueCode(code: string, excludeId?: string): Promise<void> {
+  private async ensureUniqueCode(
+    code: string,
+    excludeId?: string,
+  ): Promise<void> {
     const existing = await this.purposeRepository.findOne({ where: { code } });
     if (existing && existing.id !== excludeId) {
       throw new ConflictException(`Purpose with code "${code}" already exists`);
@@ -72,17 +102,15 @@ export class PurposeService {
   }
 
   private async loadPurposeOrFail(
-    field: 'id' | 'code',
+    field: "id" | "code",
     value: string,
   ): Promise<Purpose> {
     const qb = this.purposeRepository
-      .createQueryBuilder('purpose')
-      .leftJoinAndSelect('purpose.slabs', 'slab')
+      .createQueryBuilder("purpose")
+      .leftJoinAndSelect("purpose.slabs", "slab")
       .where(`purpose.${field} = :value`, { value });
 
-    const purpose = await qb
-      .orderBy('slab.sortOrder', 'ASC')
-      .getOne();
+    const purpose = await qb.orderBy("slab.sortOrder", "ASC").getOne();
 
     if (!purpose) {
       throw new NotFoundException(`Purpose with ${field} "${value}" not found`);
@@ -91,60 +119,72 @@ export class PurposeService {
     return purpose;
   }
 
-  async findAll(query?: PurposeListQueryDto): Promise<PurposeResponseDto[]> {
+  async findAll(
+    query?: PurposeListQueryDto,
+  ): Promise<PaginatedResponseDto<PurposeResponseDto>> {
+    const pagination = normalizePagination(query);
     const qb = this.purposeRepository
-      .createQueryBuilder('purpose')
-      .leftJoinAndSelect('purpose.slabs', 'slab');
+      .createQueryBuilder("purpose")
+      .leftJoinAndSelect("purpose.slabs", "slab");
 
     const search = this.normalizeText(query?.search);
     if (search) {
       const like = `%${search}%`;
       qb.andWhere(
-        new Brackets(searchQb => {
+        new Brackets((searchQb) => {
           searchQb
-            .where('purpose.code ILIKE :like', { like })
-            .orWhere('purpose.description ILIKE :like', { like })
-            .orWhere('purpose.threshold::text ILIKE :like', { like })
-            .orWhere('purpose.rate::text ILIKE :like', { like });
+            .where("purpose.code ILIKE :like", { like })
+            .orWhere("purpose.description ILIKE :like", { like })
+            .orWhere("purpose.threshold::text ILIKE :like", { like })
+            .orWhere("purpose.rate::text ILIKE :like", { like });
         }),
       );
     }
 
     if (query?.transactionType === TransactionType.SALE) {
-      qb.andWhere('purpose.sell = true');
+      qb.andWhere("purpose.sell = true");
     }
 
     if (query?.transactionType === TransactionType.PURCHASE) {
-      qb.andWhere('purpose.purchase = true');
+      qb.andWhere("purpose.purchase = true");
     }
 
-    if (query?.partyProfileType === 'CORPORATE') {
-      qb.andWhere('purpose.corporate = true');
+    if (query?.partyProfileType === "CORPORATE") {
+      qb.andWhere("purpose.corporate = true");
     }
 
-    if (query?.partyProfileType === 'INDIVIDUAL') {
-      qb.andWhere('purpose.individual = true');
+    if (query?.partyProfileType === "INDIVIDUAL") {
+      qb.andWhere("purpose.individual = true");
     }
 
-    const purposes = await qb
-      .orderBy('purpose.code', 'ASC')
-      .addOrderBy('slab.sortOrder', 'ASC')
-      .getMany();
+    qb.orderBy("purpose.code", "ASC").addOrderBy("slab.sortOrder", "ASC");
+    applyPagination(qb, pagination);
+    const [purposes, total] = await qb.getManyAndCount();
 
-    return purposes.map(PurposeResponseDto.fromEntity);
+    return buildPaginatedResponse(
+      purposes.map(PurposeResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<PurposeResponseDto> {
-    const purpose = await this.loadPurposeOrFail('id', id);
+    const purpose = await this.loadPurposeOrFail("id", id);
     return PurposeResponseDto.fromEntity(purpose);
   }
 
   async findByCode(code: string): Promise<PurposeResponseDto> {
-    const purpose = await this.loadPurposeOrFail('code', this.normalizeCode(code));
+    const purpose = await this.loadPurposeOrFail(
+      "code",
+      this.normalizeCode(code),
+    );
     return PurposeResponseDto.fromEntity(purpose);
   }
 
-  async create(dto: CreatePurposeDto, userId: string): Promise<PurposeResponseDto> {
+  async create(
+    dto: CreatePurposeDto,
+    userId: string,
+  ): Promise<PurposeResponseDto> {
     const code = this.normalizeCode(dto.code);
     this.ensureCodeLength(code);
     this.ensureSlabRules(dto.slabs);
@@ -157,7 +197,7 @@ export class PurposeService {
     this.ensureScopeRules(scope);
     await this.ensureUniqueCode(code);
 
-    const result = await this.dataSource.transaction(async manager => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const purposeRepository = manager.getRepository(Purpose);
       const purposeSlabRepository = manager.getRepository(PurposeSlab);
 
@@ -177,12 +217,15 @@ export class PurposeService {
       const slabs = (dto.slabs ?? [])
         .slice()
         .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map(slab =>
+        .map((slab) =>
           purposeSlabRepository.create({
             purposeId: savedPurpose.id,
             sortOrder: slab.sortOrder,
             fromAmount: String(slab.fromAmount),
-            toAmount: slab.toAmount === undefined || slab.toAmount === null ? null : String(slab.toAmount),
+            toAmount:
+              slab.toAmount === undefined || slab.toAmount === null
+                ? null
+                : String(slab.toAmount),
             rate: String(slab.rate),
             rateType: slab.rateType,
             createdBy: userId,
@@ -195,17 +238,21 @@ export class PurposeService {
       }
 
       return purposeRepository
-        .createQueryBuilder('purpose')
-        .leftJoinAndSelect('purpose.slabs', 'slab')
-        .where('purpose.id = :id', { id: savedPurpose.id })
-        .orderBy('slab.sortOrder', 'ASC')
+        .createQueryBuilder("purpose")
+        .leftJoinAndSelect("purpose.slabs", "slab")
+        .where("purpose.id = :id", { id: savedPurpose.id })
+        .orderBy("slab.sortOrder", "ASC")
         .getOneOrFail();
     });
 
     return PurposeResponseDto.fromEntity(result);
   }
 
-  async update(id: string, dto: UpdatePurposeDto, userId: string): Promise<PurposeResponseDto> {
+  async update(
+    id: string,
+    dto: UpdatePurposeDto,
+    userId: string,
+  ): Promise<PurposeResponseDto> {
     const existing = await this.purposeRepository.findOne({
       where: { id },
       relations: { slabs: true },
@@ -215,14 +262,15 @@ export class PurposeService {
       throw new NotFoundException(`Purpose with id ${id} not found`);
     }
 
-    const code = dto.code !== undefined ? this.normalizeCode(dto.code) : existing.code;
+    const code =
+      dto.code !== undefined ? this.normalizeCode(dto.code) : existing.code;
     this.ensureCodeLength(code);
     this.ensureSlabRules(dto.slabs);
     if (code !== existing.code) {
       await this.ensureUniqueCode(code, existing.id);
     }
 
-    const result = await this.dataSource.transaction(async manager => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const purposeRepository = manager.getRepository(Purpose);
       const purposeSlabRepository = manager.getRepository(PurposeSlab);
 
@@ -270,12 +318,15 @@ export class PurposeService {
         const nextSlabs = dto.slabs
           .slice()
           .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map(slab =>
+          .map((slab) =>
             purposeSlabRepository.create({
               purposeId: existing.id,
               sortOrder: slab.sortOrder,
               fromAmount: String(slab.fromAmount),
-              toAmount: slab.toAmount === undefined || slab.toAmount === null ? null : String(slab.toAmount),
+              toAmount:
+                slab.toAmount === undefined || slab.toAmount === null
+                  ? null
+                  : String(slab.toAmount),
               rate: String(slab.rate),
               rateType: slab.rateType,
               createdBy: userId,
@@ -289,10 +340,10 @@ export class PurposeService {
       }
 
       const updated = await purposeRepository
-        .createQueryBuilder('purpose')
-        .leftJoinAndSelect('purpose.slabs', 'slab')
-        .where('purpose.id = :id', { id: existing.id })
-        .orderBy('slab.sortOrder', 'ASC')
+        .createQueryBuilder("purpose")
+        .leftJoinAndSelect("purpose.slabs", "slab")
+        .where("purpose.id = :id", { id: existing.id })
+        .orderBy("slab.sortOrder", "ASC")
         .getOneOrFail();
 
       return updated;
@@ -316,11 +367,11 @@ export class PurposeService {
     });
     if (groupLinkCount > 0) {
       throw new ConflictException(
-        'Purpose is assigned to a purpose group. Remove it from the group before deleting.',
+        "Purpose is assigned to a purpose group. Remove it from the group before deleting.",
       );
     }
 
-    await this.dataSource.transaction(async manager => {
+    await this.dataSource.transaction(async (manager) => {
       const purposeRepository = manager.getRepository(Purpose);
       const purposeSlabRepository = manager.getRepository(PurposeSlab);
 
@@ -335,7 +386,9 @@ export class PurposeService {
       loaded.deletedBy = userId;
       await purposeRepository.softRemove(loaded);
 
-      const slabs = await purposeSlabRepository.find({ where: { purposeId: id } });
+      const slabs = await purposeSlabRepository.find({
+        where: { purposeId: id },
+      });
       if (slabs.length > 0) {
         for (const slab of slabs) {
           slab.deletedBy = userId;

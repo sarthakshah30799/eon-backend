@@ -1,31 +1,58 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Session, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCookieAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
-import { ChequeBookService } from './chequebook.service';
-import { CreateChequeBookDto, ApproveRejectChequeBookDto, BulkReviewChequeBooksDto, SaveChequeBookAssignmentsDto, UpdatePageStatusDto, ReturnPagesDto, ReassignChequeBookDto, AuthorizedUserRole } from './dto/chequebook.dto';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Session,
+} from "@nestjs/common";
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiCookieAuth,
+  ApiParam,
+  ApiQuery,
+} from "@nestjs/swagger";
+import { ChequeBookService } from "./chequebook.service";
+import {
+  CreateChequeBookDto,
+  ApproveRejectChequeBookDto,
+  BulkReviewChequeBooksDto,
+  SaveChequeBookAssignmentsDto,
+  UpdatePageStatusDto,
+  ReturnPagesDto,
+  ReassignChequeBookDto,
+  AuthorizedUserRole,
+} from "./dto/chequebook.dto";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { ChequeBookListQueryDto } from "./dto/chequebook-list-query.dto";
+import { ChequeBookSelectablePagesQueryDto } from "./dto/chequebook-selectable-pages-query.dto";
+import { PaginatedResponseDto } from "../common/pagination";
 
-@ApiTags('chequebooks')
-@ApiCookieAuth('sessionId')
+@ApiTags("chequebooks")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('chequebooks')
+@Controller("chequebooks")
 export class ChequeBookController {
-  private readonly logger = new Logger(ChequeBookController.name);
-
   constructor(private readonly service: ChequeBookService) {}
 
-  @Post('dispatch')
-  @ApiOperation({ summary: 'Create check book dispatch' })
-  @ApiResponse({ status: 201, description: 'Dispatch created successfully' })
+  @Post("dispatch")
+  @ApiOperation({ summary: "Create check book dispatch" })
+  @ApiResponse({ status: 201, description: "Dispatch created successfully" })
   async create(@Body() dto: CreateChequeBookDto, @Session() session: any) {
     return this.service.create(dto, session.userId, session.activeBranchId);
   }
 
-  @Get('validate-book-range')
-  @ApiOperation({ summary: 'Validate if book number range overlaps' })
+  @Get("validate-book-range")
+  @ApiOperation({ summary: "Validate if book number range overlaps" })
   async validateBookRange(
-    @Query('bookNoFrom') bookNoFromStr: string,
-    @Query('bookNoTo') bookNoToStr: string,
+    @Query("bookNoFrom") bookNoFromStr: string,
+    @Query("bookNoTo") bookNoToStr: string,
   ) {
     const bookNoFrom = parseInt(bookNoFromStr, 10);
     const bookNoTo = parseInt(bookNoToStr, 10);
@@ -35,11 +62,11 @@ export class ChequeBookController {
     return this.service.validateBookRange(bookNoFrom, bookNoTo);
   }
 
-  @Get('validate-page-range')
-  @ApiOperation({ summary: 'Validate if page number range overlaps' })
+  @Get("validate-page-range")
+  @ApiOperation({ summary: "Validate if page number range overlaps" })
   async validatePageRange(
-    @Query('mvNoFrom') mvNoFromStr: string,
-    @Query('mvNoTo') mvNoToStr: string,
+    @Query("mvNoFrom") mvNoFromStr: string,
+    @Query("mvNoTo") mvNoToStr: string,
   ) {
     const mvNoFrom = parseInt(mvNoFromStr, 10);
     const mvNoTo = parseInt(mvNoToStr, 10);
@@ -49,88 +76,87 @@ export class ChequeBookController {
     return this.service.validatePageRange(mvNoFrom, mvNoTo);
   }
 
-  @Get('next-number')
-  @ApiOperation({ summary: 'Get next sequence number for branch and date' })
+  @Get("next-number")
+  @ApiOperation({ summary: "Get next sequence number for branch and date" })
   async getNextNumber(
-    @Query('branchId') branchId: string,
-    @Query('dispatchDate') dispatchDate: string,
+    @Query("branchId") branchId: string,
+    @Query("dispatchDate") dispatchDate: string,
   ) {
     return this.service.getNextNumber(branchId, dispatchDate);
   }
 
-  @Get('dispatches')
-  @ApiOperation({ summary: 'Get all check book dispatches' })
-  @ApiResponse({ status: 200, description: 'List of dispatches' })
+  @Get("dispatches")
+  @ApiOperation({ summary: "Get all check book dispatches" })
+  @ApiResponse({ status: 200, description: "Paginated list of dispatches" })
   async findAll(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('status') status?: string,
-    @Query('bankAccountCode') bankAccountCode?: string,
+    @Query() query: ChequeBookListQueryDto,
   ) {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || undefined
-      : session.activeBranchId;
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? query.branchId?.trim() || undefined
+        : session.activeBranchId;
     let assignedToFilter: string | undefined;
     if (!session.isAdmin && !session.isHoStaff) {
       assignedToFilter = session.userId;
     }
-    return this.service.findAll(effectiveBranchId, status, bankAccountCode, assignedToFilter);
+    return this.service.findAll(
+      { ...query, branchId: effectiveBranchId },
+      assignedToFilter,
+    );
   }
 
-  @Get('users')
-  @ApiOperation({ summary: 'Get authorized users for check book allocation' })
+  @Get("users")
+  @ApiOperation({ summary: "Get authorized users for check book allocation" })
   async getAuthorizedUsers(
     @Session() session: any,
-    @Query('role') role?: AuthorizedUserRole,
-    @Query('search') search?: string,
+    @Query("role") role?: AuthorizedUserRole,
+    @Query("search") search?: string,
   ) {
     const effectiveBranchId = session.activeBranchId;
-    this.logger.log(
-      `[DEBUG] users request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'} role=${role ?? 'all'}`
-    );
     return this.service.getAuthorizedUsers(effectiveBranchId, role, search);
   }
 
-  @Get('branch-managers')
-  @ApiOperation({ summary: 'Get branch managers for a branch' })
-  @ApiQuery({ name: 'search', required: false })
+  @Get("branch-managers")
+  @ApiOperation({ summary: "Get branch managers for a branch" })
+  @ApiQuery({ name: "search", required: false })
   async getBranchManagers(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('search') search?: string,
+    @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
   ) {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || session?.activeBranchId
-      : session?.activeBranchId;
-    this.logger.log(
-      `[DEBUG] branch-managers request userId=${session?.userId ?? 'unknown'} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? 'null'} queryBranchId=${branchId?.trim() ?? 'null'} effectiveBranchId=${effectiveBranchId ?? 'null'}`
-    );
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? branchId?.trim() || session?.activeBranchId
+        : session?.activeBranchId;
     return this.service.getBranchManagers(effectiveBranchId, search);
   }
 
-  @Get('dispatches/:id')
-  @ApiOperation({ summary: 'Get a single check book dispatch by ID' })
-  @ApiParam({ name: 'id', description: 'Dispatch UUID' })
-  @ApiResponse({ status: 200, description: 'Dispatch record' })
-  async findOne(@Param('id') id: string) {
+  @Get("dispatches/:id")
+  @ApiOperation({ summary: "Get a single check book dispatch by ID" })
+  @ApiParam({ name: "id", description: "Dispatch UUID" })
+  @ApiResponse({ status: 200, description: "Dispatch record" })
+  async findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
-  @Put('dispatches/:id/reassign')
-  @ApiOperation({ summary: 'Reassign a rejected check book dispatch (resets to PENDING)' })
-  @ApiParam({ name: 'id', description: 'Dispatch UUID' })
-  @ApiResponse({ status: 200, description: 'Dispatch reassigned successfully' })
+  @Put("dispatches/:id/reassign")
+  @ApiOperation({
+    summary: "Reassign a rejected check book dispatch (resets to PENDING)",
+  })
+  @ApiParam({ name: "id", description: "Dispatch UUID" })
+  @ApiResponse({ status: 200, description: "Dispatch reassigned successfully" })
   async reassignDispatch(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: ReassignChequeBookDto,
     @Session() session: any,
   ) {
     return this.service.reassignDispatch(id, dto, session.userId);
   }
 
-  @Put('dispatches/bulk-review')
-  @ApiOperation({ summary: 'Bulk approve or reject check book dispatches' })
-  @ApiResponse({ status: 200, description: 'Dispatches reviewed successfully' })
+  @Put("dispatches/bulk-review")
+  @ApiOperation({ summary: "Bulk approve or reject check book dispatches" })
+  @ApiResponse({ status: 200, description: "Dispatches reviewed successfully" })
   async bulkReview(
     @Body() dto: BulkReviewChequeBooksDto,
     @Session() session: any,
@@ -138,21 +164,21 @@ export class ChequeBookController {
     return this.service.bulkReview(dto, session.userId);
   }
 
-  @Put('dispatches/:id/approve')
-  @ApiOperation({ summary: 'Approve or Reject check book dispatch' })
-  @ApiParam({ name: 'id', description: 'Dispatch UUID' })
-  @ApiResponse({ status: 200, description: 'Dispatch updated successfully' })
+  @Put("dispatches/:id/approve")
+  @ApiOperation({ summary: "Approve or Reject check book dispatch" })
+  @ApiParam({ name: "id", description: "Dispatch UUID" })
+  @ApiResponse({ status: 200, description: "Dispatch updated successfully" })
   async approveOrReject(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: ApproveRejectChequeBookDto,
     @Session() session: any,
   ) {
     return this.service.approveOrReject(id, dto, session.userId);
   }
 
-  @Post('assignments')
-  @ApiOperation({ summary: 'Save check book page assignments' })
-  @ApiResponse({ status: 201, description: 'Assignments saved successfully' })
+  @Post("assignments")
+  @ApiOperation({ summary: "Save check book page assignments" })
+  @ApiResponse({ status: 201, description: "Assignments saved successfully" })
   async saveAssignments(
     @Body() dto: SaveChequeBookAssignmentsDto,
     @Session() session: any,
@@ -160,28 +186,28 @@ export class ChequeBookController {
     return this.service.saveAssignments(dto, session.userId);
   }
 
-  @Get('assignments')
-  @ApiOperation({ summary: 'Get check book page assignments by book IDs' })
-  @ApiResponse({ status: 200, description: 'List of assignments' })
-  async getAssignments(@Query('checkBookIds') idsStr: string) {
-    const ids = idsStr ? idsStr.split(',') : [];
+  @Get("assignments")
+  @ApiOperation({ summary: "Get check book page assignments by book IDs" })
+  @ApiResponse({ status: 200, description: "List of assignments" })
+  async getAssignments(@Query("checkBookIds") idsStr: string) {
+    const ids = idsStr ? idsStr.split(",") : [];
     return this.service.getAssignmentsByBookIds(ids);
   }
 
-  @Get(':checkBookId/books/:bookNo/pages')
-  @ApiOperation({ summary: 'Get pages for a book number' })
-  @ApiResponse({ status: 200, description: 'List of pages' })
+  @Get(":checkBookId/books/:bookNo/pages")
+  @ApiOperation({ summary: "Get pages for a book number" })
+  @ApiResponse({ status: 200, description: "List of pages" })
   async getPagesByBookNo(
-    @Param('checkBookId') checkBookId: string,
-    @Param('bookNo') bookNoStr: string,
+    @Param("checkBookId") checkBookId: string,
+    @Param("bookNo") bookNoStr: string,
   ) {
     const bookNo = parseInt(bookNoStr, 10);
     return this.service.getPagesByBookNo(checkBookId, bookNo);
   }
 
-  @Put('pages/status')
-  @ApiOperation({ summary: 'Update page status (Void)' })
-  @ApiResponse({ status: 200, description: 'Pages updated' })
+  @Put("pages/status")
+  @ApiOperation({ summary: "Update page status (Void)" })
+  @ApiResponse({ status: 200, description: "Pages updated" })
   async updatePagesStatus(
     @Body() dto: UpdatePageStatusDto,
     @Session() session: any,
@@ -189,49 +215,58 @@ export class ChequeBookController {
     return this.service.updatePagesStatus(dto, session.userId);
   }
 
-  @Post('pages/return')
-  @ApiOperation({ summary: 'Return pages (delete from database)' })
-  @ApiResponse({ status: 200, description: 'Pages returned' })
+  @Post("pages/return")
+  @ApiOperation({ summary: "Return pages (delete from database)" })
+  @ApiResponse({ status: 200, description: "Pages returned" })
   async returnPages(@Body() dto: ReturnPagesDto) {
     return this.service.returnPages(dto);
   }
 
-  @Get('pages/search')
-  @ApiOperation({ summary: 'Search page status' })
-  @ApiResponse({ status: 200, description: 'Page tracking status' })
+  @Get("pages/search")
+  @ApiOperation({ summary: "Search page status" })
+  @ApiResponse({ status: 200, description: "Page tracking status" })
   async searchPage(
     @Session() session: any,
-    @Query('pageNo') pageNoStr: string,
+    @Query("pageNo") pageNoStr: string,
   ) {
     const pageNo = parseInt(pageNoStr, 10);
     return this.service.searchPage(pageNo, session.activeBranchId);
   }
 
-  @Get('pages/selectable')
-  @ApiOperation({ summary: 'Get selectable cheque book pages for the current branch, account and assignee' })
-  @ApiResponse({ status: 200, description: 'Selectable pages' })
+  @Get("pages/selectable")
+  @ApiOperation({
+    summary:
+      "Get selectable cheque book pages for the current branch, account and assignee",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Selectable pages",
+    type: PaginatedResponseDto,
+  })
   async getSelectablePages(
     @Session() session: any,
-    @Query('accountId') accountId?: string,
-    @Query('userId') userId?: string,
+    @Query() query: ChequeBookSelectablePagesQueryDto,
   ) {
     const effectiveBranchId = session.activeBranchId;
-    const effectiveUserId = userId || session.userId;
+    const effectiveUserId = query.userId || session.userId;
     return this.service.getSelectablePages(
       effectiveBranchId,
-      accountId,
-      effectiveUserId
+      query.accountId,
+      effectiveUserId,
+      query,
     );
   }
 
-  @Get('cashier-return/search')
-  @ApiOperation({ summary: 'Search cashier allocated checkbook pages for return' })
+  @Get("cashier-return/search")
+  @ApiOperation({
+    summary: "Search cashier allocated checkbook pages for return",
+  })
   async searchCashierReturn(
     @Session() session: any,
-    @Query('bankAccountCode') bankAccountCode: string,
-    @Query('bookNo') bookNoStr: string,
-    @Query('chequeNoFrom') chequeNoFromStr: string,
-    @Query('chequeNoTo') chequeNoToStr: string,
+    @Query("bankAccountCode") bankAccountCode: string,
+    @Query("bookNo") bookNoStr: string,
+    @Query("chequeNoFrom") chequeNoFromStr: string,
+    @Query("chequeNoTo") chequeNoToStr: string,
   ) {
     const bookNo = parseInt(bookNoStr, 10);
     const chequeNoFrom = parseInt(chequeNoFromStr, 10);

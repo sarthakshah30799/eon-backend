@@ -1,17 +1,20 @@
-import { BadRequestException } from '@nestjs/common';
-import { PurchaseRuleService } from './purchase-rule.service';
-import { TransactionPaymentMethod, TransactionType } from './transactions.enums';
+import { BadRequestException } from "@nestjs/common";
+import { PurchaseRuleService } from "./purchase-rule.service";
+import {
+  TransactionPaymentMethod,
+  TransactionType,
+} from "./transactions.enums";
 import {
   PassengerEntityType,
   PassengerNationalityType,
-} from '../passengers/passenger.entity';
+} from "../passengers/passenger.entity";
 
 type MockRepo = {
   findOne: jest.Mock;
   createQueryBuilder?: jest.Mock;
 };
 
-describe('PurchaseRuleService passenger + rule coverage', () => {
+describe("PurchaseRuleService passenger + rule coverage", () => {
   const additionalSettingService = {
     getSettingTextValue: jest.fn(),
   };
@@ -29,26 +32,26 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
   let service: PurchaseRuleService;
 
   const usdCurrency = {
-    id: 'currency-usd',
-    currencyCode: 'USD',
-    ratePer: '1',
+    id: "currency-usd",
+    currencyCode: "USD",
+    ratePer: "1",
   };
 
   const baseIndianPassenger = {
     entityType: PassengerEntityType.INDIVIDUAL,
     nationalityType: PassengerNationalityType.INDIAN,
-    panNumber: 'ABCDE1234F',
-    panHolderName: 'Test Passenger',
-    panDob: '1990-01-01',
-    contactNo: '9999999999',
-    address1: '12 Test Street',
+    panNumber: "ABCDE1234F",
+    panHolderName: "Test Passenger",
+    panDob: "1990-01-01",
+    contactNo: "9999999999",
+    address1: "12 Test Street",
   };
 
   const purchaseBody = (overrides: Record<string, unknown> = {}) => ({
     transaction: {
       transactionType: TransactionType.PURCHASE,
-      transactionDate: '2026-08-26',
-      slug: 'PURCHASE_CORPORATE_INDIVIDUAL',
+      transactionDate: "2026-08-26",
+      slug: "PURCHASE_CORPORATE_INDIVIDUAL",
       passenger: baseIndianPassenger,
       items: [
         {
@@ -75,16 +78,16 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
     additionalSettingService.getSettingTextValue.mockImplementation(
       async (_category: string, key: string) => {
         switch (key) {
-          case 'PURCHASE_PASSENGER_RULE_REFERENCE_CURRENCY_CODE':
-            return 'USD';
-          case 'PURCHASE_PASSENGER_RULE_CDF_THRESHOLD_AMOUNT':
-            return '1000000';
-          case 'PURCHASE_PASSENGER_RULE_INDIAN_CASH_LIMIT_AMOUNT':
-            return '1000';
-          case 'PURCHASE_PASSENGER_RULE_NRI_CASH_LIMIT_AMOUNT':
-            return '3000';
-          case 'PURCHASE_PASSENGER_RULE_WINDOW_DAYS':
-            return '30';
+          case "PURCHASE_PASSENGER_RULE_REFERENCE_CURRENCY_CODE":
+            return "USD";
+          case "PURCHASE_PASSENGER_RULE_CDF_THRESHOLD_AMOUNT":
+            return "1000000";
+          case "PURCHASE_PASSENGER_RULE_INDIAN_CASH_LIMIT_AMOUNT":
+            return "1000";
+          case "PURCHASE_PASSENGER_RULE_NRI_CASH_LIMIT_AMOUNT":
+            return "3000";
+          case "PURCHASE_PASSENGER_RULE_WINDOW_DAYS":
+            return "30";
           default:
             return null;
         }
@@ -108,57 +111,59 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
     );
   });
 
-  it('allows purchase with a brand-new Indian PAN (no passenger DB match)', async () => {
+  it("allows purchase with a brand-new Indian PAN (no passenger DB match)", async () => {
     const result = await service.preview(purchaseBody());
 
     expect(result.allowed).toBe(true);
-    expect(result.ruleType).toBe('OK');
+    expect(result.ruleType).toBe("OK");
     expect(result.blockingReasons).toEqual([]);
     expect(result.passengerId).toBeNull();
-    expect(result.cumulativeAmountInReferenceCurrency).toBe('0.00');
+    expect(result.cumulativeAmountInReferenceCurrency).toBe("0.00");
     await expect(service.validate(purchaseBody())).resolves.toBeUndefined();
   });
 
-  it('sale skips purchase-rule passenger matching and always allows preview/validate', async () => {
+  it("sale skips purchase-rule passenger matching and always allows preview/validate", async () => {
     const body = purchaseBody({
       transactionType: TransactionType.SALE,
       passenger: {
         ...baseIndianPassenger,
-        panNumber: 'NEWSALE123A',
+        panNumber: "NEWSALE123A",
       },
     });
 
     const result = await service.preview(body);
 
     expect(result.allowed).toBe(true);
-    expect(result.ruleType).toBe('OK');
+    expect(result.ruleType).toBe("OK");
     expect(passengerRepository.findOne).not.toHaveBeenCalled();
     await expect(service.validate(body)).resolves.toBeUndefined();
   });
 
-  it('still blocks when passenger payload is missing on corporate/individual purchase', async () => {
+  it("still blocks when passenger payload is missing on corporate/individual purchase", async () => {
     const body = purchaseBody({ passenger: null });
     const result = await service.preview(body);
 
     expect(result.allowed).toBe(false);
-    expect(result.ruleType).toBe('MISSING_PASSENGER');
-    await expect(service.validate(body)).rejects.toBeInstanceOf(BadRequestException);
+    expect(result.ruleType).toBe("MISSING_PASSENGER");
+    await expect(service.validate(body)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
-  it('allows FFMC/other purchase without passenger payload', async () => {
+  it("allows FFMC/other purchase without passenger payload", async () => {
     const body = purchaseBody({
-      slug: 'PURCHASE_FFMC',
+      slug: "PURCHASE_FFMC",
       passenger: null,
     });
     const result = await service.preview(body);
 
     expect(result.allowed).toBe(true);
-    expect(result.ruleType).toBe('OK');
+    expect(result.ruleType).toBe("OK");
     expect(result.blockingReasons).toEqual([]);
     await expect(service.validate(body)).resolves.toBeUndefined();
   });
 
-  it('still blocks Indian cash above configured limit for a new PAN', async () => {
+  it("still blocks Indian cash above configured limit for a new PAN", async () => {
     const body = purchaseBody({
       payments: [
         {
@@ -171,13 +176,13 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
     const result = await service.preview(body);
 
     expect(result.allowed).toBe(false);
-    expect(result.ruleType).toBe('CASH_LIMIT_EXCEEDED');
+    expect(result.ruleType).toBe("CASH_LIMIT_EXCEEDED");
   });
 
-  it('matches existing passenger with normalized PAN and uses history amount', async () => {
+  it("matches existing passenger with normalized PAN and uses history amount", async () => {
     passengerRepository.findOne.mockResolvedValue({
-      id: 'passenger-1',
-      panNumber: 'ABCDE1234F',
+      id: "passenger-1",
+      panNumber: "ABCDE1234F",
     });
 
     transactionRepository.createQueryBuilder.mockReturnValue({
@@ -189,9 +194,9 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
           items: [
             {
               currencyId: usdCurrency.id,
-              quantity: '25',
-              rate: '90',
-              per: '1',
+              quantity: "25",
+              rate: "90",
+              per: "1",
             },
           ],
           additionalCharges: [],
@@ -202,7 +207,7 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
     const body = purchaseBody({
       passenger: {
         ...baseIndianPassenger,
-        panNumber: 'abcde 1234 f',
+        panNumber: "abcde 1234 f",
       },
     });
 
@@ -210,11 +215,11 @@ describe('PurchaseRuleService passenger + rule coverage', () => {
 
     expect(passengerRepository.findOne).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { panNumber: 'ABCDE1234F' },
+        where: { panNumber: "ABCDE1234F" },
       }),
     );
     expect(result.allowed).toBe(true);
-    expect(result.passengerId).toBe('passenger-1');
-    expect(result.cumulativeAmountInReferenceCurrency).toBe('25.00');
+    expect(result.passengerId).toBe("passenger-1");
+    expect(result.cumulativeAmountInReferenceCurrency).toBe("25.00");
   });
 });

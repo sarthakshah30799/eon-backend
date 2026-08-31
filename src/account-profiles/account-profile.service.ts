@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import { AccountProfile } from "./account-profile.entity";
@@ -11,7 +15,12 @@ import { CreateAccountProfileDto } from "./dto/create-account-profile.dto";
 import { UpdateAccountProfileDto } from "./dto/update-account-profile.dto";
 import { AccountProfileResponseDto } from "./dto/account-profile-response.dto";
 import { AccountProfileListQueryDto } from "./dto/account-profile-list-query.dto";
-import { AccountProfileListResponseDto } from "./dto/account-profile-list-response.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 function normalizeDto(dto: CreateAccountProfileDto | UpdateAccountProfileDto) {
   const normalizeOptional = (value?: string | null) => {
@@ -31,8 +40,12 @@ function normalizeDto(dto: CreateAccountProfileDto | UpdateAccountProfileDto) {
   };
 }
 
-function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> {
-  const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
+function pickDefinedFields<T extends Record<string, any>>(
+  value: T,
+): Partial<T> {
+  const entries = Object.entries(value).filter(
+    ([, fieldValue]) => fieldValue !== undefined,
+  );
   return Object.fromEntries(entries) as Partial<T>;
 }
 
@@ -61,7 +74,10 @@ export class AccountProfileService {
     private readonly branchRepository: Repository<Branch>,
   ) {}
 
-  async create(dto: CreateAccountProfileDto, userId: string): Promise<AccountProfileResponseDto> {
+  async create(
+    dto: CreateAccountProfileDto,
+    userId: string,
+  ): Promise<AccountProfileResponseDto> {
     const normalized = normalizeDto(dto);
 
     // Validate Account Code uniqueness
@@ -69,7 +85,9 @@ export class AccountProfileService {
       where: { accountCode: normalized.accountCode },
     });
     if (existingCode) {
-      throw new ConflictException(`Account Code "${normalized.accountCode}" already exists`);
+      throw new ConflictException(
+        `Account Code "${normalized.accountCode}" already exists`,
+      );
     }
 
     // Validate Account Name uniqueness (case-insensitive due to citext)
@@ -77,51 +95,77 @@ export class AccountProfileService {
       where: { accountName: normalized.accountName },
     });
     if (existingName) {
-      throw new ConflictException(`Account Name "${normalized.accountName}" already exists`);
+      throw new ConflictException(
+        `Account Name "${normalized.accountName}" already exists`,
+      );
     }
 
     // Validate Currency exists
-    const currency = await this.currencyRepository.findOne({ where: { id: dto.currencyId } });
+    const currency = await this.currencyRepository.findOne({
+      where: { id: dto.currencyId },
+    });
     if (!currency) {
-      throw new NotFoundException(`Currency with id ${dto.currencyId} not found`);
+      throw new NotFoundException(
+        `Currency with id ${dto.currencyId} not found`,
+      );
     }
 
     // Validate Financial Code exists
-    const financialCode = await this.financialCodeRepository.findOne({ where: { id: dto.financialCodeId } });
+    const financialCode = await this.financialCodeRepository.findOne({
+      where: { id: dto.financialCodeId },
+    });
     if (!financialCode) {
-      throw new NotFoundException(`Financial Code with id ${dto.financialCodeId} not found`);
+      throw new NotFoundException(
+        `Financial Code with id ${dto.financialCodeId} not found`,
+      );
     }
 
     // Validate Financial Sub Profile exists if provided
     if (dto.financialSubProfileId) {
       const sub = await this.financialSubProfileRepository.findOne({
-        where: { id: dto.financialSubProfileId, financialCode: { id: dto.financialCodeId } },
+        where: {
+          id: dto.financialSubProfileId,
+          financialCode: { id: dto.financialCodeId },
+        },
       });
       if (!sub) {
-        throw new NotFoundException(`Financial Sub Code with id ${dto.financialSubProfileId} not found under selected Financial Code`);
+        throw new NotFoundException(
+          `Financial Sub Code with id ${dto.financialSubProfileId} not found under selected Financial Code`,
+        );
       }
     }
 
     // Validate Branch exists if provided
     if (dto.branchIdToTransfer) {
-      const branch = await this.branchRepository.findOne({ where: { id: dto.branchIdToTransfer } });
+      const branch = await this.branchRepository.findOne({
+        where: { id: dto.branchIdToTransfer },
+      });
       if (!branch) {
-        throw new NotFoundException(`Branch with id ${dto.branchIdToTransfer} not found`);
+        throw new NotFoundException(
+          `Branch with id ${dto.branchIdToTransfer} not found`,
+        );
       }
     }
 
     // Validate Map To Account exists if provided
     if (dto.mapToAccountId) {
-      const mapAcc = await this.accountProfileRepository.findOne({ where: { id: dto.mapToAccountId } });
+      const mapAcc = await this.accountProfileRepository.findOne({
+        where: { id: dto.mapToAccountId },
+      });
       if (!mapAcc) {
-        throw new NotFoundException(`Map To Account with id ${dto.mapToAccountId} not found`);
+        throw new NotFoundException(
+          `Map To Account with id ${dto.mapToAccountId} not found`,
+        );
       }
     }
 
-    const { divisionDept, accountType, subLedger, bankNature, ...rest } = normalized;
+    const { divisionDept, accountType, subLedger, bankNature, ...rest } =
+      normalized;
     const account = this.accountProfileRepository.create({
       ...rest,
-      divisionDept: divisionDept ? ({ id: divisionDept } as SelectOption) : null,
+      divisionDept: divisionDept
+        ? ({ id: divisionDept } as SelectOption)
+        : null,
       accountType: accountType ? ({ id: accountType } as SelectOption) : null,
       subLedger: subLedger ? ({ id: subLedger } as SelectOption) : null,
       bankNature: bankNature ? ({ id: bankNature } as SelectOption) : null,
@@ -133,8 +177,14 @@ export class AccountProfileService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateAccountProfileDto, userId: string): Promise<AccountProfileResponseDto> {
-    const account = await this.accountProfileRepository.findOne({ where: { id } });
+  async update(
+    id: string,
+    dto: UpdateAccountProfileDto,
+    userId: string,
+  ): Promise<AccountProfileResponseDto> {
+    const account = await this.accountProfileRepository.findOne({
+      where: { id },
+    });
     if (!account) {
       throw new NotFoundException(`Account Profile with id ${id} not found`);
     }
@@ -142,46 +192,72 @@ export class AccountProfileService {
     const normalized = normalizeDto(dto);
 
     // Validate Name uniqueness if changing
-    if (normalized.accountName && normalized.accountName !== account.accountName) {
+    if (
+      normalized.accountName &&
+      normalized.accountName !== account.accountName
+    ) {
       const existingName = await this.accountProfileRepository.findOne({
         where: { accountName: normalized.accountName },
       });
       if (existingName) {
-        throw new ConflictException(`Account Name "${normalized.accountName}" already exists`);
+        throw new ConflictException(
+          `Account Name "${normalized.accountName}" already exists`,
+        );
       }
     }
 
     // Validate Currency if provided
     if (dto.currencyId && dto.currencyId !== account.currencyId) {
-      const currency = await this.currencyRepository.findOne({ where: { id: dto.currencyId } });
+      const currency = await this.currencyRepository.findOne({
+        where: { id: dto.currencyId },
+      });
       if (!currency) {
-        throw new NotFoundException(`Currency with id ${dto.currencyId} not found`);
+        throw new NotFoundException(
+          `Currency with id ${dto.currencyId} not found`,
+        );
       }
     }
 
     // Validate Financial Code and Subcode if provided
-    const targetFinancialCodeId = dto.financialCodeId ?? account.financialCodeId;
-    if (dto.financialCodeId && dto.financialCodeId !== account.financialCodeId) {
-      const financialCode = await this.financialCodeRepository.findOne({ where: { id: dto.financialCodeId } });
+    const targetFinancialCodeId =
+      dto.financialCodeId ?? account.financialCodeId;
+    if (
+      dto.financialCodeId &&
+      dto.financialCodeId !== account.financialCodeId
+    ) {
+      const financialCode = await this.financialCodeRepository.findOne({
+        where: { id: dto.financialCodeId },
+      });
       if (!financialCode) {
-        throw new NotFoundException(`Financial Code with id ${dto.financialCodeId} not found`);
+        throw new NotFoundException(
+          `Financial Code with id ${dto.financialCodeId} not found`,
+        );
       }
     }
 
     if (dto.financialSubProfileId) {
       const sub = await this.financialSubProfileRepository.findOne({
-        where: { id: dto.financialSubProfileId, financialCode: { id: targetFinancialCodeId } },
+        where: {
+          id: dto.financialSubProfileId,
+          financialCode: { id: targetFinancialCodeId },
+        },
       });
       if (!sub) {
-        throw new NotFoundException(`Financial Sub Code with id ${dto.financialSubProfileId} not found under selected Financial Code`);
+        throw new NotFoundException(
+          `Financial Sub Code with id ${dto.financialSubProfileId} not found under selected Financial Code`,
+        );
       }
     }
 
     // Validate Branch if provided
     if (dto.branchIdToTransfer) {
-      const branch = await this.branchRepository.findOne({ where: { id: dto.branchIdToTransfer } });
+      const branch = await this.branchRepository.findOne({
+        where: { id: dto.branchIdToTransfer },
+      });
       if (!branch) {
-        throw new NotFoundException(`Branch with id ${dto.branchIdToTransfer} not found`);
+        throw new NotFoundException(
+          `Branch with id ${dto.branchIdToTransfer} not found`,
+        );
       }
     }
 
@@ -190,9 +266,13 @@ export class AccountProfileService {
       if (dto.mapToAccountId === id) {
         throw new ConflictException("An account profile cannot map to itself");
       }
-      const mapAcc = await this.accountProfileRepository.findOne({ where: { id: dto.mapToAccountId } });
+      const mapAcc = await this.accountProfileRepository.findOne({
+        where: { id: dto.mapToAccountId },
+      });
       if (!mapAcc) {
-        throw new NotFoundException(`Map To Account with id ${dto.mapToAccountId} not found`);
+        throw new NotFoundException(
+          `Map To Account with id ${dto.mapToAccountId} not found`,
+        );
       }
     }
 
@@ -207,16 +287,24 @@ export class AccountProfileService {
     const updates = pickDefinedFields(updatableFields);
     Object.assign(account, updates);
     if (divisionDept !== undefined) {
-      account.divisionDept = divisionDept ? ({ id: divisionDept } as SelectOption) : null;
+      account.divisionDept = divisionDept
+        ? ({ id: divisionDept } as SelectOption)
+        : null;
     }
     if (accountType !== undefined) {
-      account.accountType = accountType ? ({ id: accountType } as SelectOption) : null;
+      account.accountType = accountType
+        ? ({ id: accountType } as SelectOption)
+        : null;
     }
     if (subLedger !== undefined) {
-      account.subLedger = subLedger ? ({ id: subLedger } as SelectOption) : null;
+      account.subLedger = subLedger
+        ? ({ id: subLedger } as SelectOption)
+        : null;
     }
     if (bankNature !== undefined) {
-      account.bankNature = bankNature ? ({ id: bankNature } as SelectOption) : null;
+      account.bankNature = bankNature
+        ? ({ id: bankNature } as SelectOption)
+        : null;
     }
     account.updatedBy = userId;
 
@@ -248,7 +336,9 @@ export class AccountProfileService {
   }
 
   async delete(id: string): Promise<{ message: string }> {
-    const account = await this.accountProfileRepository.findOne({ where: { id } });
+    const account = await this.accountProfileRepository.findOne({
+      where: { id },
+    });
     if (!account) {
       throw new NotFoundException(`Account Profile with id ${id} not found`);
     }
@@ -258,19 +348,22 @@ export class AccountProfileService {
       where: { mapToAccountId: id },
     });
     if (isReferenced) {
-      throw new ConflictException("Cannot delete this Account Profile because it is mapped to another Account Profile");
+      throw new ConflictException(
+        "Cannot delete this Account Profile because it is mapped to another Account Profile",
+      );
     }
 
     await this.accountProfileRepository.remove(account);
     return { message: `Account Profile with id ${id} deleted successfully` };
   }
 
-  async findAll(query: AccountProfileListQueryDto): Promise<AccountProfileListResponseDto> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
+  async findAll(
+    query: AccountProfileListQueryDto,
+  ): Promise<PaginatedResponseDto<AccountProfileResponseDto>> {
+    const pagination = normalizePagination(query);
 
-    const qb = this.accountProfileRepository.createQueryBuilder("ap")
+    const qb = this.accountProfileRepository
+      .createQueryBuilder("ap")
       .leftJoinAndSelect("ap.currency", "currency")
       .leftJoinAndSelect("ap.financialCode", "financialCode")
       .leftJoinAndSelect("ap.financialSubProfile", "financialSubProfile")
@@ -285,28 +378,50 @@ export class AccountProfileService {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("ap.accountCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("ap.accountName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("divisionDept.label ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("accountType.label ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("currency.currencyCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("currency.currencyName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("financialCode.financialCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("financialCode.financialName ILIKE :search", { search: `%${query.search}%` });
+            .where("ap.accountCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("ap.accountName ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("divisionDept.label ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("accountType.label ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("currency.currencyCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("currency.currencyName ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("financialCode.financialCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("financialCode.financialName ILIKE :search", {
+              search: `%${query.search}%`,
+            });
         }),
       );
     }
 
     if (query.accountCode) {
-      qb.andWhere("ap.accountCode ILIKE :accountCode", { accountCode: `%${query.accountCode}%` });
+      qb.andWhere("ap.accountCode ILIKE :accountCode", {
+        accountCode: `%${query.accountCode}%`,
+      });
     }
 
     if (query.accountName) {
-      qb.andWhere("ap.accountName ILIKE :accountName", { accountName: `%${query.accountName}%` });
+      qb.andWhere("ap.accountName ILIKE :accountName", {
+        accountName: `%${query.accountName}%`,
+      });
     }
 
     if (query.accountType) {
-      const normalizedAccountType = normalizeAccountTypeFilter(query.accountType);
+      const normalizedAccountType = normalizeAccountTypeFilter(
+        query.accountType,
+      );
       if (isUuidLike(query.accountType)) {
         qb.andWhere("accountType.id = :accountTypeId", {
           accountTypeId: query.accountType,
@@ -319,11 +434,15 @@ export class AccountProfileService {
     }
 
     if (query.financialCodeId) {
-      qb.andWhere("ap.financialCodeId = :financialCodeId", { financialCodeId: query.financialCodeId });
+      qb.andWhere("ap.financialCodeId = :financialCodeId", {
+        financialCodeId: query.financialCodeId,
+      });
     }
 
     if (query.currencyId) {
-      qb.andWhere("ap.currencyId = :currencyId", { currencyId: query.currencyId });
+      qb.andWhere("ap.currencyId = :currencyId", {
+        currencyId: query.currencyId,
+      });
     }
 
     if (query.active !== undefined) {
@@ -331,27 +450,32 @@ export class AccountProfileService {
     }
 
     if (query.bulkPurchase !== undefined) {
-      qb.andWhere("ap.bulkPurchase = :bulkPurchase", { bulkPurchase: query.bulkPurchase });
+      qb.andWhere("ap.bulkPurchase = :bulkPurchase", {
+        bulkPurchase: query.bulkPurchase,
+      });
     }
 
     if (query.bulkSale !== undefined) {
       qb.andWhere("ap.bulkSale = :bulkSale", { bulkSale: query.bulkSale });
     }
 
-    if (query.receipt !== undefined) qb.andWhere("ap.receipt = :receipt", { receipt: query.receipt });
-    if (query.payment !== undefined) qb.andWhere("ap.payment = :payment", { payment: query.payment });
-    if (query.journalVoucher !== undefined) qb.andWhere("ap.journalVoucher = :journalVoucher", { journalVoucher: query.journalVoucher });
+    if (query.receipt !== undefined)
+      qb.andWhere("ap.receipt = :receipt", { receipt: query.receipt });
+    if (query.payment !== undefined)
+      qb.andWhere("ap.payment = :payment", { payment: query.payment });
+    if (query.journalVoucher !== undefined)
+      qb.andWhere("ap.journalVoucher = :journalVoucher", {
+        journalVoucher: query.journalVoucher,
+      });
 
-    qb.orderBy("ap.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy("ap.createdAt", "DESC");
+    applyPagination(qb, pagination);
+    const [data, total] = await qb.getManyAndCount();
 
-    const [data, totalItems] = await qb.getManyAndCount();
-
-    return {
-      data: data.map(account => AccountProfileResponseDto.fromEntity(account)),
-      page,
-      limit,
-      totalItems,
-      totalPages: Math.ceil(totalItems / limit),
-    };
+    return buildPaginatedResponse(
+      data.map((account) => AccountProfileResponseDto.fromEntity(account)),
+      total,
+      pagination,
+    );
   }
 }

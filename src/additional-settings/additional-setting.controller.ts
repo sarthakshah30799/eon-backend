@@ -1,5 +1,20 @@
-import { Body, Controller, Get, Param, Post, Put, Session, UseGuards } from "@nestjs/common";
-import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Session,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AdditionalSettingService } from "./additional-setting.service";
@@ -24,16 +39,20 @@ export class AdditionalSettingController {
   }
 
   @Get()
-  @ApiOperation({ summary: "Get all additional setting categories with subcategories" })
+  @ApiOperation({
+    summary: "Get all additional setting categories with subcategories",
+  })
   @ApiResponse({ status: 200, type: [CategoryResponseDto] })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async findAll(): Promise<CategoryResponseDto[]> {
     const categories = await this.service.findAll();
-    return categories.map(cat => CategoryResponseDto.fromEntity(cat));
+    return categories.map((cat) => CategoryResponseDto.fromEntity(cat));
   }
 
   @Post()
-  @ApiOperation({ summary: "Create a new additional setting category with subcategories" })
+  @ApiOperation({
+    summary: "Create a new additional setting category with subcategories",
+  })
   @ApiResponse({ status: 201, type: CategoryResponseDto })
   @ApiResponse({ status: 400, description: "Invalid input" })
   @ApiResponse({ status: 409, description: "Conflict" })
@@ -74,7 +93,12 @@ export class AdditionalSettingController {
     @Body() dto: UpdateSubcategoryDto,
     @Session() session: any,
   ): Promise<CategoryResponseDto> {
-    const category = await this.service.updateSubcategory(id, subcategoryId, dto, session.userId);
+    const category = await this.service.updateSubcategory(
+      id,
+      subcategoryId,
+      dto,
+      session.userId,
+    );
     return CategoryResponseDto.fromEntity(category);
   }
 }

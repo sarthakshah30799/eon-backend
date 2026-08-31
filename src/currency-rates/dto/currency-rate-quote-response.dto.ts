@@ -1,6 +1,9 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { CurrencyRateProvider } from '../currency-rates.enums';
-import { CurrencyRateQuote, CurrencyRateQuoteSide } from '../currency-rates.types';
+import { ApiProperty } from "@nestjs/swagger";
+import { CurrencyRateProvider } from "../currency-rates.enums";
+import {
+  CurrencyRateQuote,
+  CurrencyRateQuoteSide,
+} from "../currency-rates.types";
 
 class CurrencyRateQuoteSideResponseDto implements CurrencyRateQuoteSide {
   @ApiProperty()
@@ -54,7 +57,7 @@ export class CurrencyRateQuoteResponseDto implements CurrencyRateQuote {
   sale: CurrencyRateQuoteSideResponseDto;
 
   @ApiProperty()
-  effectiveSource: 'product-override' | 'group-default';
+  effectiveSource: "product-override" | "group-default";
 
   @ApiProperty({ required: false, nullable: true })
   effectiveGroupCode: string | null;

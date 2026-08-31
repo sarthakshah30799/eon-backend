@@ -27,6 +27,11 @@ import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
 import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { SelectOptionService } from "./category-option.service";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
+import { SelectOptionListQueryDto } from "./dto/select-option-list-query.dto";
+import {
+  PaginatedResponseDto,
+  buildPaginatedResponse,
+} from "../common/pagination";
 
 type SelectOptionSession = ExpressSession & SessionData;
 
@@ -43,7 +48,10 @@ export class SelectOptionController {
   @ApiResponse({
     status: 200,
     description: "List of codes",
-    schema: { type: "array", items: { enum: Object.values(CategoryOptionCodeEnum) } },
+    schema: {
+      type: "array",
+      items: { enum: Object.values(CategoryOptionCodeEnum) },
+    },
   })
   async getCodes(): Promise<CategoryOptionCodeEnum[]> {
     return this.selectOptionService.getCodes();
@@ -51,14 +59,15 @@ export class SelectOptionController {
 
   @Get("all")
   @ApiOperation({ summary: "Get all select options" })
-  @ApiQuery({ name: "search", required: false, description: "Search by value" })
   @ApiResponse({
     status: 200,
-    description: "List of select options",
-    type: [SelectOptionResponseDto],
+    description: "Paginated list of select options",
+    type: PaginatedResponseDto,
   })
-  async getAllOptions(@Query('search') search?: string): Promise<SelectOptionResponseDto[]> {
-    return this.selectOptionService.getAllOptions(search);
+  async getAllOptions(
+    @Query() query: SelectOptionListQueryDto,
+  ): Promise<PaginatedResponseDto<SelectOptionResponseDto>> {
+    return this.selectOptionService.getAllOptions(query);
   }
 
   @Get("static/:code")
@@ -83,7 +92,9 @@ export class SelectOptionController {
     description: "Select option details",
     type: SelectOptionResponseDto,
   })
-  async getOptionById(@Param("id") id: string): Promise<SelectOptionResponseDto> {
+  async getOptionById(
+    @Param("id") id: string,
+  ): Promise<SelectOptionResponseDto> {
     return this.selectOptionService.getOptionById(id);
   }
 
@@ -95,7 +106,9 @@ export class SelectOptionController {
     description: "List of select options",
     type: [SelectOptionResponseDto],
   })
-  async getOptionsByCode(@Param("code") code: string): Promise<SelectOptionResponseDto[]> {
+  async getOptionsByCode(
+    @Param("code") code: string,
+  ): Promise<SelectOptionResponseDto[]> {
     return this.selectOptionService.getOptionsByCode(code);
   }
 
@@ -142,5 +155,4 @@ export class SelectOptionController {
   ): Promise<SelectOptionResponseDto> {
     return this.selectOptionService.update(id, dto, session.userId);
   }
-
 }

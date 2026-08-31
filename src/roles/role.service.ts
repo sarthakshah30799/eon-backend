@@ -1,16 +1,30 @@
-import { Injectable, NotFoundException, ConflictException, OnModuleInit, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
-import { Role } from './role.entity';
-import { User } from '../users/user.entity';
-import { Permission } from '../permissions/permission.entity';
-import { RolesMenuPermission } from '../roles-menu-permission/roles-menu-permission.entity';
-import { Company } from '../company/company.entity';
-import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
-import { RoleResponseDto } from './dto/role-response.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  OnModuleInit,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, Repository } from "typeorm";
+import { Role } from "./role.entity";
+import { User } from "../users/user.entity";
+import { Permission } from "../permissions/permission.entity";
+import { RolesMenuPermission } from "../roles-menu-permission/roles-menu-permission.entity";
+import { Company } from "../company/company.entity";
+import { CreateRoleDto } from "./dto/create-role.dto";
+import { UpdateRoleDto } from "./dto/update-role.dto";
+import { RoleResponseDto } from "./dto/role-response.dto";
+import { RoleListQueryDto } from "./dto/role-list-query.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
-import { uppercaseFields } from '../utils/uppercase.util';
+import { uppercaseFields } from "../utils/uppercase.util";
 
 @Injectable()
 export class RoleService implements OnModuleInit {
@@ -38,24 +52,46 @@ export class RoleService implements OnModuleInit {
 
   async onModuleInit() {
     const requiredPermissions = [
-      { code: 'add', name: 'Add', description: 'Permission to add records' },
-      { code: 'modify', name: 'Modify', description: 'Permission to modify records' },
-      { code: 'delete', name: 'Delete', description: 'Permission to delete records' },
-      { code: 'view', name: 'View', description: 'Permission to view records' },
-      { code: 'export', name: 'Export', description: 'Permission to export data' },
-      { code: 'authorized', name: 'Authorized', description: 'Permission to authorize records' },
-      { code: 'rejected', name: 'Rejected', description: 'Permission to reject records' },
+      { code: "add", name: "Add", description: "Permission to add records" },
+      {
+        code: "modify",
+        name: "Modify",
+        description: "Permission to modify records",
+      },
+      {
+        code: "delete",
+        name: "Delete",
+        description: "Permission to delete records",
+      },
+      { code: "view", name: "View", description: "Permission to view records" },
+      {
+        code: "export",
+        name: "Export",
+        description: "Permission to export data",
+      },
+      {
+        code: "authorized",
+        name: "Authorized",
+        description: "Permission to authorize records",
+      },
+      {
+        code: "rejected",
+        name: "Rejected",
+        description: "Permission to reject records",
+      },
     ];
     for (const p of requiredPermissions) {
       try {
-        const existing = await this.permissionRepository.findOne({ where: { code: p.code } });
+        const existing = await this.permissionRepository.findOne({
+          where: { code: p.code },
+        });
         if (!existing) {
           const newPermission = this.permissionRepository.create({
             code: p.code,
             name: p.name,
             description: p.description,
-            createdBy: '00000000-0000-0000-0000-000000000000',
-            updatedBy: '00000000-0000-0000-0000-000000000000',
+            createdBy: "00000000-0000-0000-0000-000000000000",
+            updatedBy: "00000000-0000-0000-0000-000000000000",
           });
           await this.permissionRepository.save(newPermission);
         }
@@ -80,7 +116,7 @@ export class RoleService implements OnModuleInit {
 
     const relations = await this.menuPermissionRepository.find({
       where: { role: { id: roleId } },
-      relations: ['menu', 'permission'],
+      relations: ["menu", "permission"],
     });
 
     const grid: Record<string, Record<string, boolean>> = {};
@@ -124,11 +160,11 @@ export class RoleService implements OnModuleInit {
 
     // Fetch all permissions & menus to link them
     const allPermissions = await this.permissionRepository.find();
-    const permissionMap = new Map(allPermissions.map(p => [p.code, p]));
+    const permissionMap = new Map(allPermissions.map((p) => [p.code, p]));
 
     // Use default company ID
     const company = await this.companyRepository.findOne({ where: {} });
-    const companyId = company?.id || '11111111-1111-4111-b111-111111111111';
+    const companyId = company?.id || "11111111-1111-4111-b111-111111111111";
 
     const entitiesToSave: RolesMenuPermission[] = [];
 
@@ -152,30 +188,48 @@ export class RoleService implements OnModuleInit {
       await this.menuPermissionRepository.save(entitiesToSave);
     }
 
-    return { message: 'Permissions updated successfully' };
+    return { message: "Permissions updated successfully" };
   }
 
-  async findAll(currentUserId?: string, search?: string): Promise<RoleResponseDto[]> {
-    const qb = this.roleRepository.createQueryBuilder('role');
+  async findAll(
+    _currentUserId?: string,
+    query?: RoleListQueryDto,
+  ): Promise<PaginatedResponseDto<RoleResponseDto>> {
+    const pagination = normalizePagination(query);
+    const qb = this.roleRepository.createQueryBuilder("role");
 
-    if (search?.trim()) {
+    if (query?.search?.trim()) {
       qb.andWhere(
-        new Brackets(searchQb => {
+        new Brackets((searchQb) => {
           searchQb
-            .where('role.code ILIKE :search', { search: `%${search.trim()}%` })
-            .orWhere('role.name ILIKE :search', { search: `%${search.trim()}%` });
+            .where("role.code ILIKE :search", {
+              search: `%${query.search.trim()}%`,
+            })
+            .orWhere("role.name ILIKE :search", {
+              search: `%${query.search.trim()}%`,
+            });
         }),
       );
     }
 
-    const roles = await qb.orderBy('role.createdAt', 'DESC').getMany();
-    return roles.map(RoleResponseDto.fromEntity);
+    qb.orderBy("role.createdAt", "DESC");
+    applyPagination(qb, pagination);
+    const [roles, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      roles.map(RoleResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string, currentUserId?: string): Promise<RoleResponseDto> {
     const role = await this.roleRepository.findOne({
       where: { id },
-      relations: ['menuPermissions', 'menuPermissions.menu', 'menuPermissions.permission'],
+      relations: [
+        "menuPermissions",
+        "menuPermissions.menu",
+        "menuPermissions.permission",
+      ],
     });
     if (!role) {
       throw new NotFoundException(`Role with id ${id} not found`);
@@ -186,17 +240,26 @@ export class RoleService implements OnModuleInit {
     return RoleResponseDto.fromEntity(role);
   }
 
-  async create(rawDto: CreateRoleDto, userId: string): Promise<RoleResponseDto> {
+  async create(
+    rawDto: CreateRoleDto,
+    userId: string,
+  ): Promise<RoleResponseDto> {
     const dto = uppercaseFields(rawDto);
     const requesterIsAdmin = await this.isRequesterAdmin(userId);
 
     if (dto.isAdmin && !requesterIsAdmin) {
-      throw new ForbiddenException('Admin role can only be managed by admin users');
+      throw new ForbiddenException(
+        "Admin role can only be managed by admin users",
+      );
     }
 
-    const existing = await this.roleRepository.findOne({ where: { code: dto.code } });
+    const existing = await this.roleRepository.findOne({
+      where: { code: dto.code },
+    });
     if (existing) {
-      throw new ConflictException(`Role with code "${dto.code}" already exists`);
+      throw new ConflictException(
+        `Role with code "${dto.code}" already exists`,
+      );
     }
     const role = this.roleRepository.create({
       ...dto,
@@ -207,7 +270,11 @@ export class RoleService implements OnModuleInit {
     return RoleResponseDto.fromEntity(saved);
   }
 
-  async update(id: string, rawDto: UpdateRoleDto, userId: string): Promise<RoleResponseDto> {
+  async update(
+    id: string,
+    rawDto: UpdateRoleDto,
+    userId: string,
+  ): Promise<RoleResponseDto> {
     const dto = uppercaseFields(rawDto);
     const requesterIsAdmin = await this.isRequesterAdmin(userId);
     const role = await this.roleRepository.findOne({ where: { id } });
@@ -218,7 +285,9 @@ export class RoleService implements OnModuleInit {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
     if (dto.isAdmin && !requesterIsAdmin) {
-      throw new ForbiddenException('Admin role can only be managed by admin users');
+      throw new ForbiddenException(
+        "Admin role can only be managed by admin users",
+      );
     }
     const { code: _code, ...updatableFields } = dto;
     Object.assign(role, updatableFields);
@@ -233,7 +302,7 @@ export class RoleService implements OnModuleInit {
       throw new NotFoundException(`Role with id ${id} not found`);
     }
     if (role.isAdmin) {
-      throw new BadRequestException('Admin role cannot be deleted');
+      throw new BadRequestException("Admin role cannot be deleted");
     }
     await this.roleRepository.remove(role);
     return { message: `Role with id ${id} deleted successfully` };

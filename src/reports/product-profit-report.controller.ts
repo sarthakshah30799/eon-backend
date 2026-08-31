@@ -1,8 +1,16 @@
 import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
-import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
-import { ProductProfitReportFormat, ProductProfitReportQueryDto } from "./dto/product-profit-report-query.dto";
+import {
+  ProductProfitReportFormat,
+  ProductProfitReportQueryDto,
+} from "./dto/product-profit-report-query.dto";
 import { ProductProfitReportService } from "./product-profit-report.service";
 
 @ApiTags("reports")
@@ -31,7 +39,10 @@ export class ProductProfitReportController {
     );
     res.status(200);
     res.setHeader("Content-Type", payload.contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${payload.filename}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${payload.filename}"`,
+    );
     return res.send(payload.buffer);
   }
 }

@@ -5,7 +5,11 @@ import * as XLSX from "xlsx";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionStatus } from "../transactions/transactions.enums";
 import { ReportSortBy } from "./dto/report-sort.dto";
-import { SpecialReportFormat, SpecialReportQueryDto, SpecialReportTemplateEnum } from "./dto/special-report-query.dto";
+import {
+  SpecialReportFormat,
+  SpecialReportQueryDto,
+  SpecialReportTemplateEnum,
+} from "./dto/special-report-query.dto";
 
 type SpecialReportColumn = {
   key: string;
@@ -69,7 +73,9 @@ const formatDateOnly = (value: Date | string | null | undefined) => {
   }).format(date);
 };
 
-const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotLabel = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -85,7 +91,9 @@ const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) 
   return label || name || code;
 };
 
-const getSnapshotCode = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotCode = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -93,7 +101,9 @@ const getSnapshotCode = (snapshot: Record<string, unknown> | null | undefined) =
   return toText(snapshot.code);
 };
 
-const getSnapshotName = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotName = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -102,12 +112,17 @@ const getSnapshotName = (snapshot: Record<string, unknown> | null | undefined) =
 };
 
 const formatTransactionTypeLabel = (transaction: Transaction) =>
-  [toText(transaction.slug) || transaction.transactionType.toLowerCase(), transaction.tradeMode.toLowerCase()]
+  [
+    toText(transaction.slug) || transaction.transactionType.toLowerCase(),
+    transaction.tradeMode.toLowerCase(),
+  ]
     .filter(Boolean)
     .join(" ");
 
 const getTransactionDate = (transaction: Transaction) => {
-  return transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt;
+  return (
+    transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt
+  );
 };
 
 const compareIsoDateStrings = (
@@ -131,14 +146,25 @@ export class SpecialReportService {
   ) {}
 
   private resolveFilters(query: SpecialReportQueryDto) {
-    const branchIds = [...new Set((query.branchIds ?? []).map(item => item.trim()).filter(Boolean))];
-    const transactionNumbers = [...new Set((query.transactionNumbers ?? []).map(item => item.trim()).filter(Boolean))];
+    const branchIds = [
+      ...new Set(
+        (query.branchIds ?? []).map((item) => item.trim()).filter(Boolean),
+      ),
+    ];
+    const transactionNumbers = [
+      ...new Set(
+        (query.transactionNumbers ?? [])
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ];
 
     if (branchIds.length === 0) {
       throw new BadRequestException("At least one branch is required");
     }
 
-    const template = query.template ?? SpecialReportTemplateEnum.ACCOUNT_POSTING;
+    const template =
+      query.template ?? SpecialReportTemplateEnum.ACCOUNT_POSTING;
     if (template !== SpecialReportTemplateEnum.ACCOUNT_POSTING) {
       throw new BadRequestException("Unsupported special report template");
     }
@@ -151,13 +177,29 @@ export class SpecialReportService {
     };
   }
 
-  private async loadTransactions(branchIds: string[], transactionNumbers: string[]) {
+  private async loadTransactions(
+    branchIds: string[],
+    transactionNumbers: string[],
+  ) {
     const qb = this.transactionRepository
       .createQueryBuilder("transaction")
       .innerJoinAndSelect("transaction.postings", "posting")
       .where("transaction.isLatest = true")
-      .andWhere("transaction.status = :status", { status: TransactionStatus.APPROVED })
-      .andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", { technicalSlugs: ['CARD_STOCK','CARD_TRANSFER_OUT','CARD_TRANSFER_IN','CARD_STOCK_LOAD','CARD_SELL','CARD_SETTLE','CARD_RETURN','CARD_VOID'] })
+      .andWhere("transaction.status = :status", {
+        status: TransactionStatus.APPROVED,
+      })
+      .andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", {
+        technicalSlugs: [
+          "CARD_STOCK",
+          "CARD_TRANSFER_OUT",
+          "CARD_TRANSFER_IN",
+          "CARD_STOCK_LOAD",
+          "CARD_SELL",
+          "CARD_SETTLE",
+          "CARD_RETURN",
+          "CARD_VOID",
+        ],
+      })
       .andWhere("transaction.branchId IN (:...branchIds)", { branchIds });
 
     if (transactionNumbers.length > 0) {
@@ -166,7 +208,10 @@ export class SpecialReportService {
       });
     }
 
-    qb.orderBy(`COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`, "ASC")
+    qb.orderBy(
+      `COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`,
+      "ASC",
+    )
       .addOrderBy("transaction.approvedAt", "ASC")
       .addOrderBy("transaction.number", "ASC")
       .addOrderBy("posting.lineNo", "ASC");
@@ -177,17 +222,29 @@ export class SpecialReportService {
   private buildRows(transaction: Transaction): SpecialReportRow[] {
     const transactionDate = getTransactionDate(transaction);
     const dateLabel = formatDateOnly(transactionDate);
-    const sortDateTime = transactionDate ? new Date(transactionDate).toISOString() : "";
-    const branchLabel = getSnapshotLabel(transaction.branchSnapshot as Record<string, unknown> | null | undefined);
-    const partyProfileSnapshot = transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined;
+    const sortDateTime = transactionDate
+      ? new Date(transactionDate).toISOString()
+      : "";
+    const branchLabel = getSnapshotLabel(
+      transaction.branchSnapshot as Record<string, unknown> | null | undefined,
+    );
+    const partyProfileSnapshot = transaction.partyProfileSnapshot as
+      | Record<string, unknown>
+      | null
+      | undefined;
     const partyProfileCode = toText(partyProfileSnapshot?.code);
     const partyProfileName = getSnapshotLabel(partyProfileSnapshot);
     const typeLabel = formatTransactionTypeLabel(transaction);
 
-    const postings = [...(transaction.postings ?? [])].sort((left, right) => left.lineNo - right.lineNo);
+    const postings = [...(transaction.postings ?? [])].sort(
+      (left, right) => left.lineNo - right.lineNo,
+    );
 
-    return postings.map(posting => {
-      const accountSnapshot = posting.accountSnapshot as Record<string, unknown> | null | undefined;
+    return postings.map((posting) => {
+      const accountSnapshot = posting.accountSnapshot as
+        | Record<string, unknown>
+        | null
+        | undefined;
       const amount = Number(posting.amount ?? 0);
       const isDebit = posting.direction === "DEBIT";
 
@@ -214,21 +271,30 @@ export class SpecialReportService {
 
   async buildReport(query: SpecialReportQueryDto) {
     const filters = this.resolveFilters(query);
-    const transactions = await this.loadTransactions(filters.branchIds, filters.transactionNumbers);
+    const transactions = await this.loadTransactions(
+      filters.branchIds,
+      filters.transactionNumbers,
+    );
 
     const rows = transactions
-      .flatMap(transaction => this.buildRows(transaction))
+      .flatMap((transaction) => this.buildRows(transaction))
       .sort((left, right) => {
         if (left.sortBranch !== right.sortBranch) {
           return left.sortBranch.localeCompare(right.sortBranch);
         }
 
         if (left.sortDateTime !== right.sortDateTime) {
-          return compareIsoDateStrings(left.sortDateTime, right.sortDateTime, filters.sortBy);
+          return compareIsoDateStrings(
+            left.sortDateTime,
+            right.sortDateTime,
+            filters.sortBy,
+          );
         }
 
         if (left.sortTransactionNumber !== right.sortTransactionNumber) {
-          return left.sortTransactionNumber.localeCompare(right.sortTransactionNumber);
+          return left.sortTransactionNumber.localeCompare(
+            right.sortTransactionNumber,
+          );
         }
 
         return 0;
@@ -243,9 +309,9 @@ export class SpecialReportService {
 
   async buildExport(query: SpecialReportQueryDto, format: SpecialReportFormat) {
     const report = await this.buildReport(query);
-    const sheetData = report.rows.map(row => {
+    const sheetData = report.rows.map((row) => {
       const output: Record<string, string> = {};
-      report.columns.forEach(column => {
+      report.columns.forEach((column) => {
         output[column.key] = row[column.key] ?? "";
       });
       return output;
@@ -253,7 +319,7 @@ export class SpecialReportService {
 
     if (format === SpecialReportFormat.CSV) {
       const worksheet = XLSX.utils.json_to_sheet(sheetData, {
-        header: report.columns.map(column => column.key),
+        header: report.columns.map((column) => column.key),
       });
       const csv = XLSX.utils.sheet_to_csv(worksheet);
       return {
@@ -264,7 +330,7 @@ export class SpecialReportService {
     }
 
     const worksheet = XLSX.utils.json_to_sheet(sheetData, {
-      header: report.columns.map(column => column.key),
+      header: report.columns.map((column) => column.key),
     });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "SpecialReport");

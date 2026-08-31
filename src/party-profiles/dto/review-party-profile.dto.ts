@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsIn, IsNotEmpty, IsString, ValidateIf } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsNotEmpty,
+  IsString,
+  ValidateIf,
+} from "class-validator";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 
 export class ReviewPartyProfileDto {
@@ -12,7 +18,7 @@ export class ReviewPartyProfileDto {
   active: boolean;
 
   @ApiPropertyOptional({ description: "Reject reason when status is reject" })
-  @ValidateIf(dto => dto.status === WorkflowStatus.REJECT)
+  @ValidateIf((dto) => dto.status === WorkflowStatus.REJECT)
   @IsString()
   @IsNotEmpty()
   rejectReason?: string;

@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import { Country } from "../country/country.entity";
@@ -7,7 +11,12 @@ import { CreateStateDto } from "./dto/create-state.dto";
 import { UpdateStateDto } from "./dto/update-state.dto";
 import { StateResponseDto } from "./dto/state-response.dto";
 import { StateListQueryDto } from "./dto/state-list-query.dto";
-import { StateListResponseDto } from "./dto/state-list-response.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 function normalizeStateDto(dto: CreateStateDto | UpdateStateDto) {
   return {
@@ -19,8 +28,12 @@ function normalizeStateDto(dto: CreateStateDto | UpdateStateDto) {
   };
 }
 
-function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> {
-  const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
+function pickDefinedFields<T extends Record<string, any>>(
+  value: T,
+): Partial<T> {
+  const entries = Object.entries(value).filter(
+    ([, fieldValue]) => fieldValue !== undefined,
+  );
   return Object.fromEntries(entries) as Partial<T>;
 }
 
@@ -40,7 +53,9 @@ export class StateService {
     });
 
     if (!country) {
-      throw new NotFoundException(`Country with id ${normalized.countryId} not found`);
+      throw new NotFoundException(
+        `Country with id ${normalized.countryId} not found`,
+      );
     }
 
     const existingState = await this.stateRepository.findOne({
@@ -52,7 +67,9 @@ export class StateService {
     });
 
     if (existingState) {
-      throw new ConflictException("State with this code already exists for this country");
+      throw new ConflictException(
+        "State with this code already exists for this country",
+      );
     }
 
     const existingName = await this.stateRepository.findOne({
@@ -64,7 +81,9 @@ export class StateService {
     });
 
     if (existingName) {
-      throw new ConflictException("State with this name already exists for this country");
+      throw new ConflictException(
+        "State with this name already exists for this country",
+      );
     }
 
     const state = this.stateRepository.create({
@@ -78,7 +97,11 @@ export class StateService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateStateDto, userId: string): Promise<StateResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateStateDto,
+    userId: string,
+  ): Promise<StateResponseDto> {
     const state = await this.stateRepository.findOne({
       where: { id },
       relations: ["country"],
@@ -97,7 +120,9 @@ export class StateService {
       });
 
       if (!nextCountry) {
-        throw new NotFoundException(`Country with id ${normalized.countryId} not found`);
+        throw new NotFoundException(
+          `Country with id ${normalized.countryId} not found`,
+        );
       }
 
       country = nextCountry;
@@ -117,7 +142,9 @@ export class StateService {
       });
 
       if (existingState && existingState.id !== state.id) {
-        throw new ConflictException("State with this code already exists for this country");
+        throw new ConflictException(
+          "State with this code already exists for this country",
+        );
       }
     }
 
@@ -131,7 +158,9 @@ export class StateService {
       });
 
       if (existingState && existingState.id !== state.id) {
-        throw new ConflictException("State with this name already exists for this country");
+        throw new ConflictException(
+          "State with this name already exists for this country",
+        );
       }
     }
 
@@ -160,12 +189,13 @@ export class StateService {
     return StateResponseDto.fromEntity(state);
   }
 
-  async findAll(query: StateListQueryDto): Promise<StateListResponseDto> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
+  async findAll(
+    query: StateListQueryDto,
+  ): Promise<PaginatedResponseDto<StateResponseDto>> {
+    const pagination = normalizePagination(query);
 
-    const qb = this.stateRepository.createQueryBuilder("state")
+    const qb = this.stateRepository
+      .createQueryBuilder("state")
       .leftJoinAndSelect("state.country", "country");
 
     if (query.search) {
@@ -173,11 +203,21 @@ export class StateService {
         new Brackets((searchQb) => {
           searchQb
             .where("state.code ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("state.name ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("state.gstStateCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("state.ctrStateCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("country.code ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("country.name ILIKE :search", { search: `%${query.search}%` });
+            .orWhere("state.name ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("state.gstStateCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("state.ctrStateCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("country.code ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("country.name ILIKE :search", {
+              search: `%${query.search}%`,
+            });
         }),
       );
     }
@@ -206,16 +246,14 @@ export class StateService {
       });
     }
 
-    qb.orderBy("state.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy("state.createdAt", "DESC");
+    applyPagination(qb, pagination);
+    const [states, total] = await qb.getManyAndCount();
 
-    const [states, totalItems] = await qb.getManyAndCount();
-
-    return {
-      data: states.map(StateResponseDto.fromEntity),
-      page,
-      limit,
-      totalItems,
-      totalPages: Math.ceil(totalItems / limit),
-    };
+    return buildPaginatedResponse(
+      states.map(StateResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 }

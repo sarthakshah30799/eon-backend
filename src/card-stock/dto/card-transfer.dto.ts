@@ -1,6 +1,17 @@
-import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from "class-transformer";
+import {
+  IsArray,
+  IsDateString,
+  IsInt,
+  IsNumberString,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { PaginationQueryDto } from "../../common/pagination";
 
 export class CardTransferItemDto {
   @ApiProperty({ example: 1 })
@@ -13,7 +24,7 @@ export class CardTransferItemDto {
   @IsUUID()
   currencyId: string;
 
-  @ApiProperty({ example: '1' })
+  @ApiProperty({ example: "1" })
   @IsNumberString()
   per: string;
 
@@ -25,14 +36,17 @@ export class CardTransferItemDto {
   @IsUUID()
   issuerPartyProfileId: string;
 
-  @ApiPropertyOptional({ description: 'Server recalculates this value.' })
+  @ApiPropertyOptional({ description: "Server recalculates this value." })
   @IsOptional()
   @IsNumberString()
   feAmount?: string;
 
-  @ApiProperty({ type: [String], description: 'CARD stock IDs selected for this item.' })
+  @ApiProperty({
+    type: [String],
+    description: "CARD stock IDs selected for this item.",
+  })
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsUUID("4", { each: true })
   cardIds: string[];
 }
 
@@ -67,8 +81,8 @@ export class CardTransferActionDto {
   remarks: string;
 }
 
-export class CardTransferListQueryDto {
-  @ApiPropertyOptional({ enum: ['HELD', 'ACCEPTED', 'REJECTED', 'CANCELLED'] })
+export class CardTransferListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ enum: ["HELD", "ACCEPTED", "REJECTED", "CANCELLED"] })
   @IsOptional()
   @IsString()
   status?: string;

@@ -20,8 +20,11 @@ export class CreateSelectOptionDto {
   })
   @Transform(({ value }) =>
     typeof value === "string"
-      ? value.trim().replace(/[_\s-]/g, "").toUpperCase()
-      : value
+      ? value
+          .trim()
+          .replace(/[_\s-]/g, "")
+          .toUpperCase()
+      : value,
   )
   @IsEnum(CategoryOptionCodeEnum)
   @IsString()
@@ -31,16 +34,19 @@ export class CreateSelectOptionDto {
 
   @ApiProperty({ description: "Stored option value", example: "BRANCH" })
   @Transform(({ value }) =>
-    typeof value === "string" ? value.trim().toUpperCase() : value
+    typeof value === "string" ? value.trim().toUpperCase() : value,
   )
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
   value: string;
 
-  @ApiProperty({ description: "Human readable option label", example: "BRANCH" })
+  @ApiProperty({
+    description: "Human readable option label",
+    example: "BRANCH",
+  })
   @Transform(({ value }) =>
-    typeof value === "string" ? value.trim().toUpperCase() : value
+    typeof value === "string" ? value.trim().toUpperCase() : value,
   )
   @IsString()
   @IsNotEmpty()
@@ -52,7 +58,10 @@ export class CreateSelectOptionDto {
   @IsOptional()
   sortOrder?: number;
 
-  @ApiPropertyOptional({ description: "Whether this option is active", default: true })
+  @ApiPropertyOptional({
+    description: "Whether this option is active",
+    default: true,
+  })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;

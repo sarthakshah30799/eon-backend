@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Session, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Session,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
@@ -14,7 +26,7 @@ import { CreateCountryDto } from "./dto/create-country.dto";
 import { UpdateCountryDto } from "./dto/update-country.dto";
 import { CountryResponseDto } from "./dto/country-response.dto";
 import { CountryListQueryDto } from "./dto/country-list-query.dto";
-import { CountryListResponseDto } from "./dto/country-list-response.dto";
+import { PaginatedResponseDto } from "../common/pagination";
 import { CountryRiskCategory } from "./country.entity";
 import {
   CreateCountryAccessRulesDto,
@@ -30,28 +42,37 @@ export class CountryController {
 
   @Get()
   @ApiOperation({ summary: "Get paginated countries" })
-  @ApiQuery({ name: "page", required: false, type: Number, example: 1 })
-  @ApiQuery({ name: "limit", required: false, type: Number, example: 10 })
   @ApiQuery({ name: "search", required: false, type: String })
   @ApiQuery({ name: "code", required: false, type: String })
   @ApiQuery({ name: "name", required: false, type: String })
-  @ApiQuery({ name: "riskCategory", required: false, enum: CountryRiskCategory })
+  @ApiQuery({
+    name: "riskCategory",
+    required: false,
+    enum: CountryRiskCategory,
+  })
   @ApiQuery({ name: "restrictedCountry", required: false, type: Boolean })
   @ApiQuery({ name: "greyListCountry", required: false, type: Boolean })
   @ApiQuery({ name: "baseCountry", required: false, type: Boolean })
-  @ApiResponse({ status: 200, description: "Paginated list of countries", type: CountryListResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of countries",
+  })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async findAll(
     @Query() query: CountryListQueryDto,
     @Session() session: any,
-  ): Promise<CountryListResponseDto> {
+  ): Promise<PaginatedResponseDto<CountryResponseDto>> {
     return this.countryService.findAll(query, session);
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Get country by ID" })
   @ApiParam({ name: "id", description: "Country UUID" })
-  @ApiResponse({ status: 200, description: "Country details", type: CountryResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: "Country details",
+    type: CountryResponseDto,
+  })
   @ApiResponse({ status: 404, description: "Country not found" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async findById(@Param("id") id: string): Promise<CountryResponseDto> {
@@ -60,7 +81,11 @@ export class CountryController {
 
   @Post()
   @ApiOperation({ summary: "Create a new country" })
-  @ApiResponse({ status: 201, description: "Country created", type: CountryResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: "Country created",
+    type: CountryResponseDto,
+  })
   @ApiResponse({ status: 400, description: "Invalid input" })
   @ApiResponse({ status: 409, description: "Country already exists" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
@@ -74,7 +99,11 @@ export class CountryController {
   @Put(":id")
   @ApiOperation({ summary: "Update a country" })
   @ApiParam({ name: "id", description: "Country UUID" })
-  @ApiResponse({ status: 200, description: "Country updated", type: CountryResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: "Country updated",
+    type: CountryResponseDto,
+  })
   @ApiResponse({ status: 404, description: "Country not found" })
   @ApiResponse({ status: 409, description: "Country already exists" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
@@ -110,7 +139,11 @@ export class CountryController {
     @Body() dto: CreateCountryAccessRulesDto,
     @Session() session: any,
   ) {
-    return this.countryService.createCountryAccessRules(id, dto, session.userId);
+    return this.countryService.createCountryAccessRules(
+      id,
+      dto,
+      session.userId,
+    );
   }
 
   @Get(":id/unblock-access")
@@ -121,7 +154,10 @@ export class CountryController {
 
   @Delete("unblock-access/:ruleId")
   @ApiOperation({ summary: "Revoke an unblock access rule" })
-  async revokeUnblockAccessRule(@Param("ruleId") ruleId: string, @Session() session: any) {
+  async revokeUnblockAccessRule(
+    @Param("ruleId") ruleId: string,
+    @Session() session: any,
+  ) {
     return this.countryService.revokeCountryAccessRule(ruleId, session.userId);
   }
 }

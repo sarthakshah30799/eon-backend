@@ -1,14 +1,13 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           ALTER TABLE "transactions"
           ADD COLUMN IF NOT EXISTS "commission_amount" numeric(18,2) NOT NULL DEFAULT 0
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.refresh_transaction_tcs(
             p_transaction_id uuid
           )
@@ -179,7 +178,7 @@ export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements Mi
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.transaction_tcs_refresh_trigger()
           RETURNS trigger
           LANGUAGE plpgsql
@@ -203,10 +202,10 @@ export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements Mi
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP TRIGGER IF EXISTS transaction_tcs_refresh_trigger ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE TRIGGER transaction_tcs_refresh_trigger
           AFTER INSERT OR UPDATE OF
             transaction_type,
@@ -227,14 +226,14 @@ export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements Mi
           EXECUTE FUNCTION public.transaction_tcs_refresh_trigger();
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           UPDATE transactions t
           SET updated_at = now()
           WHERE t.is_latest = true
             AND t.status = 'APPROVED'
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DO $$
           DECLARE
             v_transaction_id uuid;
@@ -248,13 +247,13 @@ export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements Mi
           END;
           $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DROP TRIGGER IF EXISTS transaction_tcs_refresh_trigger ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.refresh_transaction_tcs(
             p_transaction_id uuid
           )
@@ -424,7 +423,7 @@ export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements Mi
           END;
           $$;
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE TRIGGER transaction_tcs_refresh_trigger
             AFTER INSERT OR UPDATE OF
               transaction_type,
@@ -443,10 +442,9 @@ export class AddTransactionCommissionHeaderAndTrigger1785500845821 implements Mi
             FOR EACH ROW
             EXECUTE FUNCTION public.transaction_tcs_refresh_trigger();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "transactions"
           DROP COLUMN IF EXISTS "commission_amount"
         `);
-    }
-
+  }
 }
