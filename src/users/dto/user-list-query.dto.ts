@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsBoolean, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsOptional, IsString, IsUUID } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
 
 const parseBooleanQuery = ({ value }: { value: unknown }) => {
@@ -46,4 +46,12 @@ export class UserListQueryDto extends PaginationQueryDto {
   @IsString()
   @IsOptional()
   roleFilter?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Filter by branch ID (admin/HO only; branch users are scoped to their active branch)",
+  })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
 }
