@@ -24,8 +24,8 @@ import { CreateFinancialCodeDto } from "./dto/create-financial-code.dto";
 import { UpdateFinancialCodeDto } from "./dto/update-financial-code.dto";
 import { FinancialCodeResponseDto } from "./dto/financial-code-response.dto";
 import { FinancialCodeListQueryDto } from "./dto/financial-code-list-query.dto";
-import { FinancialCodeListResponseDto } from "./dto/financial-code-list-response.dto";
 import { FinancialCodeService } from "./financial-code.service";
+import { PaginatedResponseDto } from "../common/pagination";
 
 @ApiTags("financial-codes")
 @ApiCookieAuth("sessionId")
@@ -40,9 +40,10 @@ export class FinancialCodeController {
   @ApiResponse({
     status: 200,
     description: "Paginated list of financial codes",
-    type: FinancialCodeListResponseDto,
   })
-  async findAll(@Query() query: FinancialCodeListQueryDto): Promise<FinancialCodeListResponseDto> {
+  async findAll(
+    @Query() query: FinancialCodeListQueryDto,
+  ): Promise<PaginatedResponseDto<FinancialCodeResponseDto>> {
     return this.financialCodeService.findAll(query);
   }
 
@@ -50,7 +51,9 @@ export class FinancialCodeController {
   @ApiOperation({ summary: "Get financial code by code string" })
   @ApiParam({ name: "code", description: "Financial code string" })
   @ApiResponse({ status: 200, type: FinancialCodeResponseDto })
-  async findByCode(@Param("code") code: string): Promise<FinancialCodeResponseDto> {
+  async findByCode(
+    @Param("code") code: string,
+  ): Promise<FinancialCodeResponseDto> {
     return this.financialCodeService.findByCode(code);
   }
 

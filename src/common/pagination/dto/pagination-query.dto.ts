@@ -24,7 +24,7 @@ export class PaginationQueryDto implements PaginationParams {
     type: Number,
   })
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') return undefined;
+    if (value === undefined || value === null || value === "") return undefined;
     const parsed = parseInt(String(value), 10);
     return isNaN(parsed) ? undefined : parsed;
   })
@@ -42,7 +42,7 @@ export class PaginationQueryDto implements PaginationParams {
     type: Number,
   })
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') return undefined;
+    if (value === undefined || value === null || value === "") return undefined;
     const parsed = parseInt(String(value), 10);
     return isNaN(parsed) ? undefined : parsed;
   })

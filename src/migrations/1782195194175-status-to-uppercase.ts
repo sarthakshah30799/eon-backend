@@ -1,13 +1,19 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class StatusToUppercase1782195194175 implements MigrationInterface {
-    name = 'StatusToUppercase1782195194175'
+  name = "StatusToUppercase1782195194175";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TYPE "public"."party_profiles_status_enum" RENAME TO "party_profiles_status_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."party_profiles_status_enum" AS ENUM('PENDING', 'APPROVE', 'REJECT')`);
-        await queryRunner.query(`ALTER TABLE "party_profiles" ALTER COLUMN "status" DROP DEFAULT`);
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TYPE "public"."party_profiles_status_enum" RENAME TO "party_profiles_status_enum_old"`,
+    );
+    await queryRunner.query(
+      `CREATE TYPE "public"."party_profiles_status_enum" AS ENUM('PENDING', 'APPROVE', 'REJECT')`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "party_profiles" ALTER COLUMN "status" DROP DEFAULT`,
+    );
+    await queryRunner.query(`
             ALTER TABLE "party_profiles"
             ALTER COLUMN "status" TYPE "public"."party_profiles_status_enum"
             USING (
@@ -19,11 +25,19 @@ export class StatusToUppercase1782195194175 implements MigrationInterface {
                 END
             )::"public"."party_profiles_status_enum"
         `);
-        await queryRunner.query(`ALTER TABLE "party_profiles" ALTER COLUMN "status" SET DEFAULT 'PENDING'`);
-        await queryRunner.query(`DROP TYPE "public"."party_profiles_status_enum_old"`);
-        await queryRunner.query(`ALTER TYPE "public"."party_profile_status_change_logs_status_enum" RENAME TO "party_profile_status_change_logs_status_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."party_profile_status_change_logs_status_enum" AS ENUM('PENDING', 'APPROVE', 'REJECT')`);
-        await queryRunner.query(`
+    await queryRunner.query(
+      `ALTER TABLE "party_profiles" ALTER COLUMN "status" SET DEFAULT 'PENDING'`,
+    );
+    await queryRunner.query(
+      `DROP TYPE "public"."party_profiles_status_enum_old"`,
+    );
+    await queryRunner.query(
+      `ALTER TYPE "public"."party_profile_status_change_logs_status_enum" RENAME TO "party_profile_status_change_logs_status_enum_old"`,
+    );
+    await queryRunner.query(
+      `CREATE TYPE "public"."party_profile_status_change_logs_status_enum" AS ENUM('PENDING', 'APPROVE', 'REJECT')`,
+    );
+    await queryRunner.query(`
             ALTER TABLE "party_profile_status_change_logs"
             ALTER COLUMN "status" TYPE "public"."party_profile_status_change_logs_status_enum"
             USING (
@@ -35,12 +49,16 @@ export class StatusToUppercase1782195194175 implements MigrationInterface {
                 END
             )::"public"."party_profile_status_change_logs_status_enum"
         `);
-        await queryRunner.query(`DROP TYPE "public"."party_profile_status_change_logs_status_enum_old"`);
-    }
+    await queryRunner.query(
+      `DROP TYPE "public"."party_profile_status_change_logs_status_enum_old"`,
+    );
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE TYPE "public"."party_profile_status_change_logs_status_enum_old" AS ENUM('pending', 'approve', 'reject')`);
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `CREATE TYPE "public"."party_profile_status_change_logs_status_enum_old" AS ENUM('pending', 'approve', 'reject')`,
+    );
+    await queryRunner.query(`
             ALTER TABLE "party_profile_status_change_logs"
             ALTER COLUMN "status" TYPE "public"."party_profile_status_change_logs_status_enum_old"
             USING (
@@ -52,11 +70,19 @@ export class StatusToUppercase1782195194175 implements MigrationInterface {
                 END
             )::"public"."party_profile_status_change_logs_status_enum_old"
         `);
-        await queryRunner.query(`DROP TYPE "public"."party_profile_status_change_logs_status_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."party_profile_status_change_logs_status_enum_old" RENAME TO "party_profile_status_change_logs_status_enum"`);
-        await queryRunner.query(`CREATE TYPE "public"."party_profiles_status_enum_old" AS ENUM('pending', 'approve', 'reject')`);
-        await queryRunner.query(`ALTER TABLE "party_profiles" ALTER COLUMN "status" DROP DEFAULT`);
-        await queryRunner.query(`
+    await queryRunner.query(
+      `DROP TYPE "public"."party_profile_status_change_logs_status_enum"`,
+    );
+    await queryRunner.query(
+      `ALTER TYPE "public"."party_profile_status_change_logs_status_enum_old" RENAME TO "party_profile_status_change_logs_status_enum"`,
+    );
+    await queryRunner.query(
+      `CREATE TYPE "public"."party_profiles_status_enum_old" AS ENUM('pending', 'approve', 'reject')`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "party_profiles" ALTER COLUMN "status" DROP DEFAULT`,
+    );
+    await queryRunner.query(`
             ALTER TABLE "party_profiles"
             ALTER COLUMN "status" TYPE "public"."party_profiles_status_enum_old"
             USING (
@@ -68,9 +94,12 @@ export class StatusToUppercase1782195194175 implements MigrationInterface {
                 END
             )::"public"."party_profiles_status_enum_old"
         `);
-        await queryRunner.query(`ALTER TABLE "party_profiles" ALTER COLUMN "status" SET DEFAULT 'pending'`);
-        await queryRunner.query(`DROP TYPE "public"."party_profiles_status_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."party_profiles_status_enum_old" RENAME TO "party_profiles_status_enum"`);
-    }
-
+    await queryRunner.query(
+      `ALTER TABLE "party_profiles" ALTER COLUMN "status" SET DEFAULT 'pending'`,
+    );
+    await queryRunner.query(`DROP TYPE "public"."party_profiles_status_enum"`);
+    await queryRunner.query(
+      `ALTER TYPE "public"."party_profiles_status_enum_old" RENAME TO "party_profiles_status_enum"`,
+    );
+  }
 }

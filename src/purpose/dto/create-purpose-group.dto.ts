@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   ArrayUnique,
   IsArray,
@@ -10,16 +10,16 @@ import {
   IsString,
   IsUUID,
   Min,
-} from 'class-validator';
-import { PurposeGroupProfileType } from '../purpose.enums';
+} from "class-validator";
+import { PurposeGroupProfileType } from "../purpose.enums";
 
 export class CreatePurposeGroupDto {
-  @ApiProperty({ description: 'Purpose group name' })
+  @ApiProperty({ description: "Purpose group name" })
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ description: 'Report line title shown in FLM 8 sell section' })
+  @ApiProperty({ description: "Report line title shown in FLM 8 sell section" })
   @IsString()
   @IsNotEmpty()
   title: string;
@@ -29,7 +29,8 @@ export class CreatePurposeGroupDto {
   profileType: PurposeGroupProfileType;
 
   @ApiProperty({
-    description: 'Sort order used as the FLM 8 sell-section row order. Lower numbers appear first.',
+    description:
+      "Sort order used as the FLM 8 sell-section row order. Lower numbers appear first.",
     default: 0,
   })
   @Type(() => Number)
@@ -38,9 +39,12 @@ export class CreatePurposeGroupDto {
   @IsOptional()
   sortOrder?: number;
 
-  @ApiProperty({ type: [String], description: 'Sell purpose ids in this group' })
+  @ApiProperty({
+    type: [String],
+    description: "Sell purpose ids in this group",
+  })
   @IsArray()
   @ArrayUnique()
-  @IsUUID('4', { each: true })
+  @IsUUID("4", { each: true })
   purposeIds: string[];
 }

@@ -1,4 +1,11 @@
-import { Column, Entity, OneToMany, Index, ManyToOne, JoinColumn } from "typeorm";
+import {
+  Column,
+  Entity,
+  OneToMany,
+  Index,
+  ManyToOne,
+  JoinColumn,
+} from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { State } from "../state/state.entity";
 import { CountryGroup } from "../country-groups/country-group.entity";
@@ -27,7 +34,7 @@ export class Country extends BaseEntity {
   @JoinColumn({ name: "country_group_id" })
   countryGroup: CountryGroup;
 
-  @OneToMany(() => UnblockCountryAccess, rule => rule.country)
+  @OneToMany(() => UnblockCountryAccess, (rule) => rule.country)
   unblockCountryAccessRules: UnblockCountryAccess[];
 
   @OneToMany(() => State, (state) => state.country)

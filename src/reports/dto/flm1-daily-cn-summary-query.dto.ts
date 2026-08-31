@@ -33,13 +33,16 @@ export class Flm1DailyCnSummaryQueryDto {
   @IsOptional()
   branchIds?: string[];
 
-  @ApiPropertyOptional({ description: "Product id. Defaults to CN when omitted." })
+  @ApiPropertyOptional({
+    description: "Product id. Defaults to CN when omitted.",
+  })
   @IsUUID()
   @IsOptional()
   productId?: string;
 
   @ApiPropertyOptional({
-    description: "Report layout. branch_wise shows one section per branch. consolidate rolls selected branches into one company-level section.",
+    description:
+      "Report layout. branch_wise shows one section per branch. consolidate rolls selected branches into one company-level section.",
     enum: Object.values(FlmReportLayout),
   })
   @IsIn(Object.values(FlmReportLayout))

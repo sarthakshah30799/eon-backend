@@ -32,8 +32,8 @@ import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
-import { PartyProfileListResponseDto } from "./dto/party-profile-list-response.dto";
 import { PartyProfileService } from "./party-profile.service";
+import { PaginatedResponseDto } from "../common/pagination";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 
@@ -48,7 +48,9 @@ export class PartyProfileController {
   @Get("types")
   @ApiOperation({ summary: "Get all party profile types as key-value pairs" })
   @ApiResponse({ status: 200, description: "List of profile types" })
-  async getTypes(@Session() session: any): Promise<{ value: string; label: string }[]> {
+  async getTypes(
+    @Session() session: any,
+  ): Promise<{ value: string; label: string }[]> {
     return this.partyProfileService.getTypes(session.userId);
   }
 
@@ -57,13 +59,12 @@ export class PartyProfileController {
   @ApiResponse({
     status: 200,
     description: "Paginated list of party profiles",
-    type: PartyProfileListResponseDto,
   })
   async findAll(
     @Query() query: PartyProfileListQueryDto,
-    @Query('branchId') branchId: string | undefined,
+    @Query("branchId") branchId: string | undefined,
     @Session() session: any,
-  ): Promise<PartyProfileListResponseDto> {
+  ): Promise<PaginatedResponseDto<PartyProfileResponseDto>> {
     return this.partyProfileService.findAll(
       query,
       session.userId,
@@ -72,9 +73,13 @@ export class PartyProfileController {
   }
 
   @Get("review-queue")
-  @ApiOperation({ summary: "Get party profiles pending review for current HO user" })
+  @ApiOperation({
+    summary: "Get party profiles pending review for current HO user",
+  })
   @ApiResponse({ status: 200, description: "Pending review list" })
-  async getReviewQueue(@Session() session: any): Promise<PartyProfileResponseDto[]> {
+  async getReviewQueue(
+    @Session() session: any,
+  ): Promise<PartyProfileResponseDto[]> {
     return this.partyProfileService.getReviewQueue(session.userId);
   }
 
@@ -87,10 +92,7 @@ export class PartyProfileController {
     @Param("id") id: string,
     @Session() session: any,
   ): Promise<PartyProfileResponseDto> {
-    return this.partyProfileService.findByIdForUser(
-      id,
-      session.userId,
-    );
+    return this.partyProfileService.findByIdForUser(id, session.userId);
   }
 
   @Post()
@@ -100,7 +102,9 @@ export class PartyProfileController {
     @Body() dto: CreatePartyProfileDto,
     @Session() session: any,
   ): Promise<PartyProfileResponseDto> {
-    const canSeeAllBranches = Boolean(session?.isAdmin || session?.isHo || session?.isHoStaff);
+    const canSeeAllBranches = Boolean(
+      session?.isAdmin || session?.isHo || session?.isHoStaff,
+    );
     const effectiveBranchId = canSeeAllBranches
       ? dto.branchId?.trim() || session.activeBranchId
       : session.activeBranchId;
@@ -148,7 +152,9 @@ export class PartyProfileController {
   }
 
   @Get(":id/commission/template")
-  @ApiOperation({ summary: "Download commission template for an agent profile" })
+  @ApiOperation({
+    summary: "Download commission template for an agent profile",
+  })
   @ApiParam({ name: "id", description: "Party profile UUID" })
   async getCommissionTemplate(
     @Param("id", ParseUUIDPipe) id: string,

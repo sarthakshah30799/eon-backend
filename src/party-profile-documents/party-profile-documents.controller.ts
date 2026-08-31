@@ -10,40 +10,50 @@ import {
   HttpStatus,
   ParseUUIDPipe,
   Session,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { PartyProfileDocumentsService } from './party-profile-documents.service';
-import { PartyProfileDocumentsResponseDto } from './dto/party-profile-documents-response.dto';
-import type { PartyProfileDocumentUploadFile } from './party-profile-document-upload-file';
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import {
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { Response } from "express";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { PartyProfileDocumentsService } from "./party-profile-documents.service";
+import { PartyProfileDocumentsResponseDto } from "./dto/party-profile-documents-response.dto";
+import type { PartyProfileDocumentUploadFile } from "./party-profile-document-upload-file";
 
-@ApiTags('party-profile-documents')
+@ApiTags("party-profile-documents")
 @UseGuards(PermissionsGuard)
-@Controller('party-profiles/:partyProfileId/documents')
+@Controller("party-profiles/:partyProfileId/documents")
 export class PartyProfileDocumentsController {
   constructor(
     private readonly partyProfileDocumentsService: PartyProfileDocumentsService,
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get document requirements and current uploads for a party profile' })
+  @ApiOperation({
+    summary:
+      "Get document requirements and current uploads for a party profile",
+  })
   @ApiResponse({ status: 200, type: PartyProfileDocumentsResponseDto })
   async getDocuments(
-    @Param('partyProfileId', ParseUUIDPipe) partyProfileId: string,
+    @Param("partyProfileId", ParseUUIDPipe) partyProfileId: string,
   ): Promise<PartyProfileDocumentsResponseDto> {
     return this.partyProfileDocumentsService.getDocuments(partyProfileId);
   }
 
-  @Post(':documentProfileId')
-  @ApiOperation({ summary: 'Upload or replace a document for a specific document profile' })
-  @ApiConsumes('multipart/form-data')
+  @Post(":documentProfileId")
+  @ApiOperation({
+    summary: "Upload or replace a document for a specific document profile",
+  })
+  @ApiConsumes("multipart/form-data")
   @ApiResponse({ status: 200, type: PartyProfileDocumentsResponseDto })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor("file"))
   async uploadDocument(
-    @Param('partyProfileId', ParseUUIDPipe) partyProfileId: string,
-    @Param('documentProfileId', ParseUUIDPipe) documentProfileId: string,
+    @Param("partyProfileId", ParseUUIDPipe) partyProfileId: string,
+    @Param("documentProfileId", ParseUUIDPipe) documentProfileId: string,
     @UploadedFile() file: PartyProfileDocumentUploadFile,
     @Session() session: any,
   ): Promise<PartyProfileDocumentsResponseDto> {
@@ -55,11 +65,13 @@ export class PartyProfileDocumentsController {
     );
   }
 
-  @Get(':documentProfileId/download')
-  @ApiOperation({ summary: 'Download the stored file for a party profile document profile' })
+  @Get(":documentProfileId/download")
+  @ApiOperation({
+    summary: "Download the stored file for a party profile document profile",
+  })
   async downloadDocument(
-    @Param('partyProfileId', ParseUUIDPipe) partyProfileId: string,
-    @Param('documentProfileId', ParseUUIDPipe) documentProfileId: string,
+    @Param("partyProfileId", ParseUUIDPipe) partyProfileId: string,
+    @Param("documentProfileId", ParseUUIDPipe) documentProfileId: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const payload = await this.partyProfileDocumentsService.downloadDocument(
@@ -68,8 +80,11 @@ export class PartyProfileDocumentsController {
     );
 
     res.status(HttpStatus.OK);
-    res.setHeader('Content-Type', payload.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${payload.fileName}"`);
+    res.setHeader("Content-Type", payload.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${payload.fileName}"`,
+    );
     return payload.file;
   }
 }

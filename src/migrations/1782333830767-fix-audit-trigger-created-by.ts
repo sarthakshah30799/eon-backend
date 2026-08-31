@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class FixAuditTriggerCreatedBy1782333830767 implements MigrationInterface {
-    name = 'FixAuditTriggerCreatedBy1782333830767'
+  name = "FixAuditTriggerCreatedBy1782333830767";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION audit_trigger_func()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -63,10 +63,10 @@ export class FixAuditTriggerCreatedBy1782333830767 implements MigrationInterface
             END;
             $$ LANGUAGE plpgsql;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION audit_trigger_func()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -116,5 +116,5 @@ export class FixAuditTriggerCreatedBy1782333830767 implements MigrationInterface
             END;
             $$ LANGUAGE plpgsql;
         `);
-    }
+  }
 }

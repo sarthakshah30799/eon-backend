@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -10,13 +10,13 @@ import {
   IsString,
   ValidateNested,
   ValidateIf,
-} from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+} from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
 
 export class MigrationConnectionConfigDto {
-  @ApiProperty({ enum: ['string', 'options'] })
-  @IsIn(['string', 'options'])
-  connectionMode: 'string' | 'options';
+  @ApiProperty({ enum: ["string", "options"] })
+  @IsIn(["string", "options"])
+  connectionMode: "string" | "options";
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -24,12 +24,12 @@ export class MigrationConnectionConfigDto {
   connectionString?: string;
 
   @ApiProperty({ required: false })
-  @ValidateIf(dto => dto.connectionMode === 'options')
+  @ValidateIf((dto) => dto.connectionMode === "options")
   @IsString()
   host?: string;
 
   @ApiProperty({ required: false })
-  @ValidateIf(dto => dto.connectionMode === 'options')
+  @ValidateIf((dto) => dto.connectionMode === "options")
   @IsInt()
   @Min(1)
   @Max(65535)
@@ -37,17 +37,17 @@ export class MigrationConnectionConfigDto {
   port?: number;
 
   @ApiProperty({ required: false })
-  @ValidateIf(dto => dto.connectionMode === 'options')
+  @ValidateIf((dto) => dto.connectionMode === "options")
   @IsString()
   username?: string;
 
   @ApiProperty({ required: false })
-  @ValidateIf(dto => dto.connectionMode === 'options')
+  @ValidateIf((dto) => dto.connectionMode === "options")
   @IsString()
   password?: string;
 
   @ApiProperty({ required: false })
-  @ValidateIf(dto => dto.connectionMode === 'options')
+  @ValidateIf((dto) => dto.connectionMode === "options")
   @IsString()
   database?: string;
 
@@ -58,10 +58,13 @@ export class MigrationConnectionConfigDto {
 }
 
 export class MigrationRunRequestDto {
-  @ApiProperty({ enum: ['currentMaster', 'currentTransaction'], required: false })
+  @ApiProperty({
+    enum: ["currentMaster", "currentTransaction"],
+    required: false,
+  })
   @IsOptional()
-  @IsIn(['currentMaster', 'currentTransaction'])
-  schemaTarget?: 'currentMaster' | 'currentTransaction';
+  @IsIn(["currentMaster", "currentTransaction"])
+  schemaTarget?: "currentMaster" | "currentTransaction";
 
   @ApiProperty({ type: () => MigrationConnectionConfigDto, required: false })
   @IsOptional()

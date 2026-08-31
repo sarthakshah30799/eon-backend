@@ -1,11 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { StaticSelectOption } from '../category-option-static-options';
+import { ApiProperty } from "@nestjs/swagger";
+import { StaticSelectOption } from "../category-option-static-options";
 
 export class StaticSelectOptionResponseDto {
-  @ApiProperty({ description: 'Option value' })
+  @ApiProperty({ description: "Option value" })
   value: string;
 
-  @ApiProperty({ description: 'Option label' })
+  @ApiProperty({ description: "Option label" })
   label: string;
 
   static fromValue(option: StaticSelectOption): StaticSelectOptionResponseDto {
@@ -15,4 +15,3 @@ export class StaticSelectOptionResponseDto {
     };
   }
 }
-

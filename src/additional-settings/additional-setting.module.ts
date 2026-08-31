@@ -9,9 +9,7 @@ import { SessionPolicyModule } from "../session-policy/session-policy.module";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      AdvancedSetting,
-    ]),
+    TypeOrmModule.forFeature([AdvancedSetting]),
     UserModule,
     PasswordPolicyModule,
     SessionPolicyModule,

@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ExpenseIncomeBookingMaster } from '../expense-income-booking-master.entity';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ExpenseIncomeBookingMaster } from "../expense-income-booking-master.entity";
 
 export class AccountProfileSummaryDto {
   @ApiProperty()
@@ -79,7 +79,9 @@ export class ExpenseIncomeBookingMasterResponseDto {
   @ApiPropertyOptional({ nullable: true })
   to: Date | null;
 
-  static fromEntity(entity: ExpenseIncomeBookingMaster): ExpenseIncomeBookingMasterResponseDto {
+  static fromEntity(
+    entity: ExpenseIncomeBookingMaster,
+  ): ExpenseIncomeBookingMasterResponseDto {
     const dto = new ExpenseIncomeBookingMasterResponseDto();
     dto.id = entity.id;
     dto.createdAt = entity.createdAt;
@@ -100,7 +102,7 @@ export class ExpenseIncomeBookingMasterResponseDto {
     dto.tdsApplicable = entity.tdsApplicable;
     dto.tdsValue = Number(entity.tdsValue);
     dto.tdsAccountId = entity.tdsAccountId;
-    
+
     if (entity.tdsAccount) {
       dto.tdsAccount = {
         id: entity.tdsAccount.id,

@@ -2,23 +2,29 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, In, Repository } from 'typeorm';
-import { Branch } from './branch.entity';
-import { BranchCounter } from './entities/branch-counter.entity';
-import { Counter } from '../counters/counter.entity';
-import { Country } from '../country/country.entity';
-import { State } from '../state/state.entity';
-import { SelectOption } from '../category-options/category-option.entity';
-import { UserRole } from '../user-roles/user-role.entity';
-import { CreateBranchDto } from './dto/create-branch.dto';
-import { BranchListQueryDto } from './dto/branch-list-query.dto';
-import { UpdateBranchDto } from './dto/update-branch.dto';
-import { BranchResponseDto } from './dto/branch-response.dto';
-import { assertCountersExist } from './branch-counter.access';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, In, Repository } from "typeorm";
+import { Branch } from "./branch.entity";
+import { BranchCounter } from "./entities/branch-counter.entity";
+import { Counter } from "../counters/counter.entity";
+import { Country } from "../country/country.entity";
+import { State } from "../state/state.entity";
+import { SelectOption } from "../category-options/category-option.entity";
+import { UserRole } from "../user-roles/user-role.entity";
+import { CreateBranchDto } from "./dto/create-branch.dto";
+import { BranchListQueryDto } from "./dto/branch-list-query.dto";
+import { UpdateBranchDto } from "./dto/update-branch.dto";
+import { BranchResponseDto } from "./dto/branch-response.dto";
+import { assertCountersExist } from "./branch-counter.access";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
-import { uppercaseFields } from '../utils/uppercase.util';
+import { uppercaseFields } from "../utils/uppercase.util";
 
 @Injectable()
 export class BranchService {
@@ -40,7 +46,13 @@ export class BranchService {
   private async loadBranch(id: string): Promise<Branch> {
     const branch = await this.branchRepository.findOne({
       where: { id },
-      relations: ['company', 'counterLinks', 'country', 'state', 'locationType'],
+      relations: [
+        "company",
+        "counterLinks",
+        "country",
+        "state",
+        "locationType",
+      ],
     });
     if (!branch) {
       throw new NotFoundException(`Branch with id ${id} not found`);
@@ -64,7 +76,7 @@ export class BranchService {
     await assertCountersExist(uniqueCounterIds, async (ids) => {
       const existing = await this.counterRepository.find({
         where: { id: In(ids) },
-        select: ['id'],
+        select: ["id"],
       });
       const existingIds = new Set(existing.map((counter) => counter.id));
       return ids.filter((id) => !existingIds.has(id));
@@ -80,11 +92,11 @@ export class BranchService {
 
     if (toUnlink.length > 0) {
       const blockingAssignments = await this.userRoleRepository
-        .createQueryBuilder('userRole')
-        .leftJoinAndSelect('userRole.user', 'user')
-        .leftJoinAndSelect('userRole.counter', 'counter')
-        .where('userRole.branch_id = :branchId', { branchId })
-        .andWhere('userRole.counter_id IN (:...counterIds)', {
+        .createQueryBuilder("userRole")
+        .leftJoinAndSelect("userRole.user", "user")
+        .leftJoinAndSelect("userRole.counter", "counter")
+        .where("userRole.branch_id = :branchId", { branchId })
+        .andWhere("userRole.counter_id IN (:...counterIds)", {
           counterIds: toUnlink,
         })
         .getMany();
@@ -92,7 +104,7 @@ export class BranchService {
       if (blockingAssignments.length > 0) {
         const first = blockingAssignments[0];
         const userLabel =
-          first.user?.email || first.user?.code || first.user?.id || 'a user';
+          first.user?.email || first.user?.code || first.user?.id || "a user";
         const counterLabel =
           first.counter?.name ||
           (first.counter?.counterNo != null
@@ -127,59 +139,67 @@ export class BranchService {
     }
   }
 
-  async findAll(query?: BranchListQueryDto): Promise<BranchResponseDto[]> {
+  async findAll(
+    query?: BranchListQueryDto,
+  ): Promise<PaginatedResponseDto<BranchResponseDto>> {
+    const pagination = normalizePagination(query);
     const includeInactive = query?.activeOnly === false;
     const qb = this.branchRepository
-      .createQueryBuilder('branch')
-      .leftJoinAndSelect('branch.company', 'company')
-      .leftJoinAndSelect('branch.counterLinks', 'counterLinks')
-      .leftJoinAndSelect('branch.country', 'country')
-      .leftJoinAndSelect('branch.state', 'state')
-      .leftJoinAndSelect('branch.locationType', 'locationType')
-      .orderBy('branch.createdAt', 'DESC');
+      .createQueryBuilder("branch")
+      .leftJoinAndSelect("branch.company", "company")
+      .leftJoinAndSelect("branch.counterLinks", "counterLinks")
+      .leftJoinAndSelect("branch.country", "country")
+      .leftJoinAndSelect("branch.state", "state")
+      .leftJoinAndSelect("branch.locationType", "locationType")
+      .orderBy("branch.createdAt", "DESC");
 
     if (!includeInactive) {
-      qb.andWhere('branch.isActive = :isActive', { isActive: true });
+      qb.andWhere("branch.isActive = :isActive", { isActive: true });
     }
 
     if (query?.search) {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where('branch.code ILIKE :search', { search: `%${query.search}%` })
-            .orWhere('branch.name ILIKE :search', {
+            .where("branch.code ILIKE :search", { search: `%${query.search}%` })
+            .orWhere("branch.name ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('branch.city ILIKE :search', {
+            .orWhere("branch.city ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('branch.branch_number::text ILIKE :search', {
+            .orWhere("branch.branch_number::text ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('branch.contactName ILIKE :search', {
+            .orWhere("branch.contactName ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('branch.contactNo ILIKE :search', {
+            .orWhere("branch.contactNo ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('branch.branchEmail ILIKE :search', {
+            .orWhere("branch.branchEmail ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('country.name ILIKE :search', {
+            .orWhere("country.name ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('state.name ILIKE :search', {
+            .orWhere("state.name ILIKE :search", {
               search: `%${query.search}%`,
             })
-            .orWhere('company.name ILIKE :search', {
+            .orWhere("company.name ILIKE :search", {
               search: `%${query.search}%`,
             });
         }),
       );
     }
 
-    const branches = await qb.getMany();
-    return branches.map((branch) => BranchResponseDto.fromEntity(branch));
+    applyPagination(qb, pagination);
+    const [branches, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      branches.map((branch) => BranchResponseDto.fromEntity(branch)),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<BranchResponseDto> {
@@ -187,7 +207,10 @@ export class BranchService {
     return BranchResponseDto.fromEntity(branch);
   }
 
-  async create(dto: CreateBranchDto, userId: string): Promise<BranchResponseDto> {
+  async create(
+    dto: CreateBranchDto,
+    userId: string,
+  ): Promise<BranchResponseDto> {
     const { companyId, countryId, stateId, counterIds, locationType, ...rest } =
       uppercaseFields(dto);
 
@@ -201,7 +224,7 @@ export class BranchService {
 
     const state = await this.stateRepository.findOne({
       where: { id: stateId },
-      relations: ['country'],
+      relations: ["country"],
     });
 
     if (!state) {
@@ -210,13 +233,15 @@ export class BranchService {
 
     if (state.country?.id !== country.id) {
       throw new NotFoundException(
-        'Selected state does not belong to the selected country',
+        "Selected state does not belong to the selected country",
       );
     }
 
     const branch = this.branchRepository.create({
       ...rest,
-      locationType: locationType ? ({ id: locationType } as SelectOption) : null,
+      locationType: locationType
+        ? ({ id: locationType } as SelectOption)
+        : null,
       country,
       state,
       company: companyId ? ({ id: companyId } as any) : null,
@@ -265,7 +290,7 @@ export class BranchService {
     if (stateId !== undefined) {
       const nextState = await this.stateRepository.findOne({
         where: { id: stateId },
-        relations: ['country'],
+        relations: ["country"],
       });
 
       if (!nextState) {
@@ -281,7 +306,7 @@ export class BranchService {
 
     if (country && state && state.country?.id !== country.id) {
       throw new NotFoundException(
-        'Selected state does not belong to the selected country',
+        "Selected state does not belong to the selected country",
       );
     }
 

@@ -1,7 +1,10 @@
 import { BadRequestException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import * as XLSX from "xlsx";
-import { CardStockCardStatus, CardStockOperationType } from "../card-stock/card-stock.enums";
+import {
+  CardStockCardStatus,
+  CardStockOperationType,
+} from "../card-stock/card-stock.enums";
 import { toUtcDateOnly, toUtcNextDate } from "../common/date/date.util";
 import { CardSettlementReportFormat } from "./dto/card-settlement-report-query.dto";
 import { CardBlankStockReportQueryDto } from "./dto/card-blank-stock-report-query.dto";
@@ -170,9 +173,7 @@ export const resolveCardBlankStockReportFilters = (
   }
 
   const startDate = query.startDate ? toUtcDateOnly(query.startDate) : null;
-  const endDateExclusive = query.endDate
-    ? toUtcNextDate(query.endDate)
-    : null;
+  const endDateExclusive = query.endDate ? toUtcNextDate(query.endDate) : null;
 
   if (query.startDate && Number.isNaN(startDate?.getTime() ?? Number.NaN)) {
     throw new BadRequestException("Invalid startDate");

@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddTransactionAccountPostingsTrigger1784123978502 implements MigrationInterface {
-    name = 'AddTransactionAccountPostingsTrigger1784123978502'
+  name = "AddTransactionAccountPostingsTrigger1784123978502";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.enqueue_transaction_account_postings_rebuild()
             RETURNS trigger
             LANGUAGE plpgsql
@@ -84,52 +84,51 @@ export class AddTransactionAccountPostingsTrigger1784123978502 implements Migrat
             END;
             $$;
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transactions ON "transactions";
             CREATE TRIGGER transaction_account_postings_rebuild_on_transactions
             AFTER INSERT OR UPDATE OR DELETE ON "transactions"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_account_postings_rebuild();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transaction_items ON "transaction_items";
             CREATE TRIGGER transaction_account_postings_rebuild_on_transaction_items
             AFTER INSERT OR UPDATE OR DELETE ON "transaction_items"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_account_postings_rebuild();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transaction_payments ON "transaction_payments";
             CREATE TRIGGER transaction_account_postings_rebuild_on_transaction_payments
             AFTER INSERT OR UPDATE OR DELETE ON "transaction_payments"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_account_postings_rebuild();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transaction_additional_charges ON "transaction_additional_charges";
             CREATE TRIGGER transaction_account_postings_rebuild_on_transaction_additional_charges
             AFTER INSERT OR UPDATE OR DELETE ON "transaction_additional_charges"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_account_postings_rebuild();
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transaction_additional_charges ON "transaction_additional_charges";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transaction_payments ON "transaction_payments";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transaction_items ON "transaction_items";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_account_postings_rebuild_on_transactions ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP FUNCTION IF EXISTS public.enqueue_transaction_account_postings_rebuild();
         `);
-    }
-
+  }
 }

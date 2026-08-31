@@ -1,10 +1,10 @@
-import { IsEmail, IsString, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, IsOptional } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
 
 export class LoginUserDto {
   @ApiProperty({
-    description: 'User email address',
-    example: 'user@example.com',
+    description: "User email address",
+    example: "user@example.com",
     required: false,
   })
   @IsEmail()
@@ -12,8 +12,8 @@ export class LoginUserDto {
   email?: string;
 
   @ApiProperty({
-    description: 'Country code for mobile number',
-    example: '+1',
+    description: "Country code for mobile number",
+    example: "+1",
     required: false,
   })
   @IsString()
@@ -21,8 +21,8 @@ export class LoginUserDto {
   countryCode?: string;
 
   @ApiProperty({
-    description: 'Mobile number',
-    example: '1234567890',
+    description: "Mobile number",
+    example: "1234567890",
     required: false,
   })
   @IsString()
@@ -30,8 +30,8 @@ export class LoginUserDto {
   mobileNumber?: string;
 
   @ApiProperty({
-    description: 'User password',
-    example: 'password123',
+    description: "User password",
+    example: "password123",
   })
   @IsString()
   password: string;

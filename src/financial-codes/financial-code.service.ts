@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import { FinancialCode } from "./financial-code.entity";
@@ -8,9 +12,16 @@ import { CreateFinancialCodeDto } from "./dto/create-financial-code.dto";
 import { UpdateFinancialCodeDto } from "./dto/update-financial-code.dto";
 import { FinancialCodeResponseDto } from "./dto/financial-code-response.dto";
 import { FinancialCodeListQueryDto } from "./dto/financial-code-list-query.dto";
-import { FinancialCodeListResponseDto } from "./dto/financial-code-list-response.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
-function normalizeFinancialCodeDto(dto: CreateFinancialCodeDto | UpdateFinancialCodeDto) {
+function normalizeFinancialCodeDto(
+  dto: CreateFinancialCodeDto | UpdateFinancialCodeDto,
+) {
   const normalizeOptional = (value?: string | null) => {
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
@@ -25,8 +36,12 @@ function normalizeFinancialCodeDto(dto: CreateFinancialCodeDto | UpdateFinancial
   };
 }
 
-function pickDefinedFields<T extends Record<string, any>>(value: T): Partial<T> {
-  const entries = Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined);
+function pickDefinedFields<T extends Record<string, any>>(
+  value: T,
+): Partial<T> {
+  const entries = Object.entries(value).filter(
+    ([, fieldValue]) => fieldValue !== undefined,
+  );
   return Object.fromEntries(entries) as Partial<T>;
 }
 
@@ -39,7 +54,10 @@ export class FinancialCodeService {
     private readonly financialSubProfileRepository: Repository<FinancialSubProfile>,
   ) {}
 
-  async create(dto: CreateFinancialCodeDto, userId: string): Promise<FinancialCodeResponseDto> {
+  async create(
+    dto: CreateFinancialCodeDto,
+    userId: string,
+  ): Promise<FinancialCodeResponseDto> {
     const normalized = normalizeFinancialCodeDto(dto);
 
     const existing = await this.financialCodeRepository.findOne({
@@ -47,12 +65,19 @@ export class FinancialCodeService {
     });
 
     if (existing) {
-      throw new ConflictException(`Financial Code "${normalized.financialCode}" already exists`);
+      throw new ConflictException(
+        `Financial Code "${normalized.financialCode}" already exists`,
+      );
     }
 
-    const { subProfiles: subProfilesDto, financialType, defaultSign, ...parentData } = normalized;
+    const {
+      subProfiles: subProfilesDto,
+      financialType,
+      defaultSign,
+      ...parentData
+    } = normalized;
 
-    const subProfiles = (subProfilesDto ?? []).map(sp => {
+    const subProfiles = (subProfilesDto ?? []).map((sp) => {
       return this.financialSubProfileRepository.create({
         financialSubCode: sp.financialSubCode.trim().toUpperCase(),
         financialSubName: sp.financialSubName.trim().toUpperCase(),
@@ -64,7 +89,9 @@ export class FinancialCodeService {
 
     const code = this.financialCodeRepository.create({
       ...parentData,
-      financialType: financialType ? ({ id: financialType } as SelectOption) : null,
+      financialType: financialType
+        ? ({ id: financialType } as SelectOption)
+        : null,
       defaultSign: defaultSign ? ({ id: defaultSign } as SelectOption) : null,
       subProfiles,
       createdBy: userId,
@@ -75,7 +102,11 @@ export class FinancialCodeService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateFinancialCodeDto, userId: string): Promise<FinancialCodeResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateFinancialCodeDto,
+    userId: string,
+  ): Promise<FinancialCodeResponseDto> {
     const code = await this.financialCodeRepository.findOne({
       where: { id },
       relations: ["subProfiles"],
@@ -97,10 +128,14 @@ export class FinancialCodeService {
     const updates = pickDefinedFields(parentData);
     Object.assign(code, updates);
     if (financialType !== undefined) {
-      code.financialType = financialType ? ({ id: financialType } as SelectOption) : null;
+      code.financialType = financialType
+        ? ({ id: financialType } as SelectOption)
+        : null;
     }
     if (defaultSign !== undefined) {
-      code.defaultSign = defaultSign ? ({ id: defaultSign } as SelectOption) : null;
+      code.defaultSign = defaultSign
+        ? ({ id: defaultSign } as SelectOption)
+        : null;
     }
     code.updatedBy = userId;
 
@@ -108,16 +143,18 @@ export class FinancialCodeService {
       const existingSubs = code.subProfiles ?? [];
 
       // 1. Identify which existing sub-profiles to delete
-      const incomingIds = subProfilesDto.map(ns => ns.id).filter(Boolean);
-      const toDelete = existingSubs.filter(es => !incomingIds.includes(es.id));
+      const incomingIds = subProfilesDto.map((ns) => ns.id).filter(Boolean);
+      const toDelete = existingSubs.filter(
+        (es) => !incomingIds.includes(es.id),
+      );
       if (toDelete.length > 0) {
         await this.financialSubProfileRepository.remove(toDelete);
       }
 
       // 2. Map incoming to create/update
-      code.subProfiles = subProfilesDto.map(ns => {
+      code.subProfiles = subProfilesDto.map((ns) => {
         if (ns.id) {
-          const matched = existingSubs.find(es => es.id === ns.id);
+          const matched = existingSubs.find((es) => es.id === ns.id);
           if (matched) {
             matched.financialSubCode = ns.financialSubCode.trim().toUpperCase();
             matched.financialSubName = ns.financialSubName.trim().toUpperCase();
@@ -160,7 +197,9 @@ export class FinancialCodeService {
     });
 
     if (!code) {
-      throw new NotFoundException(`Financial Code "${financialCode}" not found`);
+      throw new NotFoundException(
+        `Financial Code "${financialCode}" not found`,
+      );
     }
 
     return FinancialCodeResponseDto.fromEntity(code);
@@ -187,17 +226,17 @@ export class FinancialCodeService {
     } catch (error) {
       if (error.code === "23503") {
         throw new ConflictException(
-          "Cannot delete Financial Code because it is mapped in an Account Profile"
+          "Cannot delete Financial Code because it is mapped in an Account Profile",
         );
       }
       throw error;
     }
   }
 
-  async findAll(query: FinancialCodeListQueryDto): Promise<FinancialCodeListResponseDto> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
+  async findAll(
+    query: FinancialCodeListQueryDto,
+  ): Promise<PaginatedResponseDto<FinancialCodeResponseDto>> {
+    const pagination = normalizePagination(query);
 
     const qb = this.financialCodeRepository
       .createQueryBuilder("fc")
@@ -209,10 +248,18 @@ export class FinancialCodeService {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("financialType.label ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.financialCode ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("fc.financialName ILIKE :search", { search: `%${query.search}%` })
-            .orWhere("defaultSign.label ILIKE :search", { search: `%${query.search}%` });
+            .where("financialType.label ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("fc.financialCode ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("fc.financialName ILIKE :search", {
+              search: `%${query.search}%`,
+            })
+            .orWhere("defaultSign.label ILIKE :search", {
+              search: `%${query.search}%`,
+            });
         }),
       );
     }
@@ -235,16 +282,14 @@ export class FinancialCodeService {
       });
     }
 
-    qb.orderBy("fc.createdAt", "DESC").skip(skip).take(limit);
+    qb.orderBy("fc.createdAt", "DESC");
+    applyPagination(qb, pagination);
+    const [data, total] = await qb.getManyAndCount();
 
-    const [data, totalItems] = await qb.getManyAndCount();
-
-    return {
-      data: data.map(code => FinancialCodeResponseDto.fromEntity(code)),
-      page,
-      limit,
-      totalItems,
-      totalPages: Math.ceil(totalItems / limit),
-    };
+    return buildPaginatedResponse(
+      data.map((code) => FinancialCodeResponseDto.fromEntity(code)),
+      total,
+      pagination,
+    );
   }
 }

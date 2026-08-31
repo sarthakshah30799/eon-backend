@@ -1,4 +1,9 @@
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn } from "typeorm";
+import {
+  Column,
+  Entity,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+} from "typeorm";
 
 @Entity("audit_logs")
 export class AuditLog {

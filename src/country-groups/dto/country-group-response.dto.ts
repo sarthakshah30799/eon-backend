@@ -12,7 +12,11 @@ export class CountryGroupResponseDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty({ required: false, nullable: true, type: () => CurrencyResponseDto })
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: () => CurrencyResponseDto,
+  })
   sellLimitCurrency?: CurrencyResponseDto | null;
 
   @ApiProperty({ required: false, nullable: true })

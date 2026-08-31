@@ -7,80 +7,84 @@ import {
   MaxLength,
   MinLength,
   ValidateNested,
-} from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { UserAssignmentDto } from './user-assignment.dto';
+} from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+import { UserAssignmentDto } from "./user-assignment.dto";
 
 export class CreateUserDto {
-  @ApiProperty({ description: 'User Code', example: 'USR-001', maxLength: 20 })
+  @ApiProperty({ description: "User Code", example: "USR-001", maxLength: 20 })
   @IsString()
   @MinLength(1)
   @MaxLength(20)
   code: string;
 
-  @ApiProperty({ description: 'User Name', example: 'Sarthak Kumar', maxLength: 250 })
+  @ApiProperty({
+    description: "User Name",
+    example: "Sarthak Kumar",
+    maxLength: 250,
+  })
   @IsString()
   @MinLength(1)
   @MaxLength(250)
   name: string;
 
-  @ApiProperty({ description: 'Contact No', required: false })
+  @ApiProperty({ description: "Contact No", required: false })
   @IsString()
   @IsOptional()
   contactNo?: string;
 
-  @ApiProperty({ description: 'Email', example: 'user@example.com' })
+  @ApiProperty({ description: "Email", example: "user@example.com" })
   @IsEmail()
   email: string;
 
-  @ApiProperty({ description: 'Employee No', required: false })
+  @ApiProperty({ description: "Employee No", required: false })
   @IsString()
   @IsOptional()
   employeeNo?: string;
 
-  @ApiProperty({ description: 'Designation', required: false })
+  @ApiProperty({ description: "Designation", required: false })
   @IsString()
   @IsOptional()
   designation?: string;
 
-  @ApiProperty({ description: 'User Lic No', required: false })
+  @ApiProperty({ description: "User Lic No", required: false })
   @IsString()
   @IsOptional()
   userLicNo?: string;
 
-  @ApiProperty({ description: 'Is Active', default: true, required: false })
+  @ApiProperty({ description: "Is Active", default: true, required: false })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
 
-  @ApiProperty({ description: 'Is Locked', default: false, required: false })
+  @ApiProperty({ description: "Is Locked", default: false, required: false })
   @IsBoolean()
   @IsOptional()
   isLocked?: boolean;
 
-  @ApiProperty({ description: 'Is Dormant', default: false, required: false })
+  @ApiProperty({ description: "Is Dormant", default: false, required: false })
   @IsBoolean()
   @IsOptional()
   isDormant?: boolean;
 
-  @ApiProperty({ description: 'Role ID (UUID)', required: false })
+  @ApiProperty({ description: "Role ID (UUID)", required: false })
   @IsString()
   @IsOptional()
   roleId?: string;
 
-  @ApiProperty({ description: 'Branch ID (UUID)', required: false })
+  @ApiProperty({ description: "Branch ID (UUID)", required: false })
   @IsString()
   @IsOptional()
   branchId?: string;
 
-  @ApiProperty({ description: 'Counter ID (UUID)', required: false })
+  @ApiProperty({ description: "Counter ID (UUID)", required: false })
   @IsString()
   @IsOptional()
   counterId?: string;
 
   @ApiProperty({
-    description: 'Assigned role, branch and counter combinations',
+    description: "Assigned role, branch and counter combinations",
     required: false,
     type: [UserAssignmentDto],
   })

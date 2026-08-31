@@ -73,10 +73,12 @@ export class CountryResponseDto {
     dto.blockedAt = entity.blockedAt ?? null;
     dto.blockedById = entity.blockedById ?? null;
     dto.blockedReason = entity.blockedReason ?? null;
-    
+
     if (entity.countryGroup) {
       dto.countryGroupId = entity.countryGroup.id;
-      dto.countryGroup = CountryGroupResponseDto.fromEntity(entity.countryGroup);
+      dto.countryGroup = CountryGroupResponseDto.fromEntity(
+        entity.countryGroup,
+      );
     }
 
     dto.createdAt = entity.createdAt;

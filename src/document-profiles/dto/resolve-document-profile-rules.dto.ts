@@ -1,7 +1,7 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
-import { IsEnum, IsString } from 'class-validator';
-import { DocumentSpecificationType } from '../document-profile.entity';
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { IsOptional, IsUUID } from "class-validator";
+import { IsEnum, IsString } from "class-validator";
+import { DocumentSpecificationType } from "../document-profile.entity";
 
 export class ResolveDocumentProfilesDto {
   @ApiPropertyOptional({ enum: DocumentSpecificationType })
@@ -9,17 +9,17 @@ export class ResolveDocumentProfilesDto {
   @IsOptional()
   specificationType?: DocumentSpecificationType;
 
-  @ApiPropertyOptional({ description: 'Document type value or label' })
+  @ApiPropertyOptional({ description: "Document type value or label" })
   @IsString()
   @IsOptional()
   type?: string;
 
-  @ApiPropertyOptional({ description: 'Document group selection value' })
+  @ApiPropertyOptional({ description: "Document group selection value" })
   @IsUUID()
   @IsOptional()
   groupSelection?: string;
 
-  @ApiPropertyOptional({ description: 'Entity selection value' })
+  @ApiPropertyOptional({ description: "Entity selection value" })
   @IsUUID()
   @IsOptional()
   entitySelection?: string;

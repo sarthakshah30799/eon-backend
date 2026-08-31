@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Session,
-  UseGuards,
-} from "@nestjs/common";
+import { Controller, Get, Query, Session, UseGuards } from "@nestjs/common";
 import { ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { DashboardService } from "./dashboard.service";
@@ -28,7 +22,11 @@ export class DashboardController {
     counterId?: string;
     isAdminOrHo: boolean;
   } {
-    const isAdminOrHo = !!(session?.isAdmin || session?.isHo || session?.isHoStaff);
+    const isAdminOrHo = !!(
+      session?.isAdmin ||
+      session?.isHo ||
+      session?.isHoStaff
+    );
     return {
       branchId: isAdminOrHo ? undefined : session?.activeBranchId,
       counterId: isAdminOrHo ? undefined : session?.activeCounterId,
@@ -40,14 +38,23 @@ export class DashboardController {
   @ApiOperation({ summary: "Get dashboard stats" })
   async getStats(@Session() session: any): Promise<DashboardStatsDto> {
     const ctx = this.getBranchContext(session);
-    return this.dashboardService.getStats(ctx.branchId, ctx.counterId, ctx.isAdminOrHo);
+    return this.dashboardService.getStats(
+      ctx.branchId,
+      ctx.counterId,
+      ctx.isAdminOrHo,
+    );
   }
 
   @Get("volume-by-currency")
   @ApiOperation({ summary: "Get today vs yesterday volume by currency" })
-  async getVolumeByCurrency(@Session() session: any): Promise<VolumeByCurrencyDto[]> {
+  async getVolumeByCurrency(
+    @Session() session: any,
+  ): Promise<VolumeByCurrencyDto[]> {
     const ctx = this.getBranchContext(session);
-    return this.dashboardService.getVolumeByCurrency(ctx.branchId, ctx.isAdminOrHo);
+    return this.dashboardService.getVolumeByCurrency(
+      ctx.branchId,
+      ctx.isAdminOrHo,
+    );
   }
 
   @Get("volume-chart")

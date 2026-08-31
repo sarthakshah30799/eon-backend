@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { CurrencyRateMarginType } from '../currency-rates.enums';
-import { ProductCurrencyPricingRule } from '../currency-rates.types';
+import { ApiProperty } from "@nestjs/swagger";
+import { CurrencyRateMarginType } from "../currency-rates.enums";
+import { ProductCurrencyPricingRule } from "../currency-rates.types";
 
 class CurrencyRateMarginResponseDto {
   @ApiProperty({ enum: CurrencyRateMarginType })

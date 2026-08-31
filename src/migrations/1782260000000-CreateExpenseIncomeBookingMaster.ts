@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateExpenseIncomeBookingMaster1782260000000 implements MigrationInterface {
-    name = 'CreateExpenseIncomeBookingMaster1782260000000'
+  name = "CreateExpenseIncomeBookingMaster1782260000000";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE TABLE "expense_income_booking_masters" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(), 
                 "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), 
@@ -31,26 +31,44 @@ export class CreateExpenseIncomeBookingMaster1782260000000 implements MigrationI
                 CONSTRAINT "PK_be8781133009e586e5ae84d5e73" PRIMARY KEY ("id")
             )
         `);
-        await queryRunner.query(`CREATE INDEX "IDX_443b0250e83f054a7eaa416152" ON "expense_income_booking_masters" ("type") `);
-        await queryRunner.query(`CREATE INDEX "IDX_aa263a2324d5b1be828c88a65b" ON "expense_income_booking_masters" ("code") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_f894bb9fdbfa2d21ace7245f0f" ON "expense_income_booking_masters" ("type", "code") `);
-        await queryRunner.query(`ALTER TABLE "expense_income_booking_masters" ADD CONSTRAINT "FK_592fbfa8d4e4193f3085b8b3cc9" FOREIGN KEY ("tds_account_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
-        
-        // Add audit trigger
-        await queryRunner.query(`
+    await queryRunner.query(
+      `CREATE INDEX "IDX_443b0250e83f054a7eaa416152" ON "expense_income_booking_masters" ("type") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_aa263a2324d5b1be828c88a65b" ON "expense_income_booking_masters" ("code") `,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "IDX_f894bb9fdbfa2d21ace7245f0f" ON "expense_income_booking_masters" ("type", "code") `,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "expense_income_booking_masters" ADD CONSTRAINT "FK_592fbfa8d4e4193f3085b8b3cc9" FOREIGN KEY ("tds_account_id") REFERENCES "account_profiles"("id") ON DELETE SET NULL ON UPDATE NO ACTION`,
+    );
+
+    // Add audit trigger
+    await queryRunner.query(`
             CREATE TRIGGER expense_income_booking_masters_audit_trigger
             AFTER INSERT OR UPDATE OR DELETE ON "expense_income_booking_masters"
             FOR EACH ROW
             EXECUTE FUNCTION audit_trigger_func();
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP TRIGGER IF EXISTS expense_income_booking_masters_audit_trigger ON "expense_income_booking_masters"`);
-        await queryRunner.query(`ALTER TABLE "expense_income_booking_masters" DROP CONSTRAINT "FK_592fbfa8d4e4193f3085b8b3cc9"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_f894bb9fdbfa2d21ace7245f0f"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_aa263a2324d5b1be828c88a65b"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_443b0250e83f054a7eaa416152"`);
-        await queryRunner.query(`DROP TABLE "expense_income_booking_masters"`);
-    }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS expense_income_booking_masters_audit_trigger ON "expense_income_booking_masters"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "expense_income_booking_masters" DROP CONSTRAINT "FK_592fbfa8d4e4193f3085b8b3cc9"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_f894bb9fdbfa2d21ace7245f0f"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_aa263a2324d5b1be828c88a65b"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_443b0250e83f054a7eaa416152"`,
+    );
+    await queryRunner.query(`DROP TABLE "expense_income_booking_masters"`);
+  }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 @Injectable()
 export class ConfigService {
@@ -14,7 +14,6 @@ export class ConfigService {
     return process.env[key];
   }
 
-
   getNumber(key: string): number {
     const value = this.get(key);
     const parsed = parseInt(value, 10);
@@ -26,7 +25,7 @@ export class ConfigService {
 
   getBoolean(key: string): boolean {
     const value = this.get(key);
-    return value.toLowerCase() === 'true';
+    return value.toLowerCase() === "true";
   }
 
   getOptionalBoolean(key: string): boolean | undefined {
@@ -34,55 +33,78 @@ export class ConfigService {
     if (value === undefined) {
       return undefined;
     }
-    return value.toLowerCase() === 'true';
+    return value.toLowerCase() === "true";
   }
 
   get port(): number {
-    const p = this.getOptional('PORT');
+    const p = this.getOptional("PORT");
     return p ? parseInt(p, 10) : 3000;
   }
 
   get nodeEnv(): string | undefined {
-    return this.getOptional('NODE_ENV');
+    return this.getOptional("NODE_ENV");
   }
 
   get isProduction(): boolean {
-    return this.nodeEnv === 'production';
+    return this.nodeEnv === "production";
   }
 
   get secretSessionKey(): string {
-    return this.get('SESSION_SECRET');
+    return this.get("SESSION_SECRET");
   }
 
   get database() {
-    const sslEnabled = this.getOptionalBoolean('DB_SSL') === true;
+    const sslEnabled = this.getOptionalBoolean("DB_SSL") === true;
     return {
-      host: this.get('DB_HOST'),
-      transactionHost: this.getOptional('DB2_HOST') || this.getOptional('DB_HOST2') || this.get('DB_HOST'),
-      port: this.getNumber('DB_PORT'),
-      username: this.get('DB_USERNAME'),
-      password: this.get('DB_PASSWORD'),
-      database: this.get('DB_DATABASE'),
-      database2: this.getOptional('DB2_DATABASE') || this.getOptional('DB_DATABASE2') || this.get('DB_DATABASE'),
-      transactionDatabase: this.getOptional('DB2_DATABASE') || this.getOptional('DB_DATABASE2') || this.get('DB_DATABASE'),
+      host: this.get("DB_HOST"),
+      transactionHost:
+        this.getOptional("DB2_HOST") ||
+        this.getOptional("DB_HOST2") ||
+        this.get("DB_HOST"),
+      port: this.getNumber("DB_PORT"),
+      username: this.get("DB_USERNAME"),
+      password: this.get("DB_PASSWORD"),
+      database: this.get("DB_DATABASE"),
+      database2:
+        this.getOptional("DB2_DATABASE") ||
+        this.getOptional("DB_DATABASE2") ||
+        this.get("DB_DATABASE"),
+      transactionDatabase:
+        this.getOptional("DB2_DATABASE") ||
+        this.getOptional("DB_DATABASE2") ||
+        this.get("DB_DATABASE"),
       ssl: sslEnabled
-        ? { rejectUnauthorized: this.getOptionalBoolean('DB_SSL_REJECT_UNAUTHORIZED') !== false }
+        ? {
+            rejectUnauthorized:
+              this.getOptionalBoolean("DB_SSL_REJECT_UNAUTHORIZED") !== false,
+          }
         : false,
       synchronize: false,
     };
   }
 
   get database2() {
-    const sslEnabled = this.getOptionalBoolean('DB2_SSL') === true || this.getOptionalBoolean('DB_SSL') === true;
-    const portVal = this.getOptional('DB2_PORT') || this.getOptional('DB_PORT');
+    const sslEnabled =
+      this.getOptionalBoolean("DB2_SSL") === true ||
+      this.getOptionalBoolean("DB_SSL") === true;
+    const portVal = this.getOptional("DB2_PORT") || this.getOptional("DB_PORT");
     return {
-      host: this.getOptional('DB2_HOST') || this.getOptional('DB_HOST2') || this.get('DB_HOST'),
+      host:
+        this.getOptional("DB2_HOST") ||
+        this.getOptional("DB_HOST2") ||
+        this.get("DB_HOST"),
       port: portVal ? parseInt(portVal, 10) : 5432,
-      username: this.getOptional('DB2_USERNAME') || this.get('DB_USERNAME'),
-      password: this.getOptional('DB2_PASSWORD') || this.get('DB_PASSWORD'),
-      database: this.getOptional('DB2_DATABASE') || this.getOptional('DB_DATABASE2') || this.get('DB_DATABASE'),
+      username: this.getOptional("DB2_USERNAME") || this.get("DB_USERNAME"),
+      password: this.getOptional("DB2_PASSWORD") || this.get("DB_PASSWORD"),
+      database:
+        this.getOptional("DB2_DATABASE") ||
+        this.getOptional("DB_DATABASE2") ||
+        this.get("DB_DATABASE"),
       ssl: sslEnabled
-        ? { rejectUnauthorized: this.getOptionalBoolean('DB2_SSL_REJECT_UNAUTHORIZED') !== false }
+        ? {
+            rejectUnauthorized:
+              this.getOptionalBoolean("DB2_SSL_REJECT_UNAUTHORIZED") !== false,
+          }
         : false,
     };
   }

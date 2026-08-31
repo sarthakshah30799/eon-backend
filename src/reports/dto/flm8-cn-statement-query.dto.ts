@@ -65,7 +65,9 @@ export class Flm8CnStatementQueryDto {
   @IsOptional()
   branchIds?: string[];
 
-  @ApiPropertyOptional({ description: "Product id. Defaults to CN when omitted." })
+  @ApiPropertyOptional({
+    description: "Product id. Defaults to CN when omitted.",
+  })
   @IsUUID()
   @IsOptional()
   productId?: string;
@@ -79,7 +81,8 @@ export class Flm8CnStatementQueryDto {
   profileType: PurposeGroupProfileType;
 
   @ApiPropertyOptional({
-    description: "Report layout. Vertical matches FLM 1. Horizontal lists currency as a column.",
+    description:
+      "Report layout. Vertical matches FLM 1. Horizontal lists currency as a column.",
     enum: Object.values(Flm8CnStatementView),
   })
   @IsIn(Object.values(Flm8CnStatementView))

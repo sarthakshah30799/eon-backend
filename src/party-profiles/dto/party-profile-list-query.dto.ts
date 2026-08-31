@@ -1,6 +1,14 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID } from "class-validator";
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from "class-validator";
+import { PaginationQueryDto } from "../../common/pagination";
 import { ClientType } from "../party-profile.entity";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 
@@ -29,16 +37,7 @@ const parseBooleanQuery = ({ value }: { value: unknown }) => {
   return undefined;
 };
 
-const parseNumberQuery = ({ value }: { value: unknown }) => {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-export class PartyProfileListQueryDto {
+export class PartyProfileListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: "Search query by code, name, or city" })
   @IsString()
   @IsOptional()
@@ -60,33 +59,42 @@ export class PartyProfileListQueryDto {
   @Transform(parseBooleanQuery)
   active?: boolean;
 
-  @ApiPropertyOptional({ description: "When false, include inactive party profiles" })
+  @ApiPropertyOptional({
+    description: "When false, include inactive party profiles",
+  })
   @IsBoolean()
   @IsOptional()
   @Transform(parseBooleanQuery)
   activeOnly?: boolean;
 
-  @ApiPropertyOptional({ description: "Filter by workflow status", enum: WorkflowStatus })
+  @ApiPropertyOptional({
+    description: "Filter by workflow status",
+    enum: WorkflowStatus,
+  })
   @IsEnum(WorkflowStatus)
   @IsOptional()
   status?: WorkflowStatus;
 
-  @ApiPropertyOptional({ description: "Filter by individual party profile flag" })
+  @ApiPropertyOptional({
+    description: "Filter by individual party profile flag",
+  })
   @IsBoolean()
   @IsOptional()
   @Transform(parseBooleanQuery)
   isIndividual?: boolean;
 
-  @ApiPropertyOptional({ description: "Filter by one or more Party Profile types", enum: ClientType, isArray: true })
+  @ApiPropertyOptional({
+    description: "Filter by one or more Party Profile types",
+    enum: ClientType,
+    isArray: true,
+  })
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') {
+    if (value === undefined || value === null || value === "") {
       return undefined;
     }
 
-    const values = Array.isArray(value) ? value : String(value).split(',');
-    return values
-      .map(item => String(item).trim())
-      .filter(Boolean);
+    const values = Array.isArray(value) ? value : String(value).split(",");
+    return values.map((item) => String(item).trim()).filter(Boolean);
   })
   @IsArray()
   @IsEnum(ClientType, { each: true })
@@ -98,14 +106,12 @@ export class PartyProfileListQueryDto {
     isArray: true,
   })
   @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') {
+    if (value === undefined || value === null || value === "") {
       return undefined;
     }
 
-    const values = Array.isArray(value) ? value : String(value).split(',');
-    return values
-      .map(item => String(item).trim())
-      .filter(Boolean);
+    const values = Array.isArray(value) ? value : String(value).split(",");
+    return values.map((item) => String(item).trim()).filter(Boolean);
   })
   @IsArray()
   @IsString({ each: true })
@@ -118,25 +124,17 @@ export class PartyProfileListQueryDto {
   @Transform(parseBooleanQuery)
   sale?: boolean;
 
-  @ApiPropertyOptional({ description: "Filter by purchase-enabled party profiles" })
+  @ApiPropertyOptional({
+    description: "Filter by purchase-enabled party profiles",
+  })
   @IsBoolean()
   @IsOptional()
   @Transform(parseBooleanQuery)
   purchase?: boolean;
 
-  @ApiPropertyOptional({ description: "Page number", default: 1 })
-  @IsInt()
-  @IsOptional()
-  @Transform(parseNumberQuery)
-  page?: number;
-
-  @ApiPropertyOptional({ description: "Items per page", default: 10 })
-  @IsInt()
-  @IsOptional()
-  @Transform(parseNumberQuery)
-  limit?: number;
-
-  @ApiPropertyOptional({ description: "Filter by Entity Type category option id" })
+  @ApiPropertyOptional({
+    description: "Filter by Entity Type category option id",
+  })
   @IsUUID()
   @IsOptional()
   entityTypeId?: string;

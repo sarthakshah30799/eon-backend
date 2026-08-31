@@ -1,8 +1,18 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsInt, IsNotEmpty, IsString, IsUUID, MaxLength, Min } from "class-validator";
+import {
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from "class-validator";
 
 export class CreateFinancialSubProfileDto {
-  @ApiProperty({ description: "Financial code ID (UUID)", example: "123e4567-e89b-12d3-a456-426614174000" })
+  @ApiProperty({
+    description: "Financial code ID (UUID)",
+    example: "123e4567-e89b-12d3-a456-426614174000",
+  })
   @IsUUID()
   @IsNotEmpty()
   financialCodeId: string;

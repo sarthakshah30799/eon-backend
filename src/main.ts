@@ -1,24 +1,26 @@
-import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { json, urlencoded } from 'express';
+import "dotenv/config";
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+import { ValidationPipe } from "@nestjs/common";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { json, urlencoded } from "express";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const expressApp = app.getHttpAdapter().getInstance();
 
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ limit: '10mb', extended: true }));
-  expressApp.set('trust proxy', 1);
+  app.use(json({ limit: "10mb" }));
+  app.use(urlencoded({ limit: "10mb", extended: true }));
+  expressApp.set("trust proxy", 1);
 
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-    transformOptions: { enableImplicitConversion: true },
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
 
   app.enableCors({
     origin: true,
@@ -27,30 +29,34 @@ async function bootstrap() {
 
   // Swagger configuration
   const config = new DocumentBuilder()
-    .setTitle('Maraekat API')
-    .setDescription('API documentation for Maraekat application with user authentication, CRUD operations for companies, branches, counters, currencies, roles, users, TDS profiles, and dynamic menu system.')
-    .setVersion('1.0')
-    .addTag('auth', 'Authentication endpoints')
-    .addTag('users', 'User management')
-    .addTag('companies', 'Company management')
-    .addTag('branches', 'Branch management')
-    .addTag('counters', 'Counter management')
-    .addTag('currencies', 'Currency management')
-    .addTag('countries', 'Country management')
-    .addTag('states', 'State management')
-    .addTag('roles', 'Role management')
-    .addTag('menus', 'Dynamic menu management')
-    .addTag('tds-profiles', 'TDS profile management')
-    .addTag('passengers', 'Passenger AML verification')
-    .addCookieAuth('sessionId')
+    .setTitle("Maraekat API")
+    .setDescription(
+      "API documentation for Maraekat application with user authentication, CRUD operations for companies, branches, counters, currencies, roles, users, TDS profiles, and dynamic menu system.",
+    )
+    .setVersion("1.0")
+    .addTag("auth", "Authentication endpoints")
+    .addTag("users", "User management")
+    .addTag("companies", "Company management")
+    .addTag("branches", "Branch management")
+    .addTag("counters", "Counter management")
+    .addTag("currencies", "Currency management")
+    .addTag("countries", "Country management")
+    .addTag("states", "State management")
+    .addTag("roles", "Role management")
+    .addTag("menus", "Dynamic menu management")
+    .addTag("tds-profiles", "TDS profile management")
+    .addTag("passengers", "Passenger AML verification")
+    .addCookieAuth("sessionId")
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup("api", app, document);
 
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);
-  console.log(`Swagger documentation available at: http://localhost:${port}/api`);
+  console.log(
+    `Swagger documentation available at: http://localhost:${port}/api`,
+  );
 }
 bootstrap();

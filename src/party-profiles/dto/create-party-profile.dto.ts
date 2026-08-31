@@ -21,12 +21,20 @@ import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-
 import { PartyProfileCommissionRuleDto } from "./party-profile-commission-rule.dto";
 
 export class CreatePartyProfileDto {
-  @ApiProperty({ description: "Date of Introduction", example: "2026-06-09T00:00:00Z" })
+  @ApiProperty({
+    description: "Date of Introduction",
+    example: "2026-06-09T00:00:00Z",
+  })
   @IsString()
   @IsOptional()
   dateOfIntro?: string;
 
-  @ApiProperty({ description: "Client Code", example: "SHREENATH", minLength: 5, maxLength: 20 })
+  @ApiProperty({
+    description: "Client Code",
+    example: "SHREENATH",
+    minLength: 5,
+    maxLength: 20,
+  })
   @IsString()
   @IsNotEmpty()
   @Length(5, 20, { message: "Code must be between 5 and 20 characters" })
@@ -37,7 +45,10 @@ export class CreatePartyProfileDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiPropertyOptional({ description: "Individual category customer status flag", default: false })
+  @ApiPropertyOptional({
+    description: "Individual category customer status flag",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   isIndividual?: boolean;
@@ -345,14 +356,21 @@ export class CreatePartyProfileDto {
   @IsOptional()
   ffmcRegDate?: string;
 
-  @ApiPropertyOptional({ description: "Allowed CARD number length for this issuer. Defaults to 16.", example: 16 })
+  @ApiPropertyOptional({
+    description: "Allowed CARD number length for this issuer. Defaults to 16.",
+    example: 16,
+  })
   @IsInt()
   @Min(8)
   @Max(19)
   @IsOptional()
   cardNumberLength?: number;
 
-  @ApiPropertyOptional({ description: "When true, CARD stock upload and entry may use a masked number of the configured length.", default: false })
+  @ApiPropertyOptional({
+    description:
+      "When true, CARD stock upload and entry may use a masked number of the configured length.",
+    default: false,
+  })
   @IsBoolean()
   @IsOptional()
   allowCardNumberMasking?: boolean;
@@ -362,14 +380,21 @@ export class CreatePartyProfileDto {
   @IsOptional()
   divisionFactor?: number;
 
-  @ApiPropertyOptional({ description: "Commission Rules", type: [PartyProfileCommissionRuleDto] })
+  @ApiPropertyOptional({
+    description: "Commission Rules",
+    type: [PartyProfileCommissionRuleDto],
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PartyProfileCommissionRuleDto)
   @IsOptional()
   commissionRules?: PartyProfileCommissionRuleDto[];
 
-  @ApiPropertyOptional({ description: "Client Profile Type", enum: ClientType, default: ClientType.CORPORATE_CLIENT })
+  @ApiPropertyOptional({
+    description: "Client Profile Type",
+    enum: ClientType,
+    default: ClientType.CORPORATE_CLIENT,
+  })
   @IsEnum(ClientType)
   @IsOptional()
   type?: ClientType;

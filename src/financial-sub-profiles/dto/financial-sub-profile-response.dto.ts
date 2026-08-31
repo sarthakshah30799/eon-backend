@@ -33,7 +33,9 @@ export class FinancialSubProfileResponseDto {
   @ApiProperty()
   updatedAt: Date;
 
-  static fromEntity(entity: FinancialSubProfile): FinancialSubProfileResponseDto {
+  static fromEntity(
+    entity: FinancialSubProfile,
+  ): FinancialSubProfileResponseDto {
     const dto = new FinancialSubProfileResponseDto();
     dto.id = entity.id;
     dto.financialCodeId = entity.financialCode?.id || null;

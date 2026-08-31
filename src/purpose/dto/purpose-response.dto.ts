@@ -1,7 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Purpose } from '../purpose.entity';
-import { PurposeRateType } from '../purpose.enums';
-import { PurposeSlabResponseDto } from './purpose-slab-response.dto';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Purpose } from "../purpose.entity";
+import { PurposeRateType } from "../purpose.enums";
+import { PurposeSlabResponseDto } from "./purpose-slab-response.dto";
 
 export class PurposeResponseDto {
   @ApiProperty()
@@ -64,7 +64,7 @@ export class PurposeResponseDto {
     dto.slabs = (entity.slabs ?? [])
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map(slab => PurposeSlabResponseDto.fromEntity(slab));
+      .map((slab) => PurposeSlabResponseDto.fromEntity(slab));
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     dto.createdBy = entity.createdBy;

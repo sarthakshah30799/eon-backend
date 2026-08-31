@@ -1,9 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsBoolean, IsEnum, IsOptional } from "class-validator";
 import {
   PassengerEntityType,
   PassengerNationalityType,
-} from '../passenger.entity';
+} from "../passenger.entity";
 
 export class VerifyPassengerAmlDto {
   @ApiProperty({ enum: PassengerEntityType })
@@ -14,39 +14,39 @@ export class VerifyPassengerAmlDto {
   @IsEnum(PassengerNationalityType)
   nationalityType: PassengerNationalityType;
 
-  @ApiPropertyOptional({ example: 'ABCDE1234F' })
+  @ApiPropertyOptional({ example: "ABCDE1234F" })
   @IsOptional()
   panNumber?: string;
 
-  @ApiPropertyOptional({ example: 'John Doe' })
+  @ApiPropertyOptional({ example: "John Doe" })
   @IsOptional()
   panHolderName?: string;
 
-  @ApiPropertyOptional({ example: '1990-01-31' })
+  @ApiPropertyOptional({ example: "1990-01-31" })
   @IsOptional()
   panDob?: string;
 
-  @ApiPropertyOptional({ example: 'COMPANY' })
+  @ApiPropertyOptional({ example: "COMPANY" })
   @IsOptional()
   panHolderRelationType?: string;
 
-  @ApiPropertyOptional({ example: 'P1234567' })
+  @ApiPropertyOptional({ example: "P1234567" })
   @IsOptional()
   passportNumber?: string;
 
-  @ApiPropertyOptional({ example: 'Delhi' })
+  @ApiPropertyOptional({ example: "Delhi" })
   @IsOptional()
   passportIssueAt?: string;
 
-  @ApiPropertyOptional({ example: '2020-01-01' })
+  @ApiPropertyOptional({ example: "2020-01-01" })
   @IsOptional()
   passportIssueDate?: string;
 
-  @ApiPropertyOptional({ example: '2030-01-01' })
+  @ApiPropertyOptional({ example: "2030-01-01" })
   @IsOptional()
   passportExpiryDate?: string;
 
-  @ApiPropertyOptional({ example: '2026-07-21' })
+  @ApiPropertyOptional({ example: "2026-07-21" })
   @IsOptional()
   arrivalDate?: string;
 

@@ -40,7 +40,6 @@ export const loadFlm4ItemRows = (
   );
 };
 
-
 export const buildFlm4PurchaseFromFfmcExport = (
   report: Flm3ReportResponse,
   format: CardSettlementReportFormat,

@@ -1,19 +1,22 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AdvancedSetting, NodeType } from '../additional-settings/advanced-setting.entity';
-import { User } from '../users/user.entity';
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  AdvancedSetting,
+  NodeType,
+} from "../additional-settings/advanced-setting.entity";
+import { User } from "../users/user.entity";
 import {
   SessionPolicyConfig,
   SessionPolicyResponseDto,
   SESSION_POLICY_CHILDREN,
-} from './session-policy.dto';
+} from "./session-policy.dto";
 import {
   SessionPolicyCodeEnum,
   SessionPolicyValidationCodeEnum,
-} from './session-policy.enum';
+} from "./session-policy.enum";
 
-type LoginSessionUser = Pick<User, 'id' | 'email' | 'isAdmin'> & {
+type LoginSessionUser = Pick<User, "id" | "email" | "isAdmin"> & {
   isHoStaff?: boolean;
 };
 
@@ -42,11 +45,12 @@ export class SessionPolicyService {
   }
 
   private toSafeInteger(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') {
+    if (value === null || value === undefined || value === "") {
       return null;
     }
 
-    const parsed = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+    const parsed =
+      typeof value === "number" ? value : Number.parseInt(String(value), 10);
     return Number.isFinite(parsed) ? parsed : null;
   }
 
@@ -110,11 +114,11 @@ export class SessionPolicyService {
       );
     }
 
-    if (['true', 'yes', '1'].includes(trimmed)) {
+    if (["true", "yes", "1"].includes(trimmed)) {
       return true;
     }
 
-    if (['false', 'no', '0'].includes(trimmed)) {
+    if (["false", "no", "0"].includes(trimmed)) {
       return false;
     }
 
@@ -140,7 +144,8 @@ export class SessionPolicyService {
     }
 
     return this.validatePolicyConfig({
-      allowMultipleLogin: rowMap.get(SessionPolicyCodeEnum.AllowMultipleLogin)?.valueBoolean,
+      allowMultipleLogin: rowMap.get(SessionPolicyCodeEnum.AllowMultipleLogin)
+        ?.valueBoolean,
       idleTimeoutSeconds: this.normalizeOptionalCount(
         rowMap.get(SessionPolicyCodeEnum.IdleTimeoutSeconds)?.valueNumber,
       ),
@@ -150,13 +155,18 @@ export class SessionPolicyService {
   validatePolicyConfig(config: SessionPolicyConfig): SessionPolicyConfig {
     const normalized: SessionPolicyConfig = {
       allowMultipleLogin: config.allowMultipleLogin,
-      idleTimeoutSeconds: this.normalizeOptionalCount(config.idleTimeoutSeconds),
+      idleTimeoutSeconds: this.normalizeOptionalCount(
+        config.idleTimeoutSeconds,
+      ),
     };
 
-    if (normalized.idleTimeoutSeconds !== undefined && normalized.idleTimeoutSeconds < 0) {
+    if (
+      normalized.idleTimeoutSeconds !== undefined &&
+      normalized.idleTimeoutSeconds < 0
+    ) {
       throw this.createPolicyException(
         SessionPolicyValidationCodeEnum.InvalidPolicyConfig,
-        'Idle timeout cannot be negative',
+        "Idle timeout cannot be negative",
         {
           idleTimeoutSeconds: normalized.idleTimeoutSeconds,
         },
@@ -172,9 +182,9 @@ export class SessionPolicyService {
         code: SessionPolicyCodeEnum.Policy,
         nodeType: NodeType.Category,
       },
-      relations: ['children'],
+      relations: ["children"],
       order: {
-        createdAt: 'ASC',
+        createdAt: "ASC",
       },
     });
 
@@ -187,14 +197,20 @@ export class SessionPolicyService {
     }
 
     const category = await this.getSessionPolicyEntity();
-    const config = category ? this.buildConfigFromRows(category.children || []) : {};
+    const config = category
+      ? this.buildConfigFromRows(category.children || [])
+      : {};
 
     this.cachedPolicy = config;
     return config;
   }
 
-  async getSessionPolicyDto(forceReload = false): Promise<SessionPolicyResponseDto> {
-    return SessionPolicyResponseDto.fromConfig(await this.getSessionPolicy(forceReload));
+  async getSessionPolicyDto(
+    forceReload = false,
+  ): Promise<SessionPolicyResponseDto> {
+    return SessionPolicyResponseDto.fromConfig(
+      await this.getSessionPolicy(forceReload),
+    );
   }
 
   invalidateCache(): void {
@@ -206,12 +222,19 @@ export class SessionPolicyService {
   }
 
   isPolicyCategory(code?: string | null): boolean {
-    return String(code ?? '').trim().toUpperCase() === SessionPolicyCodeEnum.Policy;
+    return (
+      String(code ?? "")
+        .trim()
+        .toUpperCase() === SessionPolicyCodeEnum.Policy
+    );
   }
 
   applyPolicyToSession(session: any, policy: SessionPolicyConfig): void {
     const resolved = this.validatePolicyConfig(policy);
-    if (resolved.idleTimeoutSeconds !== undefined && resolved.idleTimeoutSeconds > 0) {
+    if (
+      resolved.idleTimeoutSeconds !== undefined &&
+      resolved.idleTimeoutSeconds > 0
+    ) {
       session.lastActivityAt = session.lastActivityAt ?? Date.now();
       session.cookie.maxAge = resolved.idleTimeoutSeconds * 1000;
     }
@@ -224,7 +247,10 @@ export class SessionPolicyService {
   async applyLoginSessionPolicy(
     user: LoginSessionUser,
     session: any,
-    invalidateUserSessions: (userId: string, currentSessionId?: string) => Promise<void>,
+    invalidateUserSessions: (
+      userId: string,
+      currentSessionId?: string,
+    ) => Promise<void>,
   ): Promise<{ message: string; sessionsInvalidated: number }> {
     const policy = await this.getSessionPolicy();
     const shouldInvalidate = this.shouldInvalidatePriorSessions(policy);
@@ -240,15 +266,18 @@ export class SessionPolicyService {
     session.activeBranchId = null;
     session.activeCounterId = null;
     const resolved = this.validatePolicyConfig(policy);
-    if (resolved.idleTimeoutSeconds !== undefined && resolved.idleTimeoutSeconds > 0) {
+    if (
+      resolved.idleTimeoutSeconds !== undefined &&
+      resolved.idleTimeoutSeconds > 0
+    ) {
       this.applyPolicyToSession(session, resolved);
       this.touchSession(session);
     }
 
     return {
       message: shouldInvalidate
-        ? 'Login successful - previous sessions have been invalidated'
-        : 'Login successful',
+        ? "Login successful - previous sessions have been invalidated"
+        : "Login successful",
       sessionsInvalidated: shouldInvalidate ? 1 : 0,
     };
   }
@@ -259,7 +288,10 @@ export class SessionPolicyService {
 
   isSessionExpired(session: any, policy: SessionPolicyConfig): boolean {
     const resolved = this.validatePolicyConfig(policy);
-    if (resolved.idleTimeoutSeconds === undefined || resolved.idleTimeoutSeconds <= 0) {
+    if (
+      resolved.idleTimeoutSeconds === undefined ||
+      resolved.idleTimeoutSeconds <= 0
+    ) {
       return false;
     }
 

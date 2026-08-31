@@ -11,14 +11,16 @@ import {
 
 export class CreateTransactionDataLocksDto {
   @ApiProperty({
-    description: "FLM 8 report end date used as the lock-through date (inclusive)",
+    description:
+      "FLM 8 report end date used as the lock-through date (inclusive)",
   })
   @IsDateString()
   lockedThroughDate: string;
 
   @ApiProperty({
     type: [String],
-    description: "Branch ids to lock. Empty/omitted is not allowed; client must send resolved list.",
+    description:
+      "Branch ids to lock. Empty/omitted is not allowed; client must send resolved list.",
   })
   @IsArray()
   @ArrayMinSize(1)

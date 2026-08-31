@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Menu } from './menu.entity';
-import { CreateMenuDto } from './dto/create-menu.dto';
-import { UpdateMenuDto } from './dto/update-menu.dto';
-import { MenuResponseDto } from './dto/menu-response.dto';
-import { normalizeMenuPath } from './menu-path.util';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Menu } from "./menu.entity";
+import { CreateMenuDto } from "./dto/create-menu.dto";
+import { UpdateMenuDto } from "./dto/update-menu.dto";
+import { MenuResponseDto } from "./dto/menu-response.dto";
+import { normalizeMenuPath } from "./menu-path.util";
 
 @Injectable()
 export class MenuService {
@@ -16,13 +20,13 @@ export class MenuService {
 
   private async getAllMenuDtos(): Promise<MenuResponseDto[]> {
     const menus = await this.menuRepository
-      .createQueryBuilder('menu')
-      .leftJoinAndSelect('menu.parent', 'parent')
-      .orderBy('menu.sortOrder IS NULL', 'ASC')
-      .addOrderBy('menu.sortOrder', 'ASC')
-      .addOrderBy('menu.name', 'ASC')
+      .createQueryBuilder("menu")
+      .leftJoinAndSelect("menu.parent", "parent")
+      .orderBy("menu.sortOrder IS NULL", "ASC")
+      .addOrderBy("menu.sortOrder", "ASC")
+      .addOrderBy("menu.name", "ASC")
       .getMany();
-    return menus.map(menu => MenuResponseDto.fromEntity(menu, false));
+    return menus.map((menu) => MenuResponseDto.fromEntity(menu, false));
   }
 
   private async getMenuDtosWithoutAdminBranch(): Promise<MenuResponseDto[]> {
@@ -71,13 +75,13 @@ export class MenuService {
 
   private buildVisibleMenuDtos(
     menus: MenuResponseDto[],
-    includeAdminMenus: boolean
+    includeAdminMenus: boolean,
   ): MenuResponseDto[] {
     if (includeAdminMenus) {
       return menus;
     }
 
-    const menusById = new Map(menus.map(menu => [menu.id, menu]));
+    const menusById = new Map(menus.map((menu) => [menu.id, menu]));
     const visibleCache = new Map<string, boolean>();
 
     const isVisible = (menu: MenuResponseDto): boolean => {
@@ -87,17 +91,13 @@ export class MenuService {
       }
 
       const parent = menu.parentId ? menusById.get(menu.parentId) : undefined;
-      const visible = !menu.isAdmin && (
-        !parent
-          ? true
-          : isVisible(parent)
-      );
+      const visible = !menu.isAdmin && (!parent ? true : isVisible(parent));
 
       visibleCache.set(menu.id, visible);
       return visible;
     };
 
-    return menus.filter(menu => isVisible(menu));
+    return menus.filter((menu) => isVisible(menu));
   }
 
   private buildTree(menus: MenuResponseDto[]): MenuResponseDto[] {
@@ -112,7 +112,7 @@ export class MenuService {
 
     const build = (parentId: string | null): MenuResponseDto[] => {
       const items = childrenByParent.get(parentId) ?? [];
-      return items.map(menu => ({
+      return items.map((menu) => ({
         ...menu,
         children: build(menu.id),
       }));
@@ -144,7 +144,7 @@ export class MenuService {
     includeAdminMenus: boolean,
   ): MenuResponseDto[] {
     return menus
-      .map(menu => {
+      .map((menu) => {
         if (menu.isAdmin && !includeAdminMenus) {
           return null;
         }
@@ -171,7 +171,7 @@ export class MenuService {
 
   private findMenuNodeById(
     menus: MenuResponseDto[],
-    id: string
+    id: string,
   ): MenuResponseDto | null {
     for (const menu of menus) {
       if (menu.id === id) {
@@ -191,7 +191,7 @@ export class MenuService {
 
   async findRightsTree(): Promise<MenuResponseDto[]> {
     const menus = await this.getMenuDtosWithoutAdminBranch();
-    return this.buildTree(menus.filter(menu => menu.isActive));
+    return this.buildTree(menus.filter((menu) => menu.isActive));
   }
 
   async findTree(
@@ -203,14 +203,18 @@ export class MenuService {
     const visibleMenus = this.buildVisibleMenuDtos(
       menus,
       includeAdminMenus && isAdminUser,
-    ).filter(menu => menu.isActive);
+    ).filter((menu) => menu.isActive);
 
     const tree = this.buildTree(visibleMenus);
     if (includeAdminMenus && isAdminUser) {
       return tree;
     }
 
-    return this.pruneTreeByPermissions(tree, permissions, includeAdminMenus && isAdminUser);
+    return this.pruneTreeByPermissions(
+      tree,
+      permissions,
+      includeAdminMenus && isAdminUser,
+    );
   }
 
   async findAll(
@@ -248,7 +252,7 @@ export class MenuService {
   ): Promise<MenuResponseDto> {
     const { parentId, ...rest } = dto;
     if (rest.isAdmin && !isAdminUser) {
-      throw new ForbiddenException('Only admin users can create admin menus');
+      throw new ForbiddenException("Only admin users can create admin menus");
     }
     if (parentId) {
       await this.findById(parentId, includeAdminMenus, isAdminUser);
@@ -257,7 +261,7 @@ export class MenuService {
     const menu = this.menuRepository.create({
       ...rest,
       path,
-      parent: parentId ? { id: parentId } as any : null,
+      parent: parentId ? ({ id: parentId } as any) : null,
       createdBy: userId,
       updatedBy: userId,
     });
@@ -280,7 +284,7 @@ export class MenuService {
     }
     const { parentId, ...rest } = dto;
     if (rest.isAdmin && !isAdminUser) {
-      throw new ForbiddenException('Only admin users can update admin menus');
+      throw new ForbiddenException("Only admin users can update admin menus");
     }
     if (parentId) {
       await this.findById(parentId, includeAdminMenus, isAdminUser);
@@ -290,7 +294,7 @@ export class MenuService {
       path: normalizeMenuPath(rest.path),
     });
     if (parentId !== undefined) {
-      menu.parent = parentId ? { id: parentId } as any : null;
+      menu.parent = parentId ? ({ id: parentId } as any) : null;
     }
     menu.updatedBy = userId;
     await this.menuRepository.save(menu);

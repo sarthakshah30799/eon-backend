@@ -1,6 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { ArrayNotEmpty, IsArray, IsEnum, IsOptional, IsString } from "class-validator";
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+} from "class-validator";
 import { ReportSortBy } from "./report-sort.dto";
 
 export enum SpecialReportTemplateEnum {
@@ -18,9 +24,7 @@ const parseArrayQuery = ({ value }: { value: unknown }) => {
   }
 
   const values = Array.isArray(value) ? value : String(value).split(",");
-  return values
-    .map(item => String(item).trim())
-    .filter(Boolean);
+  return values.map((item) => String(item).trim()).filter(Boolean);
 };
 
 export class SpecialReportQueryDto {

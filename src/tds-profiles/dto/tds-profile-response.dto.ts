@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { TdsProfile } from '../tds-profile.entity';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { TdsProfile } from "../tds-profile.entity";
 
 export class TdsProfileResponseDto {
   @ApiProperty()

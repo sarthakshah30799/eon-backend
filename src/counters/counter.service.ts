@@ -1,12 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Counter } from './counter.entity';
-import { CreateCounterDto } from './dto/create-counter.dto';
-import { UpdateCounterDto } from './dto/update-counter.dto';
-import { CounterResponseDto } from './dto/counter-response.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Counter } from "./counter.entity";
+import { CreateCounterDto } from "./dto/create-counter.dto";
+import { CounterListQueryDto } from "./dto/counter-list-query.dto";
+import { UpdateCounterDto } from "./dto/update-counter.dto";
+import { CounterResponseDto } from "./dto/counter-response.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
-import { uppercaseFields } from '../utils/uppercase.util';
+import { uppercaseFields } from "../utils/uppercase.util";
 
 @Injectable()
 export class CounterService {
@@ -16,38 +23,44 @@ export class CounterService {
   ) {}
 
   async findAll(
-    activeOnly = true,
-    search?: string,
-    branchId?: string,
-  ): Promise<CounterResponseDto[]> {
+    query?: CounterListQueryDto,
+  ): Promise<PaginatedResponseDto<CounterResponseDto>> {
+    const pagination = normalizePagination(query);
     const qb = this.counterRepository
-      .createQueryBuilder('counter')
-      .leftJoinAndSelect('counter.branchLinks', 'branchLinks')
-      .leftJoinAndSelect('branchLinks.branch', 'branch')
-      .orderBy('counter.createdAt', 'DESC');
+      .createQueryBuilder("counter")
+      .leftJoinAndSelect("counter.branchLinks", "branchLinks")
+      .leftJoinAndSelect("branchLinks.branch", "branch")
+      .orderBy("counter.createdAt", "DESC");
 
-    if (activeOnly) {
-      qb.andWhere('counter.isActive = :isActive', { isActive: true });
+    if (query?.activeOnly) {
+      qb.andWhere("counter.isActive = :isActive", { isActive: true });
     }
 
-    if (search) {
-      qb.andWhere('counter.name ILIKE :search', { search: `%${search}%` });
-    }
-
-    if (branchId?.trim()) {
-      qb.andWhere('branchLinks.branchId = :branchId', {
-        branchId: branchId.trim(),
+    if (query?.search) {
+      qb.andWhere("counter.name ILIKE :search", {
+        search: `%${query.search}%`,
       });
     }
 
-    const counters = await qb.getMany();
-    return counters.map(CounterResponseDto.fromEntity);
+    if (query?.branchId?.trim()) {
+      qb.andWhere("branchLinks.branchId = :branchId", {
+        branchId: query.branchId.trim(),
+      });
+    }
+
+    applyPagination(qb, pagination);
+    const [counters, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      counters.map(CounterResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<CounterResponseDto> {
     const counter = await this.counterRepository.findOne({
       where: { id },
-      relations: ['branchLinks', 'branchLinks.branch'],
+      relations: ["branchLinks", "branchLinks.branch"],
     });
     if (!counter) {
       throw new NotFoundException(`Counter with id ${id} not found`);
@@ -55,7 +68,10 @@ export class CounterService {
     return CounterResponseDto.fromEntity(counter);
   }
 
-  async create(dto: CreateCounterDto, userId: string): Promise<CounterResponseDto> {
+  async create(
+    dto: CreateCounterDto,
+    userId: string,
+  ): Promise<CounterResponseDto> {
     const rest = uppercaseFields(dto);
     const counter = this.counterRepository.create({
       ...rest,
@@ -66,7 +82,11 @@ export class CounterService {
     return this.findById(saved.id);
   }
 
-  async update(id: string, dto: UpdateCounterDto, userId: string): Promise<CounterResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateCounterDto,
+    userId: string,
+  ): Promise<CounterResponseDto> {
     const counter = await this.counterRepository.findOne({ where: { id } });
     if (!counter) {
       throw new NotFoundException(`Counter with id ${id} not found`);

@@ -3,7 +3,6 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-  Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, In, Between, Brackets } from "typeorm";
@@ -12,7 +11,10 @@ import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { ManualBookPageTracking } from "./entities/manual-book-page-tracking.entity";
 import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
-import { TransactionTypeProfileEnum, type TransactionTypeProfile } from "../transactions/transactions.enums";
+import {
+  TransactionTypeProfileEnum,
+  type TransactionTypeProfile,
+} from "../transactions/transactions.enums";
 import {
   CreateManualBookDto,
   ApproveRejectManualBookDto,
@@ -23,7 +25,11 @@ import {
   ReturnPagesDto,
 } from "./dto/manual-bill-book.dto";
 import { ManualBillBookListQueryDto } from "./dto/manual-bill-book-list-query.dto";
-import { normalizePagination } from "../common/pagination/pagination.util";
+import { ManualBillBookSelectablePagesQueryDto } from "./dto/manual-bill-book-selectable-pages-query.dto";
+import {
+  applyPagination,
+  normalizePagination,
+} from "../common/pagination/pagination.util";
 import {
   PaginatedResponseDto,
   buildPaginatedResponse,
@@ -37,23 +43,23 @@ type UserLookup = {
   name: string;
 };
 
-const TRANSACTION_TYPE_PROFILE_ALIASES: Record<string, TransactionTypeProfile> = {
-  PURCHASE: TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL,
-  SALE: TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL,
-};
+const TRANSACTION_TYPE_PROFILE_ALIASES: Record<string, TransactionTypeProfile> =
+  {
+    PURCHASE: TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL,
+    SALE: TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL,
+  };
 
-const TRANSACTION_TYPE_PROFILE_GROUPS: Record<string, TransactionTypeProfile[]> = {
-  PURCHASE: [
-    TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL,
-  ],
-  SALE: [
-    TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL,
-  ],
+const TRANSACTION_TYPE_PROFILE_GROUPS: Record<
+  string,
+  TransactionTypeProfile[]
+> = {
+  PURCHASE: [TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL],
+  SALE: [TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL],
 };
 
 const TRANSACTION_TYPE_PROFILE_GROUP_LABELS: Record<string, string> = {
-  PURCHASE: 'Purchase (Corporate/Individual)',
-  SALE: 'Sell (Corporate/Individual)',
+  PURCHASE: "Purchase (Corporate/Individual)",
+  SALE: "Sell (Corporate/Individual)",
 };
 
 const resolveStoredTransactionTypeProfile = (
@@ -65,7 +71,9 @@ const resolveStoredTransactionTypeProfile = (
 
   return (
     TRANSACTION_TYPE_PROFILE_ALIASES[value.trim().toUpperCase()] ??
-    (Object.values(TransactionTypeProfileEnum).includes(value as TransactionTypeProfile)
+    (Object.values(TransactionTypeProfileEnum).includes(
+      value as TransactionTypeProfile,
+    )
       ? (value as TransactionTypeProfile)
       : undefined)
   );
@@ -93,7 +101,7 @@ const resolveTransactionTypeProfileLabel = (
   fallback?: string,
 ): string => {
   if (!value) {
-    return fallback ?? '';
+    return fallback ?? "";
   }
 
   const normalized = value.trim().toUpperCase();
@@ -101,15 +109,11 @@ const resolveTransactionTypeProfileLabel = (
     return TRANSACTION_TYPE_PROFILE_GROUP_LABELS[normalized];
   }
 
-  if (
-    normalized === TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL
-  ) {
+  if (normalized === TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL) {
     return TRANSACTION_TYPE_PROFILE_GROUP_LABELS.PURCHASE;
   }
 
-  if (
-    normalized === TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL
-  ) {
+  if (normalized === TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL) {
     return TRANSACTION_TYPE_PROFILE_GROUP_LABELS.SALE;
   }
 
@@ -118,8 +122,6 @@ const resolveTransactionTypeProfileLabel = (
 
 @Injectable()
 export class ManualBillBookService {
-  private readonly logger = new Logger(ManualBillBookService.name);
-
   constructor(
     @InjectRepository(ManualBook, "database2")
     private readonly manualBookRepository: Repository<ManualBook>,
@@ -129,7 +131,7 @@ export class ManualBillBookService {
 
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
-  ) { }
+  ) {}
 
   async create(
     dto: CreateManualBookDto,
@@ -166,8 +168,8 @@ export class ManualBillBookService {
 
     // Check for overlapping book number ranges
     const overlappingBookNo = await this.manualBookRepository
-      .createQueryBuilder('book')
-      .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom", {
         bookNoFrom,
         bookNoTo,
       })
@@ -175,14 +177,14 @@ export class ManualBillBookService {
 
     if (overlappingBookNo) {
       throw new BadRequestException(
-        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}]`
+        `Book number range [${bookNoFrom} - ${bookNoTo}] overlaps with existing book [${overlappingBookNo.no}]`,
       );
     }
 
     // Check for overlapping page number ranges
     const overlapping = await this.manualBookRepository
-      .createQueryBuilder('book')
-      .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom", {
         mvNoFrom,
         mvNoTo,
       })
@@ -190,7 +192,7 @@ export class ManualBillBookService {
 
     if (overlapping) {
       throw new BadRequestException(
-        `Page number range [${mvNoFrom} - ${mvNoTo}] overlaps with existing book [${overlapping.no}] with range [${overlapping.mvNoFrom} - ${overlapping.mvNoTo}]`
+        `Page number range [${mvNoFrom} - ${mvNoTo}] overlaps with existing book [${overlapping.no}] with range [${overlapping.mvNoFrom} - ${overlapping.mvNoTo}]`,
       );
     }
 
@@ -215,10 +217,13 @@ export class ManualBillBookService {
       }
     }
     const no = `${prefix}${String(nextSeq).padStart(5, "0")}`;
-    const storedTransactionType = resolveStoredTransactionTypeProfile(transactionType);
+    const storedTransactionType =
+      resolveStoredTransactionTypeProfile(transactionType);
 
     if (!storedTransactionType) {
-      throw new BadRequestException(`Invalid transaction type: ${transactionType}`);
+      throw new BadRequestException(
+        `Invalid transaction type: ${transactionType}`,
+      );
     }
 
     const book = this.manualBookRepository.create({
@@ -280,9 +285,32 @@ export class ManualBillBookService {
     paginationQuery?: ManualBillBookListQueryDto,
   ): Promise<PaginatedResponseDto<any>> {
     const { limit, offset } = normalizePagination(paginationQuery ?? {});
-    this.logger.log(
-      `[DEBUG] findAll pagination limit=${limit} offset=${offset} rawLimit=${paginationQuery?.limit} rawOffset=${paginationQuery?.offset} branchId=${branchId ?? 'null'} status=${status ?? 'null'} search=${paginationQuery?.search ?? 'null'}`,
-    );
+
+    const fromDate = paginationQuery?.fromDate?.trim();
+    const toDate = paginationQuery?.toDate?.trim();
+    if ((fromDate && !toDate) || (!fromDate && toDate)) {
+      throw new BadRequestException(
+        "Both fromDate and toDate are required together.",
+      );
+    }
+    if (fromDate && toDate && fromDate > toDate) {
+      throw new BadRequestException("fromDate must be on or before toDate.");
+    }
+
+    const bookNoFrom = paginationQuery?.bookNoFrom;
+    const bookNoTo = paginationQuery?.bookNoTo;
+    const hasBookFrom = bookNoFrom !== undefined && bookNoFrom !== null;
+    const hasBookTo = bookNoTo !== undefined && bookNoTo !== null;
+    if (hasBookFrom !== hasBookTo) {
+      throw new BadRequestException(
+        "Both bookNoFrom and bookNoTo are required together.",
+      );
+    }
+    if (hasBookFrom && hasBookTo && bookNoFrom > bookNoTo) {
+      throw new BadRequestException(
+        "bookNoFrom must be less than or equal to bookNoTo.",
+      );
+    }
 
     const qb = this.manualBookRepository.createQueryBuilder("book");
 
@@ -292,7 +320,8 @@ export class ManualBillBookService {
     if (status) {
       qb.andWhere("book.status = :status", { status });
     }
-    const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
+    const transactionTypeGroup =
+      resolveTransactionTypeProfileGroup(transactionType);
     if (transactionType && transactionType !== "ALL" && transactionTypeGroup) {
       if (transactionTypeGroup.length === 1) {
         qb.andWhere("book.transactionType = :transactionType", {
@@ -307,6 +336,16 @@ export class ManualBillBookService {
     if (assignedTo) {
       qb.andWhere("book.assignedTo = :assignedTo", { assignedTo });
     }
+    if (fromDate && toDate) {
+      qb.andWhere("book.dispatchDate >= :fromDate", { fromDate });
+      qb.andWhere("book.dispatchDate <= :toDate", { toDate });
+    }
+    if (hasBookFrom && hasBookTo) {
+      qb.andWhere(
+        "book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom",
+        { bookNoFrom, bookNoTo },
+      );
+    }
 
     const search = paginationQuery?.search?.trim();
     if (search) {
@@ -316,10 +355,18 @@ export class ManualBillBookService {
           sub
             .where("book.no ILIKE :search", { search: like })
             .orWhere("book.remarks ILIKE :search", { search: like })
-            .orWhere("CAST(book.bookNoFrom AS TEXT) ILIKE :search", { search: like })
-            .orWhere("CAST(book.bookNoTo AS TEXT) ILIKE :search", { search: like })
-            .orWhere("CAST(book.mvNoFrom AS TEXT) ILIKE :search", { search: like })
-            .orWhere("CAST(book.mvNoTo AS TEXT) ILIKE :search", { search: like });
+            .orWhere("CAST(book.bookNoFrom AS TEXT) ILIKE :search", {
+              search: like,
+            })
+            .orWhere("CAST(book.bookNoTo AS TEXT) ILIKE :search", {
+              search: like,
+            })
+            .orWhere("CAST(book.mvNoFrom AS TEXT) ILIKE :search", {
+              search: like,
+            })
+            .orWhere("CAST(book.mvNoTo AS TEXT) ILIKE :search", {
+              search: like,
+            });
         }),
       );
     }
@@ -358,7 +405,9 @@ export class ManualBillBookService {
         ...book,
         branchName: branch ? branch.name : "Unknown Branch",
         branchCode: branch ? branch.code : "",
-        transactionTypeLabel: resolveTransactionTypeProfileLabel(book.transactionType),
+        transactionTypeLabel: resolveTransactionTypeProfileLabel(
+          book.transactionType,
+        ),
         assignedTo: {
           id: assignedUser ? assignedUser.id : book.assignedTo,
           name: assignedUser ? assignedUser.name : book.assignedTo,
@@ -437,22 +486,29 @@ export class ManualBillBookService {
       throw new NotFoundException(`Manual Book entry with ID ${id} not found`);
     }
     if (book.status !== WorkflowStatus.REJECT) {
-      throw new BadRequestException('Only REJECTED dispatches can be reassigned');
+      throw new BadRequestException(
+        "Only REJECTED dispatches can be reassigned",
+      );
     }
 
     book.assignedTo = dto.assignedTo;
     if (dto.remarks !== undefined) book.remarks = dto.remarks;
     if (dto.dispatchDate !== undefined) book.dispatchDate = dto.dispatchDate;
     if (dto.transactionType !== undefined) {
-      const storedTransactionType = resolveStoredTransactionTypeProfile(dto.transactionType);
+      const storedTransactionType = resolveStoredTransactionTypeProfile(
+        dto.transactionType,
+      );
       if (!storedTransactionType) {
-        throw new BadRequestException(`Invalid transaction type: ${dto.transactionType}`);
+        throw new BadRequestException(
+          `Invalid transaction type: ${dto.transactionType}`,
+        );
       }
       book.transactionType = storedTransactionType;
     }
     if (dto.bookNoFrom !== undefined) book.bookNoFrom = dto.bookNoFrom;
     if (dto.bookNoTo !== undefined) book.bookNoTo = dto.bookNoTo;
-    if (dto.vouchersPerBook !== undefined) book.vouchersPerBook = dto.vouchersPerBook;
+    if (dto.vouchersPerBook !== undefined)
+      book.vouchersPerBook = dto.vouchersPerBook;
     if (dto.mvNoFrom !== undefined) book.mvNoFrom = dto.mvNoFrom;
     if (dto.mvNoTo !== undefined) book.mvNoTo = dto.mvNoTo;
     book.status = WorkflowStatus.PENDING;
@@ -465,32 +521,10 @@ export class ManualBillBookService {
   }
 
   async getAuthorizedUsers(branchId: string, search?: string): Promise<any[]> {
-    this.logger.log(`[DEBUG] getAuthorizedUsers called with branchId=${branchId ?? 'null'}`);
-    const diagnostics = await this.branchRepository.manager.query(
-      `
-      SELECT
-        COUNT(*)::int AS role_rows,
-        COUNT(DISTINCT ur.user_id)::int AS distinct_users,
-        COUNT(*) FILTER (WHERE u.is_active = true)::int AS active_user_rows,
-        COUNT(*) FILTER (WHERE r.is_brn_mgr = true)::int AS branch_manager_rows,
-        COUNT(*) FILTER (WHERE r.is_cashier = true)::int AS cashier_rows,
-        COUNT(*) FILTER (WHERE r.is_delivery_boy = true)::int AS delivery_boy_rows,
-        COUNT(*) FILTER (WHERE r.is_cashier = true OR r.is_delivery_boy = true)::int AS allocation_user_rows,
-        COUNT(*) FILTER (WHERE r.is_admin = true)::int AS admin_rows
-      FROM user_roles ur
-      JOIN users u ON u.id = ur.user_id
-      JOIN roles r ON r.id = ur.role_id
-      WHERE ur.branch_id = $1
-      `,
-      [branchId],
-    );
-    this.logger.log(
-      `[DEBUG] getAuthorizedUsers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
-    );
-    const searchFilter = search?.trim()
-      ? ` AND u.name ILIKE $2`
-      : '';
-    const params = search?.trim() ? [branchId, `%${search.trim()}%`] : [branchId];
+    const searchFilter = search?.trim() ? ` AND u.name ILIKE $2` : "";
+    const params = search?.trim()
+      ? [branchId, `%${search.trim()}%`]
+      : [branchId];
     const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
@@ -504,34 +538,13 @@ export class ManualBillBookService {
     `,
       params,
     );
-    this.logger.log(
-      `[DEBUG] getAuthorizedUsers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
-    );
     return rows;
   }
 
-  async getBranchManagers(branchId: string, search?: string): Promise<UserLookup[]> {
-    this.logger.log(`[DEBUG] getBranchManagers called with branchId=${branchId ?? 'null'} search=${search ?? 'null'}`);
-    const diagnostics = await this.branchRepository.manager.query(
-      `
-      SELECT
-        COUNT(*)::int AS role_rows,
-        COUNT(DISTINCT ur.user_id)::int AS distinct_users,
-        COUNT(*) FILTER (WHERE u.is_active = true)::int AS active_user_rows,
-        COUNT(*) FILTER (WHERE r.is_brn_mgr = true)::int AS branch_manager_rows,
-        COUNT(*) FILTER (WHERE r.is_cashier = true)::int AS cashier_rows,
-        COUNT(*) FILTER (WHERE r.is_delivery_boy = true)::int AS delivery_boy_rows,
-        COUNT(*) FILTER (WHERE r.is_admin = true)::int AS admin_rows
-      FROM user_roles ur
-      JOIN users u ON u.id = ur.user_id
-      JOIN roles r ON r.id = ur.role_id
-      WHERE ur.branch_id = $1
-      `,
-      [branchId],
-    );
-    this.logger.log(
-      `[DEBUG] getBranchManagers diagnostics branchId=${branchId ?? 'null'} payload=${JSON.stringify(diagnostics?.[0] ?? {})}`,
-    );
+  async getBranchManagers(
+    branchId: string,
+    search?: string,
+  ): Promise<UserLookup[]> {
     const rows = await this.branchRepository.manager.query(
       `
       SELECT DISTINCT u.id, u.name
@@ -541,13 +554,10 @@ export class ManualBillBookService {
       WHERE ur.branch_id = $1
         AND u.is_active = true
         AND r.is_brn_mgr = true
-        ${search ? `AND u.name ILIKE $2` : ''}
+        ${search ? `AND u.name ILIKE $2` : ""}
       ORDER BY u.name ASC
       `,
       search ? [branchId, `%${search}%`] : [branchId],
-    );
-    this.logger.log(
-      `[DEBUG] getBranchManagers result count=${rows.length} branchId=${branchId ?? 'null'} rows=${JSON.stringify(rows)}`
     );
     return rows as UserLookup[];
   }
@@ -654,7 +664,9 @@ export class ManualBillBookService {
     const allUserIds = Array.from(
       new Set([
         ...Object.values(groups).map((g) => g.userId),
-        ...Object.values(groups).map((g) => g.assignedBy).filter(Boolean) as string[],
+        ...(Object.values(groups)
+          .map((g) => g.assignedBy)
+          .filter(Boolean) as string[]),
       ]),
     );
     let resolvedUsers: User[] = [];
@@ -671,7 +683,9 @@ export class ManualBillBookService {
       cashierId: g.userId,
       cashierName: userNameMap.get(g.userId) ?? null,
       assignedBy: g.assignedBy ?? null,
-      assignedByName: g.assignedBy ? (userNameMap.get(g.assignedBy) ?? null) : null,
+      assignedByName: g.assignedBy
+        ? (userNameMap.get(g.assignedBy) ?? null)
+        : null,
       remarks: g.remarks,
     }));
   }
@@ -775,8 +789,11 @@ export class ManualBillBookService {
     branchId?: string,
     userId?: string,
     transactionType?: string,
-  ): Promise<any[]> {
-    const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
+    paginationQuery?: ManualBillBookSelectablePagesQueryDto,
+  ): Promise<PaginatedResponseDto<any>> {
+    const pagination = normalizePagination(paginationQuery);
+    const transactionTypeGroup =
+      resolveTransactionTypeProfileGroup(transactionType);
     const query = this.pageTrackingRepository
       .createQueryBuilder("pt")
       .innerJoinAndSelect("pt.manualBook", "book")
@@ -792,7 +809,10 @@ export class ManualBillBookService {
       });
     }
 
-    if (transactionType?.trim().toUpperCase() !== "ALL" && transactionTypeGroup) {
+    if (
+      transactionType?.trim().toUpperCase() !== "ALL" &&
+      transactionTypeGroup
+    ) {
       query.andWhere(
         transactionTypeGroup.length === 1
           ? "book.transactionType = :transactionType"
@@ -811,16 +831,18 @@ export class ManualBillBookService {
       )`,
     );
 
-    const pages = await query
+    applyPagination(query, pagination);
+
+    const [pages, total] = await query
       .orderBy("book.dispatchDate", "DESC")
       .addOrderBy("book.no", "DESC")
       .addOrderBy("book.bookNoFrom", "ASC")
       .addOrderBy("pt.pageNo", "ASC")
-      .getMany();
+      .getManyAndCount();
 
     // Batch-resolve assignedBy user names in a single DB1 query
     const assignedByIds = Array.from(
-      new Set(pages.map((p) => p.assignedBy).filter(Boolean) as string[])
+      new Set(pages.map((p) => p.assignedBy).filter(Boolean) as string[]),
     );
     const userNameMap = new Map<string, string>();
     if (assignedByIds.length > 0) {
@@ -832,29 +854,35 @@ export class ManualBillBookService {
       }
     }
 
-    return pages.map((page) => ({
+    const data = pages.map((page) => ({
       id: page.id,
       manualBookId: page.manualBookId,
       userId: page.userId,
       pageNo: page.pageNo,
       assignedBy: page.assignedBy ?? null,
-      assignedByName: page.assignedBy ? (userNameMap.get(page.assignedBy) ?? null) : null,
+      assignedByName: page.assignedBy
+        ? (userNameMap.get(page.assignedBy) ?? null)
+        : null,
       remarks: page.remarks ?? null,
       manualBook: page.manualBook
         ? {
-          id: page.manualBook.id,
-          no: page.manualBook.no,
-          bookNoFrom: page.manualBook.bookNoFrom,
-          bookNoTo: page.manualBook.bookNoTo,
-          vouchersPerBook: page.manualBook.vouchersPerBook,
-          mvNoFrom: page.manualBook.mvNoFrom,
-          mvNoTo: page.manualBook.mvNoTo,
-          branchId: page.manualBook.branchId,
-          transactionType: page.manualBook.transactionType,
-          transactionTypeLabel: resolveTransactionTypeProfileLabel(page.manualBook.transactionType),
-        }
+            id: page.manualBook.id,
+            no: page.manualBook.no,
+            bookNoFrom: page.manualBook.bookNoFrom,
+            bookNoTo: page.manualBook.bookNoTo,
+            vouchersPerBook: page.manualBook.vouchersPerBook,
+            mvNoFrom: page.manualBook.mvNoFrom,
+            mvNoTo: page.manualBook.mvNoTo,
+            branchId: page.manualBook.branchId,
+            transactionType: page.manualBook.transactionType,
+            transactionTypeLabel: resolveTransactionTypeProfileLabel(
+              page.manualBook.transactionType,
+            ),
+          }
         : null,
     }));
+
+    return buildPaginatedResponse(data, total, pagination);
   }
 
   async searchDPMapping(params: {
@@ -896,7 +924,8 @@ export class ManualBillBookService {
     }
 
     // Find all manual books matching branch, transactionType (if not ALL), and book range containing bookNo
-    const transactionTypeGroup = resolveTransactionTypeProfileGroup(transactionType);
+    const transactionTypeGroup =
+      resolveTransactionTypeProfileGroup(transactionType);
 
     const queryBooks = await this.manualBookRepository
       .createQueryBuilder("mb")
@@ -905,7 +934,8 @@ export class ManualBillBookService {
       .andWhere("mb.bookNoFrom <= :bookNo", { bookNo })
       .andWhere("mb.bookNoTo >= :bookNo", { bookNo })
       .andWhere(
-        transactionType?.trim().toUpperCase() === "ALL" || transactionTypeGroup === undefined
+        transactionType?.trim().toUpperCase() === "ALL" ||
+          transactionTypeGroup === undefined
           ? "1=1"
           : transactionTypeGroup.length === 1
             ? "mb.transactionType = :transactionType"
@@ -990,7 +1020,9 @@ export class ManualBillBookService {
           manualBookId: page.manualBookId,
           bookNo: bookNo,
           transactionType: book.transactionType,
-          transactionTypeLabel: resolveTransactionTypeProfileLabel(book.transactionType),
+          transactionTypeLabel: resolveTransactionTypeProfileLabel(
+            book.transactionType,
+          ),
           mvNoFrom: page.pageNo,
           mvNoTo: page.pageNo,
           qty: 1,
@@ -1013,7 +1045,9 @@ export class ManualBillBookService {
             manualBookId: page.manualBookId,
             bookNo: bookNo,
             transactionType: book.transactionType,
-            transactionTypeLabel: resolveTransactionTypeProfileLabel(book.transactionType),
+            transactionTypeLabel: resolveTransactionTypeProfileLabel(
+              book.transactionType,
+            ),
             mvNoFrom: page.pageNo,
             mvNoTo: page.pageNo,
             qty: 1,
@@ -1043,7 +1077,7 @@ export class ManualBillBookService {
       { id: In(pageIds) },
       {
         userId: deliveryPersonId,
-        assignedBy: updatedBy,   // Track who put pages with DP (cashier or BM)
+        assignedBy: updatedBy, // Track who put pages with DP (cashier or BM)
         remarks: remarks || null,
         updatedBy,
       },
@@ -1107,7 +1141,11 @@ export class ManualBillBookService {
     );
   }
 
-  async addDeliveryPerson(branchId: string, userId: string, actorId: string): Promise<{ success: boolean }> {
+  async addDeliveryPerson(
+    branchId: string,
+    userId: string,
+    actorId: string,
+  ): Promise<{ success: boolean }> {
     await this.branchRepository.manager.query(
       `
       INSERT INTO user_roles (id, user_id, role_id, branch_id, counter_id, created_by, updated_by, created_at, updated_at)
@@ -1131,7 +1169,10 @@ export class ManualBillBookService {
     return { success: true };
   }
 
-  async removeDeliveryPerson(branchId: string, userId: string): Promise<{ success: boolean }> {
+  async removeDeliveryPerson(
+    branchId: string,
+    userId: string,
+  ): Promise<{ success: boolean }> {
     await this.branchRepository.manager.query(
       `
       DELETE FROM user_roles ur
@@ -1170,14 +1211,16 @@ export class ManualBillBookService {
     // ── Step 2: Get non-voided pages owned by those DPs (DB2) ───────────────
     const pages = await this.pageTrackingRepository.find({
       where: { userId: In(dpIds), isVoided: false },
-      order: { userId: 'ASC', manualBookId: 'ASC', pageNo: 'ASC' },
+      order: { userId: "ASC", manualBookId: "ASC", pageNo: "ASC" },
     });
 
     if (pages.length === 0) return [];
 
     // ── Step 3: Fetch manual books for those pages (DB2) ────────────────────
     const bookIds = [...new Set(pages.map((p) => p.manualBookId))];
-    const books = await this.manualBookRepository.find({ where: { id: In(bookIds) } });
+    const books = await this.manualBookRepository.find({
+      where: { id: In(bookIds) },
+    });
     const bookMap = new Map(books.map((b) => [b.id, b]));
 
     // ── Step 4: Determine which assignedBy IDs are cashiers (DB1) ──────────
@@ -1226,17 +1269,23 @@ export class ManualBillBookService {
 
       let segStart = 0;
       for (let i = 1; i <= sorted.length; i++) {
-        if (i === sorted.length || sorted[i].pageNo !== sorted[i - 1].pageNo + 1) {
+        if (
+          i === sorted.length ||
+          sorted[i].pageNo !== sorted[i - 1].pageNo + 1
+        ) {
           const seg = sorted.slice(segStart, i);
           const mvFrom = seg[0].pageNo;
           const mvTo = seg[seg.length - 1].pageNo;
           const bookNoFrom =
-            book.bookNoFrom + Math.floor((mvFrom - book.mvNoFrom) / book.vouchersPerBook);
+            book.bookNoFrom +
+            Math.floor((mvFrom - book.mvNoFrom) / book.vouchersPerBook);
           const bookNoTo =
-            book.bookNoFrom + Math.floor((mvTo - book.mvNoFrom) / book.vouchersPerBook);
+            book.bookNoFrom +
+            Math.floor((mvTo - book.mvNoFrom) / book.vouchersPerBook);
 
           const assignedBy = seg[0].assignedBy ?? null;
-          const isCashierAssignment = !!assignedBy && cashierIds.has(assignedBy);
+          const isCashierAssignment =
+            !!assignedBy && cashierIds.has(assignedBy);
 
           rows.push({
             dpUserId: seg[0].userId,
@@ -1251,9 +1300,13 @@ export class ManualBillBookService {
             pageCount: seg.length,
             // Who put these pages with the DP (cashier via Map-to-DP, or BM directly)
             assignedByUserId: assignedBy,
-            assignedByName: assignedBy ? (userNameMap.get(assignedBy) ?? null) : null,
+            assignedByName: assignedBy
+              ? (userNameMap.get(assignedBy) ?? null)
+              : null,
             returnToUserId: isCashierAssignment ? assignedBy : null,
-            returnToUserName: isCashierAssignment ? (userNameMap.get(assignedBy!) ?? null) : null,
+            returnToUserName: isCashierAssignment
+              ? (userNameMap.get(assignedBy!) ?? null)
+              : null,
             pageIds: seg.map((p) => p.id),
             book: {
               id: book.id,
@@ -1295,7 +1348,7 @@ export class ManualBillBookService {
 
     if (pages.length === 0) {
       throw new BadRequestException(
-        'No pages found for the specified delivery person in the given range.',
+        "No pages found for the specified delivery person in the given range.",
       );
     }
 
@@ -1303,23 +1356,26 @@ export class ManualBillBookService {
     const mismatched = pages.filter((p) => p.userId !== params.dpUserId);
     if (mismatched.length > 0) {
       throw new BadRequestException(
-        'One or more pages are not currently assigned to the specified delivery person.',
+        "One or more pages are not currently assigned to the specified delivery person.",
       );
     }
 
     // Determine which assignedBy IDs are cashiers (source-of-truth per spec)
-    const assignedByIds = [...new Set(pages.map((p) => p.assignedBy).filter(Boolean))] as string[];
+    const assignedByIds = [
+      ...new Set(pages.map((p) => p.assignedBy).filter(Boolean)),
+    ] as string[];
     const cashierIds = new Set<string>();
     if (assignedByIds.length > 0) {
-      const cashierRows: Array<{ user_id: string }> = await this.branchRepository.manager.query(
-        `
+      const cashierRows: Array<{ user_id: string }> =
+        await this.branchRepository.manager.query(
+          `
         SELECT DISTINCT ur.user_id
         FROM user_roles ur
         JOIN roles r ON ur.role_id = r.id
         WHERE ur.user_id = ANY($1) AND r.is_cashier = true
         `,
-        [assignedByIds],
-      );
+          [assignedByIds],
+        );
       cashierRows.forEach((r) => cashierIds.add(r.user_id));
     }
 
@@ -1354,12 +1410,12 @@ export class ManualBillBookService {
     bookNoTo: number,
   ): Promise<{ valid: boolean; error?: string }> {
     const overlappingBookNo = await this.manualBookRepository
-      .createQueryBuilder('book')
-      .where('book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.bookNoFrom <= :bookNoTo AND book.bookNoTo >= :bookNoFrom", {
         bookNoFrom,
         bookNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
+      .andWhere("book.status != :rejected", { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlappingBookNo) {
@@ -1376,12 +1432,12 @@ export class ManualBillBookService {
     mvNoTo: number,
   ): Promise<{ valid: boolean; error?: string }> {
     const overlapping = await this.manualBookRepository
-      .createQueryBuilder('book')
-      .where('book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom', {
+      .createQueryBuilder("book")
+      .where("book.mv_no_from <= :mvNoTo AND book.mv_no_to >= :mvNoFrom", {
         mvNoFrom,
         mvNoTo,
       })
-      .andWhere('book.status != :rejected', { rejected: WorkflowStatus.REJECT })
+      .andWhere("book.status != :rejected", { rejected: WorkflowStatus.REJECT })
       .getOne();
 
     if (overlapping) {

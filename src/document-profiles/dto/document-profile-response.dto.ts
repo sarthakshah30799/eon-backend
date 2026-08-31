@@ -1,6 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DocumentProfile, DocumentSpecificationType } from '../document-profile.entity';
-import { SelectOptionResponseDto } from '../../category-options/dto/category-option-response.dto';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  DocumentProfile,
+  DocumentSpecificationType,
+} from "../document-profile.entity";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 
 export class DocumentProfileResponseDto {
   @ApiProperty()
@@ -57,7 +60,9 @@ export class DocumentProfileResponseDto {
     dto.isRequired = entity.isRequired;
     dto.maxSizeMb = Number(entity.maxSizeMb);
     dto.specificationType = entity.specificationType;
-    dto.type = entity.type ? SelectOptionResponseDto.fromEntity(entity.type) : null;
+    dto.type = entity.type
+      ? SelectOptionResponseDto.fromEntity(entity.type)
+      : null;
     dto.groupSelection = entity.groupSelection
       ? SelectOptionResponseDto.fromEntity(entity.groupSelection)
       : null;

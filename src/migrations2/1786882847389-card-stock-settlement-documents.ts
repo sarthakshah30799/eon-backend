@@ -1,31 +1,71 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CardStockSettlementDocuments1786882847389 implements MigrationInterface {
-    name = 'CardStockSettlementDocuments1786882847389'
+  name = "CardStockSettlementDocuments1786882847389";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`CREATE TABLE "card_stock_settlement_documents" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "transaction_number" citext NOT NULL, "transaction_date" TIMESTAMP WITH TIME ZONE NOT NULL, "kind" citext NOT NULL, "status" citext NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "ho_branch_id" uuid NOT NULL, "ho_branch_snapshot" jsonb NOT NULL, "reference" citext, "remarks" text, "rejection_reason" text, "cancellation_reason" text, "accepted_at" TIMESTAMP WITH TIME ZONE, "accepted_by_id" uuid, "rejected_at" TIMESTAMP WITH TIME ZONE, "rejected_by_id" uuid, "cancelled_at" TIMESTAMP WITH TIME ZONE, "cancelled_by_id" uuid, "posting_transaction_id" uuid, CONSTRAINT "PK_e7e5ec21d979402eea07a9aea1e" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlement_documents_branch" ON "card_stock_settlement_documents" ("branch_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlement_documents_issuer" ON "card_stock_settlement_documents" ("issuer_party_profile_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlement_documents_date" ON "card_stock_settlement_documents" ("transaction_date") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlement_documents_kind" ON "card_stock_settlement_documents" ("kind") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlement_documents_status" ON "card_stock_settlement_documents" ("status") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_card_stock_settlement_documents_number" ON "card_stock_settlement_documents" ("transaction_number") `);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD "sale_buy_rate" numeric(18,7)`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD "issuer_rate" numeric(18,7)`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD "issuer_settlement_amount" numeric(18,2)`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD "branch_document_id" uuid`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD "issuer_document_id" uuid`);
-        await queryRunner.query(`UPDATE "card_stock_settlements" SET "sale_buy_rate" = "buy_rate" WHERE "sale_buy_rate" IS NULL`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ALTER COLUMN "sale_buy_rate" SET NOT NULL`);
-        await queryRunner.query(`UPDATE "card_stock_settlements" SET "issuer_rate" = "buy_rate", "issuer_settlement_amount" = "settlement_amount" WHERE "status" = 'ISSUER_SETTLED' AND "issuer_settlement_entry_id" IS NOT NULL AND "issuer_rate" IS NULL`);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlements_issuer_document" ON "card_stock_settlements" ("issuer_document_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_card_stock_settlements_branch_document" ON "card_stock_settlements" ("branch_document_id") `);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlement_documents" ADD CONSTRAINT "FK_card_stock_settlement_documents_posting" FOREIGN KEY ("posting_transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_branch_document" FOREIGN KEY ("branch_document_id") REFERENCES "card_stock_settlement_documents"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_issuer_document" FOREIGN KEY ("issuer_document_id") REFERENCES "card_stock_settlement_documents"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `CREATE TABLE "card_stock_settlement_documents" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "transaction_number" citext NOT NULL, "transaction_date" TIMESTAMP WITH TIME ZONE NOT NULL, "kind" citext NOT NULL, "status" citext NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "ho_branch_id" uuid NOT NULL, "ho_branch_snapshot" jsonb NOT NULL, "reference" citext, "remarks" text, "rejection_reason" text, "cancellation_reason" text, "accepted_at" TIMESTAMP WITH TIME ZONE, "accepted_by_id" uuid, "rejected_at" TIMESTAMP WITH TIME ZONE, "rejected_by_id" uuid, "cancelled_at" TIMESTAMP WITH TIME ZONE, "cancelled_by_id" uuid, "posting_transaction_id" uuid, CONSTRAINT "PK_e7e5ec21d979402eea07a9aea1e" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlement_documents_branch" ON "card_stock_settlement_documents" ("branch_id") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlement_documents_issuer" ON "card_stock_settlement_documents" ("issuer_party_profile_id") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlement_documents_date" ON "card_stock_settlement_documents" ("transaction_date") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlement_documents_kind" ON "card_stock_settlement_documents" ("kind") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlement_documents_status" ON "card_stock_settlement_documents" ("status") `,
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "IDX_card_stock_settlement_documents_number" ON "card_stock_settlement_documents" ("transaction_number") `,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD "sale_buy_rate" numeric(18,7)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD "issuer_rate" numeric(18,7)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD "issuer_settlement_amount" numeric(18,2)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD "branch_document_id" uuid`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD "issuer_document_id" uuid`,
+    );
+    await queryRunner.query(
+      `UPDATE "card_stock_settlements" SET "sale_buy_rate" = "buy_rate" WHERE "sale_buy_rate" IS NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ALTER COLUMN "sale_buy_rate" SET NOT NULL`,
+    );
+    await queryRunner.query(
+      `UPDATE "card_stock_settlements" SET "issuer_rate" = "buy_rate", "issuer_settlement_amount" = "settlement_amount" WHERE "status" = 'ISSUER_SETTLED' AND "issuer_settlement_entry_id" IS NOT NULL AND "issuer_rate" IS NULL`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlements_issuer_document" ON "card_stock_settlements" ("issuer_document_id") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_card_stock_settlements_branch_document" ON "card_stock_settlements" ("branch_document_id") `,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlement_documents" ADD CONSTRAINT "FK_card_stock_settlement_documents_posting" FOREIGN KEY ("posting_transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_branch_document" FOREIGN KEY ("branch_document_id") REFERENCES "card_stock_settlement_documents"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" ADD CONSTRAINT "FK_card_stock_settlements_issuer_document" FOREIGN KEY ("issuer_document_id") REFERENCES "card_stock_settlement_documents"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`,
+    );
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE TEMP TABLE tmp_card_settlement_branch_posted ON COMMIT DROP AS
             WITH grouped AS (
               SELECT
@@ -61,7 +101,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
             FROM numbered
             INNER JOIN transactions t ON t.id = numbered.transaction_id
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             INSERT INTO card_stock_settlement_documents (
               id, created_at, updated_at, created_by, updated_by,
               transaction_number, transaction_date, kind, status,
@@ -108,7 +148,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               LIMIT 1
             ) s ON TRUE
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_settlements s
             SET branch_document_id = g.document_id, updated_at = NOW()
             FROM tmp_card_settlement_branch_posted g
@@ -121,7 +161,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               AND s.branch_id = g.branch_id
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE TEMP TABLE tmp_card_settlement_issuer_posted ON COMMIT DROP AS
             WITH grouped AS (
               SELECT
@@ -157,7 +197,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
             FROM numbered
             INNER JOIN transactions t ON t.id = numbered.transaction_id
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             INSERT INTO card_stock_settlement_documents (
               id, created_at, updated_at, created_by, updated_by,
               transaction_number, transaction_date, kind, status,
@@ -202,7 +242,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               LIMIT 1
             ) s ON TRUE
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_settlements s
             SET issuer_document_id = g.document_id, updated_at = NOW()
             FROM tmp_card_settlement_issuer_posted g
@@ -215,7 +255,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               AND s.ho_branch_id = g.ho_branch_id
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE TEMP TABLE tmp_card_settlement_branch_pending ON COMMIT DROP AS
             SELECT
               gen_random_uuid() AS document_id,
@@ -249,7 +289,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               AND s.settlement_mode = 'MANUAL'
             GROUP BY s.issuer_party_profile_id, s.currency_id, s.branch_id, COALESCE(s.branch_requested_date, s.sale_date)::date, s.settlement_mode
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             INSERT INTO card_stock_settlement_documents (
               id, created_at, updated_at, created_by, updated_by,
               transaction_number, transaction_date, kind, status,
@@ -300,7 +340,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               LIMIT 1
             ) s ON TRUE
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_settlements s
             SET branch_document_id = g.document_id, updated_at = NOW()
             FROM tmp_card_settlement_branch_pending g
@@ -321,7 +361,7 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
               )
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             DO $$
             DECLARE
               function_definition text;
@@ -342,10 +382,10 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
             END;
             $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DO $$
             DECLARE
               function_definition text;
@@ -365,23 +405,54 @@ export class CardStockSettlementDocuments1786882847389 implements MigrationInter
             END;
             $$;
         `);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_issuer_document"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_branch_document"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlement_documents" DROP CONSTRAINT "FK_card_stock_settlement_documents_posting"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlements_branch_document"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlements_issuer_document"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP COLUMN "issuer_document_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP COLUMN "branch_document_id"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP COLUMN "issuer_settlement_amount"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP COLUMN "issuer_rate"`);
-        await queryRunner.query(`ALTER TABLE "card_stock_settlements" DROP COLUMN "sale_buy_rate"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlement_documents_number"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlement_documents_status"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlement_documents_kind"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlement_documents_date"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlement_documents_issuer"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_card_stock_settlement_documents_branch"`);
-        await queryRunner.query(`DROP TABLE "card_stock_settlement_documents"`);
-    }
-
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_issuer_document"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP CONSTRAINT "FK_card_stock_settlements_branch_document"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlement_documents" DROP CONSTRAINT "FK_card_stock_settlement_documents_posting"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlements_branch_document"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlements_issuer_document"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP COLUMN "issuer_document_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP COLUMN "branch_document_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP COLUMN "issuer_settlement_amount"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP COLUMN "issuer_rate"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "card_stock_settlements" DROP COLUMN "sale_buy_rate"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlement_documents_number"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlement_documents_status"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlement_documents_kind"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlement_documents_date"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlement_documents_issuer"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_card_stock_settlement_documents_branch"`,
+    );
+    await queryRunner.query(`DROP TABLE "card_stock_settlement_documents"`);
+  }
 }

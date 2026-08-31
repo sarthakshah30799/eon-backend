@@ -24,8 +24,8 @@ import { CreateFinancialSubProfileDto } from "./dto/create-financial-sub-profile
 import { UpdateFinancialSubProfileDto } from "./dto/update-financial-sub-profile.dto";
 import { FinancialSubProfileResponseDto } from "./dto/financial-sub-profile-response.dto";
 import { FinancialSubProfileListQueryDto } from "./dto/financial-sub-profile-list-query.dto";
-import { FinancialSubProfileListResponseDto } from "./dto/financial-sub-profile-list-response.dto";
 import { FinancialSubProfileService } from "./financial-sub-profile.service";
+import { PaginatedResponseDto } from "../common/pagination";
 
 @ApiTags("financial-sub-profiles")
 @ApiCookieAuth("sessionId")
@@ -33,16 +33,21 @@ import { FinancialSubProfileService } from "./financial-sub-profile.service";
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller("financial-sub-profiles")
 export class FinancialSubProfileController {
-  constructor(private readonly financialSubProfileService: FinancialSubProfileService) {}
+  constructor(
+    private readonly financialSubProfileService: FinancialSubProfileService,
+  ) {}
 
   @Get()
-  @ApiOperation({ summary: "Get all financial sub profiles (paginated/filtered)" })
+  @ApiOperation({
+    summary: "Get all financial sub profiles (paginated/filtered)",
+  })
   @ApiResponse({
     status: 200,
     description: "Paginated list of financial sub profiles",
-    type: FinancialSubProfileListResponseDto,
   })
-  async findAll(@Query() query: FinancialSubProfileListQueryDto): Promise<FinancialSubProfileListResponseDto> {
+  async findAll(
+    @Query() query: FinancialSubProfileListQueryDto,
+  ): Promise<PaginatedResponseDto<FinancialSubProfileResponseDto>> {
     return this.financialSubProfileService.findAll(query);
   }
 
@@ -51,7 +56,9 @@ export class FinancialSubProfileController {
   @ApiParam({ name: "id", description: "Financial sub profile UUID" })
   @ApiResponse({ status: 200, type: FinancialSubProfileResponseDto })
   @ApiResponse({ status: 404, description: "Not found" })
-  async findById(@Param("id") id: string): Promise<FinancialSubProfileResponseDto> {
+  async findById(
+    @Param("id") id: string,
+  ): Promise<FinancialSubProfileResponseDto> {
     return this.financialSubProfileService.findById(id);
   }
 

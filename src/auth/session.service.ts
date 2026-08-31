@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { Injectable } from "@nestjs/common";
+import { DataSource } from "typeorm";
 
 @Injectable()
 export class SessionService {
   constructor(private readonly dataSource: DataSource) {}
 
-  private readonly sessionTableName = 'user_sessions';
+  private readonly sessionTableName = "user_sessions";
 
   private async ensureSessionTable(): Promise<void> {
     await this.dataSource.query(`
@@ -23,7 +23,10 @@ export class SessionService {
     `);
   }
 
-  async invalidateUserSessions(userId: string, currentSessionId?: string): Promise<void> {
+  async invalidateUserSessions(
+    userId: string,
+    currentSessionId?: string,
+  ): Promise<void> {
     await this.ensureSessionTable();
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -36,8 +39,8 @@ export class SessionService {
         `DELETE FROM user_sessions 
          WHERE sess::jsonb ? 'userId' 
          AND (sess::jsonb->>'userId') = $1
-         ${currentSessionId ? 'AND sid != $2' : ''}`,
-        currentSessionId ? [userId, currentSessionId] : [userId]
+         ${currentSessionId ? "AND sid != $2" : ""}`,
+        currentSessionId ? [userId, currentSessionId] : [userId],
       );
 
       await queryRunner.commitTransaction();
@@ -59,7 +62,7 @@ export class SessionService {
        AND (sess::jsonb->>'userId') = $1
        AND expire > NOW()
        ORDER BY expire DESC`,
-      [userId]
+      [userId],
     );
     return result;
   }
@@ -69,7 +72,7 @@ export class SessionService {
 
     await this.dataSource.query(
       `DELETE FROM "${this.sessionTableName}" WHERE sid = $1`,
-      [sessionId]
+      [sessionId],
     );
   }
 
@@ -80,7 +83,7 @@ export class SessionService {
       `SELECT sid, sess, expire 
        FROM "${this.sessionTableName}" 
        WHERE sid = $1`,
-      [sessionId]
+      [sessionId],
     );
     return result[0] || null;
   }

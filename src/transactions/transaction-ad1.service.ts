@@ -1,19 +1,34 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DeepPartial, Repository } from 'typeorm';
-import { TransactionAd1 } from './entities/transaction-ad1.entity';
-import { Branch } from '../branches/branch.entity';
-import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
-import { Currency } from '../currencies/currency.entity';
-import { SelectOption } from '../category-options/category-option.entity';
-import { AccountProfile } from '../account-profiles/account-profile.entity';
-import { Product } from '../products/product.entity';
-import { Purpose } from '../purpose/purpose.entity';
-import { TransactionProfileType, TransactionType } from './transactions.enums';
-import { DayEndStartProcessService } from '../day-end-start-process/day-end-start-process.service';
-import { CompanyService } from '../company/company.service';
-import { loadEntitySnapshot } from '../common/snapshot/entity-snapshot.util';
-import { requireCompanyForDate } from '../common/snapshot/company-snapshot.util';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { DeepPartial, Repository } from "typeorm";
+import { TransactionAd1 } from "./entities/transaction-ad1.entity";
+import { Branch } from "../branches/branch.entity";
+import {
+  PartyProfile,
+  ClientType,
+} from "../party-profiles/party-profile.entity";
+import { Currency } from "../currencies/currency.entity";
+import { SelectOption } from "../category-options/category-option.entity";
+import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { Product } from "../products/product.entity";
+import { Purpose } from "../purpose/purpose.entity";
+import { TransactionProfileType, TransactionType } from "./transactions.enums";
+import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
+import { CompanyService } from "../company/company.service";
+import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
+
+import { TransactionAd1ListQueryDto } from "./dto/transaction-ad1-list-query.dto";
 
 interface Ad1Payload {
   currencyId?: string;
@@ -66,7 +81,7 @@ interface Ad1Payload {
 @Injectable()
 export class TransactionAd1Service {
   constructor(
-    @InjectRepository(TransactionAd1, 'database2')
+    @InjectRepository(TransactionAd1, "database2")
     private readonly repo: Repository<TransactionAd1>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
@@ -102,48 +117,59 @@ export class TransactionAd1Service {
     }
 
     if (payload.currencyId) {
-      const currency = await this.currencyRepository.findOne({ where: { id: payload.currencyId } });
+      const currency = await this.currencyRepository.findOne({
+        where: { id: payload.currencyId },
+      });
       snapshots.currencySnapshot = currency ?? null;
     }
 
     if (payload.productId) {
-      const product = await this.productRepository.findOne({ where: { id: payload.productId } });
+      const product = await this.productRepository.findOne({
+        where: { id: payload.productId },
+      });
       snapshots.productSnapshot = product ?? null;
     }
 
     if (payload.agentId) {
       const agent = await this.partyProfileRepository.findOne({
         where: { id: payload.agentId },
-        relations: ['commissionRules'],
+        relations: ["commissionRules"],
       });
       snapshots.agentSnapshot = agent ?? null;
     }
 
     if (payload.bankNameId) {
-      const bank = await this.accountProfileRepository.findOne({ where: { id: payload.bankNameId } });
+      const bank = await this.accountProfileRepository.findOne({
+        where: { id: payload.bankNameId },
+      });
       snapshots.bankSnapshot = bank ?? null;
     }
 
     if (payload.marketingId) {
-      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.marketingId } });
+      const opt = await this.selectOptionRepository.findOne({
+        where: { id: payload.marketingId },
+      });
       snapshots.marketingSnapshot = opt ?? null;
     }
 
     if (payload.segmentId) {
-      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.segmentId } });
+      const opt = await this.selectOptionRepository.findOne({
+        where: { id: payload.segmentId },
+      });
       snapshots.segmentSnapshot = opt ?? null;
     }
 
     if (payload.purposeId) {
-      const purpose = await this.purposeRepository.findOne({ where: { id: payload.purposeId } });
+      const purpose = await this.purposeRepository.findOne({
+        where: { id: payload.purposeId },
+      });
       if (!purpose) {
-        throw new BadRequestException(`Purpose with id ${payload.purposeId} not found`);
+        throw new BadRequestException(
+          `Purpose with id ${payload.purposeId} not found`,
+        );
       }
 
-      if (
-        payload.transactionType === TransactionType.SALE &&
-        !purpose.sell
-      ) {
+      if (payload.transactionType === TransactionType.SALE && !purpose.sell) {
         throw new BadRequestException(
           `Purpose ${purpose.code} is not valid for ${payload.transactionType}`,
         );
@@ -162,7 +188,9 @@ export class TransactionAd1Service {
     }
 
     if (payload.relationshipId) {
-      const opt = await this.selectOptionRepository.findOne({ where: { id: payload.relationshipId } });
+      const opt = await this.selectOptionRepository.findOne({
+        where: { id: payload.relationshipId },
+      });
       snapshots.relationshipSnapshot = opt ?? null;
     }
 
@@ -170,7 +198,7 @@ export class TransactionAd1Service {
   }
 
   private toNullableString(value: unknown): string | null {
-    if (value === undefined || value === null || value === '') {
+    if (value === undefined || value === null || value === "") {
       return null;
     }
 
@@ -179,23 +207,27 @@ export class TransactionAd1Service {
 
   // ── Public API ────────────────────────────────────────────────────────────
 
-  async getAgents(params: { branchId?: string; search?: string }): Promise<{ id: string; code: string; name: string }[]> {
-    const query = this.partyProfileRepository.createQueryBuilder('pp')
-      .select(['pp.id', 'pp.code', 'pp.name'])
-      .where('pp.type = :type', { type: ClientType.AGENT })
-      .andWhere('pp.active = true');
+  async getAgents(params: {
+    branchId?: string;
+    search?: string;
+  }): Promise<{ id: string; code: string; name: string }[]> {
+    const query = this.partyProfileRepository
+      .createQueryBuilder("pp")
+      .select(["pp.id", "pp.code", "pp.name"])
+      .where("pp.type = :type", { type: ClientType.AGENT })
+      .andWhere("pp.active = true");
 
     if (params.branchId) {
-      query.andWhere('pp.branchId = :branchId', { branchId: params.branchId });
+      query.andWhere("pp.branchId = :branchId", { branchId: params.branchId });
     }
 
     if (params.search?.trim()) {
-      query.andWhere('(pp.name ILIKE :search OR pp.code ILIKE :search)', {
+      query.andWhere("(pp.name ILIKE :search OR pp.code ILIKE :search)", {
         search: `%${params.search.trim()}%`,
       });
     }
 
-    query.orderBy('pp.name', 'ASC').limit(100);
+    query.orderBy("pp.name", "ASC").limit(100);
     return query.getMany();
   }
 
@@ -205,16 +237,18 @@ export class TransactionAd1Service {
     activeBranchId: string | null,
     activeCounterId: string | null,
   ): Promise<TransactionAd1> {
-    const resolvedBranchId = activeBranchId || '';
+    const resolvedBranchId = activeBranchId || "";
     if (!payload.docNo || !resolvedBranchId) {
-      throw new BadRequestException('Doc No and branch are required');
+      throw new BadRequestException("Doc No and branch are required");
     }
 
     const branch = await this.branchRepository.findOne({
       where: { id: resolvedBranchId },
     });
     if (!branch) {
-      throw new NotFoundException(`Branch with id ${resolvedBranchId} not found`);
+      throw new NotFoundException(
+        `Branch with id ${resolvedBranchId} not found`,
+      );
     }
     const policyContext = await this.dayEndStartProcessService.getDayEndContext(
       {
@@ -241,78 +275,85 @@ export class TransactionAd1Service {
     const snapshots = await this.resolveSnapshots(payload, resolvedBranchId);
 
     const ad1Data: DeepPartial<TransactionAd1> = {
-        number: String(payload.docNo),
-        branchId: String(resolvedBranchId),
-        companyId: company.id,
-        companySnapshot,
-        printCount: 0,
-        transactionType: payload.transactionType ?? TransactionType.PURCHASE,
-        profileType: payload.profileType ?? TransactionProfileType.AD1,
-        createdBy: performedById,
-        updatedBy: performedById,
+      number: String(payload.docNo),
+      branchId: String(resolvedBranchId),
+      companyId: company.id,
+      companySnapshot,
+      printCount: 0,
+      transactionType: payload.transactionType ?? TransactionType.PURCHASE,
+      profileType: payload.profileType ?? TransactionProfileType.AD1,
+      createdBy: performedById,
+      updatedBy: performedById,
 
-        dealId: payload.dealId || null,
-        docNo: payload.docNo || null,
-        transactionDate: resolvedTransactionDate || null,
-        marketingId: payload.marketingId || null,
-        segmentId: payload.segmentId || null,
-        servicedBy: payload.servicedBy || null,
-        purposeId: payload.purposeId || null,
-        remitterName: payload.remitterName || null,
-        contactNo: payload.contactNo || null,
-        email: payload.email || null,
-        address: payload.address || null,
-        pan: payload.pan || null,
-        dateOfBirth: payload.dateOfBirth || null,
-        productId: payload.productId || null,
-        beneficiaryName: payload.beneficiaryName || null,
-        beniAddress: payload.beniAddress || null,
-        beneAccountNumber: payload.beneAccountNumber || null,
-        beneBankName: payload.beneBankName || null,
-        swiftCode: payload.swiftCode || null,
-        relationshipId: payload.relationshipId || null,
-        currencyId: payload.currencyId || null,
-        fcVolume: this.toNullableString(payload.fcVolume),
-        saleRate: this.toNullableString(payload.saleRate),
-        totalInrAmt: this.toNullableString(payload.totalInrAmt),
-        gst: this.toNullableString(payload.gst),
-        bankCharges: this.toNullableString(payload.bankCharges),
-        tcs: this.toNullableString(payload.tcs),
-        otherIncome: this.toNullableString(payload.otherIncome),
-        finalAmount: this.toNullableString(payload.finalAmount),
-        settlementRate: this.toNullableString(payload.settlementRate),
-        grossRevenue: this.toNullableString(payload.grossRevenue),
-        revenueReceivable: this.toNullableString(payload.revenueReceivable),
-        agentId: payload.agentId || payload.fxRefAgentId || null,
-        agentComm: this.toNullableString(payload.agentComm),
-        tds: this.toNullableString(payload.tds),
-        commissionPayable: this.toNullableString(payload.commissionPayable),
-        netRevenue: this.toNullableString(payload.netRevenue),
-        bankNameId: payload.bankNameId || null,
-        rtgsImpsNeftRefNo: payload.rtgsImpsNeftRefNo || null,
-        remarks: payload.remarks || null,
+      dealId: payload.dealId || null,
+      docNo: payload.docNo || null,
+      transactionDate: resolvedTransactionDate || null,
+      marketingId: payload.marketingId || null,
+      segmentId: payload.segmentId || null,
+      servicedBy: payload.servicedBy || null,
+      purposeId: payload.purposeId || null,
+      remitterName: payload.remitterName || null,
+      contactNo: payload.contactNo || null,
+      email: payload.email || null,
+      address: payload.address || null,
+      pan: payload.pan || null,
+      dateOfBirth: payload.dateOfBirth || null,
+      productId: payload.productId || null,
+      beneficiaryName: payload.beneficiaryName || null,
+      beniAddress: payload.beniAddress || null,
+      beneAccountNumber: payload.beneAccountNumber || null,
+      beneBankName: payload.beneBankName || null,
+      swiftCode: payload.swiftCode || null,
+      relationshipId: payload.relationshipId || null,
+      currencyId: payload.currencyId || null,
+      fcVolume: this.toNullableString(payload.fcVolume),
+      saleRate: this.toNullableString(payload.saleRate),
+      totalInrAmt: this.toNullableString(payload.totalInrAmt),
+      gst: this.toNullableString(payload.gst),
+      bankCharges: this.toNullableString(payload.bankCharges),
+      tcs: this.toNullableString(payload.tcs),
+      otherIncome: this.toNullableString(payload.otherIncome),
+      finalAmount: this.toNullableString(payload.finalAmount),
+      settlementRate: this.toNullableString(payload.settlementRate),
+      grossRevenue: this.toNullableString(payload.grossRevenue),
+      revenueReceivable: this.toNullableString(payload.revenueReceivable),
+      agentId: payload.agentId || payload.fxRefAgentId || null,
+      agentComm: this.toNullableString(payload.agentComm),
+      tds: this.toNullableString(payload.tds),
+      commissionPayable: this.toNullableString(payload.commissionPayable),
+      netRevenue: this.toNullableString(payload.netRevenue),
+      bankNameId: payload.bankNameId || null,
+      rtgsImpsNeftRefNo: payload.rtgsImpsNeftRefNo || null,
+      remarks: payload.remarks || null,
 
-        ...snapshots,
-      };
+      ...snapshots,
+    };
 
     const ad1 = await this.repo.save(this.repo.create(ad1Data));
 
     return this.repo.findOne({ where: { id: ad1.id } });
   }
 
-  async findAll(params?: { branchId?: string; search?: string }): Promise<TransactionAd1[]> {
-    const query = this.repo.createQueryBuilder('ad1');
+  async findAll(
+    params?: TransactionAd1ListQueryDto,
+  ): Promise<PaginatedResponseDto<TransactionAd1>> {
+    const pagination = normalizePagination(params);
+    const query = this.repo.createQueryBuilder("ad1");
 
     if (params?.branchId) {
-      query.andWhere('ad1.branchId = :branchId', { branchId: params.branchId });
+      query.andWhere("ad1.branchId = :branchId", { branchId: params.branchId });
     }
 
     if (params?.search?.trim()) {
-      query.andWhere('ad1.number ILIKE :search', { search: `%${params.search.trim()}%` });
+      query.andWhere("ad1.number ILIKE :search", {
+        search: `%${params.search.trim()}%`,
+      });
     }
 
-    query.orderBy('ad1.createdAt', 'DESC');
-    return query.getMany();
+    query.orderBy("ad1.createdAt", "DESC");
+    applyPagination(query, pagination);
+    const [data, total] = await query.getManyAndCount();
+    return buildPaginatedResponse(data, total, pagination);
   }
 
   async findOne(id: string): Promise<TransactionAd1> {
@@ -331,25 +372,30 @@ export class TransactionAd1Service {
     activeCounterId: string | null,
   ): Promise<TransactionAd1> {
     const ad1 = await this.findOne(id);
-    const branchId = ad1.branchId || activeBranchId || '';
+    const branchId = ad1.branchId || activeBranchId || "";
     if (payload.transactionDate !== undefined) {
       const currentTransactionDate = ad1.transactionDate
         ? String(ad1.transactionDate).slice(0, 10)
-        : '';
+        : "";
       const resolvedTransactionDate = payload.transactionDate?.trim()
         ? payload.transactionDate
-        : '';
+        : "";
 
-      if (resolvedTransactionDate && resolvedTransactionDate.slice(0, 10) !== currentTransactionDate) {
-        const policyContext = await this.dayEndStartProcessService.getDayEndContext(
-          {
-            userId: performedById,
-            activeBranchId: branchId,
-            activeCounterId,
-          },
-          true,
-        );
-        const effectiveTransactionDate = resolvedTransactionDate || policyContext.transactionDate;
+      if (
+        resolvedTransactionDate &&
+        resolvedTransactionDate.slice(0, 10) !== currentTransactionDate
+      ) {
+        const policyContext =
+          await this.dayEndStartProcessService.getDayEndContext(
+            {
+              userId: performedById,
+              activeBranchId: branchId,
+              activeCounterId,
+            },
+            true,
+          );
+        const effectiveTransactionDate =
+          resolvedTransactionDate || policyContext.transactionDate;
         await this.dayEndStartProcessService.assertTransactionDateAllowed(
           branchId,
           performedById,
@@ -365,14 +411,45 @@ export class TransactionAd1Service {
     }
 
     const fields = [
-      'dealId', 'transactionDate', 'marketingId', 'segmentId', 'servicedBy',
-      'purposeId', 'remitterName', 'contactNo', 'email', 'address', 'pan',
-      'dateOfBirth', 'productId', 'beneficiaryName', 'beniAddress', 'beneAccountNumber',
-      'beneBankName', 'swiftCode', 'relationshipId', 'currencyId', 'fcVolume',
-      'saleRate', 'totalInrAmt', 'gst', 'bankCharges', 'tcs', 'otherIncome',
-      'finalAmount', 'settlementRate', 'grossRevenue', 'revenueReceivable',
-      'agentId', 'agentComm', 'tds', 'commissionPayable', 'netRevenue',
-      'bankNameId', 'rtgsImpsNeftRefNo', 'remarks',
+      "dealId",
+      "transactionDate",
+      "marketingId",
+      "segmentId",
+      "servicedBy",
+      "purposeId",
+      "remitterName",
+      "contactNo",
+      "email",
+      "address",
+      "pan",
+      "dateOfBirth",
+      "productId",
+      "beneficiaryName",
+      "beniAddress",
+      "beneAccountNumber",
+      "beneBankName",
+      "swiftCode",
+      "relationshipId",
+      "currencyId",
+      "fcVolume",
+      "saleRate",
+      "totalInrAmt",
+      "gst",
+      "bankCharges",
+      "tcs",
+      "otherIncome",
+      "finalAmount",
+      "settlementRate",
+      "grossRevenue",
+      "revenueReceivable",
+      "agentId",
+      "agentComm",
+      "tds",
+      "commissionPayable",
+      "netRevenue",
+      "bankNameId",
+      "rtgsImpsNeftRefNo",
+      "remarks",
     ];
 
     for (const field of fields) {
@@ -388,7 +465,9 @@ export class TransactionAd1Service {
     }
 
     const nextBranchId = payload.branchId?.trim() || ad1.branchId;
-    const branchChanged = Boolean(nextBranchId && nextBranchId !== ad1.branchId);
+    const branchChanged = Boolean(
+      nextBranchId && nextBranchId !== ad1.branchId,
+    );
     if (branchChanged) {
       ad1.branchId = nextBranchId;
     }
@@ -407,14 +486,20 @@ export class TransactionAd1Service {
     return this.findOne(id);
   }
 
-  async recordPrint(id: string): Promise<{ message: string; copyType: string; printCount: number }> {
+  async recordPrint(
+    id: string,
+  ): Promise<{ message: string; copyType: string; printCount: number }> {
     const ad1 = await this.findOne(id);
     const existingPrintCount = ad1.printCount ?? 0;
-    const copyType = existingPrintCount === 0 ? 'CUSTOMER_COPY' : 'DUPLICATE_COPY';
+    const copyType =
+      existingPrintCount === 0 ? "CUSTOMER_COPY" : "DUPLICATE_COPY";
     ad1.printCount = existingPrintCount + 1;
     await this.repo.save(ad1);
     return {
-      message: copyType === 'DUPLICATE_COPY' ? 'Duplicate copy printed' : 'Original copy printed',
+      message:
+        copyType === "DUPLICATE_COPY"
+          ? "Duplicate copy printed"
+          : "Original copy printed",
       copyType,
       printCount: ad1.printCount,
     };

@@ -1,6 +1,6 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Repository } from 'typeorm';
-import { BranchCounter } from './entities/branch-counter.entity';
+import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { Repository } from "typeorm";
+import { BranchCounter } from "./entities/branch-counter.entity";
 
 export async function counterBelongsToBranch(
   branchCounterRepository: Repository<BranchCounter>,
@@ -25,7 +25,7 @@ export async function assertCounterBelongsToBranch(
   branchCounterRepository: Repository<BranchCounter>,
   branchId: string,
   counterId: string,
-  message = 'Selected counter does not belong to the selected branch',
+  message = "Selected counter does not belong to the selected branch",
 ): Promise<void> {
   const belongs = await counterBelongsToBranch(
     branchCounterRepository,
@@ -42,7 +42,9 @@ export async function assertCountersExist(
   counterIds: string[],
   findMissing: (ids: string[]) => Promise<string[]>,
 ): Promise<void> {
-  const uniqueIds = [...new Set(counterIds.map((id) => id.trim()).filter(Boolean))];
+  const uniqueIds = [
+    ...new Set(counterIds.map((id) => id.trim()).filter(Boolean)),
+  ];
   if (uniqueIds.length === 0) {
     return;
   }

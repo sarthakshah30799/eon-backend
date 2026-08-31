@@ -12,17 +12,48 @@ import { PartyProfileModule } from "../party-profiles/party-profile.module";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { UserModule } from "../users/user.module";
-import { AccountingVoucher, AccountingVoucherItem, VoucherAdvanceApplication } from "./entities";
-import { JournalVoucherController, PaymentVoucherController, ReceiptVoucherController } from "./voucher.controller";
+import {
+  AccountingVoucher,
+  AccountingVoucherItem,
+  VoucherAdvanceApplication,
+} from "./entities";
+import {
+  JournalVoucherController,
+  PaymentVoucherController,
+  ReceiptVoucherController,
+} from "./voucher.controller";
 import { VoucherService } from "./voucher.service";
 
 @Module({
   imports: [
-    AdditionalSettingModule, DayEndStartProcessModule, PartyProfileModule, UserModule,
-    TypeOrmModule.forFeature([AccountProfile, PartyProfile, SelectOption, Branch, Counter, BranchCounter]),
-    TypeOrmModule.forFeature([AccountingVoucher, AccountingVoucherItem, VoucherAdvanceApplication, Transaction, TransactionPayment], "database2"),
+    AdditionalSettingModule,
+    DayEndStartProcessModule,
+    PartyProfileModule,
+    UserModule,
+    TypeOrmModule.forFeature([
+      AccountProfile,
+      PartyProfile,
+      SelectOption,
+      Branch,
+      Counter,
+      BranchCounter,
+    ]),
+    TypeOrmModule.forFeature(
+      [
+        AccountingVoucher,
+        AccountingVoucherItem,
+        VoucherAdvanceApplication,
+        Transaction,
+        TransactionPayment,
+      ],
+      "database2",
+    ),
   ],
-  controllers: [ReceiptVoucherController, PaymentVoucherController, JournalVoucherController],
+  controllers: [
+    ReceiptVoucherController,
+    PaymentVoucherController,
+    JournalVoucherController,
+  ],
   providers: [VoucherService],
   exports: [VoucherService, TypeOrmModule],
 })

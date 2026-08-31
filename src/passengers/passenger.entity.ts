@@ -1,4 +1,12 @@
-import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany } from "typeorm";
+import {
+  Check,
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+} from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { Country } from "../country/country.entity";

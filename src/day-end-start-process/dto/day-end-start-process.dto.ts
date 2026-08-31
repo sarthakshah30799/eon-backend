@@ -68,7 +68,8 @@ export class DayEndStartProcessContextDto {
   activeBackdateWindow?: MonthlyLockWindowResponseDto | null;
 
   @ApiPropertyOptional({
-    description: "Branch data lock from FLM 8. Punching on this date or earlier is blocked.",
+    description:
+      "Branch data lock from FLM 8. Punching on this date or earlier is blocked.",
   })
   transactionDataLock?: {
     lockedThroughDate: string;

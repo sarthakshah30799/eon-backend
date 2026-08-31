@@ -1,14 +1,13 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddTransactionTdsHeaderAndTrigger1785488969575 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           ALTER TABLE "transactions"
           ADD COLUMN IF NOT EXISTS "tds_amount" numeric(18,2) NOT NULL DEFAULT 0
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.refresh_transaction_tcs(
             p_transaction_id uuid
           )
@@ -179,7 +178,7 @@ export class AddTransactionTdsHeaderAndTrigger1785488969575 implements Migration
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.transaction_tcs_refresh_trigger()
           RETURNS trigger
           LANGUAGE plpgsql
@@ -203,7 +202,7 @@ export class AddTransactionTdsHeaderAndTrigger1785488969575 implements Migration
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.transaction_child_tcs_refresh_trigger()
           RETURNS trigger
           LANGUAGE plpgsql
@@ -232,10 +231,10 @@ export class AddTransactionTdsHeaderAndTrigger1785488969575 implements Migration
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP TRIGGER IF EXISTS transaction_tcs_refresh_trigger ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE TRIGGER transaction_tcs_refresh_trigger
           AFTER INSERT OR UPDATE OF
             transaction_type,
@@ -255,17 +254,17 @@ export class AddTransactionTdsHeaderAndTrigger1785488969575 implements Migration
           EXECUTE FUNCTION public.transaction_tcs_refresh_trigger();
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP TRIGGER IF EXISTS transaction_items_tcs_refresh_trigger ON "transaction_items";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE TRIGGER transaction_items_tcs_refresh_trigger
           AFTER INSERT OR UPDATE OR DELETE ON "transaction_items"
           FOR EACH ROW
           EXECUTE FUNCTION public.transaction_child_tcs_refresh_trigger();
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DO $$
           DECLARE
             v_transaction_id uuid;
@@ -279,28 +278,27 @@ export class AddTransactionTdsHeaderAndTrigger1785488969575 implements Migration
           END
           $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DROP TRIGGER IF EXISTS transaction_items_tcs_refresh_trigger ON "transaction_items";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP TRIGGER IF EXISTS transaction_tcs_refresh_trigger ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP FUNCTION IF EXISTS public.transaction_child_tcs_refresh_trigger();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP FUNCTION IF EXISTS public.transaction_tcs_refresh_trigger();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           DROP FUNCTION IF EXISTS public.refresh_transaction_tcs(uuid);
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "transactions"
           DROP COLUMN IF EXISTS "tds_amount";
         `);
-    }
-
+  }
 }

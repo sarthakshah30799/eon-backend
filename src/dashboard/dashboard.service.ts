@@ -98,10 +98,30 @@ export class DashboardService {
     const today = this.dateRange("today");
     const yesterday = this.dateRange("yesterday");
 
-    const todayVol = await this.volumeBetween(today.from, today.to, branchId, isAdminOrHo);
-    const yesterdayVol = await this.volumeBetween(yesterday.from, yesterday.to, branchId, isAdminOrHo);
-    const todayCount = await this.txnCountBetween(today.from, today.to, branchId, isAdminOrHo);
-    const yesterdayCount = await this.txnCountBetween(yesterday.from, yesterday.to, branchId, isAdminOrHo);
+    const todayVol = await this.volumeBetween(
+      today.from,
+      today.to,
+      branchId,
+      isAdminOrHo,
+    );
+    const yesterdayVol = await this.volumeBetween(
+      yesterday.from,
+      yesterday.to,
+      branchId,
+      isAdminOrHo,
+    );
+    const todayCount = await this.txnCountBetween(
+      today.from,
+      today.to,
+      branchId,
+      isAdminOrHo,
+    );
+    const yesterdayCount = await this.txnCountBetween(
+      yesterday.from,
+      yesterday.to,
+      branchId,
+      isAdminOrHo,
+    );
 
     const pendingTxns = await this.transactionRepository
       .createQueryBuilder("t")
@@ -130,7 +150,10 @@ export class DashboardService {
       counterId,
       isAdminOrHo,
     );
-    const pendingCardTransfers = await this.getPendingCardTransferCount(branchId, isAdminOrHo);
+    const pendingCardTransfers = await this.getPendingCardTransferCount(
+      branchId,
+      isAdminOrHo,
+    );
 
     const flaggedTxns = await this.transactionRepository
       .createQueryBuilder("t")
@@ -145,7 +168,12 @@ export class DashboardService {
       todayTransactionCount: todayCount,
       yesterdayTransactionCount: yesterdayCount,
       pendingApprovals:
-        pendingTxns + pendingPP + pendingChequeBooks + pendingManualBooks + pendingTransfers + pendingCardTransfers,
+        pendingTxns +
+        pendingPP +
+        pendingChequeBooks +
+        pendingManualBooks +
+        pendingTransfers +
+        pendingCardTransfers,
       pendingPartyProfileReviews: pendingPP,
       pendingTransactions: pendingTxns,
       pendingChequeBooks,
@@ -219,8 +247,12 @@ export class DashboardService {
     const todayStr = today.from.toISOString().split("T")[0];
     const yesterdayStr = yesterday.from.toISOString().split("T")[0];
 
-    const todayMap: Record<string, { vol: number; id: string; code: string }> = {};
-    const yesterdayMap: Record<string, { vol: number; id: string; code: string }> = {};
+    const todayMap: Record<string, { vol: number; id: string; code: string }> =
+      {};
+    const yesterdayMap: Record<
+      string,
+      { vol: number; id: string; code: string }
+    > = {};
 
     for (const row of raw) {
       const dateStr = String(row.vol_date).split("T")[0];
@@ -231,13 +263,17 @@ export class DashboardService {
       else if (dateStr === yesterdayStr) yesterdayMap[key] = entry;
     }
 
-    const allKeys = new Set([...Object.keys(todayMap), ...Object.keys(yesterdayMap)]);
+    const allKeys = new Set([
+      ...Object.keys(todayMap),
+      ...Object.keys(yesterdayMap),
+    ]);
     const result: VolumeByCurrencyDto[] = [];
 
     for (const key of allKeys) {
       const tV = todayMap[key]?.vol ?? 0;
       const yV = yesterdayMap[key]?.vol ?? 0;
-      const changePct = yV > 0 ? (((tV - yV) / yV) * 100).toFixed(1) : tV > 0 ? "100" : "0";
+      const changePct =
+        yV > 0 ? (((tV - yV) / yV) * 100).toFixed(1) : tV > 0 ? "100" : "0";
       result.push({
         currencyId: todayMap[key]?.id ?? yesterdayMap[key]?.id ?? key,
         currencyCode: todayMap[key]?.code ?? yesterdayMap[key]?.code ?? key,
@@ -297,7 +333,9 @@ export class DashboardService {
     const stop = new Date();
     while (cursor <= stop) {
       const key = cursor.toISOString().split("T")[0];
-      result.push(map[key] || { date: key, saleVolume: "0", purchaseVolume: "0" });
+      result.push(
+        map[key] || { date: key, saleVolume: "0", purchaseVolume: "0" },
+      );
       cursor.setDate(cursor.getDate() + 1);
     }
 
@@ -320,12 +358,21 @@ export class DashboardService {
     const transactions = await qb.getMany();
 
     return transactions.map((t) => {
-      const partySnapshot = t.partyProfileSnapshot as Record<string, string> | null;
+      const partySnapshot = t.partyProfileSnapshot as Record<
+        string,
+        string
+      > | null;
       const branchSnapshot = t.branchSnapshot as Record<string, string> | null;
       const items = (t as any).items ?? [];
       const firstItem = items[0];
-      const currencySnap = firstItem?.currencySnapshot as Record<string, string> | null;
-      const productSnap = firstItem?.productSnapshot as Record<string, string> | null;
+      const currencySnap = firstItem?.currencySnapshot as Record<
+        string,
+        string
+      > | null;
+      const productSnap = firstItem?.productSnapshot as Record<
+        string,
+        string
+      > | null;
       const fcyAmount = items.reduce(
         (s: number, it: any) => s + Number(it.quantity) * Number(it.rate),
         0,
@@ -381,7 +428,10 @@ export class DashboardService {
         .take(limit)
         .getMany();
       for (const t of transactions) {
-        const partySnap = t.partyProfileSnapshot as Record<string, string> | null;
+        const partySnap = t.partyProfileSnapshot as Record<
+          string,
+          string
+        > | null;
         results.push({
           id: t.id,
           entityType: "transaction",
@@ -435,7 +485,9 @@ export class DashboardService {
 
     const transferQB = this.transferRequestRepository
       .createQueryBuilder("transfer")
-      .where("transfer.status = :status", { status: TransferRequestStatus.HELD })
+      .where("transfer.status = :status", {
+        status: TransferRequestStatus.HELD,
+      })
       .orderBy("transfer.createdAt", "DESC")
       .take(limit);
 
@@ -444,7 +496,10 @@ export class DashboardService {
     if (!isAdminOrHo) {
       if (!branchId || !counterId) {
         return results
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          )
           .slice(0, limit);
       }
       transferQB
@@ -458,16 +513,34 @@ export class DashboardService {
 
     const transfers = await transferQB.getMany();
     for (const transfer of transfers) {
-      const sourceBranch = transfer.sourceBranchSnapshot as Record<string, string> | null;
-      const sourceCounter = transfer.sourceCounterSnapshot as Record<string, string> | null;
-      const destinationBranch = transfer.destinationBranchSnapshot as Record<string, string> | null;
-      const destinationCounter = transfer.destinationCounterSnapshot as Record<string, string> | null;
-      const source = sourceBranch?.label ?? sourceBranch?.name ?? transfer.sourceBranchId;
-      const sourceWorkplace = sourceCounter?.label ?? sourceCounter?.name ?? transfer.sourceCounterId;
+      const sourceBranch = transfer.sourceBranchSnapshot as Record<
+        string,
+        string
+      > | null;
+      const sourceCounter = transfer.sourceCounterSnapshot as Record<
+        string,
+        string
+      > | null;
+      const destinationBranch = transfer.destinationBranchSnapshot as Record<
+        string,
+        string
+      > | null;
+      const destinationCounter = transfer.destinationCounterSnapshot as Record<
+        string,
+        string
+      > | null;
+      const source =
+        sourceBranch?.label ?? sourceBranch?.name ?? transfer.sourceBranchId;
+      const sourceWorkplace =
+        sourceCounter?.label ?? sourceCounter?.name ?? transfer.sourceCounterId;
       const destination =
-        destinationBranch?.label ?? destinationBranch?.name ?? transfer.destinationBranchId;
+        destinationBranch?.label ??
+        destinationBranch?.name ??
+        transfer.destinationBranchId;
       const destinationWorkplace =
-        destinationCounter?.label ?? destinationCounter?.name ?? transfer.destinationCounterId;
+        destinationCounter?.label ??
+        destinationCounter?.name ??
+        transfer.destinationCounterId;
 
       results.push({
         id: transfer.id,
@@ -488,21 +561,33 @@ export class DashboardService {
     if (!isAdminOrHo) {
       if (!branchId) {
         return results
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          )
           .slice(0, limit);
       }
-      cardTransferQB.andWhere("transfer.destinationBranchId = :destinationBranchId", {
-        destinationBranchId: branchId,
-      });
+      cardTransferQB.andWhere(
+        "transfer.destinationBranchId = :destinationBranchId",
+        {
+          destinationBranchId: branchId,
+        },
+      );
     }
     const cardTransfers = await cardTransferQB.getMany();
     for (const transfer of cardTransfers) {
-      const source = (transfer.sourceBranchSnapshot as Record<string, string> | null)?.label
-        ?? (transfer.sourceBranchSnapshot as Record<string, string> | null)?.name
-        ?? transfer.sourceBranchId;
-      const destination = (transfer.destinationBranchSnapshot as Record<string, string> | null)?.label
-        ?? (transfer.destinationBranchSnapshot as Record<string, string> | null)?.name
-        ?? transfer.destinationBranchId;
+      const source =
+        (transfer.sourceBranchSnapshot as Record<string, string> | null)
+          ?.label ??
+        (transfer.sourceBranchSnapshot as Record<string, string> | null)
+          ?.name ??
+        transfer.sourceBranchId;
+      const destination =
+        (transfer.destinationBranchSnapshot as Record<string, string> | null)
+          ?.label ??
+        (transfer.destinationBranchSnapshot as Record<string, string> | null)
+          ?.name ??
+        transfer.destinationBranchId;
       results.push({
         id: transfer.id,
         entityType: "card-transfer",
@@ -514,7 +599,10 @@ export class DashboardService {
       });
     }
 
-    results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    results.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
     return results.slice(0, limit);
   }
 
@@ -525,7 +613,9 @@ export class DashboardService {
   ): Promise<number> {
     const qb = this.transferRequestRepository
       .createQueryBuilder("transfer")
-      .where("transfer.status = :status", { status: TransferRequestStatus.HELD });
+      .where("transfer.status = :status", {
+        status: TransferRequestStatus.HELD,
+      });
 
     if (!isAdminOrHo) {
       if (!branchId || !counterId) {
@@ -541,13 +631,18 @@ export class DashboardService {
     return qb.getCount();
   }
 
-  private async getPendingCardTransferCount(branchId?: string, isAdminOrHo?: boolean): Promise<number> {
+  private async getPendingCardTransferCount(
+    branchId?: string,
+    isAdminOrHo?: boolean,
+  ): Promise<number> {
     const qb = this.cardTransferRequestRepository
       .createQueryBuilder("transfer")
       .where("transfer.status = :status", { status: CardTransferStatus.HELD });
     if (!isAdminOrHo) {
       if (!branchId) return 0;
-      qb.andWhere("transfer.destinationBranchId = :destinationBranchId", { destinationBranchId: branchId });
+      qb.andWhere("transfer.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      });
     }
     return qb.getCount();
   }

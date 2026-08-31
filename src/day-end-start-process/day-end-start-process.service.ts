@@ -5,10 +5,11 @@ import { AdditionalSettingService } from "../additional-settings/additional-sett
 import { AdvancedSetting } from "../additional-settings/advanced-setting.entity";
 import { MonthlyLocksService } from "../monthly-locks/monthly-locks.service";
 import { TransactionDataLocksService } from "../transaction-data-locks/transaction-data-locks.service";
+import { getEarliestAllowedPunchDate } from "../transaction-data-locks/transaction-data-lock.utils";
 import {
-  getEarliestAllowedPunchDate,
-} from "../transaction-data-locks/transaction-data-lock.utils";
-import { DayEndExecution, DayEndExecutionStatus } from "./entities/day-end-execution.entity";
+  DayEndExecution,
+  DayEndExecutionStatus,
+} from "./entities/day-end-execution.entity";
 import {
   CompleteDayEndDto,
   DayEndStartProcessContextDto,
@@ -64,7 +65,10 @@ export class DayEndStartProcessService {
     private readonly transactionDataLocksService: TransactionDataLocksService,
   ) {}
 
-  private assertSessionContext(session: SessionContext, requireCounter = false) {
+  private assertSessionContext(
+    session: SessionContext,
+    requireCounter = false,
+  ) {
     const userId = session.userId?.trim();
     const branchId = session.activeBranchId?.trim();
     const counterId = session.activeCounterId?.trim();
@@ -91,11 +95,14 @@ export class DayEndStartProcessService {
   private async getPolicyChecklist(): Promise<PolicyChecklistItemDto[]> {
     const categories = await this.additionalSettingService.findAll();
     const category = categories.find(
-      item => String(item.code ?? "").trim().toUpperCase() === POLICY_CATEGORY_CODE,
+      (item) =>
+        String(item.code ?? "")
+          .trim()
+          .toUpperCase() === POLICY_CATEGORY_CODE,
     );
 
     return (
-      category?.children?.map(child => ({
+      category?.children?.map((child) => ({
         code: String(child.code ?? ""),
         label: String(child.label ?? child.description ?? child.code ?? ""),
         valueType: String(child.valueType ?? "text"),
@@ -270,12 +277,20 @@ export class DayEndStartProcessService {
     session: SessionContext,
     requireCounter = true,
   ): Promise<DayEndStartProcessContextDto> {
-    const { userId, branchId, counterId } = this.assertSessionContext(session, false);
+    const { userId, branchId, counterId } = this.assertSessionContext(
+      session,
+      false,
+    );
     const today = this.getTodayBusinessDate();
     const todayExecution = await this.findExecution(branchId, today);
     const latestExecution = await this.findLatestExecution(branchId);
-    const workflow = this.getWorkflowStateForExecution(today, todayExecution, latestExecution);
-    const activeMonthlyLock = await this.monthlyLocksService.getActiveMonthlyLock(branchId, userId);
+    const workflow = this.getWorkflowStateForExecution(
+      today,
+      todayExecution,
+      latestExecution,
+    );
+    const activeMonthlyLock =
+      await this.monthlyLocksService.getActiveMonthlyLock(branchId, userId);
     const transactionDataLock =
       await this.transactionDataLocksService.getActiveLockForBranch(branchId);
     const suggestedTransactionDate = this.resolveSuggestedTransactionDate(
@@ -329,7 +344,9 @@ export class DayEndStartProcessService {
         return;
       }
       if (dateValue <= dataLock.lockedThroughDate) {
-        const earliestAllowed = getEarliestAllowedPunchDate(dataLock.lockedThroughDate);
+        const earliestAllowed = getEarliestAllowedPunchDate(
+          dataLock.lockedThroughDate,
+        );
         throw new BadRequestException(
           `Transaction dates through ${dataLock.lockedThroughDate} are locked. Allowed dates start from ${earliestAllowed}`,
         );
@@ -354,7 +371,7 @@ export class DayEndStartProcessService {
       }
 
       throw new BadRequestException(
-        'Day start is required before punching transactions',
+        "Day start is required before punching transactions",
       );
     }
 
@@ -370,7 +387,10 @@ export class DayEndStartProcessService {
     assertNotDataLocked(requestedDate);
 
     if (hasMonthlyLockOverride) {
-      if (requestedDate < activeWindow.fromDate || requestedDate > activeWindow.toDate) {
+      if (
+        requestedDate < activeWindow.fromDate ||
+        requestedDate > activeWindow.toDate
+      ) {
         throw new BadRequestException(
           `Transaction date must be between ${activeWindow.fromDate} and ${activeWindow.toDate}`,
         );
@@ -384,13 +404,19 @@ export class DayEndStartProcessService {
       );
     }
 
-    if (context.workflowState === "PENDING_BOD" || context.workflowState === "READY_TO_START") {
+    if (
+      context.workflowState === "PENDING_BOD" ||
+      context.workflowState === "READY_TO_START"
+    ) {
       throw new BadRequestException(
-        'Day start is required before punching transactions',
+        "Day start is required before punching transactions",
       );
     }
 
-    if (context.workflowState === "PENDING_EOD" && requestedDate !== context.openBusinessDate) {
+    if (
+      context.workflowState === "PENDING_EOD" &&
+      requestedDate !== context.openBusinessDate
+    ) {
       throw new BadRequestException(
         `EOD is pending for this branch/user. Allowed transaction date is ${context.openBusinessDate}`,
       );
@@ -411,23 +437,27 @@ export class DayEndStartProcessService {
     answers: Record<string, unknown>,
     actorUserId: string,
   ) {
-    const { branchId: resolvedBranchId, userId: resolvedUserId } = this.assertSessionContext({
-      activeBranchId: branchId,
-      userId,
-      activeCounterId: null,
-    });
+    const { branchId: resolvedBranchId, userId: resolvedUserId } =
+      this.assertSessionContext({
+        activeBranchId: branchId,
+        userId,
+        activeCounterId: null,
+      });
     const latest = await this.findLatestExecution(resolvedBranchId);
     const today = this.getTodayBusinessDate();
     const todayExecution = await this.findExecution(resolvedBranchId, today);
-    const businessDate = todayExecution && !todayExecution.eodAt
-      ? todayExecution.businessDate
-      : latest && !latest.eodAt
-        ? latest.businessDate
-        : today;
+    const businessDate =
+      todayExecution && !todayExecution.eodAt
+        ? todayExecution.businessDate
+        : latest && !latest.eodAt
+          ? latest.businessDate
+          : today;
     const row = await this.findExecution(resolvedBranchId, businessDate);
 
     if (!row || !row.bodAt || row.eodAt) {
-      throw new BadRequestException('Day start is required before completing day end');
+      throw new BadRequestException(
+        "Day start is required before completing day end",
+      );
     }
 
     row.eodAt = new Date();
@@ -443,11 +473,12 @@ export class DayEndStartProcessService {
     answers: Record<string, unknown>,
     actorUserId: string,
   ) {
-    const { branchId: resolvedBranchId, userId: resolvedUserId } = this.assertSessionContext({
-      activeBranchId: branchId,
-      userId,
-      activeCounterId: null,
-    });
+    const { branchId: resolvedBranchId, userId: resolvedUserId } =
+      this.assertSessionContext({
+        activeBranchId: branchId,
+        userId,
+        activeCounterId: null,
+      });
     const latest = await this.findLatestExecution(resolvedBranchId);
     const today = this.getTodayBusinessDate();
     const todayExecution = await this.findExecution(resolvedBranchId, today);
@@ -470,6 +501,11 @@ export class DayEndStartProcessService {
       );
     }
 
-    return this.upsertBodRow(resolvedBranchId, today, actorUserId, answers ?? {});
+    return this.upsertBodRow(
+      resolvedBranchId,
+      today,
+      actorUserId,
+      answers ?? {},
+    );
   }
 }

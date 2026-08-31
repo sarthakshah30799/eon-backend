@@ -8,73 +8,92 @@ import {
   Query,
   Session,
   UseGuards,
-} from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { TransactionAd1Service } from './transaction-ad1.service';
+} from "@nestjs/common";
+import { ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { TransactionAd1Service } from "./transaction-ad1.service";
+import { TransactionAd1ListQueryDto } from "./dto/transaction-ad1-list-query.dto";
+import { PaginatedResponseDto } from "../common/pagination";
+import { TransactionAd1 } from "./entities/transaction-ad1.entity";
 
-@ApiTags('transaction-ad1')
-@ApiCookieAuth('sessionId')
+@ApiTags("transaction-ad1")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard)
-@Controller('transactions/ad1')
+@Controller("transactions/ad1")
 export class TransactionAd1Controller {
   constructor(private readonly ad1Service: TransactionAd1Service) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create an AD1 transaction' })
+  @ApiOperation({ summary: "Create an AD1 transaction" })
   async create(@Body() body: Record<string, any>, @Session() session: any) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.create(body, performedById, session?.activeBranchId ?? null, session?.activeCounterId ?? null);
+    return this.ad1Service.create(
+      body,
+      performedById,
+      session?.activeBranchId ?? null,
+      session?.activeCounterId ?? null,
+    );
   }
 
   @Get()
-  @ApiOperation({ summary: 'List AD1 transactions' })
+  @ApiOperation({ summary: "List AD1 transactions" })
   async findAll(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('search') search?: string,
-  ) {
+    @Query() query: TransactionAd1ListQueryDto,
+  ): Promise<PaginatedResponseDto<TransactionAd1>> {
     const canSeeAllBranches = Boolean(session?.isAdmin || session?.isHoStaff);
     const effectiveBranchId = canSeeAllBranches
-      ? branchId?.trim() || undefined
+      ? query.branchId?.trim() || undefined
       : session?.activeBranchId;
 
-    return this.ad1Service.findAll({ branchId: effectiveBranchId, search });
+    return this.ad1Service.findAll({
+      ...query,
+      branchId: effectiveBranchId,
+    });
   }
 
-  @Get('agents')
-  @ApiOperation({ summary: 'List agents available for AD1' })
+  @Get("agents")
+  @ApiOperation({ summary: "List agents available for AD1" })
   async getAgents(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('search') search?: string,
+    @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
   ) {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || undefined
-      : session?.activeBranchId;
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? branchId?.trim() || undefined
+        : session?.activeBranchId;
     return this.ad1Service.getAgents({ branchId: effectiveBranchId, search });
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get an AD1 transaction by ID' })
-  async findOne(@Param('id') id: string) {
+  @Get(":id")
+  @ApiOperation({ summary: "Get an AD1 transaction by ID" })
+  async findOne(@Param("id") id: string) {
     return this.ad1Service.findOne(id);
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update an AD1 transaction' })
+  @Put(":id")
+  @ApiOperation({ summary: "Update an AD1 transaction" })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: Record<string, any>,
     @Session() session: any,
   ) {
     const performedById = session?.userId ?? null;
-    return this.ad1Service.update(id, body, performedById, session?.activeBranchId ?? null, session?.activeCounterId ?? null);
+    return this.ad1Service.update(
+      id,
+      body,
+      performedById,
+      session?.activeBranchId ?? null,
+      session?.activeCounterId ?? null,
+    );
   }
 
-  @Post(':id/print')
-  @ApiOperation({ summary: 'Record an AD1 print and return Original or Duplicate' })
-  async recordPrint(@Param('id') id: string) {
+  @Post(":id/print")
+  @ApiOperation({
+    summary: "Record an AD1 print and return Original or Duplicate",
+  })
+  async recordPrint(@Param("id") id: string) {
     return this.ad1Service.recordPrint(id);
   }
 }

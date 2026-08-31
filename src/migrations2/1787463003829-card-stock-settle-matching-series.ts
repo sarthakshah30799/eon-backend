@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CardStockSettleMatchingSeries1787463003829 implements MigrationInterface {
-    name = "CardStockSettleMatchingSeries1787463003829";
+  name = "CardStockSettleMatchingSeries1787463003829";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DO $$
             DECLARE
               function_definition text;
@@ -40,7 +40,7 @@ export class CardStockSettleMatchingSeries1787463003829 implements MigrationInte
             $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             ALTER TABLE card_stock_balance DISABLE TRIGGER card_stock_balance_recalculate_sale_profit_update;
             ALTER TABLE card_stock_balance DISABLE TRIGGER card_stock_balance_recalculate_sale_profit_insert;
 
@@ -60,10 +60,10 @@ export class CardStockSettleMatchingSeries1787463003829 implements MigrationInte
             ALTER TABLE card_stock_balance ENABLE TRIGGER card_stock_balance_recalculate_sale_profit_insert;
             ALTER TABLE card_stock_balance ENABLE TRIGGER card_stock_balance_recalculate_sale_profit_update;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DO $$
             DECLARE
               function_definition text;
@@ -98,5 +98,5 @@ export class CardStockSettleMatchingSeries1787463003829 implements MigrationInte
             END;
             $$;
         `);
-    }
+  }
 }

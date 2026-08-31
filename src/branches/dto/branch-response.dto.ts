@@ -1,8 +1,8 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Branch } from '../branch.entity';
-import { CountryResponseDto } from '../../country/dto/country-response.dto';
-import { StateResponseDto } from '../../state/dto/state-response.dto';
-import { SelectOptionResponseDto } from '../../category-options/dto/category-option-response.dto';
+import { ApiProperty } from "@nestjs/swagger";
+import { Branch } from "../branch.entity";
+import { CountryResponseDto } from "../../country/dto/country-response.dto";
+import { StateResponseDto } from "../../state/dto/state-response.dto";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 
 export class BranchResponseDto {
   @ApiProperty() id: string;
@@ -46,7 +46,9 @@ export class BranchResponseDto {
     dto.code = entity.code;
     dto.name = entity.name;
     dto.branchNumber = entity.branchNumber;
-    dto.country = entity.country ? CountryResponseDto.fromEntity(entity.country) : null;
+    dto.country = entity.country
+      ? CountryResponseDto.fromEntity(entity.country)
+      : null;
     dto.state = entity.state ? StateResponseDto.fromEntity(entity.state) : null;
     dto.address1 = entity.address1;
     dto.address2 = entity.address2;
@@ -61,17 +63,25 @@ export class BranchResponseDto {
     dto.contactNo = entity.contactNo;
     dto.branchEmail = entity.branchEmail;
     dto.aeonBranchLic = entity.aeonBranchLic;
-    dto.locationType = entity.locationType ? SelectOptionResponseDto.fromEntity(entity.locationType) : null;
-    dto.cashHolding = entity.cashHolding !== null ? Number(entity.cashHolding) : null;
-    dto.cashHoldingTemp = entity.cashHoldingTemp !== null ? Number(entity.cashHoldingTemp) : null;
-    dto.currHolding = entity.currHolding !== null ? Number(entity.currHolding) : null;
-    dto.currHoldingTemp = entity.currHoldingTemp !== null ? Number(entity.currHoldingTemp) : null;
+    dto.locationType = entity.locationType
+      ? SelectOptionResponseDto.fromEntity(entity.locationType)
+      : null;
+    dto.cashHolding =
+      entity.cashHolding !== null ? Number(entity.cashHolding) : null;
+    dto.cashHoldingTemp =
+      entity.cashHoldingTemp !== null ? Number(entity.cashHoldingTemp) : null;
+    dto.currHolding =
+      entity.currHolding !== null ? Number(entity.currHolding) : null;
+    dto.currHoldingTemp =
+      entity.currHoldingTemp !== null ? Number(entity.currHoldingTemp) : null;
     dto.isHeadOffice = entity.isHeadOffice;
     dto.isActive = entity.isActive;
     dto.companyId = entity.company?.id || null;
     dto.companyName = entity.company?.name || null;
     dto.counterIds = entity.counterLinks
-      ? entity.counterLinks.map((link) => link.counterId || link.counter?.id).filter(Boolean)
+      ? entity.counterLinks
+          .map((link) => link.counterId || link.counter?.id)
+          .filter(Boolean)
       : [];
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;

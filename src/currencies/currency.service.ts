@@ -2,16 +2,22 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
-import { Currency, CurrencyProductAllowed } from './currency.entity';
-import { Country } from '../country/country.entity';
-import { CreateCurrencyDto } from './dto/create-currency.dto';
-import { UpdateCurrencyDto } from './dto/update-currency.dto';
-import { CurrencyResponseDto } from './dto/currency-response.dto';
-import { CurrencyRateGroup } from '../currency-rates/currency-rate-group.entity';
-import { CurrencyListQueryDto } from './dto/currency-list-query.dto';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Brackets, Repository } from "typeorm";
+import { Currency, CurrencyProductAllowed } from "./currency.entity";
+import { Country } from "../country/country.entity";
+import { CreateCurrencyDto } from "./dto/create-currency.dto";
+import { UpdateCurrencyDto } from "./dto/update-currency.dto";
+import { CurrencyResponseDto } from "./dto/currency-response.dto";
+import { CurrencyRateGroup } from "../currency-rates/currency-rate-group.entity";
+import { CurrencyListQueryDto } from "./dto/currency-list-query.dto";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 @Injectable()
 export class CurrencyService {
@@ -26,7 +32,7 @@ export class CurrencyService {
 
   private applyBusinessRules(currency: Currency): void {
     if (!currency.onlyStocking) {
-      currency.productAllowed = '';
+      currency.productAllowed = "";
       return;
     }
 
@@ -34,48 +40,62 @@ export class CurrencyService {
       currency.productAllowed || CurrencyProductAllowed.CN;
   }
 
-  async findAll(query?: CurrencyListQueryDto): Promise<CurrencyResponseDto[]> {
+  async findAll(
+    query?: CurrencyListQueryDto,
+  ): Promise<PaginatedResponseDto<CurrencyResponseDto>> {
+    const pagination = normalizePagination(query);
     const qb = this.currencyRepository
-      .createQueryBuilder('currency')
-      .leftJoinAndSelect('currency.country', 'country')
-      .leftJoinAndSelect('currency.pricingGroup', 'pricingGroup')
-      .orderBy('currency.createdAt', 'DESC');
+      .createQueryBuilder("currency")
+      .leftJoinAndSelect("currency.country", "country")
+      .leftJoinAndSelect("currency.pricingGroup", "pricingGroup")
+      .orderBy("currency.createdAt", "DESC");
 
     const trimmedSearch = query?.search?.trim();
     if (trimmedSearch) {
       qb.andWhere(
-        new Brackets(searchQb => {
+        new Brackets((searchQb) => {
           searchQb
-            .where('currency.currencyCode ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('currency.currencyName ILIKE :search', { search: `%${trimmedSearch}%` })
-            .orWhere('country.name ILIKE :search', { search: `%${trimmedSearch}%` });
+            .where("currency.currencyCode ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            })
+            .orWhere("currency.currencyName ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            })
+            .orWhere("country.name ILIKE :search", {
+              search: `%${trimmedSearch}%`,
+            });
         }),
       );
     }
 
     if (query?.activeOnly !== false) {
-      qb.andWhere('currency.active = :active', { active: true });
+      qb.andWhere("currency.active = :active", { active: true });
     }
 
     if (query?.includeOnlyStocking) {
       if (query.productAllowed) {
         qb.andWhere(
-          'currency.onlyStocking = true AND currency.productAllowed = :productAllowed',
+          "currency.onlyStocking = true AND currency.productAllowed = :productAllowed",
           { productAllowed: query.productAllowed },
         );
       }
     } else {
-      qb.andWhere('currency.onlyStocking = false');
+      qb.andWhere("currency.onlyStocking = false");
     }
 
-    const currencies = await qb.getMany();
-    return currencies.map(CurrencyResponseDto.fromEntity);
+    applyPagination(qb, pagination);
+    const [currencies, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      currencies.map(CurrencyResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
 
   async findById(id: string): Promise<CurrencyResponseDto> {
     const currency = await this.currencyRepository.findOne({
       where: { id },
-      relations: ['country', 'pricingGroup'],
+      relations: ["country", "pricingGroup"],
     });
 
     if (!currency) {
@@ -114,11 +134,17 @@ export class CurrencyService {
         where: { id: dto.pricingGroupId },
       });
       if (!pricingGroup) {
-        throw new NotFoundException(`Currency pricing group with id ${dto.pricingGroupId} not found`);
+        throw new NotFoundException(
+          `Currency pricing group with id ${dto.pricingGroupId} not found`,
+        );
       }
     }
 
-    const { countryId: _countryId, pricingGroupId: _pricingGroupId, ...otherFields } = dto;
+    const {
+      countryId: _countryId,
+      pricingGroupId: _pricingGroupId,
+      ...otherFields
+    } = dto;
     void _countryId;
     void _pricingGroupId;
     const currency = this.currencyRepository.create({
@@ -128,7 +154,7 @@ export class CurrencyService {
       pricingGroup,
       active: dto.active ?? false,
       onlyStocking: dto.onlyStocking ?? false,
-      productAllowed: dto.productAllowed ?? '',
+      productAllowed: dto.productAllowed ?? "",
       createdBy: userId,
       updatedBy: userId,
     });
@@ -146,7 +172,7 @@ export class CurrencyService {
   ): Promise<CurrencyResponseDto> {
     const currency = await this.currencyRepository.findOne({
       where: { id },
-      relations: ['country'],
+      relations: ["country"],
     });
 
     if (!currency) {
@@ -185,7 +211,7 @@ export class CurrencyService {
     }
 
     if (dto.pricingGroupId !== undefined) {
-      if (dto.pricingGroupId === null || dto.pricingGroupId === '') {
+      if (dto.pricingGroupId === null || dto.pricingGroupId === "") {
         currency.pricingGroup = null;
       } else {
         const pricingGroup = await this.pricingGroupRepository.findOne({

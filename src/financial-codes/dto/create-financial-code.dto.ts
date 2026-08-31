@@ -1,5 +1,15 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsArray, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from "class-validator";
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from "class-validator";
 import { Type } from "class-transformer";
 
 export class CreateFinancialSubProfileNestedDto {
@@ -9,7 +19,10 @@ export class CreateFinancialSubProfileNestedDto {
   @MaxLength(50)
   financialSubCode: string;
 
-  @ApiProperty({ description: "Financial Sub Name", example: "HDFC CURRENT A/C" })
+  @ApiProperty({
+    description: "Financial Sub Name",
+    example: "HDFC CURRENT A/C",
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(250)
@@ -67,7 +80,10 @@ export class CreateFinancialSubProfileNestedDto {
 }
 
 export class CreateFinancialCodeDto {
-  @ApiProperty({ description: "Financial type (from category options)", example: "PROFIT & LOSS" })
+  @ApiProperty({
+    description: "Financial type (from category options)",
+    example: "PROFIT & LOSS",
+  })
   @IsUUID()
   @IsNotEmpty()
   financialType: string;

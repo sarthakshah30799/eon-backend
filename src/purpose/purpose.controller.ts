@@ -11,100 +11,128 @@ import {
   Query,
   Session,
   UseGuards,
-} from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { UserService } from '../users/user.service';
-import { PurposeService } from './purpose.service';
-import { CreatePurposeDto } from './dto/create-purpose.dto';
-import { UpdatePurposeDto } from './dto/update-purpose.dto';
-import { PurposeResponseDto } from './dto/purpose-response.dto';
-import { PurposeListQueryDto } from './dto/purpose-list-query.dto';
+} from "@nestjs/common";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { UserService } from "../users/user.service";
+import { PurposeService } from "./purpose.service";
+import { CreatePurposeDto } from "./dto/create-purpose.dto";
+import { UpdatePurposeDto } from "./dto/update-purpose.dto";
+import { PurposeResponseDto } from "./dto/purpose-response.dto";
+import { PurposeListQueryDto } from "./dto/purpose-list-query.dto";
+import { PaginatedResponseDto } from "../common/pagination";
 
-@ApiTags('purposes')
-@ApiCookieAuth('sessionId')
+@ApiTags("purposes")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('purposes')
+@Controller("purposes")
 export class PurposeController {
   constructor(
     private readonly purposeService: PurposeService,
     private readonly userService: UserService,
   ) {}
 
-  private async assertAdminOrHoStaff(session: { userId?: string; activeBranchId?: string | null; activeCounterId?: string | null }) {
+  private async assertAdminOrHoStaff(session: {
+    userId?: string;
+    activeBranchId?: string | null;
+    activeCounterId?: string | null;
+  }) {
     if (!session.userId) {
-      throw new BadRequestException('User session is missing');
+      throw new BadRequestException("User session is missing");
     }
 
-    const user = await this.userService.findById(session.userId, session.userId, {
-      activeBranchId: session.activeBranchId ?? null,
-      activeCounterId: session.activeCounterId ?? null,
-    });
+    const user = await this.userService.findById(
+      session.userId,
+      session.userId,
+      {
+        activeBranchId: session.activeBranchId ?? null,
+        activeCounterId: session.activeCounterId ?? null,
+      },
+    );
 
     if (!(user.isAdmin || user.isHoStaff)) {
-      throw new ForbiddenException('Only admin or HO staff can manage purposes');
+      throw new ForbiddenException(
+        "Only admin or HO staff can manage purposes",
+      );
     }
 
     return user;
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all purposes' })
-  @ApiResponse({ status: 200, type: [PurposeResponseDto] })
+  @ApiOperation({ summary: "Get all purposes" })
+  @ApiResponse({ status: 200, description: "Paginated list of purposes" })
   async findAll(
     @Query() query: PurposeListQueryDto,
-  ): Promise<PurposeResponseDto[]> {
+  ): Promise<PaginatedResponseDto<PurposeResponseDto>> {
     return this.purposeService.findAll(query);
   }
 
-  @Get('code/:code')
-  @ApiOperation({ summary: 'Get purpose by code' })
-  @ApiParam({ name: 'code', description: 'Purpose code' })
-  async findByCode(
-    @Param('code') code: string,
-  ): Promise<PurposeResponseDto> {
+  @Get("code/:code")
+  @ApiOperation({ summary: "Get purpose by code" })
+  @ApiParam({ name: "code", description: "Purpose code" })
+  async findByCode(@Param("code") code: string): Promise<PurposeResponseDto> {
     return this.purposeService.findByCode(code);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get purpose by ID' })
-  @ApiParam({ name: 'id', description: 'Purpose UUID' })
+  @Get(":id")
+  @ApiOperation({ summary: "Get purpose by ID" })
+  @ApiParam({ name: "id", description: "Purpose UUID" })
   @ApiResponse({ status: 200, type: PurposeResponseDto })
-  async findById(
-    @Param('id') id: string,
-  ): Promise<PurposeResponseDto> {
+  async findById(@Param("id") id: string): Promise<PurposeResponseDto> {
     return this.purposeService.findById(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a purpose' })
+  @ApiOperation({ summary: "Create a purpose" })
   async create(
     @Body() dto: CreatePurposeDto,
-    @Session() session: { userId?: string; activeBranchId?: string | null; activeCounterId?: string | null },
+    @Session()
+    session: {
+      userId?: string;
+      activeBranchId?: string | null;
+      activeCounterId?: string | null;
+    },
   ): Promise<PurposeResponseDto> {
     const user = await this.assertAdminOrHoStaff(session);
     return this.purposeService.create(dto, user.id);
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update a purpose' })
-  @ApiParam({ name: 'id', description: 'Purpose UUID' })
+  @Put(":id")
+  @ApiOperation({ summary: "Update a purpose" })
+  @ApiParam({ name: "id", description: "Purpose UUID" })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: UpdatePurposeDto,
-    @Session() session: { userId?: string; activeBranchId?: string | null; activeCounterId?: string | null },
+    @Session()
+    session: {
+      userId?: string;
+      activeBranchId?: string | null;
+      activeCounterId?: string | null;
+    },
   ): Promise<PurposeResponseDto> {
     const user = await this.assertAdminOrHoStaff(session);
     return this.purposeService.update(id, dto, user.id);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a purpose' })
-  @ApiParam({ name: 'id', description: 'Purpose UUID' })
+  @Delete(":id")
+  @ApiOperation({ summary: "Delete a purpose" })
+  @ApiParam({ name: "id", description: "Purpose UUID" })
   async delete(
-    @Param('id') id: string,
-    @Session() session: { userId?: string; activeBranchId?: string | null; activeCounterId?: string | null },
+    @Param("id") id: string,
+    @Session()
+    session: {
+      userId?: string;
+      activeBranchId?: string | null;
+      activeCounterId?: string | null;
+    },
   ): Promise<{ message: string }> {
     const user = await this.assertAdminOrHoStaff(session);
     return this.purposeService.delete(id, user.id);

@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Role } from '../role.entity';
+import { ApiProperty } from "@nestjs/swagger";
+import { Role } from "../role.entity";
 
 export class RoleResponseDto {
   @ApiProperty() id: string;

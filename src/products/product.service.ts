@@ -3,39 +3,49 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DeepPartial, ILike, In, Repository } from 'typeorm';
-import { Product } from './product.entity';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { ProductResponseDto } from './dto/product-response.dto';
-import { AccountProfile } from '../account-profiles/account-profile.entity';
-import { ProductCardIssuer } from './entities/product-card-issuer.entity';
-import { PartyProfile, ClientType } from '../party-profiles/party-profile.entity';
-import { WorkflowStatus } from '../common/enums/workflow-status.enum';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { DeepPartial, In, Repository } from "typeorm";
+import { Product } from "./product.entity";
+import { CreateProductDto } from "./dto/create-product.dto";
+import { UpdateProductDto } from "./dto/update-product.dto";
+import { ProductListQueryDto } from "./dto/product-list-query.dto";
+import { ProductResponseDto } from "./dto/product-response.dto";
+import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { ProductCardIssuer } from "./entities/product-card-issuer.entity";
+import {
+  PartyProfile,
+  ClientType,
+} from "../party-profiles/party-profile.entity";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
+import {
+  applyPagination,
+  buildPaginatedResponse,
+  normalizePagination,
+  type PaginatedResponseDto,
+} from "../common/pagination";
 
 const ACCOUNT_PROFILE_RELATION_FIELDS = [
-  'acOfIssuer',
-  'commissionAc',
-  'fakeAccount',
-  'lossAccount',
-  'bulkPurAc',
-  'openAc',
-  'closingAc',
-  'expenseAc',
-  'bulkSaleAc',
-  'purchaseAc',
-  'saleAc',
-  'profitAc',
-  'bulkProficAc',
-  'purchaseRetCancAc',
-  'purchaseBlkCancAc',
-  'saleRetCancAc',
-  'saleBlkCancAc',
-  'branchPurAc',
-  'branchSaleAc',
-  'profitAcBrnSale',
+  "acOfIssuer",
+  "commissionAc",
+  "fakeAccount",
+  "lossAccount",
+  "bulkPurAc",
+  "openAc",
+  "closingAc",
+  "expenseAc",
+  "bulkSaleAc",
+  "purchaseAc",
+  "saleAc",
+  "profitAc",
+  "bulkProficAc",
+  "purchaseRetCancAc",
+  "purchaseBlkCancAc",
+  "saleRetCancAc",
+  "saleBlkCancAc",
+  "branchPurAc",
+  "branchSaleAc",
+  "profitAcBrnSale",
 ] as const;
 
 @Injectable()
@@ -51,35 +61,54 @@ export class ProductService {
     private readonly partyProfileRepository: Repository<PartyProfile>,
   ) {}
 
-  async findAll(filter?: { bulkBuying?: boolean; bulkSelling?: boolean; otherTransaction?: boolean; search?: string; activeOnly?: boolean }): Promise<ProductResponseDto[]> {
-    const where: Record<string, boolean> = {};
-    if (filter?.bulkBuying) where.availableInBulkBuying = true;
-    if (filter?.bulkSelling) where.availableInBulkSelling = true;
-    if (filter?.otherTransaction) where.availableInOtherTransaction = true;
-    if (filter?.activeOnly !== false) where.isActiveProduct = true;
+  async findAll(
+    query?: ProductListQueryDto,
+  ): Promise<PaginatedResponseDto<ProductResponseDto>> {
+    const pagination = normalizePagination(query);
+    const qb = this.productRepository.createQueryBuilder("product");
 
-  const searchStr = filter?.search?.trim();
-  const findOptions: any = {
-    where,
-    relations: [...ACCOUNT_PROFILE_RELATION_FIELDS, 'cardIssuerLinks'],
-    order: { createdAt: 'DESC' },
-  };
+    for (const field of ACCOUNT_PROFILE_RELATION_FIELDS) {
+      qb.leftJoinAndSelect(`product.${field}`, field);
+    }
+    qb.leftJoinAndSelect("product.cardIssuerLinks", "cardIssuerLinks").orderBy(
+      "product.createdAt",
+      "DESC",
+    );
 
-  if (searchStr) {
-    findOptions.where = [
-      { ...where, productCode: ILike(`%${searchStr}%`) },
-      { ...where, productDescription: ILike(`%${searchStr}%`) },
-    ];
+    if (query?.bulkBuying) {
+      qb.andWhere("product.availableInBulkBuying = true");
+    }
+    if (query?.bulkSelling) {
+      qb.andWhere("product.availableInBulkSelling = true");
+    }
+    if (query?.otherTransaction) {
+      qb.andWhere("product.availableInOtherTransaction = true");
+    }
+    if (query?.activeOnly !== false) {
+      qb.andWhere("product.isActiveProduct = true");
+    }
+
+    const searchStr = query?.search?.trim();
+    if (searchStr) {
+      qb.andWhere(
+        "(product.productCode ILIKE :search OR product.productDescription ILIKE :search)",
+        { search: `%${searchStr}%` },
+      );
+    }
+
+    applyPagination(qb, pagination);
+    const [products, total] = await qb.getManyAndCount();
+    return buildPaginatedResponse(
+      products.map(ProductResponseDto.fromEntity),
+      total,
+      pagination,
+    );
   }
-
-  const products = await this.productRepository.find(findOptions);
-  return products.map(ProductResponseDto.fromEntity);
-}
 
   async findById(id: string): Promise<ProductResponseDto> {
     const product = await this.productRepository.findOne({
       where: { id },
-      relations: [...ACCOUNT_PROFILE_RELATION_FIELDS, 'cardIssuerLinks'],
+      relations: [...ACCOUNT_PROFILE_RELATION_FIELDS, "cardIssuerLinks"],
     });
     if (!product) {
       throw new NotFoundException(`Product with id ${id} not found`);
@@ -89,7 +118,7 @@ export class ProductService {
 
   async create(
     dto: CreateProductDto,
-    userId: string
+    userId: string,
   ): Promise<ProductResponseDto> {
     const uppercaseCode = dto.productCode.toUpperCase();
 
@@ -98,7 +127,9 @@ export class ProductService {
       where: { productCode: uppercaseCode },
     });
     if (existing) {
-      throw new ConflictException(`Product with code "${uppercaseCode}" already exists`);
+      throw new ConflictException(
+        `Product with code "${uppercaseCode}" already exists`,
+      );
     }
 
     await this.validateAccountProfileIds(dto);
@@ -116,22 +147,29 @@ export class ProductService {
     // Enforce business rules: if not available, series applicability must be false
     this.applyBusinessRules(product);
 
-    const saved = await this.productRepository.manager.transaction(async manager => {
-      const savedProduct = await manager.getRepository(Product).save(product);
-      await this.addCardIssuerLinks(manager.getRepository(ProductCardIssuer), savedProduct.id, issuerIds, userId);
-      return savedProduct;
-    });
+    const saved = await this.productRepository.manager.transaction(
+      async (manager) => {
+        const savedProduct = await manager.getRepository(Product).save(product);
+        await this.addCardIssuerLinks(
+          manager.getRepository(ProductCardIssuer),
+          savedProduct.id,
+          issuerIds,
+          userId,
+        );
+        return savedProduct;
+      },
+    );
     return this.findById(saved.id);
   }
 
   async update(
     id: string,
     dto: UpdateProductDto,
-    userId: string
+    userId: string,
   ): Promise<ProductResponseDto> {
     const product = await this.productRepository.findOne({
       where: { id },
-      relations: ['cardIssuerLinks'],
+      relations: ["cardIssuerLinks"],
     });
     if (!product) {
       throw new NotFoundException(`Product with id ${id} not found`);
@@ -142,27 +180,34 @@ export class ProductService {
     const addIds = this.normalizeIds(dto.cardIssuerProfileIds);
     const removeIds = this.normalizeIds(dto.removedCardIssuerProfileIds);
     const removalSet = new Set(removeIds);
-    const effectiveAddIds = addIds.filter(id => !removalSet.has(id));
-    const existingIds = new Set((product.cardIssuerLinks ?? []).map(link => link.partyProfileId));
+    const effectiveAddIds = addIds.filter((id) => !removalSet.has(id));
+    const existingIds = new Set(
+      (product.cardIssuerLinks ?? []).map((link) => link.partyProfileId),
+    );
 
-    const invalidRemovalIds = removeIds.filter(id => !existingIds.has(id));
+    const invalidRemovalIds = removeIds.filter((id) => !existingIds.has(id));
     if (invalidRemovalIds.length > 0) {
       throw new BadRequestException(
-        `Card issuer profile link(s) not found for product: ${invalidRemovalIds.join(', ')}`,
+        `Card issuer profile link(s) not found for product: ${invalidRemovalIds.join(", ")}`,
       );
     }
 
-    const newIds = effectiveAddIds.filter(id => !existingIds.has(id));
+    const newIds = effectiveAddIds.filter((id) => !existingIds.has(id));
     await this.validateNewCardIssuerProfileIds(newIds);
 
-    const { productCode: _productCode, cardIssuerProfileIds: _issuerIds, removedCardIssuerProfileIds: _removedIds, ...otherFields } = dto;
+    const {
+      productCode: _productCode,
+      cardIssuerProfileIds: _issuerIds,
+      removedCardIssuerProfileIds: _removedIds,
+      ...otherFields
+    } = dto;
     Object.assign(product, otherFields, this.mapAccountingRelations(dto));
-    
+
     // Enforce business rules: if not available, series applicability must be false
     this.applyBusinessRules(product);
 
     product.updatedBy = userId;
-    await this.productRepository.manager.transaction(async manager => {
+    await this.productRepository.manager.transaction(async (manager) => {
       await manager.getRepository(Product).save(product);
       await this.updateCardIssuerLinks(
         manager.getRepository(ProductCardIssuer),
@@ -204,7 +249,7 @@ export class ProductService {
   }
 
   private mapAccountingRelations(
-    dto: Partial<CreateProductDto>
+    dto: Partial<CreateProductDto>,
   ): Partial<Product> {
     return ACCOUNT_PROFILE_RELATION_FIELDS.reduce<Partial<Product>>(
       (accumulator, field) => {
@@ -220,15 +265,15 @@ export class ProductService {
 
         return accumulator;
       },
-      {}
+      {},
     );
   }
 
   private async validateAccountProfileIds(
-    dto: Partial<CreateProductDto>
+    dto: Partial<CreateProductDto>,
   ): Promise<void> {
-    const accountProfileIds = ACCOUNT_PROFILE_RELATION_FIELDS.map(field =>
-      dto[field]?.trim()
+    const accountProfileIds = ACCOUNT_PROFILE_RELATION_FIELDS.map((field) =>
+      dto[field]?.trim(),
     ).filter((value): value is string => Boolean(value));
 
     const uniqueIds = [...new Set(accountProfileIds)];
@@ -244,18 +289,18 @@ export class ProductService {
 
     if (existingAccountProfiles.length !== uniqueIds.length) {
       const existingIds = new Set(
-        existingAccountProfiles.map(accountProfile => accountProfile.id)
+        existingAccountProfiles.map((accountProfile) => accountProfile.id),
       );
-      const missingIds = uniqueIds.filter(id => !existingIds.has(id));
+      const missingIds = uniqueIds.filter((id) => !existingIds.has(id));
 
       throw new BadRequestException(
-        `Invalid account profile id(s): ${missingIds.join(', ')}`
+        `Invalid account profile id(s): ${missingIds.join(", ")}`,
       );
     }
   }
 
   private normalizeIds(ids?: string[]): string[] {
-    return [...new Set((ids ?? []).map(id => id.trim()).filter(Boolean))];
+    return [...new Set((ids ?? []).map((id) => id.trim()).filter(Boolean))];
   }
 
   private async validateNewCardIssuerProfileIds(ids: string[]): Promise<void> {
@@ -267,18 +312,20 @@ export class ProductService {
       select: { id: true, type: true, active: true, status: true },
       where: { id: In(ids) },
     });
-    const byId = new Map(profiles.map(profile => [profile.id, profile]));
-    const invalid = ids.filter(id => {
+    const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+    const invalid = ids.filter((id) => {
       const profile = byId.get(id);
-      return !profile ||
+      return (
+        !profile ||
         profile.type !== ClientType.CARD_ISSUER_PROFILE ||
         !profile.active ||
-        profile.status !== WorkflowStatus.APPROVE;
+        profile.status !== WorkflowStatus.APPROVE
+      );
     });
 
     if (invalid.length > 0) {
       throw new BadRequestException(
-        `Invalid active approved card issuer profile id(s): ${invalid.join(', ')}`,
+        `Invalid active approved card issuer profile id(s): ${invalid.join(", ")}`,
       );
     }
   }
@@ -294,12 +341,14 @@ export class ProductService {
     }
 
     await repository.save(
-      issuerIds.map(partyProfileId => repository.create({
-        productId,
-        partyProfileId,
-        createdBy: userId,
-        updatedBy: userId,
-      })),
+      issuerIds.map((partyProfileId) =>
+        repository.create({
+          productId,
+          partyProfileId,
+          createdBy: userId,
+          updatedBy: userId,
+        }),
+      ),
     );
   }
 
@@ -315,11 +364,11 @@ export class ProductService {
     }
 
     const existing = await repository.find({ where: { productId } });
-    const existingIds = new Set(existing.map(link => link.partyProfileId));
+    const existingIds = new Set(existing.map((link) => link.partyProfileId));
     await this.addCardIssuerLinks(
       repository,
       productId,
-      addIds.filter(id => !existingIds.has(id)),
+      addIds.filter((id) => !existingIds.has(id)),
       userId,
     );
   }

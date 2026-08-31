@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Counter } from '../counter.entity';
+import { ApiProperty } from "@nestjs/swagger";
+import { Counter } from "../counter.entity";
 
 export class CounterResponseDto {
   @ApiProperty() id: string;

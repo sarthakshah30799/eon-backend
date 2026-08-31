@@ -26,7 +26,9 @@ export class CategoryResponseDto {
     dto.id = entity.id;
     dto.title = entity.label;
     dto.code = entity.code;
-    dto.subcategories = (entity.children || []).map(sub => SubcategoryResponseDto.fromEntity(sub));
+    dto.subcategories = (entity.children || []).map((sub) =>
+      SubcategoryResponseDto.fromEntity(sub),
+    );
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

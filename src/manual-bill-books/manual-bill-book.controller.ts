@@ -8,7 +8,6 @@ import {
   Query,
   UseGuards,
   Session,
-  Logger,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -31,6 +30,7 @@ import {
   ReassignManualBookDto,
 } from "./dto/manual-bill-book.dto";
 import { ManualBillBookListQueryDto } from "./dto/manual-bill-book-list-query.dto";
+import { ManualBillBookSelectablePagesQueryDto } from "./dto/manual-bill-book-selectable-pages-query.dto";
 import { PaginatedResponseDto } from "../common/pagination/dto/paginated-response.dto";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -40,8 +40,6 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
 @Controller("manual-bill-books")
 export class ManualBillBookController {
-  private readonly logger = new Logger(ManualBillBookController.name);
-
   constructor(private readonly service: ManualBillBookService) {}
 
   @Post("dispatch")
@@ -90,14 +88,19 @@ export class ManualBillBookController {
 
   @Get("dispatches")
   @ApiOperation({ summary: "Get all manual bill book dispatches (paginated)" })
-  @ApiResponse({ status: 200, description: "Paginated list of dispatches", type: PaginatedResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of dispatches",
+    type: PaginatedResponseDto,
+  })
   async findAll(
     @Session() session: any,
     @Query() query: ManualBillBookListQueryDto,
   ): Promise<PaginatedResponseDto<any>> {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? query.branchId?.trim() || undefined
-      : session.activeBranchId;
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? query.branchId?.trim() || undefined
+        : session.activeBranchId;
     let assignedToFilter: string | undefined;
     if (!session.isAdmin && !session.isHoStaff) {
       assignedToFilter = session.userId;
@@ -132,12 +135,10 @@ export class ManualBillBookController {
     @Query("branchId") branchId?: string,
     @Query("search") search?: string,
   ) {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || session?.activeBranchId
-      : session?.activeBranchId;
-    this.logger.log(
-      `[DEBUG] branch-managers request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} queryBranchId=${branchId?.trim() ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} search=${search ?? "null"}`,
-    );
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? branchId?.trim() || session?.activeBranchId
+        : session?.activeBranchId;
     return this.service.getBranchManagers(effectiveBranchId, search);
   }
 
@@ -174,9 +175,14 @@ export class ManualBillBookController {
   }
 
   @Put("dispatches/:id/reassign")
-  @ApiOperation({ summary: "Reassign a REJECTED dispatch to a new user (HO only)" })
+  @ApiOperation({
+    summary: "Reassign a REJECTED dispatch to a new user (HO only)",
+  })
   @ApiParam({ name: "id", description: "Dispatch UUID" })
-  @ApiResponse({ status: 200, description: "Dispatch reassigned and reset to PENDING" })
+  @ApiResponse({
+    status: 200,
+    description: "Dispatch reassigned and reset to PENDING",
+  })
   async reassignDispatch(
     @Param("id") id: string,
     @Body() dto: ReassignManualBookDto,
@@ -251,21 +257,22 @@ export class ManualBillBookController {
     summary:
       "Get selectable manual bill book pages for the current branch and assignee",
   })
-  @ApiResponse({ status: 200, description: "Selectable pages" })
+  @ApiResponse({
+    status: 200,
+    description: "Selectable pages",
+    type: PaginatedResponseDto,
+  })
   async getSelectablePages(
     @Session() session: any,
-    @Query("userId") userId?: string,
-    @Query("transactionType") transactionType?: string,
+    @Query() query: ManualBillBookSelectablePagesQueryDto,
   ) {
     const effectiveBranchId = session.activeBranchId;
-    const effectiveUserId = userId?.trim() || session.userId;
-    this.logger.log(
-      `[DEBUG] selectable-pages request userId=${session?.userId ?? "unknown"} isAdmin=${Boolean(session?.isAdmin)} isHoStaff=${Boolean(session?.isHoStaff)} activeBranchId=${session?.activeBranchId ?? "null"} effectiveBranchId=${effectiveBranchId ?? "null"} userFilter=${effectiveUserId ?? "null"} transactionType=${transactionType ?? "null"}`
-    );
+    const effectiveUserId = query.userId?.trim() || session.userId;
     return this.service.getSelectablePages(
       effectiveBranchId,
       effectiveUserId,
-      transactionType?.trim() || undefined,
+      query.transactionType?.trim() || undefined,
+      query,
     );
   }
 
@@ -333,7 +340,9 @@ export class ManualBillBookController {
   }
 
   @Get("dp-management/users")
-  @ApiOperation({ summary: "Get all active branch users with their delivery person status" })
+  @ApiOperation({
+    summary: "Get all active branch users with their delivery person status",
+  })
   async getBranchUsersForDP(@Session() session: any) {
     return this.service.getBranchUsersForDP(session.activeBranchId);
   }
@@ -344,7 +353,11 @@ export class ManualBillBookController {
     @Session() session: any,
     @Body() dto: ManageDeliveryPersonDto,
   ) {
-    return this.service.addDeliveryPerson(session.activeBranchId, dto.userId, session.userId);
+    return this.service.addDeliveryPerson(
+      session.activeBranchId,
+      dto.userId,
+      session.userId,
+    );
   }
 
   @Post("dp-management/remove")
@@ -353,20 +366,36 @@ export class ManualBillBookController {
     @Session() session: any,
     @Body() dto: ManageDeliveryPersonDto,
   ) {
-    return this.service.removeDeliveryPerson(session.activeBranchId, dto.userId);
+    return this.service.removeDeliveryPerson(
+      session.activeBranchId,
+      dto.userId,
+    );
   }
 
   @Get("dp-unmap/pages")
-  @ApiOperation({ summary: "Get all pages currently assigned to delivery persons in the branch" })
+  @ApiOperation({
+    summary:
+      "Get all pages currently assigned to delivery persons in the branch",
+  })
   async getDPAllocatedPages(@Session() session: any) {
     return this.service.getDPAllocatedPages(session.activeBranchId);
   }
 
   @Post("dp-unmap/execute")
-  @ApiOperation({ summary: "Unmap pages from a delivery person back to cashier or release to BM pool" })
+  @ApiOperation({
+    summary:
+      "Unmap pages from a delivery person back to cashier or release to BM pool",
+  })
   async unmapFromDP(
     @Session() session: any,
-    @Body() body: { dpUserId: string; manualBookId: string; mvFrom: number; mvTo: number; remarks?: string },
+    @Body()
+    body: {
+      dpUserId: string;
+      manualBookId: string;
+      mvFrom: number;
+      mvTo: number;
+      remarks?: string;
+    },
   ) {
     return this.service.unmapFromDP({
       dpUserId: body.dpUserId,

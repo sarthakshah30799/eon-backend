@@ -26,9 +26,7 @@ const parseArrayQuery = ({ value }: { value: unknown }) => {
   }
 
   const values = Array.isArray(value) ? value : String(value).split(",");
-  return values
-    .map(item => String(item).trim())
-    .filter(Boolean);
+  return values.map((item) => String(item).trim()).filter(Boolean);
 };
 
 export class SalePurchaseReportQueryDto {

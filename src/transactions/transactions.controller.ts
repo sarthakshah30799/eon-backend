@@ -13,17 +13,24 @@ import {
   Res,
   HttpStatus,
   ForbiddenException,
-} from '@nestjs/common';
-import { ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { ParseUUIDPipe } from '@nestjs/common';
-import { Response } from 'express';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RecordTransactionPrintDto } from './dto/record-transaction-print.dto';
-import { TransactionsService } from './transactions.service';
-import { PurchaseRuleService } from './purchase-rule.service';
-import { Transaction } from './entities/transaction.entity';
-import { AnyFilesInterceptor } from '@nestjs/platform-express';
+} from "@nestjs/common";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { ParseUUIDPipe } from "@nestjs/common";
+import { Response } from "express";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
+import { TransactionsService } from "./transactions.service";
+import { PurchaseRuleService } from "./purchase-rule.service";
+import { Transaction } from "./entities/transaction.entity";
+import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
+import { PaginatedResponseDto } from "../common/pagination";
+import { AnyFilesInterceptor } from "@nestjs/platform-express";
 
 type UploadedDraftFile = {
   fieldname: string;
@@ -33,63 +40,61 @@ type UploadedDraftFile = {
   buffer: Buffer;
 };
 
-@ApiTags('transactions')
-@ApiCookieAuth('sessionId')
+@ApiTags("transactions")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('transactions')
+@Controller("transactions")
 export class TransactionsController {
   constructor(
     private readonly transactionsService: TransactionsService,
     private readonly purchaseRuleService: PurchaseRuleService,
   ) {}
 
-  @Get('ad1/agents')
-  @ApiOperation({ summary: 'Get agents for AD1 transactions' })
+  @Get("ad1/agents")
+  @ApiOperation({ summary: "Get agents for AD1 transactions" })
   async getAd1Agents(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('search') search?: string,
+    @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
   ): Promise<any[]> {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || undefined
-      : session?.activeBranchId;
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? branchId?.trim() || undefined
+        : session?.activeBranchId;
     return this.transactionsService.getAd1Agents(effectiveBranchId, search);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get transactions filtered by slug and current branch' })
-  @ApiResponse({ status: 200, description: 'List of transactions', type: [Transaction] })
+  @ApiOperation({
+    summary: "Get transactions filtered by slug and current branch",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of transactions",
+  })
   async getTransactions(
     @Session() session: any,
-    @Query('slug') slug?: string,
-    @Query('branchId') branchId?: string,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('partyProfileId') partyProfileId?: string,
-    @Query('transactionType') transactionType?: string,
-  ): Promise<Transaction[]> {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || undefined
-      : session?.activeBranchId;
-    return this.transactionsService.getTransactions(
-      slug,
-      effectiveBranchId,
-      search,
-      status as any,
-      partyProfileId,
-      transactionType as any,
-    );
+    @Query() query: TransactionListQueryDto,
+  ): Promise<PaginatedResponseDto<Transaction>> {
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? query.branchId?.trim() || undefined
+        : session?.activeBranchId;
+    return this.transactionsService.getTransactions(query, effectiveBranchId);
   }
 
-  @Get('quantity-availability')
-  @ApiOperation({ summary: 'Get approved quantity availability for a branch, currency, and product' })
+  @Get("quantity-availability")
+  @ApiOperation({
+    summary:
+      "Get approved quantity availability for a branch, currency, and product",
+  })
   async getQuantityAvailability(
     @Session() session: any,
-    @Query('branchId') branchId?: string,
-    @Query('counterId') counterId?: string,
-    @Query('currencyId') currencyId?: string,
-    @Query('productId') productId?: string,
-    @Query('excludeTransactionId') excludeTransactionId?: string,
+    @Query("branchId") branchId?: string,
+    @Query("counterId") counterId?: string,
+    @Query("currencyId") currencyId?: string,
+    @Query("productId") productId?: string,
+    @Query("excludeTransactionId") excludeTransactionId?: string,
   ): Promise<{
     branchId: string;
     counterId: string;
@@ -99,63 +104,79 @@ export class TransactionsController {
     soldQuantity: string;
     availableQuantity: string;
   }> {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff
-      ? branchId?.trim() || undefined
-      : session?.activeBranchId;
-    const effectiveCounterId = session?.isAdmin || session?.isHoStaff
-      ? counterId?.trim() || undefined
-      : session?.activeCounterId;
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? branchId?.trim() || undefined
+        : session?.activeBranchId;
+    const effectiveCounterId =
+      session?.isAdmin || session?.isHoStaff
+        ? counterId?.trim() || undefined
+        : session?.activeCounterId;
     if (!effectiveBranchId) {
-      throw new BadRequestException('Branch is required');
+      throw new BadRequestException("Branch is required");
     }
 
     if (!effectiveCounterId) {
-      throw new BadRequestException('Counter is required');
+      throw new BadRequestException("Counter is required");
     }
 
     return this.transactionsService.getQuantityAvailability(
       effectiveBranchId,
       effectiveCounterId,
-      String(currencyId ?? ''),
-      String(productId ?? ''),
+      String(currencyId ?? ""),
+      String(productId ?? ""),
       excludeTransactionId ?? undefined,
     );
   }
 
-  @Get('average-sell-price')
+  @Get("average-sell-price")
   async getAverageSellPrice(
-    @Query('productId') productId?: string,
-    @Query('currencyId') currencyId?: string,
+    @Query("productId") productId?: string,
+    @Query("currencyId") currencyId?: string,
   ) {
     return this.transactionsService.getAverageSellPricePreview(
-      String(productId ?? ''),
-      String(currencyId ?? ''),
+      String(productId ?? ""),
+      String(currencyId ?? ""),
     );
   }
 
-  @Get('counter-hold-cost')
+  @Get("counter-hold-cost")
   async getCounterHoldCost(
-    @Query('branchId') branchId?: string,
-    @Query('counterId') counterId?: string,
-    @Query('currencyId') currencyId?: string,
+    @Query("branchId") branchId?: string,
+    @Query("counterId") counterId?: string,
+    @Query("currencyId") currencyId?: string,
     @Session() session?: any,
   ) {
-    const effectiveBranchId = session?.isAdmin || session?.isHoStaff ? branchId : session?.activeBranchId;
-    const effectiveCounterId = session?.isAdmin || session?.isHoStaff ? counterId : session?.activeCounterId;
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHoStaff
+        ? branchId
+        : session?.activeBranchId;
+    const effectiveCounterId =
+      session?.isAdmin || session?.isHoStaff
+        ? counterId
+        : session?.activeCounterId;
     if (!effectiveBranchId || !effectiveCounterId || !currencyId) {
-      throw new BadRequestException('Branch, counter, and currency are required');
+      throw new BadRequestException(
+        "Branch, counter, and currency are required",
+      );
     }
-    return this.transactionsService.getCounterHoldCost(effectiveBranchId, effectiveCounterId, currencyId);
+    return this.transactionsService.getCounterHoldCost(
+      effectiveBranchId,
+      effectiveCounterId,
+      currencyId,
+    );
   }
 
-  @Post(':id/account-postings/rebuild')
-  @ApiOperation({ summary: 'Queue a manual account posting rebuild for a transaction' })
+  @Post(":id/account-postings/rebuild")
+  @ApiOperation({
+    summary: "Queue a manual account posting rebuild for a transaction",
+  })
   async requestAccountPostingRebuild(
-    @Param('id') transactionId: string,
+    @Param("id") transactionId: string,
     @Session() session: any,
   ): Promise<{ message: string }> {
     if (!session?.userId) {
-      throw new BadRequestException('User session not found');
+      throw new BadRequestException("User session not found");
     }
 
     return this.transactionsService.requestAccountPostingRebuild(
@@ -164,9 +185,14 @@ export class TransactionsController {
     );
   }
 
-  @Post('drafts')
-  @ApiOperation({ summary: 'Create a transaction draft with multipart attachments' })
-  @ApiResponse({ status: 201, description: 'Transaction draft created successfully' })
+  @Post("drafts")
+  @ApiOperation({
+    summary: "Create a transaction draft with multipart attachments",
+  })
+  @ApiResponse({
+    status: 201,
+    description: "Transaction draft created successfully",
+  })
   @UseInterceptors(AnyFilesInterceptor())
   async createDraft(
     @Body() body: Record<string, any>,
@@ -182,22 +208,26 @@ export class TransactionsController {
     );
   }
 
-  @Post('tax-preview')
-  @ApiOperation({ summary: 'Preview GST tax calculation for a transaction payload' })
+  @Post("tax-preview")
+  @ApiOperation({
+    summary: "Preview GST tax calculation for a transaction payload",
+  })
   async previewTax(
     @Body() body: Record<string, any>,
   ): Promise<Record<string, any>> {
     return this.transactionsService.previewTransactionTax(body);
   }
 
-  @Post('tcs-preview')
-  @ApiOperation({ summary: 'Preview TCS calculation for a transaction payload' })
+  @Post("tcs-preview")
+  @ApiOperation({
+    summary: "Preview TCS calculation for a transaction payload",
+  })
   async previewTcs(
     @Body() body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
     return this.transactionsService.previewTransactionTcs(
       body as {
-        transactionType: import('./transactions.enums').TransactionType;
+        transactionType: import("./transactions.enums").TransactionType;
         purposeId: string;
         slug?: string | null;
         preTcsFinalAmount?: string | number | null;
@@ -215,33 +245,38 @@ export class TransactionsController {
     );
   }
 
-  @Post('purchase-rule-preview')
-  @ApiOperation({ summary: 'Preview purchase rule validation for a transaction payload' })
+  @Post("purchase-rule-preview")
+  @ApiOperation({
+    summary: "Preview purchase rule validation for a transaction payload",
+  })
   async previewPurchaseRule(
     @Body() body: Record<string, any>,
   ): Promise<Record<string, any>> {
     return this.purchaseRuleService.preview(body);
   }
 
-  @Get('next-number')
-  @ApiOperation({ summary: 'Get next transaction number preview' })
+  @Get("next-number")
+  @ApiOperation({ summary: "Get next transaction number preview" })
   async getNextNumber(
-    @Query('slug') slug: string,
-    @Query('branchId') branchId: string,
+    @Query("slug") slug: string,
+    @Query("branchId") branchId: string,
   ): Promise<{ nextNumber: string }> {
     return this.transactionsService.getNextTransactionNumber(slug, branchId);
   }
 
-  @Post(':id/approve')
-  @ApiOperation({ summary: 'Approve a draft transaction' })
-  @ApiResponse({ status: 200, description: 'Transaction approved successfully' })
+  @Post(":id/approve")
+  @ApiOperation({ summary: "Approve a draft transaction" })
+  @ApiResponse({
+    status: 200,
+    description: "Transaction approved successfully",
+  })
   async approveTransaction(
-    @Param('id') transactionId: string,
+    @Param("id") transactionId: string,
     @Body() body: { approvalRemarks?: string },
     @Session() session: any,
   ): Promise<Transaction> {
     if (!session?.userId) {
-      throw new BadRequestException('User session not found');
+      throw new BadRequestException("User session not found");
     }
 
     return this.transactionsService.approveTransaction(
@@ -252,11 +287,15 @@ export class TransactionsController {
     );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get transaction by ID' })
-  @ApiResponse({ status: 200, description: 'Transaction details', type: Transaction })
+  @Get(":id")
+  @ApiOperation({ summary: "Get transaction by ID" })
+  @ApiResponse({
+    status: 200,
+    description: "Transaction details",
+    type: Transaction,
+  })
   async getTransactionById(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Session() session: any,
   ): Promise<Transaction | null> {
     return this.transactionsService.getTransactionById(
@@ -266,11 +305,11 @@ export class TransactionsController {
     );
   }
 
-  @Get(':id/documents/:documentId/download')
-  @ApiOperation({ summary: 'Download or preview a transaction document' })
+  @Get(":id/documents/:documentId/download")
+  @ApiOperation({ summary: "Download or preview a transaction document" })
   async downloadDocument(
-    @Param('id', ParseUUIDPipe) transactionId: string,
-    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Param("id", ParseUUIDPipe) transactionId: string,
+    @Param("documentId", ParseUUIDPipe) documentId: string,
     @Session() session: any,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -281,21 +320,27 @@ export class TransactionsController {
       session?.activeBranchId ?? null,
     );
 
-    if ('redirectUrl' in payload) {
+    if ("redirectUrl" in payload) {
       return res.redirect(payload.redirectUrl);
     }
 
     res.status(HttpStatus.OK);
-    res.setHeader('Content-Disposition', `inline; filename="${payload.fileName}"`);
-    res.setHeader('Content-Type', payload.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${payload.fileName}"`,
+    );
+    res.setHeader("Content-Type", payload.mimeType);
     return payload.file;
   }
 
-  @Post(':id/print')
-  @ApiOperation({ summary: 'Record a purchase print and optionally send the customer copy by email' })
-  @ApiResponse({ status: 201, description: 'Print recorded successfully' })
+  @Post(":id/print")
+  @ApiOperation({
+    summary:
+      "Record a purchase print and optionally send the customer copy by email",
+  })
+  @ApiResponse({ status: 201, description: "Print recorded successfully" })
   async recordPrint(
-    @Param('id') transactionId: string,
+    @Param("id") transactionId: string,
     @Body() dto: RecordTransactionPrintDto,
     @Session() session: any,
   ): Promise<{ message: string; messageId?: string }> {

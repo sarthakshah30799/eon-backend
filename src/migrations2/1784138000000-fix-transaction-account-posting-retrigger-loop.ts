@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class FixTransactionAccountPostingRetriggerLoop1784138000000 implements MigrationInterface {
-    name = 'FixTransactionAccountPostingRetriggerLoop1784138000000'
+  name = "FixTransactionAccountPostingRetriggerLoop1784138000000";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.enqueue_transaction_account_postings_rebuild()
             RETURNS trigger
             LANGUAGE plpgsql
@@ -93,10 +93,10 @@ export class FixTransactionAccountPostingRetriggerLoop1784138000000 implements M
             END;
             $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.enqueue_transaction_account_postings_rebuild()
             RETURNS trigger
             LANGUAGE plpgsql
@@ -176,5 +176,5 @@ export class FixTransactionAccountPostingRetriggerLoop1784138000000 implements M
             END;
             $$;
         `);
-    }
+  }
 }

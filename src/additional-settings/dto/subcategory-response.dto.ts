@@ -45,10 +45,16 @@ export class SubcategoryResponseDto {
         dto.value = entity.valueBoolean ? "YES" : "NO";
         break;
       case ValueType.Number:
-        dto.value = entity.valueNumber !== null && entity.valueNumber !== undefined ? String(entity.valueNumber) : "";
+        dto.value =
+          entity.valueNumber !== null && entity.valueNumber !== undefined
+            ? String(entity.valueNumber)
+            : "";
         break;
       case ValueType.Decimal:
-        dto.value = entity.valueDecimal !== null && entity.valueDecimal !== undefined ? String(entity.valueDecimal) : "";
+        dto.value =
+          entity.valueDecimal !== null && entity.valueDecimal !== undefined
+            ? String(entity.valueDecimal)
+            : "";
         break;
       case ValueType.Date:
         dto.value = entity.valueDate ? entity.valueDate.toISOString() : "";

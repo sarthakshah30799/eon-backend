@@ -1,20 +1,35 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AdvancedSetting, NodeType, ValueType } from './advanced-setting.entity';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { UpdateCategoryDto } from './dto/update-category.dto';
-import { UpdateSubcategoryDto } from './dto/update-subcategory.dto';
-import { PasswordPolicyService } from '../password-policy/password-policy.service';
-import { PasswordPolicyCodeEnum } from '../password-policy/password-policy.enum';
-import { PASSWORD_POLICY_CHILDREN, PasswordPolicyConfig } from '../password-policy/password-policy.dto';
-import { SessionPolicyService } from '../session-policy/session-policy.service';
-import { SessionPolicyCodeEnum } from '../session-policy/session-policy.enum';
-import { SESSION_POLICY_CHILDREN, SessionPolicyConfig } from '../session-policy/session-policy.dto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  AdvancedSetting,
+  NodeType,
+  ValueType,
+} from "./advanced-setting.entity";
+import { CreateCategoryDto } from "./dto/create-category.dto";
+import { UpdateCategoryDto } from "./dto/update-category.dto";
+import { UpdateSubcategoryDto } from "./dto/update-subcategory.dto";
+import { PasswordPolicyService } from "../password-policy/password-policy.service";
+import { PasswordPolicyCodeEnum } from "../password-policy/password-policy.enum";
+import {
+  PASSWORD_POLICY_CHILDREN,
+  PasswordPolicyConfig,
+} from "../password-policy/password-policy.dto";
+import { SessionPolicyService } from "../session-policy/session-policy.service";
+import { SessionPolicyCodeEnum } from "../session-policy/session-policy.enum";
+import {
+  SESSION_POLICY_CHILDREN,
+  SessionPolicyConfig,
+} from "../session-policy/session-policy.dto";
 import {
   TransactionTypeProfileEnum,
   type TransactionTypeProfile,
-} from '../transactions/transactions.enums';
+} from "../transactions/transactions.enums";
 
 type PolicyCreateContext = {
   dto: CreateCategoryDto;
@@ -35,21 +50,28 @@ type PolicyHandler = {
   updateSubcategory: (context: PolicyUpdateContext) => Promise<void>;
 };
 
-const normalizeCode = (code?: string | null) => String(code ?? '').trim().toUpperCase();
+const normalizeCode = (code?: string | null) =>
+  String(code ?? "")
+    .trim()
+    .toUpperCase();
 const TRANSACTION_NUMBERING_CODE_LIST = Object.values(
-  TransactionTypeProfileEnum
+  TransactionTypeProfileEnum,
 ) as string[];
-TRANSACTION_NUMBERING_CODE_LIST.push('RECEIPT_VOUCHER', 'PAYMENT_VOUCHER', 'JOURNAL_VOUCHER');
+TRANSACTION_NUMBERING_CODE_LIST.push(
+  "RECEIPT_VOUCHER",
+  "PAYMENT_VOUCHER",
+  "JOURNAL_VOUCHER",
+);
 const TRANSACTION_NUMBERING_CODES = new Set<string>(
-  TRANSACTION_NUMBERING_CODE_LIST
+  TRANSACTION_NUMBERING_CODE_LIST,
 );
 const COMMON_CORPORATE_NUMBER_SERIES_CODES = [
-  'PURCHASE_CORPORATE_INDIVIDUAL',
-  'SALE_CORPORATE_INDIVIDUAL',
+  "PURCHASE_CORPORATE_INDIVIDUAL",
+  "SALE_CORPORATE_INDIVIDUAL",
 ] as const;
 
 const isTransactionTypeProfile = (
-  code: string
+  code: string,
 ): code is TransactionTypeProfile => TRANSACTION_NUMBERING_CODES.has(code);
 
 @Injectable()
@@ -59,9 +81,13 @@ export class AdditionalSettingService {
     private readonly settingRepository: Repository<AdvancedSetting>,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly sessionPolicyService: SessionPolicyService,
-  ) { }
+  ) {}
 
-  private parseAndSetValue(setting: AdvancedSetting, value: string, valueType: ValueType) {
+  private parseAndSetValue(
+    setting: AdvancedSetting,
+    value: string,
+    valueType: ValueType,
+  ) {
     setting.valueType = valueType;
     setting.valueBoolean = null;
     setting.valueText = null;
@@ -77,7 +103,8 @@ export class AdditionalSettingService {
 
     switch (valueType) {
       case ValueType.Boolean:
-        setting.valueBoolean = cleanVal.toUpperCase() === 'YES' || cleanVal.toLowerCase() === 'true';
+        setting.valueBoolean =
+          cleanVal.toUpperCase() === "YES" || cleanVal.toLowerCase() === "true";
         break;
       case ValueType.Number:
         setting.valueNumber = parseInt(cleanVal, 10);
@@ -110,7 +137,7 @@ export class AdditionalSettingService {
     subcategoryCode: string,
     value: string,
   ) {
-    if (normalizeCode(categoryCode) !== 'TRANSACTION_NUMBERING') {
+    if (normalizeCode(categoryCode) !== "TRANSACTION_NUMBERING") {
       return;
     }
 
@@ -119,20 +146,20 @@ export class AdditionalSettingService {
       return;
     }
 
-    const cleanValue = String(value ?? '').trim();
+    const cleanValue = String(value ?? "").trim();
     if (!cleanValue) {
       return;
     }
 
     if (!/^\d+$/.test(cleanValue)) {
       throw new BadRequestException(
-        'Transaction numbering value must contain digits only',
+        "Transaction numbering value must contain digits only",
       );
     }
 
     if (cleanValue.length !== 8) {
       throw new BadRequestException(
-        'Transaction numbering series must be exactly 8 digits',
+        "Transaction numbering series must be exactly 8 digits",
       );
     }
   }
@@ -141,8 +168,8 @@ export class AdditionalSettingService {
     const normalizedSeriesCode = normalizeCode(seriesCode);
 
     if (
-      normalizedSeriesCode === 'PURCHASE_CORPORATE_INDIVIDUAL' ||
-      normalizedSeriesCode === 'SALE_CORPORATE_INDIVIDUAL'
+      normalizedSeriesCode === "PURCHASE_CORPORATE_INDIVIDUAL" ||
+      normalizedSeriesCode === "SALE_CORPORATE_INDIVIDUAL"
     ) {
       return [...COMMON_CORPORATE_NUMBER_SERIES_CODES];
     }
@@ -166,17 +193,41 @@ export class AdditionalSettingService {
             let numericValue: number;
 
             if (code === PasswordPolicyCodeEnum.MinLength) {
-              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Length', false);
+              numericValue = this.passwordPolicyService.parsePolicyInteger(
+                sub.value,
+                "Minimum Length",
+                false,
+              );
             } else if (code === PasswordPolicyCodeEnum.MaxLength) {
-              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Length', false);
+              numericValue = this.passwordPolicyService.parsePolicyInteger(
+                sub.value,
+                "Maximum Length",
+                false,
+              );
             } else if (code === PasswordPolicyCodeEnum.MinSpecialCharCount) {
-              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Special Characters', true);
+              numericValue = this.passwordPolicyService.parsePolicyInteger(
+                sub.value,
+                "Minimum Special Characters",
+                true,
+              );
             } else if (code === PasswordPolicyCodeEnum.MinNumericCount) {
-              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Numeric Characters', true);
+              numericValue = this.passwordPolicyService.parsePolicyInteger(
+                sub.value,
+                "Minimum Numeric Characters",
+                true,
+              );
             } else if (code === PasswordPolicyCodeEnum.MinAlphaCount) {
-              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Alpha Characters', true);
+              numericValue = this.passwordPolicyService.parsePolicyInteger(
+                sub.value,
+                "Minimum Alpha Characters",
+                true,
+              );
             } else if (code === PasswordPolicyCodeEnum.MaxInvalidAttempts) {
-              numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Invalid Attempts', true);
+              numericValue = this.passwordPolicyService.parsePolicyInteger(
+                sub.value,
+                "Maximum Invalid Attempts",
+                true,
+              );
             } else {
               numericValue = parseInt(sub.value, 10);
             }
@@ -192,7 +243,11 @@ export class AdditionalSettingService {
               updatedBy: userId,
             });
 
-            this.parseAndSetValue(child, String(numericValue), ValueType.Number);
+            this.parseAndSetValue(
+              child,
+              String(numericValue),
+              ValueType.Number,
+            );
             createdChildren.push(child);
           }
 
@@ -206,7 +261,13 @@ export class AdditionalSettingService {
             await this.settingRepository.save(child);
           }
         },
-        updateSubcategory: async ({ categoryId, subcategoryId, setting, dto, userId }) => {
+        updateSubcategory: async ({
+          categoryId,
+          subcategoryId,
+          setting,
+          dto,
+          userId,
+        }) => {
           const children = await this.settingRepository.find({
             where: { parentId: categoryId, nodeType: NodeType.Setting },
           });
@@ -218,12 +279,12 @@ export class AdditionalSettingService {
             true,
           );
 
-          const merged = children.map(child =>
+          const merged = children.map((child) =>
             child.id === subcategoryId
               ? {
-                ...child,
-                valueNumber: numericValue,
-              }
+                  ...child,
+                  valueNumber: numericValue,
+                }
               : child,
           );
 
@@ -233,7 +294,11 @@ export class AdditionalSettingService {
 
           setting.description = setting.description || dto.description.trim();
           setting.updatedBy = userId;
-          this.parseAndSetValue(setting, String(numericValue), ValueType.Number);
+          this.parseAndSetValue(
+            setting,
+            String(numericValue),
+            ValueType.Number,
+          );
         },
       },
       [SessionPolicyCodeEnum.Policy]: {
@@ -254,10 +319,21 @@ export class AdditionalSettingService {
             });
 
             if (code === SessionPolicyCodeEnum.AllowMultipleLogin) {
-              const boolVal = this.sessionPolicyService.parsePolicyBoolean(sub.value, 'Allow Multiple Login');
-              this.parseAndSetValue(child, boolVal ? 'YES' : 'NO', ValueType.Boolean);
+              const boolVal = this.sessionPolicyService.parsePolicyBoolean(
+                sub.value,
+                "Allow Multiple Login",
+              );
+              this.parseAndSetValue(
+                child,
+                boolVal ? "YES" : "NO",
+                ValueType.Boolean,
+              );
             } else if (code === SessionPolicyCodeEnum.IdleTimeoutSeconds) {
-              const numVal = this.sessionPolicyService.parsePolicyInteger(sub.value, 'Idle Timeout Seconds', true);
+              const numVal = this.sessionPolicyService.parsePolicyInteger(
+                sub.value,
+                "Idle Timeout Seconds",
+                true,
+              );
               this.parseAndSetValue(child, String(numVal), ValueType.Number);
             } else {
               this.parseAndSetValue(child, sub.value, sub.valueType);
@@ -276,23 +352,32 @@ export class AdditionalSettingService {
             await this.settingRepository.save(child);
           }
         },
-        updateSubcategory: async ({ categoryId, subcategoryId, setting, dto, userId }) => {
+        updateSubcategory: async ({
+          categoryId,
+          subcategoryId,
+          setting,
+          dto,
+          userId,
+        }) => {
           const children = await this.settingRepository.find({
             where: { parentId: categoryId, nodeType: NodeType.Setting },
           });
 
-          if (normalizeCode(setting.code) === SessionPolicyCodeEnum.AllowMultipleLogin) {
+          if (
+            normalizeCode(setting.code) ===
+            SessionPolicyCodeEnum.AllowMultipleLogin
+          ) {
             const booleanValue = this.sessionPolicyService.parsePolicyBoolean(
               dto.value,
               setting.label || setting.code,
             );
 
-            const merged = children.map(child =>
+            const merged = children.map((child) =>
               child.id === subcategoryId
                 ? {
-                  ...child,
-                  valueBoolean: booleanValue,
-                }
+                    ...child,
+                    valueBoolean: booleanValue,
+                  }
                 : child,
             );
 
@@ -302,7 +387,11 @@ export class AdditionalSettingService {
 
             setting.description = setting.description || dto.description.trim();
             setting.updatedBy = userId;
-            this.parseAndSetValue(setting, booleanValue ? 'YES' : 'NO', ValueType.Boolean);
+            this.parseAndSetValue(
+              setting,
+              booleanValue ? "YES" : "NO",
+              ValueType.Boolean,
+            );
             return;
           }
 
@@ -313,12 +402,12 @@ export class AdditionalSettingService {
             true,
           );
 
-          const merged = children.map(child =>
+          const merged = children.map((child) =>
             child.id === subcategoryId
               ? {
-                ...child,
-                valueNumber: numericValue,
-              }
+                  ...child,
+                  valueNumber: numericValue,
+                }
               : child,
           );
 
@@ -328,7 +417,11 @@ export class AdditionalSettingService {
 
           setting.description = setting.description || dto.description.trim();
           setting.updatedBy = userId;
-          this.parseAndSetValue(setting, String(numericValue), ValueType.Number);
+          this.parseAndSetValue(
+            setting,
+            String(numericValue),
+            ValueType.Number,
+          );
         },
       },
     };
@@ -341,14 +434,14 @@ export class AdditionalSettingService {
   private getFinancialYearSuffix(referenceDate: Date): string {
     const year = referenceDate.getFullYear();
     const fiscalYear = referenceDate.getMonth() >= 3 ? year : year - 1;
-    return String(fiscalYear % 100).padStart(2, '0');
+    return String(fiscalYear % 100).padStart(2, "0");
   }
 
   private normalizeReferenceSegment(value: string): string {
-    return String(value ?? '')
+    return String(value ?? "")
       .trim()
       .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '');
+      .replace(/[^A-Z0-9]/g, "");
   }
 
   private buildTransactionNumber(
@@ -357,8 +450,14 @@ export class AdditionalSettingService {
     referenceDate: Date,
   ): string {
     const branchSegment = this.normalizeReferenceSegment(branchCode);
-    const availableSeriesDigits = Math.max(1, Math.min(9, 15 - branchSegment.length - 2));
-    const series = String(Math.trunc(currentSeries)).padStart(availableSeriesDigits, '0');
+    const availableSeriesDigits = Math.max(
+      1,
+      Math.min(9, 15 - branchSegment.length - 2),
+    );
+    const series = String(Math.trunc(currentSeries)).padStart(
+      availableSeriesDigits,
+      "0",
+    );
     return `${branchSegment}${this.getFinancialYearSuffix(referenceDate)}${series}`;
   }
 
@@ -367,55 +466,60 @@ export class AdditionalSettingService {
     branchCode: string,
     referenceDate = new Date(),
   ): Promise<string> {
-    const normalizedSeriesCodes = this.resolveTransactionNumberSeriesCodes(seriesCode);
+    const normalizedSeriesCodes =
+      this.resolveTransactionNumberSeriesCodes(seriesCode);
     const normalizedBranchCode = this.normalizeReferenceSegment(branchCode);
 
     if (!normalizedBranchCode) {
-      throw new NotFoundException('Branch code is required to generate transaction number');
+      throw new NotFoundException(
+        "Branch code is required to generate transaction number",
+      );
     }
 
     if (!normalizedSeriesCodes.length) {
-      throw new NotFoundException('Transaction series code is required');
+      throw new NotFoundException("Transaction series code is required");
     }
 
-    return this.settingRepository.manager.transaction(async manager => {
+    return this.settingRepository.manager.transaction(async (manager) => {
       const settingRepository = manager.getRepository(AdvancedSetting);
       const category = await settingRepository.findOne({
         where: {
-          code: 'TRANSACTION_NUMBERING',
+          code: "TRANSACTION_NUMBERING",
           nodeType: NodeType.Category,
         },
       });
 
       if (!category) {
         throw new NotFoundException(
-          'Transaction numbering settings are not configured',
+          "Transaction numbering settings are not configured",
         );
       }
 
       const seriesSettings = await settingRepository
-        .createQueryBuilder('setting')
-        .where('setting.parentId = :parentId', { parentId: category.id })
-        .andWhere('setting.nodeType = :nodeType', { nodeType: NodeType.Setting })
-        .andWhere('UPPER(setting.code) IN (:...codes)', {
-          codes: normalizedSeriesCodes.map(code => normalizeCode(code)),
+        .createQueryBuilder("setting")
+        .where("setting.parentId = :parentId", { parentId: category.id })
+        .andWhere("setting.nodeType = :nodeType", {
+          nodeType: NodeType.Setting,
         })
-        .setLock('pessimistic_write')
+        .andWhere("UPPER(setting.code) IN (:...codes)", {
+          codes: normalizedSeriesCodes.map((code) => normalizeCode(code)),
+        })
+        .setLock("pessimistic_write")
         .getMany();
 
       if (!seriesSettings.length) {
         throw new NotFoundException(
-          `Transaction number series setting for ${normalizedSeriesCodes.join(', ')} is not configured`,
+          `Transaction number series setting for ${normalizedSeriesCodes.join(", ")} is not configured`,
         );
       }
 
       const seriesValues = seriesSettings
-        .map(setting => this.parseSeriesValue(setting))
-        .filter(value => Number.isFinite(value) && value >= 0);
+        .map((setting) => this.parseSeriesValue(setting))
+        .filter((value) => Number.isFinite(value) && value >= 0);
       const currentSeries = Math.max(...seriesValues);
       if (!Number.isFinite(currentSeries) || currentSeries < 0) {
         throw new NotFoundException(
-          `Transaction number series for ${normalizedSeriesCodes.join(', ')} is invalid`,
+          `Transaction number series for ${normalizedSeriesCodes.join(", ")} is invalid`,
         );
       }
 
@@ -426,7 +530,7 @@ export class AdditionalSettingService {
       );
       if (generated.length > 15) {
         throw new NotFoundException(
-          'Generated transaction number exceeds the maximum allowed length',
+          "Generated transaction number exceeds the maximum allowed length",
         );
       }
 
@@ -449,52 +553,55 @@ export class AdditionalSettingService {
     branchCode: string,
     referenceDate = new Date(),
   ): Promise<{ nextNumber: string }> {
-    const normalizedSeriesCodes = this.resolveTransactionNumberSeriesCodes(seriesCode);
+    const normalizedSeriesCodes =
+      this.resolveTransactionNumberSeriesCodes(seriesCode);
     const normalizedBranchCode = this.normalizeReferenceSegment(branchCode);
 
     if (!normalizedBranchCode) {
-      throw new NotFoundException('Branch code is required to generate transaction number');
+      throw new NotFoundException(
+        "Branch code is required to generate transaction number",
+      );
     }
 
     if (!normalizedSeriesCodes.length) {
-      throw new NotFoundException('Transaction series code is required');
+      throw new NotFoundException("Transaction series code is required");
     }
 
     const category = await this.settingRepository.findOne({
       where: {
-        code: 'TRANSACTION_NUMBERING',
+        code: "TRANSACTION_NUMBERING",
         nodeType: NodeType.Category,
       },
     });
 
     if (!category) {
       throw new NotFoundException(
-        'Transaction numbering settings are not configured',
+        "Transaction numbering settings are not configured",
       );
     }
 
     const seriesSettings = await this.settingRepository
-      .createQueryBuilder('setting')
-      .where('setting.parentId = :parentId', { parentId: category.id })
-      .andWhere('setting.nodeType = :nodeType', { nodeType: NodeType.Setting })
-      .andWhere('UPPER(setting.code) IN (:...codes)', {
-        codes: normalizedSeriesCodes.map(code => normalizeCode(code)),
+      .createQueryBuilder("setting")
+      .where("setting.parentId = :parentId", { parentId: category.id })
+      .andWhere("setting.nodeType = :nodeType", { nodeType: NodeType.Setting })
+      .andWhere("UPPER(setting.code) IN (:...codes)", {
+        codes: normalizedSeriesCodes.map((code) => normalizeCode(code)),
       })
       .getMany();
 
     if (!seriesSettings.length) {
       throw new NotFoundException(
-        `Transaction number series setting for ${normalizedSeriesCodes.join(', ')} is not configured`,
+        `Transaction number series setting for ${normalizedSeriesCodes.join(", ")} is not configured`,
       );
     }
 
     const seriesValues = seriesSettings
-      .map(setting => this.parseSeriesValue(setting))
-      .filter(value => Number.isFinite(value) && value >= 0);
+      .map((setting) => this.parseSeriesValue(setting))
+      .filter((value) => Number.isFinite(value) && value >= 0);
     const currentSeries = Math.max(...seriesValues);
     if (!Number.isFinite(currentSeries) || currentSeries < 0) {
       throw new NotFoundException(
-        `Transaction number series for ${normalizedSeriesCodes.join(', ')} is invalid`,
+        `Transaction number series for ${normalizedSeriesCodes.join(", ")} is invalid`,
       );
     }
 
@@ -506,7 +613,7 @@ export class AdditionalSettingService {
 
     if (nextNumber.length > 15) {
       throw new NotFoundException(
-        'Generated transaction number exceeds the maximum allowed length',
+        "Generated transaction number exceeds the maximum allowed length",
       );
     }
 
@@ -556,13 +663,20 @@ export class AdditionalSettingService {
     defaultValue = false,
   ): Promise<boolean> {
     const setting = await this.settingRepository.findOne({
-      where: { code: normalizeCode(subcategoryCode), nodeType: NodeType.Setting },
+      where: {
+        code: normalizeCode(subcategoryCode),
+        nodeType: NodeType.Setting,
+      },
     });
     if (!setting?.parentId) return defaultValue;
     const parent = await this.settingRepository.findOne({
-      where: { id: setting.parentId, code: normalizeCode(categoryCode), nodeType: NodeType.Category },
+      where: {
+        id: setting.parentId,
+        code: normalizeCode(categoryCode),
+        nodeType: NodeType.Category,
+      },
     });
-    return parent ? setting.valueBoolean ?? defaultValue : defaultValue;
+    return parent ? (setting.valueBoolean ?? defaultValue) : defaultValue;
   }
 
   async getSettingNumberValue(
@@ -571,7 +685,10 @@ export class AdditionalSettingService {
     defaultValue: number,
   ): Promise<number> {
     const setting = await this.settingRepository.findOne({
-      where: { code: normalizeCode(subcategoryCode), nodeType: NodeType.Setting },
+      where: {
+        code: normalizeCode(subcategoryCode),
+        nodeType: NodeType.Setting,
+      },
     });
     if (!setting?.parentId) {
       return defaultValue;
@@ -589,7 +706,10 @@ export class AdditionalSettingService {
     }
 
     const parsed = Number(
-      setting.valueNumber ?? setting.valueDecimal ?? setting.valueText ?? defaultValue,
+      setting.valueNumber ??
+        setting.valueDecimal ??
+        setting.valueText ??
+        defaultValue,
     );
     return Number.isFinite(parsed) ? parsed : defaultValue;
   }
@@ -597,26 +717,31 @@ export class AdditionalSettingService {
   async findAll(): Promise<AdvancedSetting[]> {
     return this.settingRepository.find({
       where: { nodeType: NodeType.Category },
-      relations: ['children'],
+      relations: ["children"],
       order: {
-        sortOrder: 'ASC',
-        label: 'ASC',
+        sortOrder: "ASC",
+        label: "ASC",
         children: {
-          sortOrder: 'ASC',
-          label: 'ASC',
+          sortOrder: "ASC",
+          label: "ASC",
         },
       },
     });
   }
 
-  async create(dto: CreateCategoryDto, userId: string): Promise<AdvancedSetting> {
+  async create(
+    dto: CreateCategoryDto,
+    userId: string,
+  ): Promise<AdvancedSetting> {
     const categoryCode = normalizeCode(dto.code);
     const existing = await this.settingRepository.findOne({
       where: { code: categoryCode, nodeType: NodeType.Category },
     });
 
     if (existing) {
-      throw new ConflictException(`Category with code ${categoryCode} already exists`);
+      throw new ConflictException(
+        `Category with code ${categoryCode} already exists`,
+      );
     }
 
     const category = this.settingRepository.create({
@@ -648,7 +773,11 @@ export class AdditionalSettingService {
             createdBy: userId,
             updatedBy: userId,
           });
-          this.validateTransactionNumberingValue(savedCategory.code, sub.code, sub.value);
+          this.validateTransactionNumberingValue(
+            savedCategory.code,
+            sub.code,
+            sub.value,
+          );
           this.parseAndSetValue(child, sub.value, sub.valueType);
           await this.settingRepository.save(child);
         }
@@ -664,32 +793,40 @@ export class AdditionalSettingService {
 
     return this.settingRepository.findOne({
       where: { id: savedCategory.id },
-      relations: ['children'],
+      relations: ["children"],
     });
   }
 
-  async updateCategory(id: string, dto: UpdateCategoryDto, userId: string): Promise<AdvancedSetting> {
+  async updateCategory(
+    id: string,
+    dto: UpdateCategoryDto,
+    userId: string,
+  ): Promise<AdvancedSetting> {
     const category = await this.settingRepository.findOne({
       where: { id, nodeType: NodeType.Category },
     });
 
     if (!category) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     category.label = dto.title.trim();
     category.updatedBy = userId;
     await this.settingRepository.save(category);
 
-    const isPasswordPolicy = normalizeCode(category.code) === PasswordPolicyCodeEnum.Policy;
-    const isSessionPolicy = normalizeCode(category.code) === SessionPolicyCodeEnum.Policy;
+    const isPasswordPolicy =
+      normalizeCode(category.code) === PasswordPolicyCodeEnum.Policy;
+    const isSessionPolicy =
+      normalizeCode(category.code) === SessionPolicyCodeEnum.Policy;
 
     if (dto.subcategories) {
       const currentChildren = await this.settingRepository.find({
         where: { parentId: id, nodeType: NodeType.Setting },
       });
 
-      const incomingCodes = new Set(dto.subcategories.map(sub => normalizeCode(sub.code)));
+      const incomingCodes = new Set(
+        dto.subcategories.map((sub) => normalizeCode(sub.code)),
+      );
 
       // Delete children not in incoming request
       for (const child of currentChildren) {
@@ -703,7 +840,7 @@ export class AdditionalSettingService {
       // Validate and instantiate/update incoming children
       for (const [index, sub] of dto.subcategories.entries()) {
         const code = normalizeCode(sub.code);
-        let child = currentChildren.find(c => normalizeCode(c.code) === code);
+        let child = currentChildren.find((c) => normalizeCode(c.code) === code);
         if (!child) {
           child = this.settingRepository.create({
             parentId: category.id,
@@ -722,17 +859,41 @@ export class AdditionalSettingService {
           let numericValue: number;
           const pCode = code as PasswordPolicyCodeEnum;
           if (pCode === PasswordPolicyCodeEnum.MinLength) {
-            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Length', false);
+            numericValue = this.passwordPolicyService.parsePolicyInteger(
+              sub.value,
+              "Minimum Length",
+              false,
+            );
           } else if (pCode === PasswordPolicyCodeEnum.MaxLength) {
-            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Length', false);
+            numericValue = this.passwordPolicyService.parsePolicyInteger(
+              sub.value,
+              "Maximum Length",
+              false,
+            );
           } else if (pCode === PasswordPolicyCodeEnum.MinSpecialCharCount) {
-            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Special Characters', true);
+            numericValue = this.passwordPolicyService.parsePolicyInteger(
+              sub.value,
+              "Minimum Special Characters",
+              true,
+            );
           } else if (pCode === PasswordPolicyCodeEnum.MinNumericCount) {
-            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Numeric Characters', true);
+            numericValue = this.passwordPolicyService.parsePolicyInteger(
+              sub.value,
+              "Minimum Numeric Characters",
+              true,
+            );
           } else if (pCode === PasswordPolicyCodeEnum.MinAlphaCount) {
-            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Minimum Alpha Characters', true);
+            numericValue = this.passwordPolicyService.parsePolicyInteger(
+              sub.value,
+              "Minimum Alpha Characters",
+              true,
+            );
           } else if (pCode === PasswordPolicyCodeEnum.MaxInvalidAttempts) {
-            numericValue = this.passwordPolicyService.parsePolicyInteger(sub.value, 'Maximum Invalid Attempts', true);
+            numericValue = this.passwordPolicyService.parsePolicyInteger(
+              sub.value,
+              "Maximum Invalid Attempts",
+              true,
+            );
           } else {
             numericValue = parseInt(sub.value, 10);
           }
@@ -740,16 +901,31 @@ export class AdditionalSettingService {
         } else if (isSessionPolicy) {
           const sCode = code as SessionPolicyCodeEnum;
           if (sCode === SessionPolicyCodeEnum.AllowMultipleLogin) {
-            const boolVal = this.sessionPolicyService.parsePolicyBoolean(sub.value, 'Allow Multiple Login');
-            this.parseAndSetValue(child, boolVal ? 'YES' : 'NO', ValueType.Boolean);
+            const boolVal = this.sessionPolicyService.parsePolicyBoolean(
+              sub.value,
+              "Allow Multiple Login",
+            );
+            this.parseAndSetValue(
+              child,
+              boolVal ? "YES" : "NO",
+              ValueType.Boolean,
+            );
           } else if (sCode === SessionPolicyCodeEnum.IdleTimeoutSeconds) {
-            const numVal = this.sessionPolicyService.parsePolicyInteger(sub.value, 'Idle Timeout Seconds', true);
+            const numVal = this.sessionPolicyService.parsePolicyInteger(
+              sub.value,
+              "Idle Timeout Seconds",
+              true,
+            );
             this.parseAndSetValue(child, String(numVal), ValueType.Number);
           } else {
             this.parseAndSetValue(child, sub.value, sub.valueType);
           }
         } else {
-          this.validateTransactionNumberingValue(category.code, code, sub.value);
+          this.validateTransactionNumberingValue(
+            category.code,
+            code,
+            sub.value,
+          );
           this.parseAndSetValue(child, sub.value, sub.valueType);
         }
 
@@ -779,7 +955,7 @@ export class AdditionalSettingService {
 
     return this.settingRepository.findOne({
       where: { id },
-      relations: ['children'],
+      relations: ["children"],
     });
   }
 
@@ -790,11 +966,17 @@ export class AdditionalSettingService {
     userId: string,
   ): Promise<AdvancedSetting> {
     const setting = await this.settingRepository.findOne({
-      where: { id: subcategoryId, parentId: categoryId, nodeType: NodeType.Setting },
+      where: {
+        id: subcategoryId,
+        parentId: categoryId,
+        nodeType: NodeType.Setting,
+      },
     });
 
     if (!setting) {
-      throw new NotFoundException('Setting not found under the specified category');
+      throw new NotFoundException(
+        "Setting not found under the specified category",
+      );
     }
 
     const category = await this.settingRepository.findOne({
@@ -812,7 +994,11 @@ export class AdditionalSettingService {
         userId,
       });
     } else {
-      this.validateTransactionNumberingValue(category?.code ?? '', setting.code, dto.value);
+      this.validateTransactionNumberingValue(
+        category?.code ?? "",
+        setting.code,
+        dto.value,
+      );
       setting.description = dto.description.trim();
       setting.updatedBy = userId;
       this.parseAndSetValue(setting, dto.value, setting.valueType);
@@ -826,11 +1012,11 @@ export class AdditionalSettingService {
 
     const refreshedCategory = await this.settingRepository.findOne({
       where: { id: categoryId },
-      relations: ['children'],
+      relations: ["children"],
     });
 
     if (!refreshedCategory) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     return refreshedCategory;

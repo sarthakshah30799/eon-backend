@@ -132,7 +132,9 @@ const formatDateTime = (value: Date | string | null | undefined) => {
   }).format(date);
 };
 
-const getSnapshotLabel = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotLabel = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return "";
   }
@@ -162,7 +164,9 @@ const getNestedId = (
 };
 
 const getTransactionDate = (transaction: Transaction) => {
-  return transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt;
+  return (
+    transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt
+  );
 };
 
 const getItemUnitAmount = (item: TransactionItem) => {
@@ -181,7 +185,10 @@ const getItemProfitRate = (item: TransactionItem) => {
 };
 
 const getPaymentNumber = (payment: TransactionPayment) => {
-  const chequePageNo = toText((payment.chequePageSnapshot as Record<string, unknown> | null | undefined)?.pageNo);
+  const chequePageNo = toText(
+    (payment.chequePageSnapshot as Record<string, unknown> | null | undefined)
+      ?.pageNo,
+  );
   return chequePageNo || toText(payment.referenceNumber);
 };
 
@@ -196,7 +203,10 @@ const getManualBookLabel = (transaction: Transaction) => {
   }
 
   const pageNo = toText(snapshot.pageNo);
-  const manualBook = snapshot.manualBook as Record<string, unknown> | null | undefined;
+  const manualBook = snapshot.manualBook as
+    | Record<string, unknown>
+    | null
+    | undefined;
   const bookNo = toText(manualBook?.no);
 
   if (bookNo && pageNo) {
@@ -208,7 +218,7 @@ const getManualBookLabel = (transaction: Transaction) => {
 
 const buildPaymentColumns = (maxPayments: number) =>
   Array.from({ length: maxPayments }).flatMap((_, index) =>
-    PAYMENT_FIELD_SUFFIXES.map(field => ({
+    PAYMENT_FIELD_SUFFIXES.map((field) => ({
       key: `payment_${index + 1}_${field.key}`,
       label: `Payment ${index + 1} ${field.label}`,
     })),
@@ -216,7 +226,7 @@ const buildPaymentColumns = (maxPayments: number) =>
 
 const buildChargeColumns = (maxCharges: number) =>
   Array.from({ length: maxCharges }).flatMap((_, index) =>
-    CHARGE_FIELD_SUFFIXES.map(field => ({
+    CHARGE_FIELD_SUFFIXES.map((field) => ({
       key: `charge_${index + 1}_${field.key}`,
       label: `Charge ${index + 1} ${field.label}`,
     })),
@@ -237,7 +247,8 @@ const formatTransactionTypeLabel = (transaction: Transaction) =>
           : transaction.transactionPartyProfileType ===
               TransactionPartyProfileTypeEnum.COUNTER
             ? "counter transfer"
-            : toText(transaction.slug) || transaction.transactionType.toLowerCase(),
+            : toText(transaction.slug) ||
+              transaction.transactionType.toLowerCase(),
         transaction.tradeMode.toLowerCase(),
       ]
         .filter(Boolean)
@@ -306,7 +317,18 @@ export class SalePurchaseReportService {
       .leftJoinAndSelect("transaction.additionalCharges", "charge")
       .where("transaction.isLatest = true")
       .andWhere("transaction.status = :status", { status: "APPROVED" });
-    qb.andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", { technicalSlugs: ['CARD_STOCK','CARD_TRANSFER_OUT','CARD_TRANSFER_IN','CARD_STOCK_LOAD','CARD_SELL','CARD_SETTLE','CARD_RETURN','CARD_VOID'] });
+    qb.andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", {
+      technicalSlugs: [
+        "CARD_STOCK",
+        "CARD_TRANSFER_OUT",
+        "CARD_TRANSFER_IN",
+        "CARD_STOCK_LOAD",
+        "CARD_SELL",
+        "CARD_SETTLE",
+        "CARD_RETURN",
+        "CARD_VOID",
+      ],
+    });
 
     if (filters.startDate && filters.endDate) {
       qb.andWhere("transaction.approvedAt >= :startDate", {
@@ -361,7 +383,10 @@ export class SalePurchaseReportService {
       });
     }
 
-    qb.orderBy(`COALESCE(transaction.party_profile_snapshot->>'code', transaction.party_profile_snapshot->>'name', transaction.party_profile_id::text)`, "ASC")
+    qb.orderBy(
+      `COALESCE(transaction.party_profile_snapshot->>'code', transaction.party_profile_snapshot->>'name', transaction.party_profile_id::text)`,
+      "ASC",
+    )
       .addOrderBy("transaction.approved_at", "ASC")
       .addOrderBy("transaction.created_at", "ASC")
       .addOrderBy("transaction.number", "ASC");
@@ -376,21 +401,55 @@ export class SalePurchaseReportService {
     maxPayments: number;
     maxCharges: number;
   } {
-    const items = [...(transaction.items ?? [])].sort((left, right) => left.lineNo - right.lineNo);
-    const payments = [...(transaction.payments ?? [])].sort((left, right) => left.lineNo - right.lineNo);
-    const charges = [...(transaction.additionalCharges ?? [])].sort((left, right) => left.lineNo - right.lineNo);
+    const items = [...(transaction.items ?? [])].sort(
+      (left, right) => left.lineNo - right.lineNo,
+    );
+    const payments = [...(transaction.payments ?? [])].sort(
+      (left, right) => left.lineNo - right.lineNo,
+    );
+    const charges = [...(transaction.additionalCharges ?? [])].sort(
+      (left, right) => left.lineNo - right.lineNo,
+    );
     const transactionDate = getTransactionDate(transaction);
     const dateLabel = formatDateOnly(transactionDate);
-    const sortDate = transactionDate ? new Date(transactionDate).toISOString() : "";
+    const sortDate = transactionDate
+      ? new Date(transactionDate).toISOString()
+      : "";
     const sortTransactionKey = [
-      transaction.approvedAt ? new Date(transaction.approvedAt).toISOString() : "",
-      transaction.createdAt ? new Date(transaction.createdAt).toISOString() : "",
+      transaction.approvedAt
+        ? new Date(transaction.approvedAt).toISOString()
+        : "",
+      transaction.createdAt
+        ? new Date(transaction.createdAt).toISOString()
+        : "",
       transaction.number ?? "",
     ].join("::");
-    const branchLabel = getSnapshotLabel(transaction.branchSnapshot as Record<string, unknown> | null | undefined);
-    const branchSortKey = toText((transaction.branchSnapshot as Record<string, unknown> | null | undefined)?.code) || branchLabel;
-    const partyProfileLabel = getSnapshotLabel(transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined);
-    const partyProfileCode = toText((transaction.partyProfileSnapshot as Record<string, unknown> | null | undefined)?.code);
+    const branchLabel = getSnapshotLabel(
+      transaction.branchSnapshot as Record<string, unknown> | null | undefined,
+    );
+    const branchSortKey =
+      toText(
+        (
+          transaction.branchSnapshot as
+            | Record<string, unknown>
+            | null
+            | undefined
+        )?.code,
+      ) || branchLabel;
+    const partyProfileLabel = getSnapshotLabel(
+      transaction.partyProfileSnapshot as
+        | Record<string, unknown>
+        | null
+        | undefined,
+    );
+    const partyProfileCode = toText(
+      (
+        transaction.partyProfileSnapshot as
+          | Record<string, unknown>
+          | null
+          | undefined
+      )?.code,
+    );
     const partyProfileId = transaction.partyProfileId;
     const manualBillBook = getManualBookLabel(transaction);
     const groupHeaderRow: ReportRow = {
@@ -426,13 +485,25 @@ export class SalePurchaseReportService {
       partyProfileName: partyProfileLabel,
       manualBillBook,
     };
-    const netAmount = items.reduce((sum, item) => sum + getItemUnitAmount(item), 0);
-    const subtotalAmount = items.reduce((sum, item) => sum + getItemUnitAmount(item), 0);
+    const netAmount = items.reduce(
+      (sum, item) => sum + getItemUnitAmount(item),
+      0,
+    );
+    const subtotalAmount = items.reduce(
+      (sum, item) => sum + getItemUnitAmount(item),
+      0,
+    );
     const subtotalTax = 0;
     const subtotalNet = netAmount;
-    const subtotalProfit = items.reduce((sum, item) => sum + getItemProfitRate(item), 0);
+    const subtotalProfit = items.reduce(
+      (sum, item) => sum + getItemProfitRate(item),
+      0,
+    );
 
-    const getTransactionLevelColumns = (rowIndex: number, repeatTransactionData: boolean) => {
+    const getTransactionLevelColumns = (
+      rowIndex: number,
+      repeatTransactionData: boolean,
+    ) => {
       if (!repeatTransactionData && rowIndex > 0) {
         return {
           branch: "",
@@ -453,23 +524,35 @@ export class SalePurchaseReportService {
       rowIndex: number,
       repeatTransactionData: boolean,
     ): ReportRow => {
-      const transactionColumns = getTransactionLevelColumns(rowIndex, repeatTransactionData);
+      const transactionColumns = getTransactionLevelColumns(
+        rowIndex,
+        repeatTransactionData,
+      );
       const row: ReportRow = {
         rowType: "ITEM",
         transactionId: transaction.id,
         partyProfileId,
-      sortPartyProfile: partyProfileLabel,
-      sortBranch: branchSortKey,
-      sortDate,
-      sortTransactionKey,
-      ...transactionColumns,
-        currencyCode: toText((item.currencySnapshot as Record<string, unknown> | null | undefined)?.code),
-        productCode: toText((item.productSnapshot as Record<string, unknown> | null | undefined)?.code),
+        sortPartyProfile: partyProfileLabel,
+        sortBranch: branchSortKey,
+        sortDate,
+        sortTransactionKey,
+        ...transactionColumns,
+        currencyCode: toText(
+          (item.currencySnapshot as Record<string, unknown> | null | undefined)
+            ?.code,
+        ),
+        productCode: toText(
+          (item.productSnapshot as Record<string, unknown> | null | undefined)
+            ?.code,
+        ),
         quantity: formatNumber(item.quantity, 7),
         rate: formatNumber(item.rate, 7),
         amount: formatNumber(getItemUnitAmount(item), 2),
         taxAmount: "0.00",
-        netAmount: rowIndex === 0 || repeatTransactionData ? formatNumber(netAmount, 2) : "0.00",
+        netAmount:
+          rowIndex === 0 || repeatTransactionData
+            ? formatNumber(netAmount, 2)
+            : "0.00",
         profit: formatNumber(getItemProfitRate(item), 2),
       } as ReportRow;
 
@@ -489,7 +572,9 @@ export class SalePurchaseReportService {
         row[`${prefix}_byBranch`] = toText(payment.branchName);
         row[`${prefix}_date`] = formatDateOnly(payment.referenceDate);
         row[`${prefix}_number`] = getPaymentNumber(payment);
-        row[`${prefix}_inBank`] = getSnapshotLabel(payment.accountSnapshot as Record<string, unknown> | null | undefined);
+        row[`${prefix}_inBank`] = getSnapshotLabel(
+          payment.accountSnapshot as Record<string, unknown> | null | undefined,
+        );
         row[`${prefix}_chequeRef`] = toText(payment.referenceNumber);
         row[`${prefix}_amount`] = formatNumber(payment.amount, 2);
         row[`${prefix}_drawnOn`] = toText(payment.drawnOn);
@@ -503,7 +588,9 @@ export class SalePurchaseReportService {
           return;
         }
 
-        row[`${prefix}_account`] = getSnapshotLabel(charge.accountSnapshot as Record<string, unknown> | null | undefined);
+        row[`${prefix}_account`] = getSnapshotLabel(
+          charge.accountSnapshot as Record<string, unknown> | null | undefined,
+        );
         row[`${prefix}_amount`] = formatNumber(charge.amount, 2);
       });
 
@@ -535,7 +622,10 @@ export class SalePurchaseReportService {
         partyProfileName: "",
         currencyCode: "",
         productCode: "Subtotal",
-        quantity: formatNumber(items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0), 7),
+        quantity: formatNumber(
+          items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0),
+          7,
+        ),
         rate: "",
         amount: formatNumber(subtotalAmount, 2),
         taxAmount: formatNumber(subtotalTax, 2),
@@ -573,30 +663,57 @@ export class SalePurchaseReportService {
     };
   }
 
-  async buildReport(query: SalePurchaseReportQueryDto, layout: ReportLayout = "grouped") {
+  async buildReport(
+    query: SalePurchaseReportQueryDto,
+    layout: ReportLayout = "grouped",
+  ) {
     const filters = this.resolveFilters(query);
     const transactions = await this.loadTransactions(filters);
 
-    const prepared = transactions.map(transaction => this.buildTransactionRows(transaction));
-    const maxPayments = prepared.reduce((max, item) => Math.max(max, item.maxPayments), 0);
-    const maxCharges = prepared.reduce((max, item) => Math.max(max, item.maxCharges), 0);
+    const prepared = transactions.map((transaction) =>
+      this.buildTransactionRows(transaction),
+    );
+    const maxPayments = prepared.reduce(
+      (max, item) => Math.max(max, item.maxPayments),
+      0,
+    );
+    const maxCharges = prepared.reduce(
+      (max, item) => Math.max(max, item.maxCharges),
+      0,
+    );
     const columns = buildColumns(maxPayments, maxCharges);
 
     const sortedPrepared = [...prepared].sort((left, right) => {
-      if (left.groupHeaderRow.sortPartyProfile !== right.groupHeaderRow.sortPartyProfile) {
-        return left.groupHeaderRow.sortPartyProfile.localeCompare(right.groupHeaderRow.sortPartyProfile);
+      if (
+        left.groupHeaderRow.sortPartyProfile !==
+        right.groupHeaderRow.sortPartyProfile
+      ) {
+        return left.groupHeaderRow.sortPartyProfile.localeCompare(
+          right.groupHeaderRow.sortPartyProfile,
+        );
       }
 
       if (left.groupHeaderRow.sortBranch !== right.groupHeaderRow.sortBranch) {
-        return left.groupHeaderRow.sortBranch.localeCompare(right.groupHeaderRow.sortBranch);
+        return left.groupHeaderRow.sortBranch.localeCompare(
+          right.groupHeaderRow.sortBranch,
+        );
       }
 
       if (left.groupHeaderRow.sortDate !== right.groupHeaderRow.sortDate) {
-        return compareIsoDateStrings(left.groupHeaderRow.sortDate, right.groupHeaderRow.sortDate, filters.sortBy);
+        return compareIsoDateStrings(
+          left.groupHeaderRow.sortDate,
+          right.groupHeaderRow.sortDate,
+          filters.sortBy,
+        );
       }
 
-      if (left.groupHeaderRow.sortTransactionKey !== right.groupHeaderRow.sortTransactionKey) {
-        return left.groupHeaderRow.sortTransactionKey.localeCompare(right.groupHeaderRow.sortTransactionKey);
+      if (
+        left.groupHeaderRow.sortTransactionKey !==
+        right.groupHeaderRow.sortTransactionKey
+      ) {
+        return left.groupHeaderRow.sortTransactionKey.localeCompare(
+          right.groupHeaderRow.sortTransactionKey,
+        );
       }
 
       return 0;
@@ -605,8 +722,11 @@ export class SalePurchaseReportService {
     const rows: ReportRow[] = [];
     let lastPartyProfileId = "";
 
-    sortedPrepared.forEach(item => {
-      if (layout === "grouped" && item.groupHeaderRow.partyProfileId !== lastPartyProfileId) {
+    sortedPrepared.forEach((item) => {
+      if (
+        layout === "grouped" &&
+        item.groupHeaderRow.partyProfileId !== lastPartyProfileId
+      ) {
         rows.push(item.groupHeaderRow);
         lastPartyProfileId = item.groupHeaderRow.partyProfileId;
       }
@@ -627,9 +747,9 @@ export class SalePurchaseReportService {
     format: ReportExportFormat,
   ) {
     const report = await this.buildReport(query, layout);
-    const sheetData = report.rows.map(row => {
+    const sheetData = report.rows.map((row) => {
       const output: Record<string, string> = {};
-      report.columns.forEach(column => {
+      report.columns.forEach((column) => {
         output[column.key] = row[column.key] ?? "";
       });
       return output;
@@ -637,7 +757,7 @@ export class SalePurchaseReportService {
 
     if (format === "csv") {
       const worksheet = XLSX.utils.json_to_sheet(sheetData, {
-        header: report.columns.map(column => column.key),
+        header: report.columns.map((column) => column.key),
       });
       const csv = XLSX.utils.sheet_to_csv(worksheet);
       return {
@@ -648,7 +768,7 @@ export class SalePurchaseReportService {
     }
 
     const worksheet = XLSX.utils.json_to_sheet(sheetData, {
-      header: report.columns.map(column => column.key),
+      header: report.columns.map((column) => column.key),
     });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "SalePurchase");

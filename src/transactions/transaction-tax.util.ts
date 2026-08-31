@@ -9,7 +9,9 @@ import {
 import { TransactionType } from "./transactions.enums";
 
 const normalizeText = (value: unknown) =>
-  String(value ?? "").trim().toUpperCase();
+  String(value ?? "")
+    .trim()
+    .toUpperCase();
 
 const toNumber = (value: unknown) => {
   const parsedValue = Number(value);
@@ -18,7 +20,9 @@ const toNumber = (value: unknown) => {
 
 const toMoney = (value: number) => Number(roundMoney(value));
 
-const getSnapshotStateName = (snapshot: Record<string, unknown> | null | undefined) => {
+const getSnapshotStateName = (
+  snapshot: Record<string, unknown> | null | undefined,
+) => {
   if (!snapshot) {
     return null;
   }
@@ -69,7 +73,7 @@ const calculateItemRowFinalAmount = (row: TransactionTaxLineInput) => {
   const rate = toNumber(row.rate);
   const per = toNumber(row.per);
   const divisor = per > 0 ? per : 1;
-  const rowTotal = toMoney(quantity * rate / divisor);
+  const rowTotal = toMoney((quantity * rate) / divisor);
 
   return toMoney(Math.round(rowTotal));
 };
@@ -125,10 +129,18 @@ const buildComponentBreakdown = (
   }
 
   const halfRate = taxRatePercent / 2;
-  const itemCgst = toMoney(calculateChargeTaxAmount(itemTaxableAmount, halfRate));
-  const itemSgst = toMoney(calculateChargeTaxAmount(itemTaxableAmount, halfRate));
-  const chargeCgst = toMoney(calculateChargeTaxAmount(additionalChargeBaseAmount, halfRate));
-  const chargeSgst = toMoney(calculateChargeTaxAmount(additionalChargeBaseAmount, halfRate));
+  const itemCgst = toMoney(
+    calculateChargeTaxAmount(itemTaxableAmount, halfRate),
+  );
+  const itemSgst = toMoney(
+    calculateChargeTaxAmount(itemTaxableAmount, halfRate),
+  );
+  const chargeCgst = toMoney(
+    calculateChargeTaxAmount(additionalChargeBaseAmount, halfRate),
+  );
+  const chargeSgst = toMoney(
+    calculateChargeTaxAmount(additionalChargeBaseAmount, halfRate),
+  );
   return {
     splitMode,
     igstAmount: "0.00",
@@ -152,7 +164,9 @@ export function calculateTransactionTaxSummary(
   const branchStateName = getSnapshotStateName(input.branchSnapshot);
   const partyStateName =
     getSnapshotStateName(input.partyProfileSnapshot) ?? null;
-  const splitMode = applyTax ? resolveSplitMode(branchStateName, partyStateName) : null;
+  const splitMode = applyTax
+    ? resolveSplitMode(branchStateName, partyStateName)
+    : null;
 
   const itemBaseAmount = items.reduce((sum, row) => {
     return sum + calculateItemRowFinalAmount(row);
@@ -182,20 +196,30 @@ export function calculateTransactionTaxSummary(
       taxRatePercent: roundMoney(applyTax ? gstRatePercent : 0),
       gstAmount: roundMoney(rowTaxAmount),
       igstRatePercent:
-        applyTax && rowSplitMode === "IGST" ? roundMoney(gstRatePercent) : "0.00",
+        applyTax && rowSplitMode === "IGST"
+          ? roundMoney(gstRatePercent)
+          : "0.00",
       cgstRatePercent:
-        applyTax && rowSplitMode !== "IGST" ? roundMoney(gstRatePercent / 2) : "0.00",
+        applyTax && rowSplitMode !== "IGST"
+          ? roundMoney(gstRatePercent / 2)
+          : "0.00",
       sgstRatePercent:
-        applyTax && rowSplitMode !== "IGST" ? roundMoney(gstRatePercent / 2) : "0.00",
+        applyTax && rowSplitMode !== "IGST"
+          ? roundMoney(gstRatePercent / 2)
+          : "0.00",
       igstAmount:
         applyTax && rowSplitMode === "IGST" ? roundMoney(rowTaxAmount) : "0.00",
       cgstAmount:
         applyTax && rowSplitMode !== "IGST"
-          ? roundMoney(calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent / 2))
+          ? roundMoney(
+              calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent / 2),
+            )
           : "0.00",
       sgstAmount:
         applyTax && rowSplitMode !== "IGST"
-          ? roundMoney(calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent / 2))
+          ? roundMoney(
+              calculateChargeTaxAmount(rowTaxableAmount, gstRatePercent / 2),
+            )
           : "0.00",
       splitMode: applyTax ? rowSplitMode : null,
     };
@@ -217,10 +241,7 @@ export function calculateTransactionTaxSummary(
     const gstAmount = rowAppliesTax
       ? toMoney(calculateChargeTaxAmount(amount, gstRatePercent))
       : 0;
-    const igstAmount =
-      rowAppliesTax && splitMode === "IGST"
-        ? gstAmount
-        : 0;
+    const igstAmount = rowAppliesTax && splitMode === "IGST" ? gstAmount : 0;
     const cgstAmount =
       rowAppliesTax && splitMode !== "IGST"
         ? toMoney(calculateChargeTaxAmount(amount, rowHalfRate))
@@ -242,9 +263,18 @@ export function calculateTransactionTaxSummary(
       igstAmount: roundMoney(igstAmount),
       cgstAmount: roundMoney(cgstAmount),
       sgstAmount: roundMoney(sgstAmount),
-      igstRatePercent: rowAppliesTax && splitMode === "IGST" ? roundMoney(gstRatePercent) : "0.00",
-      cgstRatePercent: rowAppliesTax && splitMode !== "IGST" ? roundMoney(rowHalfRate) : "0.00",
-      sgstRatePercent: rowAppliesTax && splitMode !== "IGST" ? roundMoney(rowHalfRate) : "0.00",
+      igstRatePercent:
+        rowAppliesTax && splitMode === "IGST"
+          ? roundMoney(gstRatePercent)
+          : "0.00",
+      cgstRatePercent:
+        rowAppliesTax && splitMode !== "IGST"
+          ? roundMoney(rowHalfRate)
+          : "0.00",
+      sgstRatePercent:
+        rowAppliesTax && splitMode !== "IGST"
+          ? roundMoney(rowHalfRate)
+          : "0.00",
       totalAmount: roundMoney(signedTotalAmount),
     };
   });

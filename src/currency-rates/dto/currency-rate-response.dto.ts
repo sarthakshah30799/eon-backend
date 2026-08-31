@@ -1,7 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { CurrencyRate } from '../currency-rate.entity';
-import { CurrencyRateProvider } from '../currency-rates.enums';
-import { CurrencyResponseDto } from '../../currencies/dto/currency-response.dto';
+import { ApiProperty } from "@nestjs/swagger";
+import { CurrencyRate } from "../currency-rate.entity";
+import { CurrencyRateProvider } from "../currency-rates.enums";
+import { CurrencyResponseDto } from "../../currencies/dto/currency-response.dto";
 
 class UserSummaryResponseDto {
   @ApiProperty()
@@ -59,7 +59,9 @@ export class CurrencyRateResponseDto {
     dto.id = entity.id;
     dto.currencyId = entity.currencyId;
     dto.provider = entity.provider;
-    dto.currency = entity.currency ? CurrencyResponseDto.fromEntity(entity.currency) : null;
+    dto.currency = entity.currency
+      ? CurrencyResponseDto.fromEntity(entity.currency)
+      : null;
     dto.baseBuyRate = entity.baseBuyRate;
     dto.baseSaleRate = entity.baseSaleRate;
     dto.baseRate = entity.baseRate;

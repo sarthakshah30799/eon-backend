@@ -112,5 +112,4 @@ export class AddPurposeBooleanFlags1784915677805 implements MigrationInterface {
         DROP COLUMN IF EXISTS "corporate";
     `);
   }
-
 }

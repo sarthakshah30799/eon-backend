@@ -9,7 +9,10 @@ import { CountryController } from "./country.controller";
 import { CountryService } from "./country.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Country, Branch, User, UnblockCountryAccess]), UserModule],
+  imports: [
+    TypeOrmModule.forFeature([Country, Branch, User, UnblockCountryAccess]),
+    UserModule,
+  ],
   controllers: [CountryController],
   providers: [CountryService],
   exports: [CountryService],

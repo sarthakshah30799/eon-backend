@@ -39,7 +39,10 @@ export class Flm1DailyCnSummaryService {
     private readonly additionalSettingService: AdditionalSettingService,
   ) {}
 
-  async buildReport(query: Flm1DailyCnSummaryQueryDto, session?: SessionContext) {
+  async buildReport(
+    query: Flm1DailyCnSummaryQueryDto,
+    session?: SessionContext,
+  ) {
     const { startDate, endDateExclusive, dateLabel } = resolveFlm1ReportDate(
       query.date,
     );
@@ -96,7 +99,10 @@ export class Flm1DailyCnSummaryService {
       FLM1_DEFAULT_CURRENCY_COLUMNS,
     );
     return clampCurrencyColumnCount(
-      Math.min(FLM1_MAX_CURRENCY_COLUMNS, Math.max(FLM1_MIN_CURRENCY_COLUMNS, stored)),
+      Math.min(
+        FLM1_MAX_CURRENCY_COLUMNS,
+        Math.max(FLM1_MIN_CURRENCY_COLUMNS, stored),
+      ),
     );
   }
 }

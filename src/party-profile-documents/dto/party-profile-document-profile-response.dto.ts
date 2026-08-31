@@ -1,9 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DocumentProfile } from '../../document-profiles/document-profile.entity';
-import { DocumentProfileResponseDto } from '../../document-profiles/dto/document-profile-response.dto';
-import { SelectOptionResponseDto } from '../../category-options/dto/category-option-response.dto';
-import { PartyProfileDocument } from '../party-profile-document.entity';
-import { PartyProfileDocumentFileResponseDto } from './party-profile-document-file-response.dto';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { DocumentProfile } from "../../document-profiles/document-profile.entity";
+import { DocumentProfileResponseDto } from "../../document-profiles/dto/document-profile-response.dto";
+import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
+import { PartyProfileDocument } from "../party-profile-document.entity";
+import { PartyProfileDocumentFileResponseDto } from "./party-profile-document-file-response.dto";
 
 export class PartyProfileDocumentProfileResponseDto {
   @ApiProperty()
@@ -45,7 +45,10 @@ export class PartyProfileDocumentProfileResponseDto {
   @ApiPropertyOptional({ nullable: true })
   partyProfileDocumentId: string | null;
 
-  @ApiPropertyOptional({ nullable: true, type: PartyProfileDocumentFileResponseDto })
+  @ApiPropertyOptional({
+    nullable: true,
+    type: PartyProfileDocumentFileResponseDto,
+  })
   documentFile: PartyProfileDocumentFileResponseDto | null;
 
   static fromEntity(

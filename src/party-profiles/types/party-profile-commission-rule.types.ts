@@ -1,6 +1,6 @@
 export const PartyProfileCommissionTypeEnum = {
-  PERCENTAGE: 'PERCENTAGE',
-  PAISA: 'PAISA',
+  PERCENTAGE: "PERCENTAGE",
+  PAISA: "PAISA",
 } as const;
 
 export type PartyProfileCommissionType =

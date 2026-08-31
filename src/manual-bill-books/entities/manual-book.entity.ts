@@ -30,7 +30,9 @@ export class ManualBook {
   @Column({
     name: "transaction_type",
     type: "enum",
-    enum: Object.values(TransactionTypeProfileEnum).filter(value => !value.startsWith("CARD_")),
+    enum: Object.values(TransactionTypeProfileEnum).filter(
+      (value) => !value.startsWith("CARD_"),
+    ),
   })
   transactionType: TransactionTypeProfile;
 

@@ -9,54 +9,67 @@ import {
   Query,
   Session,
   UseGuards,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
-} from '@nestjs/swagger';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { CurrencyService } from './currency.service';
-import { CreateCurrencyDto } from './dto/create-currency.dto';
-import { CurrencyListQueryDto } from './dto/currency-list-query.dto';
-import { UpdateCurrencyDto } from './dto/update-currency.dto';
-import { CurrencyResponseDto } from './dto/currency-response.dto';
+} from "@nestjs/swagger";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { CurrencyService } from "./currency.service";
+import { CreateCurrencyDto } from "./dto/create-currency.dto";
+import { CurrencyListQueryDto } from "./dto/currency-list-query.dto";
+import { UpdateCurrencyDto } from "./dto/update-currency.dto";
+import { CurrencyResponseDto } from "./dto/currency-response.dto";
+import { PaginatedResponseDto } from "../common/pagination";
 
-@ApiTags('currencies')
-@ApiCookieAuth('sessionId')
+@ApiTags("currencies")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('currencies')
+@Controller("currencies")
 export class CurrencyController {
   constructor(private readonly currencyService: CurrencyService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all currencies' })
+  @ApiOperation({ summary: "Get all currencies" })
   @ApiResponse({
     status: 200,
-    description: 'List of currencies',
-    type: [CurrencyResponseDto],
+    description: "Paginated list of currencies",
   })
-  async findAll(@Query() query: CurrencyListQueryDto): Promise<CurrencyResponseDto[]> {
+  async findAll(
+    @Query() query: CurrencyListQueryDto,
+  ): Promise<PaginatedResponseDto<CurrencyResponseDto>> {
     return this.currencyService.findAll(query);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get currency by ID' })
-  @ApiParam({ name: 'id', description: 'Currency UUID' })
-  @ApiResponse({ status: 200, description: 'Currency details', type: CurrencyResponseDto })
-  @ApiResponse({ status: 404, description: 'Currency not found' })
-  async findById(@Param('id') id: string): Promise<CurrencyResponseDto> {
+  @Get(":id")
+  @ApiOperation({ summary: "Get currency by ID" })
+  @ApiParam({ name: "id", description: "Currency UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Currency details",
+    type: CurrencyResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Currency not found" })
+  async findById(@Param("id") id: string): Promise<CurrencyResponseDto> {
     return this.currencyService.findById(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new currency' })
-  @ApiResponse({ status: 201, description: 'Currency created', type: CurrencyResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
-  @ApiResponse({ status: 409, description: 'Conflict - Duplicate currency code' })
+  @ApiOperation({ summary: "Create a new currency" })
+  @ApiResponse({
+    status: 201,
+    description: "Currency created",
+    type: CurrencyResponseDto,
+  })
+  @ApiResponse({ status: 400, description: "Invalid input" })
+  @ApiResponse({
+    status: 409,
+    description: "Conflict - Duplicate currency code",
+  })
   async create(
     @Body() dto: CreateCurrencyDto,
     @Session() session: any,
@@ -64,26 +77,33 @@ export class CurrencyController {
     return this.currencyService.create(dto, session.userId);
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update a currency' })
-  @ApiParam({ name: 'id', description: 'Currency UUID' })
-  @ApiResponse({ status: 200, description: 'Currency updated', type: CurrencyResponseDto })
-  @ApiResponse({ status: 404, description: 'Currency not found' })
-  @ApiResponse({ status: 409, description: 'Conflict - Duplicate currency code' })
+  @Put(":id")
+  @ApiOperation({ summary: "Update a currency" })
+  @ApiParam({ name: "id", description: "Currency UUID" })
+  @ApiResponse({
+    status: 200,
+    description: "Currency updated",
+    type: CurrencyResponseDto,
+  })
+  @ApiResponse({ status: 404, description: "Currency not found" })
+  @ApiResponse({
+    status: 409,
+    description: "Conflict - Duplicate currency code",
+  })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: UpdateCurrencyDto,
     @Session() session: any,
   ): Promise<CurrencyResponseDto> {
     return this.currencyService.update(id, dto, session.userId);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a currency' })
-  @ApiParam({ name: 'id', description: 'Currency UUID' })
-  @ApiResponse({ status: 200, description: 'Currency deleted' })
-  @ApiResponse({ status: 404, description: 'Currency not found' })
-  async delete(@Param('id') id: string): Promise<{ message: string }> {
+  @Delete(":id")
+  @ApiOperation({ summary: "Delete a currency" })
+  @ApiParam({ name: "id", description: "Currency UUID" })
+  @ApiResponse({ status: 200, description: "Currency deleted" })
+  @ApiResponse({ status: 404, description: "Currency not found" })
+  async delete(@Param("id") id: string): Promise<{ message: string }> {
     return this.currencyService.delete(id);
   }
 }

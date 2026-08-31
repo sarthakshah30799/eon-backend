@@ -1,9 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
-import { CreateMonthlyLocksDto, MonthlyLockWindowResponseDto } from "./dto/monthly-lock-window.dto";
+import {
+  CreateMonthlyLocksDto,
+  MonthlyLockWindowResponseDto,
+} from "./dto/monthly-lock-window.dto";
 import { MonthlyLockWindow } from "./entities/monthly-lock-window.entity";
 
 const normalizeDateOnly = (value: Date | string): string => {
@@ -29,7 +36,10 @@ export class MonthlyLocksService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async getActiveMonthlyLock(branchId: string, userId: string): Promise<MonthlyLockWindowResponseDto | null> {
+  async getActiveMonthlyLock(
+    branchId: string,
+    userId: string,
+  ): Promise<MonthlyLockWindowResponseDto | null> {
     const activeMonthlyLock = await this.monthlyLockWindowRepository.findOne({
       where: { branchId, userId, isActive: true },
       order: { createdAt: "DESC" },
@@ -58,7 +68,9 @@ export class MonthlyLocksService {
       const fromDate = normalizeDateOnly(rule.fromDate);
       const toDate = normalizeDateOnly(rule.toDate);
       if (fromDate > toDate) {
-        throw new BadRequestException("Monthly lock from date cannot be after to date");
+        throw new BadRequestException(
+          "Monthly lock from date cannot be after to date",
+        );
       }
 
       const existing = await this.monthlyLockWindowRepository.findOne({
@@ -97,16 +109,24 @@ export class MonthlyLocksService {
       order: { createdAt: "DESC" },
     });
 
-    const branchIds = [...new Set(rows.map(row => row.branchId))];
-    const userIds = [...new Set(rows.map(row => row.userId))];
+    const branchIds = [...new Set(rows.map((row) => row.branchId))];
+    const userIds = [...new Set(rows.map((row) => row.userId))];
     const [branches, users] = await Promise.all([
-      branchIds.length > 0 ? this.branchRepository.find({ where: { id: In(branchIds) } }) : Promise.resolve([]),
-      userIds.length > 0 ? this.userRepository.find({ where: { id: In(userIds) } }) : Promise.resolve([]),
+      branchIds.length > 0
+        ? this.branchRepository.find({ where: { id: In(branchIds) } })
+        : Promise.resolve([]),
+      userIds.length > 0
+        ? this.userRepository.find({ where: { id: In(userIds) } })
+        : Promise.resolve([]),
     ]);
-    const branchNameById = new Map(branches.map(branch => [branch.id, branch.name ?? null]));
-    const userNameById = new Map(users.map(user => [user.id, user.name ?? null]));
+    const branchNameById = new Map(
+      branches.map((branch) => [branch.id, branch.name ?? null]),
+    );
+    const userNameById = new Map(
+      users.map((user) => [user.id, user.name ?? null]),
+    );
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       branchId: row.branchId,
       userId: row.userId,
@@ -121,7 +141,9 @@ export class MonthlyLocksService {
   }
 
   async revokeMonthlyLock(windowId: string, actorUserId: string) {
-    const window = await this.monthlyLockWindowRepository.findOne({ where: { id: windowId } });
+    const window = await this.monthlyLockWindowRepository.findOne({
+      where: { id: windowId },
+    });
     if (!window) {
       throw new NotFoundException(`Monthly lock with id ${windowId} not found`);
     }

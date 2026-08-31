@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateManualBookAllocationsTable1782700000000 implements MigrationInterface {
-    name = 'CreateManualBookAllocationsTable1782700000000'
+  name = "CreateManualBookAllocationsTable1782700000000";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE TABLE "manual_book_allocations" (
                 "id" uuid NOT NULL DEFAULT gen_random_uuid(),
                 "manual_book_id" uuid NOT NULL,
@@ -20,14 +20,14 @@ export class CreateManualBookAllocationsTable1782700000000 implements MigrationI
             )
         `);
 
-        // Index for performance
-        await queryRunner.query(`
+    // Index for performance
+    await queryRunner.query(`
             CREATE INDEX "IDX_manual_book_allocations_query" ON "manual_book_allocations" ("manual_book_id", "book_no")
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP INDEX "IDX_manual_book_allocations_query"`);
-        await queryRunner.query(`DROP TABLE "manual_book_allocations"`);
-    }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX "IDX_manual_book_allocations_query"`);
+    await queryRunner.query(`DROP TABLE "manual_book_allocations"`);
+  }
 }

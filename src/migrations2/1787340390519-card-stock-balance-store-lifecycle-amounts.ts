@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements MigrationInterface {
-    name = "CardStockBalanceStoreLifecycleAmounts1787340390519";
+  name = "CardStockBalanceStoreLifecycleAmounts1787340390519";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_insert_entry(
               p_card uuid, p_tx uuid, p_ref_type public.card_stock_reference_type_enum, p_ref_id uuid, p_op public.card_stock_transaction_entries_operation_type_enum,
               p_branch uuid, p_branch_snapshot jsonb, p_currency uuid, p_currency_snapshot jsonb, p_product uuid, p_product_snapshot jsonb,
@@ -29,7 +29,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
             $fn$
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_card_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$
             DECLARE
               r record;
@@ -68,7 +68,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
             $fn$
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_item() RETURNS trigger LANGUAGE plpgsql AS $fn$
             DECLARE
               t record;
@@ -216,7 +216,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
             $fn$
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_transaction_entries e
                SET rate = coalesce(ti.rate, e.rate),
                    amount = coalesce(
@@ -230,7 +230,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               AND e.operation_type = 'SELL'
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_balance b
                SET sell_rate = e.rate,
                    sell_amount = e.amount,
@@ -240,7 +240,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               AND e.operation_type = 'SELL'
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_transaction_entries e
                SET amount = coalesce(c.amount, c.denomination, 0),
                    updated_at = now()
@@ -249,7 +249,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               AND e.operation_type IN ('STOCK', 'TRANSFER_OUT', 'TRANSFER_IN')
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_balance b
                SET receive_amount = coalesce(c.amount, c.denomination, 0),
                    updated_at = now()
@@ -260,7 +260,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               AND e.operation_type IN ('STOCK', 'TRANSFER_IN')
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_balance b
                SET transfer_amount = coalesce(c.amount, c.denomination, 0),
                    updated_at = now()
@@ -269,7 +269,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               AND b.transfer_entry_id IS NOT NULL
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_transaction_entries e
                SET rate = coalesce(ti.rate, e.rate),
                    amount = coalesce(
@@ -284,7 +284,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               AND e.reference_type = 'CARD_SALE'
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             UPDATE card_stock_balance b
                SET receive_rate = e.rate,
                    receive_amount = e.amount,
@@ -293,10 +293,10 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
             WHERE e.id = b.receive_entry_id
               AND e.operation_type = 'CARD_STOCK_LOAD'
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_insert_entry(
               p_card uuid, p_tx uuid, p_ref_type public.card_stock_reference_type_enum, p_ref_id uuid, p_op public.card_stock_transaction_entries_operation_type_enum,
               p_branch uuid, p_branch_snapshot jsonb, p_currency uuid, p_currency_snapshot jsonb, p_product uuid, p_product_snapshot jsonb,
@@ -309,7 +309,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
             END; $fn$
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_card_insert() RETURNS trigger LANGUAGE plpgsql AS $fn$
               DECLARE r record; entry_id uuid; BEGIN
                 SELECT receipt.id AS receipt_id, receipt.receipt_date, i.currency_id, i.currency_snapshot, i.product_id, i.product_snapshot, i.issuer_party_profile_id, i.issuer_party_profile_snapshot, receipt.branch_id, receipt.branch_snapshot, receipt.created_by, technical.id AS technical_transaction_id INTO r
@@ -324,7 +324,7 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
               END; $fn$
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.card_stock_on_transaction_item() RETURNS trigger LANGUAGE plpgsql AS $fn$
               DECLARE t record; c record; b record; r record; entry_id uuid; next_series citext; operation public.card_stock_transaction_entries_operation_type_enum; ref_type public.card_stock_reference_type_enum; ref_id uuid; op_rate numeric := 0; op_amount numeric := 0;
               BEGIN
@@ -386,5 +386,5 @@ export class CardStockBalanceStoreLifecycleAmounts1787340390519 implements Migra
                 RETURN NEW;
               END; $fn$
         `);
-    }
+  }
 }

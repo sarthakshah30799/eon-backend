@@ -1,10 +1,10 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateCorporateClientsTable1780888888889 implements MigrationInterface {
-    name = 'CreateCorporateClientsTable1780888888889'
+  name = "CreateCorporateClientsTable1780888888889";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE TABLE "corporate_clients" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -74,17 +74,27 @@ export class CreateCorporateClientsTable1780888888889 implements MigrationInterf
                 CONSTRAINT "FK_corporate_clients_origin_branch_id" FOREIGN KEY ("origin_branch_id") REFERENCES "branches"("id") ON DELETE SET NULL
             )
         `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_corporate_clients_code" ON "corporate_clients" ("code")`);
-        await queryRunner.query(`CREATE INDEX "IDX_corporate_clients_name" ON "corporate_clients" ("name")`);
-        await queryRunner.query(`CREATE INDEX "IDX_corporate_clients_gst_state_id" ON "corporate_clients" ("gst_state_id")`);
-        await queryRunner.query(`CREATE INDEX "IDX_corporate_clients_origin_branch_id" ON "corporate_clients" ("origin_branch_id")`);
-    }
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "IDX_corporate_clients_code" ON "corporate_clients" ("code")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_corporate_clients_name" ON "corporate_clients" ("name")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_corporate_clients_gst_state_id" ON "corporate_clients" ("gst_state_id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_corporate_clients_origin_branch_id" ON "corporate_clients" ("origin_branch_id")`,
+    );
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`DROP INDEX "IDX_corporate_clients_origin_branch_id"`);
-        await queryRunner.query(`DROP INDEX "IDX_corporate_clients_gst_state_id"`);
-        await queryRunner.query(`DROP INDEX "IDX_corporate_clients_name"`);
-        await queryRunner.query(`DROP INDEX "IDX_corporate_clients_code"`);
-        await queryRunner.query(`DROP TABLE "corporate_clients"`);
-    }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP INDEX "IDX_corporate_clients_origin_branch_id"`,
+    );
+    await queryRunner.query(`DROP INDEX "IDX_corporate_clients_gst_state_id"`);
+    await queryRunner.query(`DROP INDEX "IDX_corporate_clients_name"`);
+    await queryRunner.query(`DROP INDEX "IDX_corporate_clients_code"`);
+    await queryRunner.query(`DROP TABLE "corporate_clients"`);
+  }
 }

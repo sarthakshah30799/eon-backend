@@ -17,9 +17,13 @@ import { TransactionSettlementSource } from "../../vouchers/voucher.enums";
 import { VoucherAdvanceApplication } from "../../vouchers/entities/voucher-advance-application.entity";
 
 @Index("IDX_transaction_payments_transaction_id", ["transactionId"])
-@Index("IDX_transaction_payments_transaction_line", ["transactionId", "lineNo"], {
-  unique: true,
-})
+@Index(
+  "IDX_transaction_payments_transaction_line",
+  ["transactionId", "lineNo"],
+  {
+    unique: true,
+  },
+)
 @Index("IDX_transaction_payments_cheque_page_id", ["chequePageId"])
 @Entity("transaction_payments")
 export class TransactionPayment extends BaseEntity {
@@ -44,13 +48,21 @@ export class TransactionPayment extends BaseEntity {
   @Column({ type: "jsonb", name: "account_snapshot", nullable: true })
   accountSnapshot: TransactionReferenceSnapshotValue;
 
-  @Column({ type: "enum", enum: TransactionSettlementSource, name: "settlement_source", default: TransactionSettlementSource.NORMAL })
+  @Column({
+    type: "enum",
+    enum: TransactionSettlementSource,
+    name: "settlement_source",
+    default: TransactionSettlementSource.NORMAL,
+  })
   settlementSource: TransactionSettlementSource;
 
   @Column({ type: "uuid", name: "advance_voucher_id", nullable: true })
   advanceVoucherId: string | null;
 
-  @OneToOne(() => VoucherAdvanceApplication, application => application.transactionPayment)
+  @OneToOne(
+    () => VoucherAdvanceApplication,
+    (application) => application.transactionPayment,
+  )
   advanceApplication?: VoucherAdvanceApplication | null;
 
   @Column({ type: "uuid", name: "cheque_page_id", nullable: true })
@@ -77,8 +89,7 @@ export class TransactionPayment extends BaseEntity {
     enumName: "transaction_payments_direction_enum",
     default: TransactionPaymentDirection.PAYMENT,
   })
-  paymentDirection:
-    (typeof TransactionPaymentDirection)[keyof typeof TransactionPaymentDirection];
+  paymentDirection: (typeof TransactionPaymentDirection)[keyof typeof TransactionPaymentDirection];
 
   @Column({
     type: "varchar",

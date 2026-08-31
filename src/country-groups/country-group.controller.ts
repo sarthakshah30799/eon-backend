@@ -1,11 +1,30 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Session, UseGuards } from "@nestjs/common";
-import { ApiCookieAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  Session,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CountryGroupService } from "./country-group.service";
 import { CreateCountryGroupDto } from "./dto/create-country-group.dto";
 import { UpdateCountryGroupDto } from "./dto/update-country-group.dto";
 import { CountryGroupResponseDto } from "./dto/country-group-response.dto";
+import { CountryGroupListQueryDto } from "./dto/country-group-list-query.dto";
+import { PaginatedResponseDto } from "../common/pagination";
 
 interface SessionUserContext {
   userId?: string;
@@ -20,19 +39,25 @@ export class CountryGroupController {
 
   @Get()
   @ApiOperation({ summary: "Get all country groups" })
-  @ApiQuery({ name: "search", required: false })
-  @ApiResponse({ status: 200, description: "List of country groups", type: [CountryGroupResponseDto] })
+  @ApiResponse({
+    status: 200,
+    description: "Paginated list of country groups",
+  })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async findAll(
-    @Query("search") search?: string,
-  ): Promise<CountryGroupResponseDto[]> {
-    return this.countryGroupService.findAll(search);
+    @Query() query: CountryGroupListQueryDto,
+  ): Promise<PaginatedResponseDto<CountryGroupResponseDto>> {
+    return this.countryGroupService.findAll(query);
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Get country group by ID" })
   @ApiParam({ name: "id", description: "Country group UUID" })
-  @ApiResponse({ status: 200, description: "Country group details", type: CountryGroupResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: "Country group details",
+    type: CountryGroupResponseDto,
+  })
   @ApiResponse({ status: 404, description: "Country group not found" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async findById(@Param("id") id: string): Promise<CountryGroupResponseDto> {
@@ -41,7 +66,11 @@ export class CountryGroupController {
 
   @Post()
   @ApiOperation({ summary: "Create a new country group" })
-  @ApiResponse({ status: 201, description: "Country group created", type: CountryGroupResponseDto })
+  @ApiResponse({
+    status: 201,
+    description: "Country group created",
+    type: CountryGroupResponseDto,
+  })
   @ApiResponse({ status: 400, description: "Invalid input" })
   @ApiResponse({ status: 409, description: "Country group already exists" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
@@ -55,7 +84,11 @@ export class CountryGroupController {
   @Put(":id")
   @ApiOperation({ summary: "Update a country group" })
   @ApiParam({ name: "id", description: "Country group UUID" })
-  @ApiResponse({ status: 200, description: "Country group updated", type: CountryGroupResponseDto })
+  @ApiResponse({
+    status: 200,
+    description: "Country group updated",
+    type: CountryGroupResponseDto,
+  })
   @ApiResponse({ status: 404, description: "Country group not found" })
   @ApiResponse({ status: 409, description: "Country group already exists" })
   @ApiResponse({ status: 401, description: "Unauthorized" })

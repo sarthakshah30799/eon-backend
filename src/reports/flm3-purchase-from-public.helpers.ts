@@ -784,7 +784,9 @@ export const buildFlm3PurchaseFromPublicExport = (
     report.groups.forEach((group) => {
       sheetRows.push([group.branchLabel]);
       if (group.empty) {
-        sheetRows.push([group.emptyMessage || "No transactions in this period"]);
+        sheetRows.push([
+          group.emptyMessage || "No transactions in this period",
+        ]);
         sheetRows.push([]);
         return;
       }

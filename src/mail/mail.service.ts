@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { MailConfig } from './entities/mail-config.entity';
-import { ConfigService } from '../config/config.service';
-import { SaveSmtpConfigDto } from './dto/smtp-config.dto';
-import { EncryptionUtil } from './utils/encryption.util';
-import * as nodemailer from 'nodemailer';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { MailConfig } from "./entities/mail-config.entity";
+import { ConfigService } from "../config/config.service";
+import { SaveSmtpConfigDto } from "./dto/smtp-config.dto";
+import { EncryptionUtil } from "./utils/encryption.util";
+import * as nodemailer from "nodemailer";
 
 @Injectable()
 export class MailService {
@@ -16,7 +16,7 @@ export class MailService {
     private readonly mailConfigRepository: Repository<MailConfig>,
     private readonly configService: ConfigService,
   ) {
-    const secret = this.configService.get('SESSION_SECRET');
+    const secret = this.configService.get("SESSION_SECRET");
     this.encryptionUtil = new EncryptionUtil(secret);
   }
 
@@ -35,13 +35,14 @@ export class MailService {
     } else if (existing && existing.password) {
       passwordEncrypted = existing.password;
     } else {
-      throw new Error('SMTP password is required for initial configuration.');
+      throw new Error("SMTP password is required for initial configuration.");
     }
 
     const secure = dto.port === 465;
 
     // Verify connection with new configuration before saving
-    const decryptedPassword = dto.password || this.encryptionUtil.decrypt(passwordEncrypted);
+    const decryptedPassword =
+      dto.password || this.encryptionUtil.decrypt(passwordEncrypted);
     await this.verifyTransport({
       host: dto.host.trim(),
       port: dto.port,
@@ -72,7 +73,7 @@ export class MailService {
       if (savedConfig && savedConfig.password) {
         password = this.encryptionUtil.decrypt(savedConfig.password);
       } else {
-        throw new Error('SMTP password is required to verify settings');
+        throw new Error("SMTP password is required to verify settings");
       }
     }
 
@@ -118,7 +119,7 @@ export class MailService {
   }): Promise<{ messageId: string }> {
     const config = await this.getSmtpConfig();
     if (!config) {
-      throw new Error('Mail settings are not configured in the database yet.');
+      throw new Error("Mail settings are not configured in the database yet.");
     }
 
     const decryptedPassword = this.encryptionUtil.decrypt(config.password);
@@ -137,9 +138,22 @@ export class MailService {
     const fromAddress = params.from || config.senderEmail || config.username;
 
     // Parse comma-separated lists of emails into arrays
-    const toEmails = params.to.split(',').map((email) => email.trim()).filter(Boolean);
-    const ccEmails = params.cc ? params.cc.split(',').map((email) => email.trim()).filter(Boolean) : undefined;
-    const bccEmails = params.bcc ? params.bcc.split(',').map((email) => email.trim()).filter(Boolean) : undefined;
+    const toEmails = params.to
+      .split(",")
+      .map((email) => email.trim())
+      .filter(Boolean);
+    const ccEmails = params.cc
+      ? params.cc
+          .split(",")
+          .map((email) => email.trim())
+          .filter(Boolean)
+      : undefined;
+    const bccEmails = params.bcc
+      ? params.bcc
+          .split(",")
+          .map((email) => email.trim())
+          .filter(Boolean)
+      : undefined;
 
     const info = await transport.sendMail({
       from: fromAddress,

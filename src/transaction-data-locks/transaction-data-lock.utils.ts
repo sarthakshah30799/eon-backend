@@ -1,4 +1,6 @@
-export const normalizeDateOnly = (value: Date | string | null | undefined): string => {
+export const normalizeDateOnly = (
+  value: Date | string | null | undefined,
+): string => {
   if (!value) {
     return "";
   }
@@ -33,5 +35,6 @@ export const addDaysToDateOnly = (dateOnly: string, days: number): string => {
   return normalizeDateOnly(date);
 };
 
-export const getEarliestAllowedPunchDate = (lockedThroughDate: string): string =>
-  addDaysToDateOnly(lockedThroughDate, 1);
+export const getEarliestAllowedPunchDate = (
+  lockedThroughDate: string,
+): string => addDaysToDateOnly(lockedThroughDate, 1);

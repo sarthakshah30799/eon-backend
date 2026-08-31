@@ -45,12 +45,16 @@ const BRANCH_ACCOUNT_KEY_PRIORITY: Record<
   },
 };
 
-const PROFIT_ACCOUNT_PRIORITY: Record<TradeMode, readonly ProductAccountKey[]> = {
-  [TradeMode.BULK]: ["bulkProficAc", "profitAc"],
-  [TradeMode.RETAIL]: ["profitAc", "bulkProficAc"],
-};
+const PROFIT_ACCOUNT_PRIORITY: Record<TradeMode, readonly ProductAccountKey[]> =
+  {
+    [TradeMode.BULK]: ["bulkProficAc", "profitAc"],
+    [TradeMode.RETAIL]: ["profitAc", "bulkProficAc"],
+  };
 
-const BRANCH_PROFIT_ACCOUNT_PRIORITY: Record<TradeMode, readonly ProductAccountKey[]> = {
+const BRANCH_PROFIT_ACCOUNT_PRIORITY: Record<
+  TradeMode,
+  readonly ProductAccountKey[]
+> = {
   [TradeMode.BULK]: ["profitAcBrnSale", "bulkProficAc", "profitAc"],
   [TradeMode.RETAIL]: ["profitAcBrnSale", "profitAc", "bulkProficAc"],
 };
@@ -112,7 +116,9 @@ export function resolveProductTransactionAccountField(
   return keys[0];
 }
 
-export function getTransactionAccountKindLabel(kind: "purchase" | "sale" | "profit") {
+export function getTransactionAccountKindLabel(
+  kind: "purchase" | "sale" | "profit",
+) {
   return ACCOUNT_KIND_LABEL[kind];
 }
 

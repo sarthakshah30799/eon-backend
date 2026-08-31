@@ -1,9 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsEnum, IsOptional } from "class-validator";
 import {
   PassengerEntityType,
   PassengerNationalityType,
-} from '../passenger.entity';
+} from "../passenger.entity";
 
 export class VerifyPassengerPanDto {
   @ApiProperty({ enum: PassengerEntityType })
@@ -14,15 +14,15 @@ export class VerifyPassengerPanDto {
   @IsEnum(PassengerNationalityType)
   nationalityType: PassengerNationalityType;
 
-  @ApiPropertyOptional({ example: 'ABCDE1234F' })
+  @ApiPropertyOptional({ example: "ABCDE1234F" })
   @IsOptional()
   panNumber?: string;
 
-  @ApiPropertyOptional({ example: 'John Doe' })
+  @ApiPropertyOptional({ example: "John Doe" })
   @IsOptional()
   panHolderName?: string;
 
-  @ApiPropertyOptional({ example: '1990-01-31' })
+  @ApiPropertyOptional({ example: "1990-01-31" })
   @IsOptional()
   panDob?: string;
 }

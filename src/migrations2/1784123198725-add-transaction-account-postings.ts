@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddTransactionAccountPostings1784123198725
-  implements MigrationInterface
-{
+export class AddTransactionAccountPostings1784123198725 implements MigrationInterface {
   name = "AddTransactionAccountPostings1784123198725";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -62,15 +60,21 @@ export class AddTransactionAccountPostings1784123198725
     await queryRunner.query(
       `ALTER TABLE "transaction_account_postings" DROP CONSTRAINT "FK_transaction_account_postings_transaction_id"`,
     );
-    await queryRunner.query(`ALTER TABLE "transaction_account_postings" DROP COLUMN "source_id"`);
-    await queryRunner.query(`ALTER TABLE "transaction_account_postings" DROP COLUMN "source_type"`);
+    await queryRunner.query(
+      `ALTER TABLE "transaction_account_postings" DROP COLUMN "source_id"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_account_postings" DROP COLUMN "source_type"`,
+    );
     await queryRunner.query(
       `DROP INDEX "public"."IDX_transaction_items_account_id"`,
     );
     await queryRunner.query(
       `ALTER TABLE "transaction_items" DROP COLUMN "account_snapshot"`,
     );
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN "account_id"`);
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN "account_id"`,
+    );
     await queryRunner.query(
       `DROP INDEX "public"."IDX_transaction_account_postings_transaction_id"`,
     );
@@ -83,9 +87,7 @@ export class AddTransactionAccountPostings1784123198725
     await queryRunner.query(
       `DROP INDEX "public"."IDX_transaction_account_postings_profile_id"`,
     );
-    await queryRunner.query(
-      `DROP TABLE "transaction_account_postings"`,
-    );
+    await queryRunner.query(`DROP TABLE "transaction_account_postings"`);
     await queryRunner.query(
       `DROP TYPE "public"."transaction_account_postings_direction_enum"`,
     );

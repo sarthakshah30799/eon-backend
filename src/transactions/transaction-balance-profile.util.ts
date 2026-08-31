@@ -2,7 +2,9 @@ import { ClientType } from "../party-profiles/party-profile.entity";
 import { TradeMode } from "./transactions.enums";
 
 export function normalizeBalanceProfileType(value: unknown): string {
-  const normalized = String(value ?? "").trim().toUpperCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
 
   if (normalized === ClientType.FFMC || normalized === "FFMC") {
     return "FFMC";

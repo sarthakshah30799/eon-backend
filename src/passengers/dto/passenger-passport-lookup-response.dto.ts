@@ -1,10 +1,10 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class PassengerPassportLookupResponseDto {
   @ApiProperty({ example: true })
   found: boolean;
 
-  @ApiProperty({ example: 'Passenger found' })
+  @ApiProperty({ example: "Passenger found" })
   message: string;
 
   @ApiPropertyOptional({ type: Object })

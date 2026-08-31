@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { PasswordPolicyCodeEnum } from './password-policy.enum';
+import { ApiProperty } from "@nestjs/swagger";
+import { PasswordPolicyCodeEnum } from "./password-policy.enum";
 
 export interface PasswordPolicyConfig {
   minLength?: number;
@@ -13,27 +13,27 @@ export interface PasswordPolicyConfig {
 export const PASSWORD_POLICY_CHILDREN = [
   {
     code: PasswordPolicyCodeEnum.MinLength,
-    label: 'Minimum Length',
+    label: "Minimum Length",
   },
   {
     code: PasswordPolicyCodeEnum.MaxLength,
-    label: 'Maximum Length',
+    label: "Maximum Length",
   },
   {
     code: PasswordPolicyCodeEnum.MinSpecialCharCount,
-    label: 'Minimum Special Characters',
+    label: "Minimum Special Characters",
   },
   {
     code: PasswordPolicyCodeEnum.MinNumericCount,
-    label: 'Minimum Numeric Characters',
+    label: "Minimum Numeric Characters",
   },
   {
     code: PasswordPolicyCodeEnum.MinAlphaCount,
-    label: 'Minimum Alpha Characters',
+    label: "Minimum Alpha Characters",
   },
   {
     code: PasswordPolicyCodeEnum.MaxInvalidAttempts,
-    label: 'Maximum Invalid Attempts',
+    label: "Maximum Invalid Attempts",
   },
 ] as const;
 

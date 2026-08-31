@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddHoldCostProfitToTransactionItems1784095899089
-  implements MigrationInterface
-{
+export class AddHoldCostProfitToTransactionItems1784095899089 implements MigrationInterface {
   name = "AddHoldCostProfitToTransactionItems1784095899089";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -164,7 +162,11 @@ export class AddHoldCostProfitToTransactionItems1784095899089
     await queryRunner.query(`
       DROP FUNCTION IF EXISTS public.transaction_items_hold_profit_trigger();
     `);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN "profit"`);
-    await queryRunner.query(`ALTER TABLE "transaction_items" DROP COLUMN "hold_cost"`);
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN "profit"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "transaction_items" DROP COLUMN "hold_cost"`,
+    );
   }
 }

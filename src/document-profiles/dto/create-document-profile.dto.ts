@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayNotEmpty,
   IsArray,
@@ -11,15 +11,15 @@ import {
   IsUUID,
   IsEnum,
   MaxLength,
-} from 'class-validator';
-import { DocumentSpecificationType } from '../document-profile.entity';
-import { Type } from 'class-transformer';
-import { EmptyStringToUndefined } from '../../common/decorators/empty-string-to-undefined.decorator';
+} from "class-validator";
+import { DocumentSpecificationType } from "../document-profile.entity";
+import { Type } from "class-transformer";
+import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
 
 export class CreateDocumentProfileDto {
   @ApiProperty({
-    description: 'Unique document code',
-    example: 'PAN_CARD_FRONT',
+    description: "Unique document code",
+    example: "PAN_CARD_FRONT",
   })
   @IsString()
   @IsNotEmpty()
@@ -27,8 +27,8 @@ export class CreateDocumentProfileDto {
   documentCode: string;
 
   @ApiProperty({
-    description: 'Document description',
-    example: 'PAN card copy front side',
+    description: "Document description",
+    example: "PAN card copy front side",
   })
   @IsString()
   @IsNotEmpty()
@@ -36,7 +36,7 @@ export class CreateDocumentProfileDto {
   documentDescription: string;
 
   @ApiProperty({
-    description: 'Allowed document types',
+    description: "Allowed document types",
     type: [String],
   })
   @IsArray()
@@ -46,7 +46,7 @@ export class CreateDocumentProfileDto {
   documentType: string[];
 
   @ApiPropertyOptional({
-    description: 'Is the document required?',
+    description: "Is the document required?",
     default: false,
   })
   @IsBoolean()
@@ -54,7 +54,7 @@ export class CreateDocumentProfileDto {
   isRequired?: boolean;
 
   @ApiProperty({
-    description: 'Maximum file size in MB',
+    description: "Maximum file size in MB",
     example: 5,
   })
   @Type(() => Number)
@@ -63,7 +63,7 @@ export class CreateDocumentProfileDto {
   maxSizeMb: number;
 
   @ApiProperty({
-    description: 'Specification type',
+    description: "Specification type",
     enum: DocumentSpecificationType,
   })
   @IsEnum(DocumentSpecificationType)
@@ -71,43 +71,43 @@ export class CreateDocumentProfileDto {
   specificationType: DocumentSpecificationType;
 
   @ApiProperty({
-    description: 'Type',
-    format: 'uuid',
+    description: "Type",
+    format: "uuid",
   })
   @IsUUID()
   @IsNotEmpty()
   type: string;
 
   @ApiProperty({
-    description: 'Document group selection',
+    description: "Document group selection",
   })
   @IsUUID()
   @IsNotEmpty()
   groupSelection: string;
 
   @ApiProperty({
-    description: 'Entity type selection',
+    description: "Entity type selection",
   })
   @IsUUID()
   @IsNotEmpty()
   entitySelection: string;
 
   @ApiPropertyOptional({
-    description: 'Financial year selection',
+    description: "Financial year selection",
   })
   @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
   financialYearSelection?: string;
 
-  @ApiPropertyOptional({ description: 'Profile sort order', default: 0 })
+  @ApiPropertyOptional({ description: "Profile sort order", default: 0 })
   @Type(() => Number)
   @IsNumber()
   @IsOptional()
   @Min(0)
   sortOrder?: number;
 
-  @ApiPropertyOptional({ description: 'Profile active flag', default: true })
+  @ApiPropertyOptional({ description: "Profile active flag", default: true })
   @IsBoolean()
   @IsOptional()
   active?: boolean;

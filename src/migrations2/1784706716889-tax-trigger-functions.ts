@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF NOT EXISTS (
@@ -17,7 +16,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.calculate_transaction_gst_components(
             p_transaction_type text,
             p_apply_tax boolean,
@@ -112,7 +111,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.calculate_transaction_gst_preview(
             p_payload jsonb
           )
@@ -243,7 +242,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.refresh_transaction_tax_summary(
             p_transaction_id uuid
           )
@@ -364,7 +363,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.transaction_additional_charges_tax_fill_trigger()
           RETURNS trigger
           LANGUAGE plpgsql
@@ -395,7 +394,7 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE OR REPLACE FUNCTION public.transaction_tax_summary_refresh_trigger()
           RETURNS trigger
           LANGUAGE plpgsql
@@ -420,77 +419,77 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           $$;
         `);
 
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_fill_trigger ON "transaction_additional_charges"`,
-        );
-        await queryRunner.query(
-          `CREATE TRIGGER transaction_additional_charges_tax_fill_trigger
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_fill_trigger ON "transaction_additional_charges"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER transaction_additional_charges_tax_fill_trigger
            BEFORE INSERT OR UPDATE ON "transaction_additional_charges"
            FOR EACH ROW
            EXECUTE FUNCTION public.transaction_additional_charges_tax_fill_trigger()`,
-        );
+    );
 
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_items_tax_summary_refresh_trigger ON "transaction_items"`,
-        );
-        await queryRunner.query(
-          `CREATE TRIGGER transaction_items_tax_summary_refresh_trigger
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_items_tax_summary_refresh_trigger ON "transaction_items"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER transaction_items_tax_summary_refresh_trigger
            AFTER INSERT OR UPDATE OR DELETE ON "transaction_items"
            FOR EACH ROW
            EXECUTE FUNCTION public.transaction_tax_summary_refresh_trigger()`,
-        );
+    );
 
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_summary_refresh_trigger ON "transaction_additional_charges"`,
-        );
-        await queryRunner.query(
-          `CREATE TRIGGER transaction_additional_charges_tax_summary_refresh_trigger
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_summary_refresh_trigger ON "transaction_additional_charges"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER transaction_additional_charges_tax_summary_refresh_trigger
            AFTER INSERT OR UPDATE OR DELETE ON "transaction_additional_charges"
            FOR EACH ROW
            EXECUTE FUNCTION public.transaction_tax_summary_refresh_trigger()`,
-        );
+    );
 
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_header_tax_summary_refresh_trigger ON "transactions"`,
-        );
-        await queryRunner.query(
-          `CREATE TRIGGER transaction_header_tax_summary_refresh_trigger
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_header_tax_summary_refresh_trigger ON "transactions"`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER transaction_header_tax_summary_refresh_trigger
            AFTER INSERT OR UPDATE OF transaction_type, tax_rate_percent, branch_snapshot, party_profile_snapshot ON "transactions"
            FOR EACH ROW
            EXECUTE FUNCTION public.transaction_tax_summary_refresh_trigger()`,
-        );
-    }
+    );
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_header_tax_summary_refresh_trigger ON "transactions"`,
-        );
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_summary_refresh_trigger ON "transaction_additional_charges"`,
-        );
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_items_tax_summary_refresh_trigger ON "transaction_items"`,
-        );
-        await queryRunner.query(
-          `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_fill_trigger ON "transaction_additional_charges"`,
-        );
-        await queryRunner.query(
-          `DROP FUNCTION IF EXISTS public.transaction_tax_summary_refresh_trigger()`,
-        );
-        await queryRunner.query(
-          `DROP FUNCTION IF EXISTS public.transaction_additional_charges_tax_fill_trigger()`,
-        );
-        await queryRunner.query(
-          `DROP FUNCTION IF EXISTS public.refresh_transaction_tax_summary(uuid)`,
-        );
-        await queryRunner.query(
-          `DROP FUNCTION IF EXISTS public.calculate_transaction_gst_preview(jsonb)`,
-        );
-        await queryRunner.query(
-          `DROP FUNCTION IF EXISTS public.calculate_transaction_gst_components(text, boolean, numeric, numeric, numeric, text, text)`,
-        );
-        await queryRunner.query(`DROP TABLE IF EXISTS "transaction_tax_summaries"`);
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_header_tax_summary_refresh_trigger ON "transactions"`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_summary_refresh_trigger ON "transaction_additional_charges"`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_items_tax_summary_refresh_trigger ON "transaction_items"`,
+    );
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS transaction_additional_charges_tax_fill_trigger ON "transaction_additional_charges"`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.transaction_tax_summary_refresh_trigger()`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.transaction_additional_charges_tax_fill_trigger()`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.refresh_transaction_tax_summary(uuid)`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.calculate_transaction_gst_preview(jsonb)`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS public.calculate_transaction_gst_components(text, boolean, numeric, numeric, numeric, text, text)`,
+    );
+    await queryRunner.query(`DROP TABLE IF EXISTS "transaction_tax_summaries"`);
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF EXISTS (
@@ -501,6 +500,5 @@ export class TaxTriggerFunctions1784706716889 implements MigrationInterface {
           END
           $$;
         `);
-    }
-
+  }
 }

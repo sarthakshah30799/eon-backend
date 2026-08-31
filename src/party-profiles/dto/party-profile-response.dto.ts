@@ -66,7 +66,10 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "KYC Approval Number" })
   kycApprovalNumber?: string;
 
-  @ApiPropertyOptional({ description: "KYC Risk Category", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "KYC Risk Category",
+    type: SelectOptionResponseDto,
+  })
   kycRiskCategory?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "Cheque Transaction Limit" })
@@ -75,7 +78,10 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Default Handling Charges" })
   defaultHandlingCharges?: number;
 
-  @ApiPropertyOptional({ description: "Default Agent", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "Default Agent",
+    type: SelectOptionResponseDto,
+  })
   defaultAgent?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "Phone No" })
@@ -102,7 +108,10 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Group", type: SelectOptionResponseDto })
   group?: SelectOptionResponseDto | null;
 
-  @ApiPropertyOptional({ description: "Entity Type", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "Entity Type",
+    type: SelectOptionResponseDto,
+  })
   entityType?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "PAN Name" })
@@ -114,10 +123,16 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "PAN No" })
   panNo?: string;
 
-  @ApiPropertyOptional({ description: "Marketing Executive", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "Marketing Executive",
+    type: SelectOptionResponseDto,
+  })
   marketingExecutive?: SelectOptionResponseDto | null;
 
-  @ApiPropertyOptional({ description: "Business Nature", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "Business Nature",
+    type: SelectOptionResponseDto,
+  })
   businessNature?: SelectOptionResponseDto | null;
 
   @ApiProperty({ description: "Is TDS Deducted flag" })
@@ -126,7 +141,10 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "TDS value/type" })
   tds?: string;
 
-  @ApiPropertyOptional({ description: "TDS Group", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "TDS Group",
+    type: SelectOptionResponseDto,
+  })
   tdsGroup?: SelectOptionResponseDto | null;
 
   @ApiProperty({ description: "Active status flag" })
@@ -175,15 +193,16 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "State Name" })
   stateName?: string;
 
-
-
   @ApiPropertyOptional({ description: "Branch ID" })
   branchId?: string;
 
   @ApiPropertyOptional({ description: "Branch", type: BranchResponseDto })
   branch?: BranchResponseDto | null;
 
-  @ApiPropertyOptional({ description: "Location", type: SelectOptionResponseDto })
+  @ApiPropertyOptional({
+    description: "Location",
+    type: SelectOptionResponseDto,
+  })
   location?: SelectOptionResponseDto | null;
 
   @ApiPropertyOptional({ description: "Website" })
@@ -213,10 +232,14 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "Division Factor" })
   divisionFactor?: number;
 
-  @ApiPropertyOptional({ description: "Allowed CARD number length for this issuer" })
+  @ApiPropertyOptional({
+    description: "Allowed CARD number length for this issuer",
+  })
   cardNumberLength?: number | null;
 
-  @ApiPropertyOptional({ description: "Whether masked CARD numbers are accepted for this issuer" })
+  @ApiPropertyOptional({
+    description: "Whether masked CARD numbers are accepted for this issuer",
+  })
   allowCardNumberMasking?: boolean;
 
   @ApiProperty({ description: "Party profile type", enum: ClientType })
@@ -254,11 +277,17 @@ export class PartyProfileResponseDto {
     dto.code = entity.code;
     dto.name = entity.name;
     dto.isIndividual = entity.isIndividual;
-    dto.creditLimit = entity.creditLimit ? Number(entity.creditLimit) : undefined;
+    dto.creditLimit = entity.creditLimit
+      ? Number(entity.creditLimit)
+      : undefined;
     dto.creditDays = entity.creditDays;
-    dto.temporaryCreditLimit = entity.temporaryCreditLimit ? Number(entity.temporaryCreditLimit) : undefined;
+    dto.temporaryCreditLimit = entity.temporaryCreditLimit
+      ? Number(entity.temporaryCreditLimit)
+      : undefined;
     dto.temporaryCreditDays = entity.temporaryCreditDays;
-    dto.permanentCreditLimit = entity.permanentCreditLimit ? Number(entity.permanentCreditLimit) : undefined;
+    dto.permanentCreditLimit = entity.permanentCreditLimit
+      ? Number(entity.permanentCreditLimit)
+      : undefined;
     dto.permanentCreditDays = entity.permanentCreditDays;
     dto.address1 = entity.address1;
     dto.address2 = entity.address2;
@@ -266,10 +295,18 @@ export class PartyProfileResponseDto {
     dto.city = entity.city;
     dto.pinCode = entity.pinCode;
     dto.kycApprovalNumber = entity.kycApprovalNumber;
-    dto.kycRiskCategory = entity.kycRiskCategory ? SelectOptionResponseDto.fromEntity(entity.kycRiskCategory) : null;
-    dto.chqTrxnLimit = entity.chqTrxnLimit ? Number(entity.chqTrxnLimit) : undefined;
-    dto.defaultHandlingCharges = entity.defaultHandlingCharges ? Number(entity.defaultHandlingCharges) : undefined;
-    dto.defaultAgent = entity.defaultAgent ? SelectOptionResponseDto.fromEntity(entity.defaultAgent) : null;
+    dto.kycRiskCategory = entity.kycRiskCategory
+      ? SelectOptionResponseDto.fromEntity(entity.kycRiskCategory)
+      : null;
+    dto.chqTrxnLimit = entity.chqTrxnLimit
+      ? Number(entity.chqTrxnLimit)
+      : undefined;
+    dto.defaultHandlingCharges = entity.defaultHandlingCharges
+      ? Number(entity.defaultHandlingCharges)
+      : undefined;
+    dto.defaultAgent = entity.defaultAgent
+      ? SelectOptionResponseDto.fromEntity(entity.defaultAgent)
+      : null;
     dto.phoneNo = entity.phoneNo;
     dto.blockDateFrom = entity.blockDateFrom;
     dto.establishmentDate = entity.establishmentDate;
@@ -277,16 +314,26 @@ export class PartyProfileResponseDto {
     dto.email = entity.email;
     dto.contactName = entity.contactName;
     dto.designation = entity.designation;
-    dto.group = entity.group ? SelectOptionResponseDto.fromEntity(entity.group) : null;
-    dto.entityType = entity.entityType ? SelectOptionResponseDto.fromEntity(entity.entityType) : null;
+    dto.group = entity.group
+      ? SelectOptionResponseDto.fromEntity(entity.group)
+      : null;
+    dto.entityType = entity.entityType
+      ? SelectOptionResponseDto.fromEntity(entity.entityType)
+      : null;
     dto.panName = entity.panName;
     dto.panDob = entity.panDob;
     dto.panNo = entity.panNo;
-    dto.marketingExecutive = entity.marketingExecutive ? SelectOptionResponseDto.fromEntity(entity.marketingExecutive) : null;
-    dto.businessNature = entity.businessNature ? SelectOptionResponseDto.fromEntity(entity.businessNature) : null;
+    dto.marketingExecutive = entity.marketingExecutive
+      ? SelectOptionResponseDto.fromEntity(entity.marketingExecutive)
+      : null;
+    dto.businessNature = entity.businessNature
+      ? SelectOptionResponseDto.fromEntity(entity.businessNature)
+      : null;
     dto.isTdsDeducted = entity.isTdsDeducted;
     dto.tds = entity.tds;
-    dto.tdsGroup = entity.tdsGroup ? SelectOptionResponseDto.fromEntity(entity.tdsGroup) : null;
+    dto.tdsGroup = entity.tdsGroup
+      ? SelectOptionResponseDto.fromEntity(entity.tdsGroup)
+      : null;
     dto.active = entity.active;
     dto.isActive = entity.isActive;
     dto.printAddress = entity.printAddress;
@@ -294,7 +341,7 @@ export class PartyProfileResponseDto {
     dto.sale = entity.sale;
     dto.purchase = entity.purchase;
     dto.commissionRules = Array.isArray(entity.commissionRules)
-      ? entity.commissionRules.map(rule =>
+      ? entity.commissionRules.map((rule) =>
           PartyProfileCommissionRuleResponseDto.fromValue(rule),
         )
       : [];
@@ -307,8 +354,12 @@ export class PartyProfileResponseDto {
     dto.stateName = entity.state?.name;
 
     dto.branchId = entity.branchId;
-    dto.branch = entity.branch ? BranchResponseDto.fromEntity(entity.branch) : null;
-    dto.location = entity.location ? SelectOptionResponseDto.fromEntity(entity.location) : null;
+    dto.branch = entity.branch
+      ? BranchResponseDto.fromEntity(entity.branch)
+      : null;
+    dto.location = entity.location
+      ? SelectOptionResponseDto.fromEntity(entity.location)
+      : null;
     dto.webSite = entity.webSite;
     dto.accountHolderName = entity.accountHolderName;
     dto.bankName = entity.bankName;
@@ -319,9 +370,10 @@ export class PartyProfileResponseDto {
     dto.ffmcRegDate = entity.ffmcRegDate;
     dto.cardNumberLength = entity.cardNumberLength ?? null;
     dto.allowCardNumberMasking = Boolean(entity.allowCardNumberMasking);
-    dto.divisionFactor = entity.divisionFactor !== null && entity.divisionFactor !== undefined
-      ? Number(entity.divisionFactor)
-      : undefined;
+    dto.divisionFactor =
+      entity.divisionFactor !== null && entity.divisionFactor !== undefined
+        ? Number(entity.divisionFactor)
+        : undefined;
     dto.type = entity.type;
     dto.status = entity.status;
     dto.statusUpdatedById = entity.statusUpdatedById;

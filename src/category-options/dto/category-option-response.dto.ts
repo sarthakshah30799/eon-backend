@@ -29,7 +29,9 @@ export class SelectOptionResponseDto {
   static fromEntity(entity: SelectOption): SelectOptionResponseDto {
     const dto = new SelectOptionResponseDto();
     dto.id = entity.id;
-    dto.code = String(entity.code ?? '').replace(/[_\s-]/g, '').toUpperCase();
+    dto.code = String(entity.code ?? "")
+      .replace(/[_\s-]/g, "")
+      .toUpperCase();
     dto.value = entity.value;
     dto.label = entity.label;
     dto.sortOrder = entity.sortOrder;

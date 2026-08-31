@@ -219,7 +219,8 @@ const LINE_DEFINITIONS: LineDefinition[] = [
     key: "saleTotal",
     label: "    Total Sells (a + b + c)",
     kind: "TOTAL",
-    values: (totals) => totals.salePublic + totals.saleBulk + totals.saleForeign,
+    values: (totals) =>
+      totals.salePublic + totals.saleBulk + totals.saleForeign,
   },
   {
     key: "transferOut",
@@ -262,7 +263,10 @@ const groupedSaleTotal = (totals: CurrencyTotals) =>
 const allSaleTotal = (totals: CurrencyTotals) =>
   groupedSaleTotal(totals) + totals.ungroupedSale;
 
-const resolveSaleGroup = (saleGroups: Flm1SaleGroup[], purposeId: string | null) => {
+const resolveSaleGroup = (
+  saleGroups: Flm1SaleGroup[],
+  purposeId: string | null,
+) => {
   if (!purposeId) {
     return null;
   }
@@ -278,17 +282,21 @@ const sortSaleGroups = (saleGroups: Flm1SaleGroup[]) =>
       left.title.localeCompare(right.title),
   );
 
-const buildLineDefinitions = (saleGroups?: Flm1SaleGroup[]): LineDefinition[] => {
+const buildLineDefinitions = (
+  saleGroups?: Flm1SaleGroup[],
+): LineDefinition[] => {
   if (!saleGroups) {
     return LINE_DEFINITIONS;
   }
 
-  const saleItems: LineDefinition[] = sortSaleGroups(saleGroups).map((group) => ({
-    key: `saleGroup:${group.id}`,
-    label: `    ${group.title}`,
-    kind: "ITEM",
-    values: (totals) => totals.saleGroupQty[group.id] ?? 0,
-  }));
+  const saleItems: LineDefinition[] = sortSaleGroups(saleGroups).map(
+    (group) => ({
+      key: `saleGroup:${group.id}`,
+      label: `    ${group.title}`,
+      kind: "ITEM",
+      values: (totals) => totals.saleGroupQty[group.id] ?? 0,
+    }),
+  );
 
   const saleSection: LineDefinition[] = [
     { key: "saleHeader", label: "IV. Sale", kind: "HEADER" },
@@ -326,10 +334,11 @@ const buildLineDefinitions = (saleGroups?: Flm1SaleGroup[]): LineDefinition[] =>
     },
   ];
 
-  const saleHeaderIndex = LINE_DEFINITIONS.findIndex((line) => line.key === "saleHeader");
+  const saleHeaderIndex = LINE_DEFINITIONS.findIndex(
+    (line) => line.key === "saleHeader",
+  );
   return [...LINE_DEFINITIONS.slice(0, saleHeaderIndex), ...saleSection];
 };
-
 
 const toText = (value: unknown) =>
   value === undefined || value === null ? "" : String(value).trim();
@@ -428,7 +437,10 @@ const classifySlug = (
   return null;
 };
 
-const emptyCurrency = (currencyId: string, currencyCode: string): CurrencyTotals => ({
+const emptyCurrency = (
+  currencyId: string,
+  currencyCode: string,
+): CurrencyTotals => ({
   currencyId,
   currencyCode,
   opening: 0,
@@ -473,7 +485,11 @@ const mergeCurrencyTotals = (
 const consolidateBranchMap = (
   branchMap: Map<
     string,
-    { label: string; productLabel: string; currencies: Map<string, CurrencyTotals> }
+    {
+      label: string;
+      productLabel: string;
+      currencies: Map<string, CurrencyTotals>;
+    }
   >,
 ) => {
   const consolidated = {
@@ -527,7 +543,9 @@ const buildLineRows = (
     };
     currencies.forEach((currency) => {
       row[currency.currencyId] =
-        line.kind === "HEADER" || !line.values ? "" : formatQty(line.values(currency));
+        line.kind === "HEADER" || !line.values
+          ? ""
+          : formatQty(line.values(currency));
     });
     return row;
   });
@@ -647,7 +665,11 @@ export const buildFlm1DailyCnSummary = (
   const layout = resolveFlmReportLayout(options.layout);
   const branchMap = new Map<
     string,
-    { label: string; productLabel: string; currencies: Map<string, CurrencyTotals> }
+    {
+      label: string;
+      productLabel: string;
+      currencies: Map<string, CurrencyTotals>;
+    }
   >();
 
   const ensureBranch = (branchId: string, label: string) => {
@@ -673,7 +695,8 @@ export const buildFlm1DailyCnSummary = (
     if (productLabel && !branch.productLabel) {
       branch.productLabel = productLabel;
     }
-    const currencyCode = getSnapshotCode(row.currencySnapshot) || row.currencyId;
+    const currencyCode =
+      getSnapshotCode(row.currencySnapshot) || row.currencyId;
     const currency =
       branch.currencies.get(row.currencyId) ??
       emptyCurrency(row.currencyId, currencyCode);
@@ -732,7 +755,9 @@ export const buildFlm1DailyCnSummary = (
     }
     const currencies = [...branch.currencies.values()]
       .filter(hasMovement)
-      .sort((left, right) => left.currencyCode.localeCompare(right.currencyCode));
+      .sort((left, right) =>
+        left.currencyCode.localeCompare(right.currencyCode),
+      );
 
     if (!currencies.length) {
       return {
@@ -748,18 +773,20 @@ export const buildFlm1DailyCnSummary = (
       branchId,
       branchLabel: branch.label,
       empty: false,
-      blocks: chunkItems(currencies, options.currenciesPerBlock).map((chunk) => ({
-        columns: [
-          { key: "particulars", label: "Particulars" },
-          ...chunk.map((currency) => ({
-            key: currency.currencyId,
-            label:
-              options.currencyLabelById?.[currency.currencyId] ??
-              currency.currencyCode,
-          })),
-        ],
-        rows: buildLineRows(chunk, options.saleGroups),
-      })),
+      blocks: chunkItems(currencies, options.currenciesPerBlock).map(
+        (chunk) => ({
+          columns: [
+            { key: "particulars", label: "Particulars" },
+            ...chunk.map((currency) => ({
+              key: currency.currencyId,
+              label:
+                options.currencyLabelById?.[currency.currencyId] ??
+                currency.currencyCode,
+            })),
+          ],
+          rows: buildLineRows(chunk, options.saleGroups),
+        }),
+      ),
     };
   });
 
@@ -817,7 +844,10 @@ export const buildFlm1DailyCnSummaryExport = (
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "FLM1");
   return {
-    buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer,
+    buffer: XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    }) as Buffer,
     contentType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     filename: "flm1-daily-cn-summary.xlsx",

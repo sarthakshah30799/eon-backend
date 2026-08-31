@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddTransactionBalanceCurrenciesTrigger1785250767892 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE OR REPLACE FUNCTION public.enqueue_transaction_balance_currencies_rebuild()
             RETURNS trigger
             LANGUAGE plpgsql
@@ -150,42 +149,41 @@ export class AddTransactionBalanceCurrenciesTrigger1785250767892 implements Migr
             END;
             $$;
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_balance_currencies_rebuild_on_transactions ON "transactions";
             CREATE TRIGGER transaction_balance_currencies_rebuild_on_transactions
             AFTER INSERT OR UPDATE ON "transactions"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_balance_currencies_rebuild();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_balance_currencies_rebuild_on_transactions_delete ON "transactions";
             CREATE TRIGGER transaction_balance_currencies_rebuild_on_transactions_delete
             BEFORE DELETE ON "transactions"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_balance_currencies_rebuild();
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_balance_currencies_rebuild_on_transaction_items ON "transaction_items";
             CREATE TRIGGER transaction_balance_currencies_rebuild_on_transaction_items
             AFTER INSERT OR UPDATE OR DELETE ON "transaction_items"
             FOR EACH ROW
             EXECUTE FUNCTION public.enqueue_transaction_balance_currencies_rebuild();
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_balance_currencies_rebuild_on_transaction_items ON "transaction_items";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_balance_currencies_rebuild_on_transactions_delete ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP TRIGGER IF EXISTS transaction_balance_currencies_rebuild_on_transactions ON "transactions";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
             DROP FUNCTION IF EXISTS public.enqueue_transaction_balance_currencies_rebuild();
         `);
-    }
-
+  }
 }

@@ -1,7 +1,10 @@
-import { CurrencyRateMarginType, CurrencyRateProvider } from './currency-rates.enums';
+import {
+  CurrencyRateMarginType,
+  CurrencyRateProvider,
+} from "./currency-rates.enums";
 
 export interface CurrencyRateMarginConfig {
-  marginType: CurrencyRateMarginType | '';
+  marginType: CurrencyRateMarginType | "";
   marginValue: string | null;
   minRate: string | null;
   maxRate: string | null;
@@ -19,7 +22,11 @@ export interface ProductCurrencyPricingRule extends CurrencyRateRuleConfig {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  product?: { id: string; productCode: string; productDescription: string } | null;
+  product?: {
+    id: string;
+    productCode: string;
+    productDescription: string;
+  } | null;
   currency?: { id: string; currencyCode: string; currencyName: string } | null;
 }
 
@@ -43,6 +50,6 @@ export interface CurrencyRateQuote {
   baseSaleRate: string;
   buy: CurrencyRateQuoteSide;
   sale: CurrencyRateQuoteSide;
-  effectiveSource: 'product-override' | 'group-default';
+  effectiveSource: "product-override" | "group-default";
   effectiveGroupCode: string | null;
 }

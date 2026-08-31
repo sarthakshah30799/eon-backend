@@ -1,6 +1,16 @@
-import { IsDateString, IsEnum, IsNotEmpty, IsNumberString, IsUUID, Matches, ValidateNested, IsArray, ArrayMinSize } from 'class-validator';
-import { Type } from 'class-transformer';
-import { StockRevaluationFrequency } from '../stock-revaluation.enums';
+import {
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsNumberString,
+  IsUUID,
+  Matches,
+  ValidateNested,
+  IsArray,
+  ArrayMinSize,
+} from "class-validator";
+import { Type } from "class-transformer";
+import { StockRevaluationFrequency } from "../stock-revaluation.enums";
 
 export class StockRevaluationRateDto {
   @IsDateString()
@@ -17,7 +27,7 @@ export class StockRevaluationRateDto {
 export class ProcessStockRevaluationDto {
   @IsArray()
   @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
+  @IsUUID("4", { each: true })
   branchIds: string[];
 
   @IsEnum(StockRevaluationFrequency)
@@ -31,7 +41,7 @@ export class ProcessStockRevaluationDto {
 export class UploadStockRevaluationDto {
   @IsArray()
   @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
+  @IsUUID("4", { each: true })
   branchIds: string[];
 
   @IsEnum(StockRevaluationFrequency)

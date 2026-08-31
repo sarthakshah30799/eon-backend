@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class MergePurchaseNumberingSeries1784811588284 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DO $$
           DECLARE
             v_category_id uuid;
@@ -100,10 +99,10 @@ export class MergePurchaseNumberingSeries1784811588284 implements MigrationInter
           END
           $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DO $$
           DECLARE
             v_category_id uuid;
@@ -192,6 +191,5 @@ export class MergePurchaseNumberingSeries1784811588284 implements MigrationInter
           END
           $$;
         `);
-    }
-
+  }
 }

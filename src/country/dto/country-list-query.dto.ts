@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Type, Transform } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { Transform } from "class-transformer";
+import { IsBoolean, IsEnum, IsOptional, IsString } from "class-validator";
+import { PaginationQueryDto } from "../../common/pagination";
 import { CountryRiskCategory } from "../country.entity";
 
 const parseBoolean = ({ value }: { value: unknown }) => {
@@ -9,23 +10,10 @@ const parseBoolean = ({ value }: { value: unknown }) => {
   return value;
 };
 
-export class CountryListQueryDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  page?: number = 1;
-
-  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  @IsOptional()
-  limit?: number = 10;
-
-  @ApiPropertyOptional({ description: "Global search across code, name, and regulatory codes" })
+export class CountryListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    description: "Global search across code, name, and regulatory codes",
+  })
   @IsString()
   @IsOptional()
   search?: string;
@@ -40,7 +28,10 @@ export class CountryListQueryDto {
   @IsOptional()
   name?: string;
 
-  @ApiPropertyOptional({ description: "Filter by risk category", enum: CountryRiskCategory })
+  @ApiPropertyOptional({
+    description: "Filter by risk category",
+    enum: CountryRiskCategory,
+  })
   @IsEnum(CountryRiskCategory)
   @IsOptional()
   riskCategory?: CountryRiskCategory;
@@ -63,7 +54,9 @@ export class CountryListQueryDto {
   @IsOptional()
   baseCountry?: boolean;
 
-  @ApiPropertyOptional({ description: "Hide blocked countries unless an override exists" })
+  @ApiPropertyOptional({
+    description: "Hide blocked countries unless an override exists",
+  })
   @Transform(parseBoolean)
   @IsBoolean()
   @IsOptional()

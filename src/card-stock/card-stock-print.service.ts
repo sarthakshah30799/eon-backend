@@ -1,17 +1,17 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { TransactionLog } from '../transactions/entities/transaction-log.entity';
-import { TransactionLogAction } from '../transactions/transactions.enums';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { TransactionLog } from "../transactions/entities/transaction-log.entity";
+import { TransactionLogAction } from "../transactions/transactions.enums";
 import {
   CardStockPrintCopyType,
   CardStockPrintKind,
-} from './dto/card-stock-print.dto';
+} from "./dto/card-stock-print.dto";
 
 @Injectable()
 export class CardStockPrintService {
   constructor(
-    @InjectRepository(TransactionLog, 'database2')
+    @InjectRepository(TransactionLog, "database2")
     private readonly transactionLogRepository: Repository<TransactionLog>,
   ) {}
 
@@ -37,8 +37,8 @@ export class CardStockPrintService {
         : CardStockPrintCopyType.DUPLICATE_COPY;
     const message =
       copyType === CardStockPrintCopyType.DUPLICATE_COPY
-        ? 'Duplicate copy printed'
-        : 'Original copy printed';
+        ? "Duplicate copy printed"
+        : "Original copy printed";
 
     await this.transactionLogRepository.save(
       this.transactionLogRepository.create({

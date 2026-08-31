@@ -35,7 +35,10 @@ export class FinancialCodeResponseDto {
   @ApiProperty()
   priority: number;
 
-  @ApiProperty({ type: [FinancialSubProfileNestedResponseDto], required: false })
+  @ApiProperty({
+    type: [FinancialSubProfileNestedResponseDto],
+    required: false,
+  })
   subProfiles?: FinancialSubProfileNestedResponseDto[];
 
   @ApiProperty()
@@ -47,16 +50,20 @@ export class FinancialCodeResponseDto {
   static fromEntity(entity: FinancialCode): FinancialCodeResponseDto {
     const dto = new FinancialCodeResponseDto();
     dto.id = entity.id;
-    dto.financialType = entity.financialType ? SelectOptionResponseDto.fromEntity(entity.financialType) : null;
+    dto.financialType = entity.financialType
+      ? SelectOptionResponseDto.fromEntity(entity.financialType)
+      : null;
     dto.financialCode = entity.financialCode;
     dto.financialName = entity.financialName;
-    dto.defaultSign = entity.defaultSign ? SelectOptionResponseDto.fromEntity(entity.defaultSign) : null;
+    dto.defaultSign = entity.defaultSign
+      ? SelectOptionResponseDto.fromEntity(entity.defaultSign)
+      : null;
     dto.priority = entity.priority;
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
 
     if (entity.subProfiles) {
-      dto.subProfiles = entity.subProfiles.map(sp => {
+      dto.subProfiles = entity.subProfiles.map((sp) => {
         const subDto = new FinancialSubProfileNestedResponseDto();
         subDto.id = sp.id;
         subDto.financialSubCode = sp.financialSubCode;

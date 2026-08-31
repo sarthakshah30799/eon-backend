@@ -1,7 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PurposeGroup } from '../purpose-group.entity';
-import { PurposeGroupProfileType } from '../purpose.enums';
-import { PurposeResponseDto } from './purpose-response.dto';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { PurposeGroup } from "../purpose-group.entity";
+import { PurposeGroupProfileType } from "../purpose.enums";
+import { PurposeResponseDto } from "./purpose-response.dto";
 
 export class PurposeGroupResponseDto {
   @ApiProperty()
@@ -42,9 +42,11 @@ export class PurposeGroupResponseDto {
     dto.profileType = entity.profileType;
     dto.sortOrder = entity.sortOrder;
     dto.purposes = (entity.purposes ?? [])
-      .map(link => link.purpose)
-      .filter((purpose): purpose is NonNullable<typeof purpose> => Boolean(purpose))
-      .map(purpose => PurposeResponseDto.fromEntity(purpose));
+      .map((link) => link.purpose)
+      .filter((purpose): purpose is NonNullable<typeof purpose> =>
+        Boolean(purpose),
+      )
+      .map((purpose) => PurposeResponseDto.fromEntity(purpose));
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     dto.createdBy = entity.createdBy;

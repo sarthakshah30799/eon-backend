@@ -1,4 +1,4 @@
-import { CurrencyTransferType } from '../transfers.enums';
+import { CurrencyTransferType } from "../transfers.enums";
 
 export type TransferRequestItemPayload = {
   currencyId: string;

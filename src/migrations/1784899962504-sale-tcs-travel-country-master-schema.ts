@@ -1,9 +1,8 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationInterface {
-
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF NOT EXISTS (
@@ -17,17 +16,17 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "purposes"
             ADD COLUMN IF NOT EXISTS "party_profile_type" "public"."purpose_party_profile_type_enum";
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE INDEX IF NOT EXISTS "IDX_purposes_transaction_type_party_profile_type"
           ON "purposes" ("transaction_type", "party_profile_type");
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "country_groups"
             ADD COLUMN IF NOT EXISTS "sell_limit_amount" numeric(18,2),
             ADD COLUMN IF NOT EXISTS "sell_limit_currency_id" uuid,
@@ -35,7 +34,7 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
             ADD COLUMN IF NOT EXISTS "max_travel_days" integer;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF NOT EXISTS (
@@ -51,12 +50,12 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "countries"
             ADD COLUMN IF NOT EXISTS "is_cis_country" boolean NOT NULL DEFAULT false;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE TABLE IF NOT EXISTS "passenger_travels" (
             "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
             "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -80,24 +79,24 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           )
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE INDEX IF NOT EXISTS "IDX_passenger_travels_passenger_id"
           ON "passenger_travels" ("passenger_id")
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE INDEX IF NOT EXISTS "IDX_passenger_travels_country_id"
           ON "passenger_travels" ("travelling_country_id")
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE INDEX IF NOT EXISTS "IDX_passenger_travels_ticket_no"
           ON "passenger_travels" ("ticket_no")
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           CREATE INDEX IF NOT EXISTS "IDX_passenger_travels_travel_pnr"
           ON "passenger_travels" ("travel_pnr")
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF NOT EXISTS (
@@ -113,7 +112,7 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF NOT EXISTS (
@@ -129,7 +128,7 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           $$;
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF NOT EXISTS (
@@ -144,31 +143,39 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           END
           $$;
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
           ALTER TABLE "passenger_travels" DROP CONSTRAINT IF EXISTS "FK_passenger_travels_travelling_country_id";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "passenger_travels" DROP CONSTRAINT IF EXISTS "FK_passenger_travels_airline_tt_id";
         `);
-        await queryRunner.query(`
+    await queryRunner.query(`
           ALTER TABLE "passenger_travels" DROP CONSTRAINT IF EXISTS "FK_passenger_travels_passenger_id";
         `);
-        await queryRunner.query(`DROP TABLE IF EXISTS "passenger_travels";`);
-        await queryRunner.query(`ALTER TABLE "countries" DROP COLUMN IF EXISTS "is_cis_country";`);
-        await queryRunner.query(`ALTER TABLE "country_groups" DROP CONSTRAINT IF EXISTS "FK_country_groups_sell_limit_currency_id";`);
-        await queryRunner.query(`
+    await queryRunner.query(`DROP TABLE IF EXISTS "passenger_travels";`);
+    await queryRunner.query(
+      `ALTER TABLE "countries" DROP COLUMN IF EXISTS "is_cis_country";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "country_groups" DROP CONSTRAINT IF EXISTS "FK_country_groups_sell_limit_currency_id";`,
+    );
+    await queryRunner.query(`
           ALTER TABLE "country_groups"
             DROP COLUMN IF EXISTS "max_travel_days",
             DROP COLUMN IF EXISTS "min_travel_days",
             DROP COLUMN IF EXISTS "sell_limit_currency_id",
             DROP COLUMN IF EXISTS "sell_limit_amount";
         `);
-        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_purposes_transaction_type_party_profile_type";`);
-        await queryRunner.query(`ALTER TABLE "purposes" DROP COLUMN IF EXISTS "party_profile_type";`);
-        await queryRunner.query(`
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "public"."IDX_purposes_transaction_type_party_profile_type";`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "purposes" DROP COLUMN IF EXISTS "party_profile_type";`,
+    );
+    await queryRunner.query(`
           DO $$
           BEGIN
             IF EXISTS (
@@ -181,6 +188,5 @@ export class SaleTcsTravelCountryMasterSchema1784899962504 implements MigrationI
           END
           $$;
         `);
-    }
-
+  }
 }

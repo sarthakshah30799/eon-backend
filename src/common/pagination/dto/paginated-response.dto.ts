@@ -8,7 +8,10 @@ export class PaginatedResponseDto<T> {
   @ApiProperty({ isArray: true })
   data: T[];
 
-  @ApiProperty({ description: "Total number of items matching the filters (before pagination)" })
+  @ApiProperty({
+    description:
+      "Total number of items matching the filters (before pagination)",
+  })
   total: number;
 
   @ApiProperty({ description: "Limit used for this request" })
@@ -16,6 +19,9 @@ export class PaginatedResponseDto<T> {
 
   @ApiProperty({ description: "Offset used for this request" })
   offset: number;
+
+  @ApiProperty({ description: "Total pages for this limit" })
+  totalPages: number;
 
   @ApiProperty({ description: "Whether more items exist beyond this page" })
   hasMore: boolean;
@@ -37,6 +43,7 @@ export function buildPaginatedResponse<T>(
     total,
     limit,
     offset,
+    totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
     hasMore: offset + data.length < total,
   };
 }

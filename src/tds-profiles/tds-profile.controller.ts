@@ -9,45 +9,48 @@ import {
   Query,
   Session,
   UseGuards,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
-} from '@nestjs/swagger';
-import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { CreateTdsProfileDto } from './dto/create-tds-profile.dto';
-import { UpdateTdsProfileDto } from './dto/update-tds-profile.dto';
-import { TdsProfileResponseDto } from './dto/tds-profile-response.dto';
-import { TdsProfileListQueryDto } from './dto/tds-profile-list-query.dto';
-import { TdsProfileService } from './tds-profile.service';
+} from "@nestjs/swagger";
+import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { CreateTdsProfileDto } from "./dto/create-tds-profile.dto";
+import { UpdateTdsProfileDto } from "./dto/update-tds-profile.dto";
+import { TdsProfileResponseDto } from "./dto/tds-profile-response.dto";
+import { TdsProfileListQueryDto } from "./dto/tds-profile-list-query.dto";
+import { TdsProfileService } from "./tds-profile.service";
+import { PaginatedResponseDto } from "../common/pagination";
 
-@ApiTags('tds-profiles')
-@ApiCookieAuth('sessionId')
+@ApiTags("tds-profiles")
+@ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller('tds-profiles')
+@Controller("tds-profiles")
 export class TdsProfileController {
   constructor(private readonly tdsProfileService: TdsProfileService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all TDS profiles' })
-  @ApiResponse({ status: 200, type: [TdsProfileResponseDto] })
-  async findAll(@Query() query: TdsProfileListQueryDto): Promise<TdsProfileResponseDto[]> {
+  @ApiOperation({ summary: "Get all TDS profiles" })
+  @ApiResponse({ status: 200, description: "Paginated list of TDS profiles" })
+  async findAll(
+    @Query() query: TdsProfileListQueryDto,
+  ): Promise<PaginatedResponseDto<TdsProfileResponseDto>> {
     return this.tdsProfileService.findAll(query);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get TDS profile by ID' })
-  @ApiParam({ name: 'id', description: 'TDS profile UUID' })
-  async findById(@Param('id') id: string): Promise<TdsProfileResponseDto> {
+  @Get(":id")
+  @ApiOperation({ summary: "Get TDS profile by ID" })
+  @ApiParam({ name: "id", description: "TDS profile UUID" })
+  async findById(@Param("id") id: string): Promise<TdsProfileResponseDto> {
     return this.tdsProfileService.findById(id);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a TDS profile' })
+  @ApiOperation({ summary: "Create a TDS profile" })
   async create(
     @Body() dto: CreateTdsProfileDto,
     @Session() session: any,
@@ -55,21 +58,21 @@ export class TdsProfileController {
     return this.tdsProfileService.create(dto, session.userId);
   }
 
-  @Put(':id')
-  @ApiOperation({ summary: 'Update a TDS profile' })
-  @ApiParam({ name: 'id', description: 'TDS profile UUID' })
+  @Put(":id")
+  @ApiOperation({ summary: "Update a TDS profile" })
+  @ApiParam({ name: "id", description: "TDS profile UUID" })
   async update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() dto: UpdateTdsProfileDto,
     @Session() session: any,
   ): Promise<TdsProfileResponseDto> {
     return this.tdsProfileService.update(id, dto, session.userId);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a TDS profile' })
-  @ApiParam({ name: 'id', description: 'TDS profile UUID' })
-  async delete(@Param('id') id: string): Promise<{ message: string }> {
+  @Delete(":id")
+  @ApiOperation({ summary: "Delete a TDS profile" })
+  @ApiParam({ name: "id", description: "TDS profile UUID" })
+  async delete(@Param("id") id: string): Promise<{ message: string }> {
     return this.tdsProfileService.delete(id);
   }
 }
