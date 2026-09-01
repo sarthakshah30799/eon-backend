@@ -44,6 +44,16 @@ export class CurrencyListQueryDto extends PaginationQueryDto {
 
   @ApiPropertyOptional({
     description:
+      "When true, return both tradable and only-stocking currencies (no onlyStocking filter).",
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  @Transform(parseBooleanQuery)
+  includeAllStockingTypes?: boolean;
+
+  @ApiPropertyOptional({
+    description:
       "When true, include only-stocking currencies. Default false excludes them from sale/purchase lists.",
     default: false,
   })
