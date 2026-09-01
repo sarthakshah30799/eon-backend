@@ -16,6 +16,8 @@ import {
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
+  TransactionTypeProfileEnum,
+  TransactionPartyProfileTypeEnum,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
@@ -435,14 +437,41 @@ export class TransactionsService {
     return Number.isFinite(parsedValue) ? parsedValue : 0;
   }
 
+  private normalizeTransactionSlug(slug?: string | null): string {
+    return String(slug ?? "")
+      .trim()
+      .toUpperCase()
+      .replace(/-/g, "_");
+  }
+
+  private isCorporateIndividualTransactionSlug(slug?: string | null): boolean {
+    const normalizedSlug = this.normalizeTransactionSlug(slug);
+    if (!normalizedSlug) {
+      return false;
+    }
+
+    return (
+      normalizedSlug ===
+        TransactionTypeProfileEnum.PURCHASE_CORPORATE_INDIVIDUAL ||
+      normalizedSlug === TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL ||
+      normalizedSlug.includes("CORPORATE_INDIVIDUAL") ||
+      normalizedSlug === "CORPORATE" ||
+      normalizedSlug === "INDIVIDUAL"
+    );
+  }
+
   private resolveTransactionPartyProfileType(
     slug?: string | null,
   ): PurposePartyProfileType | null {
     const normalizedSlug = String(slug ?? "")
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .replace(/-/g, "_");
 
-    if (normalizedSlug === "corporate") {
+    if (
+      normalizedSlug === "corporate" ||
+      this.isCorporateIndividualTransactionSlug(slug)
+    ) {
       return PurposePartyProfileType.CORPORATE;
     }
 
@@ -451,6 +480,36 @@ export class TransactionsService {
     }
 
     return null;
+  }
+
+  private requiresPaymentRows(
+    slug?: string | null,
+    transactionPartyProfileType?: string | null,
+    passengerEntityType?: string | null,
+  ): boolean {
+    if (this.isCorporateIndividualTransactionSlug(slug)) {
+      return true;
+    }
+
+    const normalizedPartyType = String(transactionPartyProfileType ?? "")
+      .trim()
+      .toUpperCase();
+    if (
+      normalizedPartyType === PurposePartyProfileType.CORPORATE ||
+      normalizedPartyType === PurposePartyProfileType.INDIVIDUAL ||
+      normalizedPartyType === TransactionPartyProfileTypeEnum.CORPORATE ||
+      normalizedPartyType === TransactionPartyProfileTypeEnum.INDIVIDUAL
+    ) {
+      return true;
+    }
+
+    const normalizedPassengerType = String(passengerEntityType ?? "")
+      .trim()
+      .toUpperCase();
+    return (
+      normalizedPassengerType === PassengerEntityType.CORPORATE ||
+      normalizedPassengerType === PassengerEntityType.INDIVIDUAL
+    );
   }
 
   private purposeAppliesToContext(
@@ -2329,7 +2388,18 @@ export class TransactionsService {
         : [];
     const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
     const payableTotalAmount = Number(payableTotal || 0);
-    if (!isFakeCurrency && payableTotalAmount > 0 && paymentRows.length === 0) {
+    const requiresPaymentRows = this.requiresPaymentRows(
+      transactionPayload.slug,
+      transactionPayload.transactionPartyProfileType ??
+        transactionPartyProfileType,
+      passengerPayload?.entityType,
+    );
+    if (
+      !isFakeCurrency &&
+      requiresPaymentRows &&
+      payableTotalAmount > 0 &&
+      paymentRows.length === 0
+    ) {
       throw new BadRequestException("At least one payment row is required");
     }
 
@@ -2518,7 +2588,13 @@ export class TransactionsService {
     }
 
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
-    if (!isFakeCurrency && Number(payableTotal.toString()) !== totalPaid) {
+    const shouldMatchPaymentTotal =
+      !isFakeCurrency &&
+      (requiresPaymentRows || paymentRows.length > 0);
+    if (
+      shouldMatchPaymentTotal &&
+      Number(payableTotal.toString()) !== totalPaid
+    ) {
       throw new BadRequestException(
         `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
       );
