@@ -51,7 +51,7 @@ import {
 } from "../common/pagination";
 import { CardStockTransactionService } from "./card-stock-transaction.service";
 import { TransactionReferenceSnapshot } from "../transactions/types/transaction-snapshot.types";
-import { isCardProductCode } from "./card-product.util";
+import { isCardProductCode, isMultiCurrencyCardProduct, MULTI_CURRENCY_CARD_PRODUCT_CODE } from "./card-product.util";
 
 @Injectable()
 export class CardTransferService {
@@ -155,6 +155,21 @@ export class CardTransferService {
       throw new BadRequestException(
         `Item ${item.lineNo}: issuer profile is invalid, inactive, or not approved`,
       );
+    const multiCurrency = isMultiCurrencyCardProduct(product.productCode);
+    if (multiCurrency) {
+      if (
+        !currency.onlyStocking ||
+        currency.productAllowed !== MULTI_CURRENCY_CARD_PRODUCT_CODE
+      ) {
+        throw new BadRequestException(
+          `Item ${item.lineNo}: CM transfers must use an only-stocking currency with product allowed CM`,
+        );
+      }
+    } else if (currency.onlyStocking) {
+      throw new BadRequestException(
+        `Item ${item.lineNo}: CC transfers must use a tradable (non-stocking) currency`,
+      );
+    }
     const link = await this.productIssuerRepository.findOne({
       where: { productId: product.id, partyProfileId: issuer.id },
     });
@@ -398,8 +413,11 @@ export class CardTransferService {
       series: card.series,
       kitNumber: card.kitNumber,
       maskedCardNumber: numberById.get(card.id) ?? null,
+      currencyId: card.receiptItem?.currencyId ?? "",
       currencyCode: card.receiptItem?.currencySnapshot?.currencyCode ?? "",
+      productId: card.receiptItem?.productId ?? "",
       productCode: card.receiptItem?.productSnapshot?.productCode ?? "",
+      issuerPartyProfileId: card.receiptItem?.issuerPartyProfileId ?? "",
       issuerName: card.receiptItem?.issuerPartyProfileSnapshot?.name ?? "",
       denomination: card.denomination,
       amount: card.amount,
@@ -968,8 +986,11 @@ export class CardTransferService {
           series: selection.card?.series ?? "",
           kitNumber: selection.card?.kitNumber ?? "",
           maskedCardNumber: numberById.get(selection.cardId) ?? null,
+          currencyId: item.currencyId,
           currencyCode: item.currencySnapshot?.currencyCode ?? "",
+          productId: item.productId,
           productCode: item.productSnapshot?.productCode ?? "",
+          issuerPartyProfileId: item.issuerPartyProfileId,
           issuerName: item.issuerPartyProfileSnapshot?.name ?? "",
           denomination: selection.card?.denomination ?? "0.00",
           amount: selection.card?.amount ?? "0.00",

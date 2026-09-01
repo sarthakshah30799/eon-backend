@@ -72,15 +72,19 @@ export class CurrencyService {
       qb.andWhere("currency.active = :active", { active: true });
     }
 
-    if (query?.includeOnlyStocking) {
-      if (query.productAllowed) {
-        qb.andWhere(
-          "currency.onlyStocking = true AND currency.productAllowed = :productAllowed",
-          { productAllowed: query.productAllowed },
-        );
+    if (!query?.includeAllStockingTypes) {
+      if (query?.includeOnlyStocking) {
+        qb.andWhere("currency.onlyStocking = :onlyStocking", {
+          onlyStocking: true,
+        });
+        if (query.productAllowed) {
+          qb.andWhere("currency.productAllowed = :productAllowed", {
+            productAllowed: query.productAllowed,
+          });
+        }
+      } else {
+        qb.andWhere("currency.onlyStocking = false");
       }
-    } else {
-      qb.andWhere("currency.onlyStocking = false");
     }
 
     applyPagination(qb, pagination);
