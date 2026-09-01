@@ -57,7 +57,10 @@ export class UserController {
         activeCounterId: session?.activeCounterId ?? null,
       },
     );
-    const effectiveBranchId = session.activeBranchId;
+    const effectiveBranchId =
+      user.isAdmin || user.isHoStaff
+        ? query.branchId?.trim() || session.activeBranchId
+        : session.activeBranchId;
     if (user.isAdmin || user.isHoStaff) {
       return this.userService.findAll(session.userId, query, effectiveBranchId);
     }
