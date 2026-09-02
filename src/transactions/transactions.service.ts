@@ -74,6 +74,11 @@ import {
   resolveProductTransactionAccount,
   roundMoney,
 } from "./transaction-accounting.util";
+import {
+  isCorporateIndividualTransactionContext,
+  isCorporateIndividualTransactionSlug,
+  normalizeTransactionSlug,
+} from "./transaction-slug.util";
 import { TransactionEvent } from "./entities/transaction-event.entity";
 import {
   TransactionEventStatus,
@@ -438,11 +443,12 @@ export class TransactionsService {
   private resolveTransactionPartyProfileType(
     slug?: string | null,
   ): PurposePartyProfileType | null {
-    const normalizedSlug = String(slug ?? "")
-      .trim()
-      .toLowerCase();
+    const normalizedSlug = normalizeTransactionSlug(slug).toLowerCase();
 
-    if (normalizedSlug === "corporate") {
+    if (
+      normalizedSlug === "corporate" ||
+      isCorporateIndividualTransactionSlug(slug)
+    ) {
       return PurposePartyProfileType.CORPORATE;
     }
 
@@ -2329,7 +2335,18 @@ export class TransactionsService {
         : [];
     const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
     const payableTotalAmount = Number(payableTotal || 0);
-    if (!isFakeCurrency && payableTotalAmount > 0 && paymentRows.length === 0) {
+    const requiresPaymentRows = isCorporateIndividualTransactionContext(
+      transactionPayload.slug,
+      transactionPayload.transactionPartyProfileType ??
+        transactionPartyProfileType,
+      passengerPayload?.entityType,
+    );
+    if (
+      !isFakeCurrency &&
+      requiresPaymentRows &&
+      payableTotalAmount > 0 &&
+      paymentRows.length === 0
+    ) {
       throw new BadRequestException("At least one payment row is required");
     }
 
@@ -2518,7 +2535,13 @@ export class TransactionsService {
     }
 
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
-    if (!isFakeCurrency && Number(payableTotal.toString()) !== totalPaid) {
+    const shouldMatchPaymentTotal =
+      !isFakeCurrency &&
+      (requiresPaymentRows || paymentRows.length > 0);
+    if (
+      shouldMatchPaymentTotal &&
+      Number(payableTotal.toString()) !== totalPaid
+    ) {
       throw new BadRequestException(
         `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
       );

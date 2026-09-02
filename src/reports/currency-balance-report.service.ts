@@ -179,7 +179,9 @@ export class CurrencyBalanceReportService {
     }
 
     if (filters.endDate) {
-      qb.andWhere("balance.date <= :endDate", { endDate: filters.endDate });
+      qb.andWhere("balance.date <= :endDate", {
+        endDate: new Date(filters.endDate.getTime() + 24 * 60 * 60 * 1000 - 1),
+      });
     }
 
     if (filters.branchIds.length > 0) {
