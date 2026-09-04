@@ -206,6 +206,54 @@ export class ManualBillBookController {
     return this.service.getAssignmentsByBookIds(ids);
   }
 
+  @Get("books/selectable")
+  @ApiOperation({
+    summary:
+      "Get selectable manual bill books (one row per dispatch/manual book id) for the current branch and assignee",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Selectable books",
+    type: PaginatedResponseDto,
+  })
+  async getSelectableBooks(
+    @Session() session: any,
+    @Query() query: ManualBillBookSelectablePagesQueryDto,
+  ) {
+    const effectiveBranchId = session.activeBranchId;
+    const effectiveUserId = query.userId?.trim() || session.userId;
+    return this.service.getSelectableBooks(
+      effectiveBranchId,
+      effectiveUserId,
+      query.transactionType?.trim() || undefined,
+      query,
+    );
+  }
+
+  @Get("pages/selectable")
+  @ApiOperation({
+    summary:
+      "Get selectable manual bill book pages for the current branch and assignee",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Selectable pages",
+    type: PaginatedResponseDto,
+  })
+  async getSelectablePages(
+    @Session() session: any,
+    @Query() query: ManualBillBookSelectablePagesQueryDto,
+  ) {
+    const effectiveBranchId = session.activeBranchId;
+    const effectiveUserId = query.userId?.trim() || session.userId;
+    return this.service.getSelectablePages(
+      effectiveBranchId,
+      effectiveUserId,
+      query.transactionType?.trim() || undefined,
+      query,
+    );
+  }
+
   @Get(":manualBookId/books/:bookNo/pages")
   @ApiOperation({ summary: "Get pages for a book number" })
   @ApiResponse({ status: 200, description: "List of pages" })
@@ -250,30 +298,6 @@ export class ManualBillBookController {
   ) {
     const pageNo = parseInt(pageNoStr, 10);
     return this.service.searchPage(pageNo, session.activeBranchId);
-  }
-
-  @Get("pages/selectable")
-  @ApiOperation({
-    summary:
-      "Get selectable manual bill book pages for the current branch and assignee",
-  })
-  @ApiResponse({
-    status: 200,
-    description: "Selectable pages",
-    type: PaginatedResponseDto,
-  })
-  async getSelectablePages(
-    @Session() session: any,
-    @Query() query: ManualBillBookSelectablePagesQueryDto,
-  ) {
-    const effectiveBranchId = session.activeBranchId;
-    const effectiveUserId = query.userId?.trim() || session.userId;
-    return this.service.getSelectablePages(
-      effectiveBranchId,
-      effectiveUserId,
-      query.transactionType?.trim() || undefined,
-      query,
-    );
   }
 
   @Get("dp-mapping/search")
