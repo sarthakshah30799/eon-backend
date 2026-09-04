@@ -89,10 +89,18 @@ export class CardTransferService {
     return Boolean(session.isAdmin || session.isHo || session.isHoStaff);
   }
 
-  private assertHoAccess(session: AuthenticatedSession) {
-    if (!this.isHoAccess(session))
+  private assertCanManageSource(
+    session: AuthenticatedSession,
+    sourceBranchId: string,
+  ) {
+    if (this.isHoAccess(session)) return;
+    if (!session.activeBranchId)
       throw new ForbiddenException(
-        "Only Admin/HO users can manage CARD transfer requests",
+        "Active branch is required to manage CARD transfer requests",
+      );
+    if (session.activeBranchId !== sourceBranchId)
+      throw new ForbiddenException(
+        "You can only manage CARD transfers from your active branch",
       );
   }
 
@@ -108,10 +116,8 @@ export class CardTransferService {
         where: { id: destinationBranchId, isActive: true },
       }),
     ]);
-    if (!source?.isHeadOffice)
-      throw new BadRequestException(
-        "Source branch must be an active HO branch",
-      );
+    if (!source)
+      throw new BadRequestException("Source branch must be active");
     if (!destination)
       throw new BadRequestException("Destination branch must be active");
     if (source.id === destination.id)
@@ -337,7 +343,7 @@ export class CardTransferService {
         session.activeBranchId !== request.sourceBranchId
       ) {
         throw new ForbiddenException(
-          "You can only print Stock Out from the source HO branch",
+          "You can only print Stock Out from the source branch",
         );
       }
       if (!request.sourceTransactionId) {
@@ -377,14 +383,12 @@ export class CardTransferService {
   }
 
   async availableCards(sourceBranchId: string, session: AuthenticatedSession) {
-    this.assertHoAccess(session);
+    this.assertCanManageSource(session, sourceBranchId);
     const branch = await this.branchRepository.findOne({
       where: { id: sourceBranchId, isActive: true },
     });
-    if (!branch?.isHeadOffice)
-      throw new BadRequestException(
-        "Source branch must be an active HO branch",
-      );
+    if (!branch)
+      throw new BadRequestException("Source branch must be active");
     const cards = await this.cardRepository.find({
       where: {
         currentBranchId: sourceBranchId,
@@ -426,11 +430,11 @@ export class CardTransferService {
   }
 
   async create(dto: CreateCardTransferDto, session: AuthenticatedSession) {
-    this.assertHoAccess(session);
     const { source, destination } = await this.resolveBranches(
       dto.sourceBranchId,
       dto.destinationBranchId,
     );
+    this.assertCanManageSource(session, source.id);
     const policy =
       await this.dayEndStartProcessService.assertTransactionDateAllowed(
         source.id,
@@ -555,11 +559,11 @@ export class CardTransferService {
     dto: CreateCardTransferDto,
     session: AuthenticatedSession,
   ) {
-    this.assertHoAccess(session);
     const { source, destination } = await this.resolveBranches(
       dto.sourceBranchId,
       dto.destinationBranchId,
     );
+    this.assertCanManageSource(session, source.id);
     const policy =
       await this.dayEndStartProcessService.assertTransactionDateAllowed(
         source.id,
@@ -582,6 +586,7 @@ export class CardTransferService {
         throw new NotFoundException("CARD transfer request not found");
       if (request.status !== CardTransferStatus.HELD)
         throw new BadRequestException("Only held CARD transfers can be edited");
+      this.assertCanManageSource(session, request.sourceBranchId);
       if (request.destinationBranchId !== destination.id)
         throw new BadRequestException(
           "Destination branch cannot be changed after the CARD transfer request is created",
@@ -717,7 +722,7 @@ export class CardTransferService {
         where: { id: request.destinationBranchId, isActive: true },
       }),
     ]);
-    if (!source?.isHeadOffice)
+    if (!source)
       throw new BadRequestException("Source branch is no longer active");
     if (!destination)
       throw new BadRequestException("Destination branch is no longer active");
@@ -820,7 +825,10 @@ export class CardTransferService {
     return this.finishHeld(id, CardTransferStatus.REJECTED, remarks, session);
   }
   async cancel(id: string, remarks: string, session: AuthenticatedSession) {
-    this.assertHoAccess(session);
+    const current = await this.requestRepository.findOne({ where: { id } });
+    if (!current)
+      throw new NotFoundException("CARD transfer request not found");
+    this.assertCanManageSource(session, current.sourceBranchId);
     return this.finishHeld(id, CardTransferStatus.CANCELLED, remarks, session);
   }
 
