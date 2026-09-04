@@ -885,6 +885,184 @@ export class ManualBillBookService {
     return buildPaginatedResponse(data, total, pagination);
   }
 
+  async getSelectableBooks(
+    branchId?: string,
+    userId?: string,
+    transactionType?: string,
+    paginationQuery?: ManualBillBookSelectablePagesQueryDto,
+  ): Promise<PaginatedResponseDto<any>> {
+    const pagination = normalizePagination(paginationQuery);
+    const transactionTypeGroup =
+      resolveTransactionTypeProfileGroup(transactionType);
+
+    const params: unknown[] = [];
+    let paramIndex = 1;
+    const whereClauses = ["pt.is_voided = false"];
+
+    if (branchId) {
+      whereClauses.push(`book.branch_id = $${paramIndex++}`);
+      params.push(branchId);
+    }
+
+    if (userId) {
+      whereClauses.push(`pt.user_id = $${paramIndex++}`);
+      params.push(userId);
+    }
+
+    if (
+      transactionType?.trim().toUpperCase() !== "ALL" &&
+      transactionTypeGroup
+    ) {
+      if (transactionTypeGroup.length === 1) {
+        whereClauses.push(`book.transaction_type = $${paramIndex++}`);
+        params.push(transactionTypeGroup[0]);
+      } else {
+        whereClauses.push(`book.transaction_type = ANY($${paramIndex++})`);
+        params.push(transactionTypeGroup);
+      }
+    }
+
+    whereClauses.push(`NOT EXISTS (
+      SELECT 1
+      FROM transactions t
+      WHERE t.manual_book_page_id = pt.id
+    )`);
+
+    const baseCte = `
+      WITH selectable_pages AS (
+        SELECT
+          pt.manual_book_id,
+          pt.user_id,
+          pt.page_no,
+          pt.assigned_by,
+          pt.remarks,
+          book.no AS dispatch_no,
+          book.book_no_from,
+          book.book_no_to,
+          book.vouchers_per_book,
+          book.mv_no_from,
+          book.mv_no_to,
+          book.branch_id,
+          book.transaction_type,
+          book.dispatch_date
+        FROM manual_book_page_tracking pt
+        INNER JOIN manual_books book ON book.id = pt.manual_book_id
+        WHERE ${whereClauses.join(" AND ")}
+      )
+    `;
+
+    const countSql = `
+      ${baseCte}
+      SELECT COUNT(*)::int AS total
+      FROM (
+        SELECT manual_book_id
+        FROM selectable_pages
+        GROUP BY manual_book_id
+      ) grouped
+    `;
+
+    const limitParam = paramIndex++;
+    const offsetParam = paramIndex++;
+    const dataSql = `
+      ${baseCte}
+      SELECT
+        manual_book_id AS "manualBookId",
+        MIN(page_no)::int AS "pageNoFrom",
+        MAX(page_no)::int AS "pageNoTo",
+        COUNT(*)::int AS "availablePageCount",
+        (MAX(user_id::text))::uuid AS "userId",
+        (MAX(assigned_by::text))::uuid AS "assignedBy",
+        MAX(remarks) AS "remarks",
+        MAX(dispatch_no) AS "dispatchNo",
+        MAX(book_no_from)::int AS "bookNoFrom",
+        MAX(book_no_to)::int AS "bookNoTo",
+        MAX(vouchers_per_book)::int AS "vouchersPerBook",
+        MAX(mv_no_from)::int AS "mvNoFrom",
+        MAX(mv_no_to)::int AS "mvNoTo",
+        (MAX(branch_id::text))::uuid AS "branchId",
+        MAX(transaction_type) AS "transactionType",
+        MAX(dispatch_date) AS "dispatchDate"
+      FROM selectable_pages
+      GROUP BY manual_book_id
+      ORDER BY MAX(dispatch_date) DESC, MAX(dispatch_no) DESC
+      LIMIT $${limitParam} OFFSET $${offsetParam}
+    `;
+
+    const [countRows, rows] = await Promise.all([
+      this.pageTrackingRepository.query(countSql, params),
+      this.pageTrackingRepository.query(dataSql, [
+        ...params,
+        pagination.limit,
+        pagination.offset,
+      ]),
+    ]);
+
+    const total = Number(countRows?.[0]?.total ?? 0);
+    const assignedByIds = Array.from(
+      new Set(
+        rows
+          .map((row: { assignedBy?: string | null }) => row.assignedBy)
+          .filter(Boolean) as string[],
+      ),
+    );
+    const userNameMap = new Map<string, string>();
+    if (assignedByIds.length > 0) {
+      const resolvedUsers = await this.branchRepository.manager.find(User, {
+        where: { id: In(assignedByIds) },
+      });
+      for (const user of resolvedUsers) {
+        userNameMap.set(user.id, user.name);
+      }
+    }
+
+    const data = rows.map(
+      (row: {
+        manualBookId: string;
+        pageNoFrom: number;
+        pageNoTo: number;
+        availablePageCount: number;
+        userId: string;
+        assignedBy?: string | null;
+        remarks?: string | null;
+        dispatchNo: string;
+        bookNoFrom: number;
+        bookNoTo: number;
+        vouchersPerBook: number;
+        mvNoFrom: number;
+        mvNoTo: number;
+        branchId: string;
+        transactionType: TransactionTypeProfile;
+        dispatchDate: string;
+      }) => ({
+        id: row.manualBookId,
+        manualBookId: row.manualBookId,
+        pageNoFrom: row.pageNoFrom,
+        pageNoTo: row.pageNoTo,
+        availablePageCount: row.availablePageCount,
+        userId: row.userId,
+        assignedBy: row.assignedBy ?? null,
+        assignedByName: row.assignedBy
+          ? (userNameMap.get(row.assignedBy) ?? null)
+          : null,
+        remarks: row.remarks ?? null,
+        no: row.dispatchNo,
+        bookNoFrom: row.bookNoFrom,
+        bookNoTo: row.bookNoTo,
+        vouchersPerBook: row.vouchersPerBook,
+        mvNoFrom: row.mvNoFrom,
+        mvNoTo: row.mvNoTo,
+        branchId: row.branchId,
+        transactionType: row.transactionType,
+        transactionTypeLabel: resolveTransactionTypeProfileLabel(
+          row.transactionType,
+        ),
+        dispatchDate: row.dispatchDate,
+      }),
+    );
+
+    return buildPaginatedResponse(data, total, pagination);
+  }
+
   async searchDPMapping(params: {
     branchId: string;
     currentUserId: string;
