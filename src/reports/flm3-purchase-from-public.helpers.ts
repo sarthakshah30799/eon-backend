@@ -107,6 +107,7 @@ const BASE_COLUMNS: Flm3ReportColumn[] = [
   { key: "date", label: "Date" },
   { key: "srNo", label: "Sr no" },
   { key: "customerName", label: "Name of customer" },
+  { key: "passportPassengerName", label: "Passport Passenger Name" },
   { key: "nationality", label: "Nationality" },
   { key: "fullAddress", label: "Full Address" },
   {
@@ -581,6 +582,9 @@ const buildFlm3RegisterSection = (
       date: displayDate,
       srNo: String(row.lineNo ?? ""),
       customerName: snapshotText(passengerSnapshot.panHolderName),
+      passportPassengerName: snapshotText(
+        passengerSnapshot.passportPassengerName,
+      ),
       nationality: snapshotText(passengerSnapshot.nationalityType),
       fullAddress: buildFullAddress(passengerSnapshot),
       identificationDocument: buildIdentificationDocument(
@@ -624,6 +628,7 @@ const buildFlm3RegisterSection = (
       date: "Total",
       srNo: "",
       customerName: "",
+      passportPassengerName: "",
       nationality: "",
       fullAddress: "",
       identificationDocument: "",

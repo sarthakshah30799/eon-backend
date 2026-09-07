@@ -138,6 +138,7 @@ type TransactionPassengerPayload = {
   gstNumber?: string | null;
   gstStateId?: string | null;
   passportNumber?: string | null;
+  passportPassengerName?: string | null;
   passportIssueAt?: string | null;
   passportIssueDate?: string | null;
   passportExpiryDate?: string | null;
@@ -196,6 +197,7 @@ const hasCompletePassengerPassport = (
   Boolean(
     passenger &&
     hasPassengerIdentityText(passenger.passportNumber) &&
+    hasPassengerIdentityText(passenger.passportPassengerName) &&
     hasPassengerIdentityText(passenger.passportIssueAt) &&
     hasPassengerIdentityText(passenger.passportIssueDate) &&
     hasPassengerIdentityText(passenger.passportExpiryDate),
@@ -1630,6 +1632,7 @@ export class TransactionsService {
         city: passengerPayload.city ?? null,
         stateId: passengerPayload.stateId ?? null,
         passportNumber: normalizedPassportNumber,
+        passportPassengerName: passengerPayload.passportPassengerName ?? null,
         passportIssueAt: passengerPayload.passportIssueAt ?? null,
         passportIssueDate: passengerPayload.passportIssueDate ?? null,
         passportExpiryDate: passengerPayload.passportExpiryDate ?? null,

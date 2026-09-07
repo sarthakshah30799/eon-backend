@@ -78,6 +78,7 @@ export class PassengerService {
       residentStatusId: passenger.residentStatusId,
       gstStateId: passenger.gstStateId,
       passportNumber: passenger.passportNumber,
+      passportPassengerName: passenger.passportPassengerName,
       passportIssueAt: passenger.passportIssueAt,
       passportIssueDate: passenger.passportIssueDate,
       passportExpiryDate: passenger.passportExpiryDate,
@@ -185,6 +186,9 @@ export class PassengerService {
     if (isBlank(dto.passportNumber)) {
       return this.buildFailure("Passport number is required");
     }
+    if (isBlank(dto.passportPassengerName)) {
+      return this.buildFailure("Passport passenger name is required");
+    }
     if (isBlank(dto.passportIssueAt)) {
       return this.buildFailure("Passport issue place is required");
     }
@@ -224,6 +228,7 @@ export class PassengerService {
     if (
       this.hasInvalidVerificationToken([
         dto.passportNumber,
+        dto.passportPassengerName,
         dto.passportIssueAt,
         dto.passportIssueDate,
         dto.passportExpiryDate,
