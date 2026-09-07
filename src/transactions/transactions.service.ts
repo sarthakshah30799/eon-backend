@@ -67,6 +67,7 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { freezeTransactionPassengerSnapshot } from "./utils/passenger-snapshot.util";
 import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
@@ -1648,10 +1649,13 @@ export class TransactionsService {
       );
 
       passengerId = savedPassenger.id;
-      passengerSnapshot = (await loadEntitySnapshot(
-        this.passengerRepository,
-        savedPassenger.id,
-      )) as TransactionPassengerSnapshotValue;
+      passengerSnapshot = freezeTransactionPassengerSnapshot(
+        (await loadEntitySnapshot(
+          this.passengerRepository,
+          savedPassenger.id,
+        )) as TransactionPassengerSnapshotValue,
+        passengerPayload,
+      );
     }
 
     if (passengerTravelPayload) {
