@@ -3,6 +3,7 @@ import { DataSource } from "typeorm";
 import * as XLSX from "xlsx";
 import { CardStockSettlementStatus } from "../card-stock/card-stock.enums";
 import { toUtcDateOnly, toUtcNextDate } from "../common/date/date.util";
+import { resolvePassengerDisplayNameFromSnapshot } from "../transactions/utils/passenger-display-name.util";
 import {
   CardSettlementReportFormat,
   CardSettlementReportQueryDto,
@@ -68,7 +69,7 @@ const UNSETTLED_COLUMNS: CardSettlementReportColumn[] = [
   { key: "sellingBranch", label: "Selling Branch" },
   { key: "issuer", label: "Issuer" },
   { key: "product", label: "Product" },
-  { key: "passengerName", label: "PAN Holder Name" },
+  { key: "passengerName", label: "Passenger Name" },
   { key: "passportPassengerName", label: "Passport Passenger Name" },
   { key: "maskedCardNumber", label: "Card Number" },
   { key: "currency", label: "Currency" },
@@ -395,8 +396,9 @@ const buildItemRow = (
     sellingBranch: branchLabel,
     issuer: getSnapshotLabel(row.issuerPartyProfileSnapshot),
     product: getSnapshotLabel(row.productSnapshot),
-    passengerName: toText(
-      parseSnapshot(row.passengerSnapshot)?.panHolderName,
+    passengerName: resolvePassengerDisplayNameFromSnapshot(
+      parseSnapshot(row.passengerSnapshot),
+      getSnapshotLabel(row.partyProfileSnapshot),
     ),
     passportPassengerName: toText(
       parseSnapshot(row.passengerSnapshot)?.passportPassengerName,
