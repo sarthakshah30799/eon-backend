@@ -71,6 +71,7 @@ import { freezeTransactionPassengerSnapshot } from "./utils/passenger-snapshot.u
 import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
+import { PartyCreditService } from "../party-profiles/party-credit.service";
 import {
   resolveProductTransactionAccount,
   roundMoney,
@@ -394,6 +395,7 @@ export class TransactionsService {
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
+    private readonly partyCreditService: PartyCreditService,
     private readonly voucherService: VoucherService,
   ) {}
 
@@ -2357,6 +2359,32 @@ export class TransactionsService {
       throw new BadRequestException("At least one payment row is required");
     }
 
+    const totalPaidPreview =
+      this.partyCreditService.sumPaymentAmounts(paymentRows);
+    const currentOutstandingPreview = Math.max(
+      0,
+      Number((payableTotalAmount - totalPaidPreview).toFixed(2)),
+    );
+    let allowPartialPayment = false;
+    if (!isFakeCurrency && currentOutstandingPreview > 0) {
+      const creditPreview = await this.partyCreditService.preview({
+        partyProfileId: String(transactionPayload.partyProfileId),
+        transactionType: transactionPayload.transactionType,
+        transactionDate: resolvedTransactionDate,
+        payableAmount: payableTotalAmount,
+        payments: paymentRows,
+        excludeTransactionId: refreshedTransaction.id,
+      });
+
+      if (!creditPreview.allowed) {
+        throw new BadRequestException(
+          creditPreview.blockingReason || "Credit validation failed",
+        );
+      }
+
+      allowPartialPayment = creditPreview.outstandingAllowed;
+    }
+
     const paymentMethods = isFakeCurrency
       ? []
       : paymentRows.map((row) => this.resolvePaymentMethod(row.paymentMethod));
@@ -2544,7 +2572,7 @@ export class TransactionsService {
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
     const shouldMatchPaymentTotal =
       !isFakeCurrency &&
-      (requiresPaymentRows || paymentRows.length > 0);
+      (requiresPaymentRows || (paymentRows.length > 0 && !allowPartialPayment));
     if (
       shouldMatchPaymentTotal &&
       Number(payableTotal.toString()) !== totalPaid

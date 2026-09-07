@@ -27,6 +27,8 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionsService } from "./transactions.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
+import { PartyCreditService } from "../party-profiles/party-credit.service";
+import { CreditPreviewDto } from "./dto/credit-preview.dto";
 import { Transaction } from "./entities/transaction.entity";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
 import { PaginatedResponseDto } from "../common/pagination";
@@ -48,6 +50,7 @@ export class TransactionsController {
   constructor(
     private readonly transactionsService: TransactionsService,
     private readonly purchaseRuleService: PurchaseRuleService,
+    private readonly partyCreditService: PartyCreditService,
   ) {}
 
   @Get("ad1/agents")
@@ -253,6 +256,14 @@ export class TransactionsController {
     @Body() body: Record<string, any>,
   ): Promise<Record<string, any>> {
     return this.purchaseRuleService.preview(body);
+  }
+
+  @Post("credit-preview")
+  @ApiOperation({
+    summary: "Preview party credit validation for a transaction payload",
+  })
+  async previewCredit(@Body() body: CreditPreviewDto) {
+    return this.partyCreditService.preview(body);
   }
 
   @Get("next-number")

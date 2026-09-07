@@ -17,6 +17,7 @@ import { MailService } from "../mail/mail.service";
 import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
+import { UpgradePartyProfileCreditPolicyDto } from "./dto/upgrade-party-profile-credit-policy.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
@@ -76,6 +77,22 @@ function pickDefinedFields<T extends Record<string, any>>(
     ([, fieldValue]) => fieldValue !== undefined,
   );
   return Object.fromEntries(entries) as Partial<T>;
+}
+
+const CREDIT_POLICY_UPDATE_FIELDS = [
+  "permanentCreditLimit",
+  "permanentCreditDays",
+  "temporaryCreditLimit",
+  "temporaryCreditDays",
+  "chqTrxnLimit",
+] as const;
+
+function stripCreditPolicyFields<T extends Record<string, any>>(value: T): T {
+  const next = { ...value };
+  for (const field of CREDIT_POLICY_UPDATE_FIELDS) {
+    delete next[field];
+  }
+  return next;
 }
 
 type PartyProfileCommissionRuleInput = {
@@ -693,7 +710,7 @@ export class PartyProfileService {
       commissionRules: _commissionRules,
       ...updatableFields
     } = normalized;
-    const updates = pickDefinedFields(updatableFields);
+    const updates = pickDefinedFields(stripCreditPolicyFields(updatableFields));
     const nextType = normalized.type ?? client.type;
     if (nextType !== ClientType.CARD_ISSUER_PROFILE) {
       delete updates.cardNumberLength;
@@ -778,6 +795,46 @@ export class PartyProfileService {
     if (!requesterIsAdmin) {
       await this.notifyPartyProfileReviewers(client, user);
     }
+    return this.findById(id);
+  }
+
+  async upgradeCreditPolicy(
+    id: string,
+    dto: UpgradePartyProfileCreditPolicyDto,
+    userId: string,
+  ): Promise<PartyProfileResponseDto> {
+    const user = await this.getCurrentUser(userId);
+    const client = await this.partyProfileRepository.findOne({ where: { id } });
+    if (!client) {
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
+    }
+
+    this.assertPartyProfileAccess(user, client.type, "modify");
+    this.assertPartyProfileEditableByUser(client, user);
+
+    const updates = pickDefinedFields(dto);
+    if (!Object.keys(updates).length) {
+      throw new BadRequestException(
+        "At least one credit policy field is required",
+      );
+    }
+
+    Object.assign(client, updates);
+    client.updatedBy = userId;
+
+    const requesterIsAdmin = user?.isAdmin === true;
+    if (!requesterIsAdmin) {
+      client.active = false;
+      client.status = WorkflowStatus.PENDING;
+      client.statusUpdatedById = null;
+      client.statusUpdatedAt = null;
+    }
+
+    await this.partyProfileRepository.save(client);
+    if (!requesterIsAdmin) {
+      await this.notifyPartyProfileReviewers(client, user);
+    }
+
     return this.findById(id);
   }
 
