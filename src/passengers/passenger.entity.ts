@@ -57,6 +57,10 @@ export enum PassengerOtherIdProofType {
   "CHK_passengers_pan_holder_present",
   `"pan_number" IS NULL OR "pan_holder_name" IS NOT NULL`,
 )
+@Check(
+  "CHK_passengers_passport_passenger_name_present",
+  `"passport_number" IS NULL OR "passport_passenger_name" IS NOT NULL`,
+)
 @Entity("passengers")
 export class Passenger extends BaseEntity {
   @Column({ type: "uuid", name: "party_profile_id" })
@@ -183,6 +187,13 @@ export class Passenger extends BaseEntity {
 
   @Column({ type: "citext", name: "passport_number", nullable: true })
   passportNumber: string | null;
+
+  @Column({
+    type: "citext",
+    name: "passport_passenger_name",
+    nullable: true,
+  })
+  passportPassengerName: string | null;
 
   @Column({ type: "citext", name: "passport_issue_at", nullable: true })
   passportIssueAt: string | null;

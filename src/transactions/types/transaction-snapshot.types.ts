@@ -44,6 +44,7 @@ export interface TransactionPassengerSnapshot extends TransactionReferenceSnapsh
   gstNumber?: string | null;
   gstState?: TransactionReferenceSnapshotValue;
   passportNumber?: string | null;
+  passportPassengerName?: string | null;
   passportIssueAt?: string | null;
   passportIssueDate?: string | null;
   passportExpiryDate?: string | null;
