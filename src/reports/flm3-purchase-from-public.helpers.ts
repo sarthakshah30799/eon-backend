@@ -1,4 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
+import { resolvePassengerDisplayNameFromSnapshot } from "../transactions/utils/passenger-display-name.util";
 import { DataSource } from "typeorm";
 import * as XLSX from "xlsx";
 import { toUtcDateOnly, toUtcNextDate } from "../common/date/date.util";
@@ -65,6 +66,7 @@ export type Flm3ItemRow = {
   branchSnapshot: Record<string, unknown> | string | null;
   transactionDate: string | Date;
   transactionNumber: string | null;
+  partyProfileSnapshot: Record<string, unknown> | string | null;
   passengerSnapshot: Record<string, unknown> | string | null;
   loanAmount: string | number | null;
   lineNo: number | string;
@@ -107,6 +109,7 @@ const BASE_COLUMNS: Flm3ReportColumn[] = [
   { key: "date", label: "Date" },
   { key: "srNo", label: "Sr no" },
   { key: "customerName", label: "Name of customer" },
+  { key: "passportPassengerName", label: "Passport Passenger Name" },
   { key: "nationality", label: "Nationality" },
   { key: "fullAddress", label: "Full Address" },
   {
@@ -428,6 +431,7 @@ export const loadFlmRegisterItemRows = async (
         tx.branch_snapshot AS "branchSnapshot",
         tx.transaction_date AS "transactionDate",
         tx.number AS "transactionNumber",
+        tx.party_profile_snapshot AS "partyProfileSnapshot",
         tx.passenger_snapshot AS "passengerSnapshot",
         tx.loan_amount AS "loanAmount",
         item.line_no AS "lineNo",
@@ -550,6 +554,7 @@ const buildFlm3RegisterSection = (
 
   const rows: Flm3ReportRow[] = itemRows.map((row) => {
     const passengerSnapshot = parseSnapshot(row.passengerSnapshot);
+    const partyProfileSnapshot = parseSnapshot(row.partyProfileSnapshot);
     const currencySnapshot = parseSnapshot(row.currencySnapshot);
     const productSnapshot = parseSnapshot(row.productSnapshot);
     const lineNo = toNumber(row.lineNo);
@@ -580,7 +585,13 @@ const buildFlm3RegisterSection = (
       transactionId: row.transactionId,
       date: displayDate,
       srNo: String(row.lineNo ?? ""),
-      customerName: snapshotText(passengerSnapshot.panHolderName),
+      customerName: resolvePassengerDisplayNameFromSnapshot(
+        passengerSnapshot,
+        snapshotText(partyProfileSnapshot.name),
+      ),
+      passportPassengerName: snapshotText(
+        passengerSnapshot.passportPassengerName,
+      ),
       nationality: snapshotText(passengerSnapshot.nationalityType),
       fullAddress: buildFullAddress(passengerSnapshot),
       identificationDocument: buildIdentificationDocument(
@@ -624,6 +635,7 @@ const buildFlm3RegisterSection = (
       date: "Total",
       srNo: "",
       customerName: "",
+      passportPassengerName: "",
       nationality: "",
       fullAddress: "",
       identificationDocument: "",

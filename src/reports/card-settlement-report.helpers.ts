@@ -3,6 +3,7 @@ import { DataSource } from "typeorm";
 import * as XLSX from "xlsx";
 import { CardStockSettlementStatus } from "../card-stock/card-stock.enums";
 import { toUtcDateOnly, toUtcNextDate } from "../common/date/date.util";
+import { resolvePassengerDisplayNameFromSnapshot } from "../transactions/utils/passenger-display-name.util";
 import {
   CardSettlementReportFormat,
   CardSettlementReportQueryDto,
@@ -68,7 +69,8 @@ const UNSETTLED_COLUMNS: CardSettlementReportColumn[] = [
   { key: "sellingBranch", label: "Selling Branch" },
   { key: "issuer", label: "Issuer" },
   { key: "product", label: "Product" },
-  { key: "passengerName", label: "Passenger" },
+  { key: "passengerName", label: "Passenger Name" },
+  { key: "passportPassengerName", label: "Passport Passenger Name" },
   { key: "maskedCardNumber", label: "Card Number" },
   { key: "currency", label: "Currency" },
   { key: "quantity", label: "Quantity" },
@@ -200,6 +202,7 @@ const emptyItemValues = (kind: CardSettlementReportKind) => {
     issuer: "",
     product: "",
     passengerName: "",
+    passportPassengerName: "",
     maskedCardNumber: "",
     currency: "",
     quantity: "",
@@ -393,7 +396,13 @@ const buildItemRow = (
     sellingBranch: branchLabel,
     issuer: getSnapshotLabel(row.issuerPartyProfileSnapshot),
     product: getSnapshotLabel(row.productSnapshot),
-    passengerName: getSnapshotLabel(row.passengerSnapshot),
+    passengerName: resolvePassengerDisplayNameFromSnapshot(
+      parseSnapshot(row.passengerSnapshot),
+      getSnapshotLabel(row.partyProfileSnapshot),
+    ),
+    passportPassengerName: toText(
+      parseSnapshot(row.passengerSnapshot)?.passportPassengerName,
+    ),
     maskedCardNumber: toText(row.maskedCardNumber),
     currency: getSnapshotCode(row.currencySnapshot),
     quantity: formatStoredNumber(row.denomination, 2),

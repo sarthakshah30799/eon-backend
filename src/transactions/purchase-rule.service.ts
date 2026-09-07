@@ -37,6 +37,7 @@ type PurchaseRulePassengerInput = {
   panHolderName?: string;
   panDob?: string;
   passportNumber?: string;
+  passportPassengerName?: string;
   arrivalDate?: string;
 };
 
@@ -480,6 +481,7 @@ export class PurchaseRuleService {
       }
     } else {
       const passportNumber = normalizeIdentity(passenger.passportNumber);
+      const passportPassengerName = normalize(passenger.passportPassengerName);
       if (passportNumber) {
         searchTiers.push({ tier: 1, where: { passportNumber } });
       }
@@ -489,6 +491,47 @@ export class PurchaseRuleService {
           where: {
             passportNumber,
             contactNo: normalize(passenger.contactNo),
+          },
+        });
+      }
+      if (passportNumber && isTruthy(passportPassengerName)) {
+        searchTiers.push({
+          tier: 3,
+          where: {
+            passportNumber,
+            passportPassengerName,
+          },
+        });
+      }
+      if (
+        passportNumber &&
+        isTruthy(passportPassengerName) &&
+        isTruthy(passenger.contactNo)
+      ) {
+        searchTiers.push({
+          tier: 4,
+          where: {
+            passportNumber,
+            passportPassengerName,
+            contactNo: normalize(passenger.contactNo),
+          },
+        });
+      }
+      if (isTruthy(passportPassengerName) && isTruthy(passenger.contactNo)) {
+        searchTiers.push({
+          tier: 5,
+          where: {
+            passportPassengerName,
+            contactNo: normalize(passenger.contactNo),
+          },
+        });
+      }
+      if (isTruthy(passportPassengerName) && isTruthy(passenger.address1)) {
+        searchTiers.push({
+          tier: 6,
+          where: {
+            passportPassengerName,
+            address1: normalize(String(passenger.address1)).slice(0, 15),
           },
         });
       }

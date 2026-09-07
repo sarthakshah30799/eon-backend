@@ -67,6 +67,7 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { freezeTransactionPassengerSnapshot } from "./utils/passenger-snapshot.util";
 import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
@@ -138,6 +139,7 @@ type TransactionPassengerPayload = {
   gstNumber?: string | null;
   gstStateId?: string | null;
   passportNumber?: string | null;
+  passportPassengerName?: string | null;
   passportIssueAt?: string | null;
   passportIssueDate?: string | null;
   passportExpiryDate?: string | null;
@@ -196,6 +198,7 @@ const hasCompletePassengerPassport = (
   Boolean(
     passenger &&
     hasPassengerIdentityText(passenger.passportNumber) &&
+    hasPassengerIdentityText(passenger.passportPassengerName) &&
     hasPassengerIdentityText(passenger.passportIssueAt) &&
     hasPassengerIdentityText(passenger.passportIssueDate) &&
     hasPassengerIdentityText(passenger.passportExpiryDate),
@@ -1630,6 +1633,7 @@ export class TransactionsService {
         city: passengerPayload.city ?? null,
         stateId: passengerPayload.stateId ?? null,
         passportNumber: normalizedPassportNumber,
+        passportPassengerName: passengerPayload.passportPassengerName ?? null,
         passportIssueAt: passengerPayload.passportIssueAt ?? null,
         passportIssueDate: passengerPayload.passportIssueDate ?? null,
         passportExpiryDate: passengerPayload.passportExpiryDate ?? null,
@@ -1645,10 +1649,13 @@ export class TransactionsService {
       );
 
       passengerId = savedPassenger.id;
-      passengerSnapshot = (await loadEntitySnapshot(
-        this.passengerRepository,
-        savedPassenger.id,
-      )) as TransactionPassengerSnapshotValue;
+      passengerSnapshot = freezeTransactionPassengerSnapshot(
+        (await loadEntitySnapshot(
+          this.passengerRepository,
+          savedPassenger.id,
+        )) as TransactionPassengerSnapshotValue,
+        passengerPayload,
+      );
     }
 
     if (passengerTravelPayload) {

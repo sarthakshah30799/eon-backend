@@ -34,6 +34,10 @@ export class VerifyPassengerAmlDto {
   @IsOptional()
   passportNumber?: string;
 
+  @ApiPropertyOptional({ example: "Michael Smith" })
+  @IsOptional()
+  passportPassengerName?: string;
+
   @ApiPropertyOptional({ example: "Delhi" })
   @IsOptional()
   passportIssueAt?: string;
