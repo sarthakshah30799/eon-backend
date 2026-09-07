@@ -17,6 +17,7 @@ import {
   CreateJournalVoucherDto,
   CreatePaymentVoucherDto,
   CreateReceiptVoucherDto,
+  OutstandingBillsQueryDto,
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
 import { VoucherType } from "./voucher.enums";
@@ -48,6 +49,12 @@ export class ReceiptVoucherController {
     @Session() session: any,
   ) {
     return this.service.available(VoucherType.RECEIPT, query, session);
+  }
+  @Get("outstanding-bills") outstandingBills(
+    @Query() query: OutstandingBillsQueryDto,
+    @Session() session: any,
+  ) {
+    return this.service.outstandingBills(VoucherType.RECEIPT, query, session);
   }
   @Get(":id") find(
     @Param("id", ParseUUIDPipe) id: string,
@@ -83,6 +90,12 @@ export class PaymentVoucherController {
     @Session() session: any,
   ) {
     return this.service.available(VoucherType.PAYMENT, query, session);
+  }
+  @Get("outstanding-bills") outstandingBills(
+    @Query() query: OutstandingBillsQueryDto,
+    @Session() session: any,
+  ) {
+    return this.service.outstandingBills(VoucherType.PAYMENT, query, session);
   }
   @Get(":id") find(
     @Param("id", ParseUUIDPipe) id: string,

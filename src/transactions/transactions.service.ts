@@ -75,7 +75,6 @@ import {
   roundMoney,
 } from "./transaction-accounting.util";
 import {
-  isCorporateIndividualTransactionContext,
   isCorporateIndividualTransactionSlug,
   normalizeTransactionSlug,
 } from "./transaction-slug.util";
@@ -2334,22 +2333,6 @@ export class TransactionsService {
         ? transactionPayload.payments
         : [];
     const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
-    const payableTotalAmount = Number(payableTotal || 0);
-    const requiresPaymentRows = isCorporateIndividualTransactionContext(
-      transactionPayload.slug,
-      transactionPayload.transactionPartyProfileType ??
-        transactionPartyProfileType,
-      passengerPayload?.entityType,
-    );
-    if (
-      !isFakeCurrency &&
-      requiresPaymentRows &&
-      payableTotalAmount > 0 &&
-      paymentRows.length === 0
-    ) {
-      throw new BadRequestException("At least one payment row is required");
-    }
-
     const paymentMethods = isFakeCurrency
       ? []
       : paymentRows.map((row) => this.resolvePaymentMethod(row.paymentMethod));
@@ -2535,15 +2518,13 @@ export class TransactionsService {
     }
 
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
-    const shouldMatchPaymentTotal =
-      !isFakeCurrency &&
-      (requiresPaymentRows || paymentRows.length > 0);
     if (
-      shouldMatchPaymentTotal &&
-      Number(payableTotal.toString()) !== totalPaid
+      !isFakeCurrency &&
+      paymentRows.length > 0 &&
+      totalPaid > Number(payableTotal.toString())
     ) {
       throw new BadRequestException(
-        `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
+        `Payment total ${totalPaid.toFixed(2)} cannot exceed payable total ${payableTotal}`,
       );
     }
 

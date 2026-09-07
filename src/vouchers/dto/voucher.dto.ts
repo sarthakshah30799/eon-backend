@@ -22,11 +22,37 @@ export class CreateVoucherItemDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() subledgerPartyProfileId?:
     | string
     | null;
-  @ApiProperty() @IsUUID() accountId: string;
+  @ApiPropertyOptional({
+    description:
+      "Required for ACCOUNT lines. Optional for bill lines (server fills purchase/sale control account).",
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
   @ApiProperty({ enum: VoucherEntryDirection })
   @IsEnum(VoucherEntryDirection)
   direction: VoucherEntryDirection;
   @ApiProperty({ example: "100.00" }) @IsNumberString() amount: string;
+  @ApiPropertyOptional({
+    description: "Required when item type is a purchase/sale profile.",
+  })
+  @IsOptional()
+  @IsUUID()
+  settledTransactionId?: string | null;
+}
+
+export class OutstandingBillsQueryDto extends PaginationQueryDto {
+  @ApiProperty() @IsUUID() partyProfileId: string;
+  @ApiProperty({
+    description: "VOUCHER_ITEM_TYPE / transactions.slug value e.g. SALE_FFMC",
+  })
+  @IsString()
+  @IsNotEmpty()
+  slug: string;
+  @ApiProperty() @IsUUID() branchId: string;
+  @ApiProperty() @IsUUID() counterId: string;
+  @ApiProperty() @IsDateString() transactionDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
 }
 
 export class CreatePartyVoucherDto {
