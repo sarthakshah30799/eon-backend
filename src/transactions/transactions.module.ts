@@ -40,6 +40,7 @@ import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { Counter } from "../counters/counter.entity";
 import { PurchaseRuleService } from "./purchase-rule.service";
+import { PartyCreditService } from "../party-profiles/party-credit.service";
 import { CountryModule } from "../country/country.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
 import { UserModule } from "../users/user.module";
@@ -103,6 +104,7 @@ import { VoucherModule } from "../vouchers/voucher.module";
     TransactionAccountPostingWorker,
     TransactionBalanceCurrencyWorker,
     PurchaseRuleService,
+    PartyCreditService,
   ],
   exports: [TypeOrmModule, TransactionsService],
 })

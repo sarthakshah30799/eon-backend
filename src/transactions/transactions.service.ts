@@ -67,14 +67,17 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { freezeTransactionPassengerSnapshot } from "./utils/passenger-snapshot.util";
 import { requireCompanyForDate } from "../common/snapshot/company-snapshot.util";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
+import { PartyCreditService } from "../party-profiles/party-credit.service";
 import {
   resolveProductTransactionAccount,
   roundMoney,
 } from "./transaction-accounting.util";
 import {
+  isCorporateIndividualTransactionContext,
   isCorporateIndividualTransactionSlug,
   normalizeTransactionSlug,
 } from "./transaction-slug.util";
@@ -392,6 +395,7 @@ export class TransactionsService {
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
+    private readonly partyCreditService: PartyCreditService,
     private readonly voucherService: VoucherService,
   ) {}
 
@@ -1647,10 +1651,13 @@ export class TransactionsService {
       );
 
       passengerId = savedPassenger.id;
-      passengerSnapshot = (await loadEntitySnapshot(
-        this.passengerRepository,
-        savedPassenger.id,
-      )) as TransactionPassengerSnapshotValue;
+      passengerSnapshot = freezeTransactionPassengerSnapshot(
+        (await loadEntitySnapshot(
+          this.passengerRepository,
+          savedPassenger.id,
+        )) as TransactionPassengerSnapshotValue,
+        passengerPayload,
+      );
     }
 
     if (passengerTravelPayload) {
@@ -2336,6 +2343,48 @@ export class TransactionsService {
         ? transactionPayload.payments
         : [];
     const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
+    const payableTotalAmount = Number(payableTotal || 0);
+    const requiresPaymentRows = isCorporateIndividualTransactionContext(
+      transactionPayload.slug,
+      transactionPayload.transactionPartyProfileType ??
+        transactionPartyProfileType,
+      passengerPayload?.entityType,
+    );
+    if (
+      !isFakeCurrency &&
+      requiresPaymentRows &&
+      payableTotalAmount > 0 &&
+      paymentRows.length === 0
+    ) {
+      throw new BadRequestException("At least one payment row is required");
+    }
+
+    const totalPaidPreview =
+      this.partyCreditService.sumPaymentAmounts(paymentRows);
+    const currentOutstandingPreview = Math.max(
+      0,
+      Number((payableTotalAmount - totalPaidPreview).toFixed(2)),
+    );
+    let allowPartialPayment = false;
+    if (!isFakeCurrency && currentOutstandingPreview > 0) {
+      const creditPreview = await this.partyCreditService.preview({
+        partyProfileId: String(transactionPayload.partyProfileId),
+        transactionType: transactionPayload.transactionType,
+        transactionDate: resolvedTransactionDate,
+        payableAmount: payableTotalAmount,
+        payments: paymentRows,
+        excludeTransactionId: refreshedTransaction.id,
+      });
+
+      if (!creditPreview.allowed) {
+        throw new BadRequestException(
+          creditPreview.blockingReason || "Credit validation failed",
+        );
+      }
+
+      allowPartialPayment = creditPreview.outstandingAllowed;
+    }
+
     const paymentMethods = isFakeCurrency
       ? []
       : paymentRows.map((row) => this.resolvePaymentMethod(row.paymentMethod));
@@ -2521,6 +2570,9 @@ export class TransactionsService {
     }
 
     const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
+    const shouldMatchPaymentTotal =
+      !isFakeCurrency &&
+      (requiresPaymentRows || (paymentRows.length > 0 && !allowPartialPayment));
     if (
       !isFakeCurrency &&
       paymentRows.length > 0 &&
@@ -2528,6 +2580,14 @@ export class TransactionsService {
     ) {
       throw new BadRequestException(
         `Payment total ${totalPaid.toFixed(2)} cannot exceed payable total ${payableTotal}`,
+      );
+    }
+    if (
+      shouldMatchPaymentTotal &&
+      Number(payableTotal.toString()) !== totalPaid
+    ) {
+      throw new BadRequestException(
+        `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
       );
     }
 

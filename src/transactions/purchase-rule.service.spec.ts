@@ -222,4 +222,80 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     expect(result.passengerId).toBe("passenger-1");
     expect(result.cumulativeAmountInReferenceCurrency).toBe("25.00");
   });
+
+  it("matches NRI passenger by passport number and passport passenger name", async () => {
+    passengerRepository.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "passenger-nri-1",
+        passportNumber: "P1234567",
+        passportPassengerName: "John Smith",
+      });
+
+    const body = purchaseBody({
+      passenger: {
+        entityType: PassengerEntityType.INDIVIDUAL,
+        nationalityType: PassengerNationalityType.NRI,
+        passportNumber: "P1234567",
+        passportPassengerName: "John Smith",
+        contactNo: "9999999999",
+        address1: "12 Test Street",
+      },
+      payments: [
+        {
+          paymentMethod: TransactionPaymentMethod.CASH,
+          amount: 500,
+        },
+      ],
+    });
+
+    const result = await service.preview(body);
+
+    expect(passengerRepository.findOne).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        where: {
+          passportNumber: "P1234567",
+          passportPassengerName: "John Smith",
+        },
+      }),
+    );
+    expect(result.passengerId).toBe("passenger-nri-1");
+    expect(result.passengerMatchTier).toBe(3);
+  });
+
+  it("matches NRI passenger by passport number alone within the 30-day window", async () => {
+    passengerRepository.findOne.mockResolvedValue({
+      id: "passenger-nri-2",
+      passportNumber: "P1234567",
+      passportPassengerName: "John Smith",
+    });
+
+    const body = purchaseBody({
+      passenger: {
+        entityType: PassengerEntityType.INDIVIDUAL,
+        nationalityType: PassengerNationalityType.NRI,
+        passportNumber: "P1234567",
+        passportPassengerName: "John Smith",
+        contactNo: "9999999999",
+      },
+      payments: [
+        {
+          paymentMethod: TransactionPaymentMethod.CASH,
+          amount: 500,
+        },
+      ],
+    });
+
+    const result = await service.preview(body);
+
+    expect(passengerRepository.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { passportNumber: "P1234567" },
+      }),
+    );
+    expect(result.passengerId).toBe("passenger-nri-2");
+    expect(result.passengerMatchTier).toBe(1);
+  });
 });
