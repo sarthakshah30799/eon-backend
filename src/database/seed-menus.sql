@@ -52,6 +52,7 @@ BEGIN
 
   -- Accounting
   (200, 'Journal Vouchers',       '/journal-vouchers',               'Accounting', NULL, FALSE, 'book-open', 'unique'),
+  (205, 'Deposit / Withdrawals',  '/deposit-withdrawals',            'Accounting', NULL, FALSE, 'arrow-left-right', 'unique'),
   (210, 'Payments',               '/payments',                       'Accounting', NULL, FALSE, 'credit-card','unique'),
   (220, 'Receipts',               '/receipts',                       'Accounting', NULL, FALSE, 'receipt',   'unique'),
 
@@ -103,6 +104,9 @@ BEGIN
 
   -- Reports
   (900, 'Currency Balance Reports',    '/reports/currency-balance',      'Reports', '/reports', FALSE, 'bar-chart', 'unique'),
+  (905, 'Bank Report',                 '/reports/bank-report',           'Reports', '/reports', FALSE, 'bar-chart', 'unique'),
+  (907, 'Cash Report',                 '/reports/cash-report',           'Reports', '/reports', FALSE, 'bar-chart', 'unique'),
+  (908, 'Generate Ledger',             '/reports/generate-ledger',       'Reports', '/reports', FALSE, 'bar-chart', 'unique'),
   (910, 'Product Profit Reports',      '/reports/product-profit-report', 'Reports', '/reports', FALSE, 'bar-chart', 'unique'),
   (920, 'Sale & Purchase Reports',     '/reports/sale-purchase-report',  'Reports', '/reports', FALSE, 'bar-chart', 'unique'),
   (930, 'Settled CARD Report',         '/reports/card-settled-report',   'Reports', '/reports', FALSE, 'bar-chart', 'unique'),

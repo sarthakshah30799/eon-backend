@@ -32,9 +32,11 @@ import { TransactionPayment } from "../transactions/entities/transaction-payment
 import {
   AdvanceApplicationPayloadDto,
   AvailableAdvanceQueryDto,
+  CreateDepositWithdrawalVoucherDto,
   CreateJournalVoucherDto,
   CreatePartyVoucherDto,
   CreateVoucherItemDto,
+  OutstandingBillsQueryDto,
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
 import {
@@ -46,8 +48,13 @@ import {
   VoucherAccountMode,
   VoucherAdvanceApplicationState,
   VoucherEntryDirection,
+  VoucherItemTypeValue,
+  VOUCHER_ITEM_TYPE_LABELS,
   VoucherType,
   VOUCHER_NUMBER_SERIES,
+  isVoucherAccountItemType,
+  isVoucherBillItemType,
+  voucherBillTransactionType,
 } from "./voucher.enums";
 import {
   applyPagination,
@@ -76,12 +83,12 @@ const REQUIRED_OPTIONS = [
     label: "Credit Card",
     sortOrder: 4,
   },
-  {
-    code: "VOUCHER_ITEM_TYPE",
-    value: "ACCOUNT",
-    label: "Account",
-    sortOrder: 1,
-  },
+  ...Object.values(VoucherItemTypeValue).map((value, index) => ({
+    code: "VOUCHER_ITEM_TYPE" as const,
+    value,
+    label: VOUCHER_ITEM_TYPE_LABELS[value],
+    sortOrder: index + 1,
+  })),
 ] as const;
 
 const normalize = (value: unknown) => String(value ?? "").trim();
@@ -145,12 +152,33 @@ export interface VoucherSession {
   isHoStaff?: boolean;
 }
 
+type ResolvedAccountVoucherItem = {
+  kind: "ACCOUNT";
+  dto: CreateVoucherItemDto;
+  type: SelectOption;
+  account: AccountProfile;
+  subledger: PartyProfile | null;
+};
+
+type ResolvedBillVoucherItem = {
+  kind: "BILL";
+  dto: CreateVoucherItemDto;
+  type: SelectOption;
+  direction: VoucherEntryDirection;
+  subledger: PartyProfile | null;
+  settledTransactionId: string;
+};
+
+type ResolvedVoucherItem = ResolvedAccountVoucherItem | ResolvedBillVoucherItem;
+
 @Injectable()
 export class VoucherService implements OnModuleInit {
   constructor(
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(AccountingVoucher, "database2")
     private readonly voucherRepository: Repository<AccountingVoucher>,
+    @InjectRepository(Transaction, "database2")
+    private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(VoucherAdvanceApplication, "database2")
     private readonly applicationRepository: Repository<VoucherAdvanceApplication>,
     @InjectRepository(AccountProfile)
@@ -368,6 +396,154 @@ export class VoucherService implements OnModuleInit {
     return this.account(id, undefined, "advance");
   }
 
+  private async resolveBillControlAccount(
+    itemTypeValue: string,
+    usage: VoucherType,
+  ) {
+    const billType = voucherBillTransactionType(itemTypeValue);
+    const settingCode =
+      billType === "PURCHASE"
+        ? "PURCHASE_CONTROL_ACCOUNT"
+        : "SALE_CONTROL_ACCOUNT";
+    const id = normalize(
+      await this.additionalSettings.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        settingCode,
+      ),
+    );
+    if (!id)
+      throw new BadRequestException(
+        `Missing ${settingCode} additional setting`,
+      );
+    return this.account(id, usage, "item");
+  }
+
+  private async resolveHandlingFeeAccount() {
+    const id = normalize(
+      await this.additionalSettings.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "HANDLING_CHARGE_ACCOUNT",
+      ),
+    );
+    if (!id)
+      throw new BadRequestException(
+        "Missing HANDLING_CHARGE_ACCOUNT additional setting",
+      );
+    return this.account(id, undefined, "item");
+  }
+
+  private accountLedgerTokens(account: AccountProfile) {
+    return new Set(
+      [account.accountType?.value, account.accountType?.label]
+        .map(normalizeUpper)
+        .filter(Boolean),
+    );
+  }
+
+  private isBankLedgerAccount(account: AccountProfile) {
+    return this.accountLedgerTokens(account).has("BANK_LEDGER");
+  }
+
+  private isCashOrBankLedgerAccount(account: AccountProfile) {
+    const tokens = this.accountLedgerTokens(account);
+    return tokens.has("BANK_LEDGER") || tokens.has("CASH_LEDGER");
+  }
+
+  private async resolveBankChequeAccountTypeOption() {
+    const option = await this.optionRepository.findOne({
+      where: {
+        code: "VOUCHER_ACCOUNT_TYPE",
+        value: VoucherAccountMode.BANK_CHEQUE,
+        isActive: true,
+      },
+    });
+    if (!option)
+      throw new BadRequestException(
+        "Missing active VOUCHER_ACCOUNT_TYPE Bank / Cheque option",
+      );
+    return option;
+  }
+
+  private billOutstandingCents(transaction: Transaction) {
+    return (
+      cents(transaction.finalAmount) -
+      cents(transaction.byCash ?? 0) -
+      cents(transaction.byCheque ?? 0)
+    );
+  }
+
+  private validateSettledBillTransaction(
+    transaction: Transaction,
+    itemTypeValue: string,
+    partyProfileId: string,
+    branchId: string,
+    voucherDate: string,
+    amountCents: number,
+  ) {
+    if (transaction.status !== TransactionStatus.APPROVED)
+      throw new BadRequestException("Settled transaction must be approved");
+    if (!transaction.isLatest)
+      throw new BadRequestException(
+        "Settled transaction must be the latest revision",
+      );
+    if (normalizeUpper(transaction.slug) !== normalizeUpper(itemTypeValue))
+      throw new BadRequestException(
+        "Settled transaction does not match item type",
+      );
+    if (transaction.partyProfileId !== partyProfileId)
+      throw new BadRequestException(
+        "Settled transaction party does not match voucher party",
+      );
+    if (transaction.branchId !== branchId)
+      throw new BadRequestException(
+        "Settled transaction branch does not match voucher branch",
+      );
+    if (
+      String(transaction.transactionDate).slice(0, 10) >
+      voucherDate.slice(0, 10)
+    )
+      throw new BadRequestException(
+        "Settled transaction date cannot be after voucher date",
+      );
+    const outstanding = this.billOutstandingCents(transaction);
+    if (outstanding <= 0)
+      throw new BadRequestException(
+        "Settled transaction has no outstanding balance",
+      );
+    if (amountCents !== outstanding)
+      throw new BadRequestException(
+        "Bill settlement amount must equal the transaction outstanding balance",
+      );
+  }
+
+  private bumpBillSettlement(
+    transaction: Transaction,
+    amountCents: number,
+    accountMode: VoucherAccountMode,
+    actorId: string,
+  ) {
+    if (
+      accountMode === VoucherAccountMode.CASH ||
+      accountMode === VoucherAccountMode.PETTY_CASH
+    ) {
+      transaction.byCash = money(
+        cents(transaction.byCash ?? 0) + amountCents,
+      );
+    } else if (
+      accountMode === VoucherAccountMode.BANK_CHEQUE ||
+      accountMode === VoucherAccountMode.CREDIT_CARD
+    ) {
+      transaction.byCheque = money(
+        cents(transaction.byCheque ?? 0) + amountCents,
+      );
+    } else {
+      throw new BadRequestException(
+        "Unsupported voucher account mode for bill settlement",
+      );
+    }
+    transaction.updatedBy = actorId;
+  }
+
   private calculate(type: VoucherType, items: CreateVoucherItemDto[]) {
     let debit = 0;
     let credit = 0;
@@ -395,6 +571,13 @@ export class VoucherService implements OnModuleInit {
       throw new BadRequestException(
         "Journal voucher debit and credit totals must be positive and equal",
       );
+    if (
+      type === VoucherType.DEPOSIT_WITHDRAWAL &&
+      (debit <= 0 || credit <= 0 || debit !== credit)
+    )
+      throw new BadRequestException(
+        "Deposit / Withdrawal debit and credit totals must be positive and equal",
+      );
     return {
       totalDebit: money(debit),
       totalCredit: money(credit),
@@ -408,11 +591,312 @@ export class VoucherService implements OnModuleInit {
     };
   }
 
-  async create(
-    type: VoucherType,
-    dto: CreatePartyVoucherDto | CreateJournalVoucherDto,
+  private async createDepositWithdrawal(
+    dto: CreateDepositWithdrawalVoucherDto,
     session: VoucherSession,
   ) {
+    const type = VoucherType.DEPOSIT_WITHDRAWAL;
+    const actorId = this.getActor(session);
+    const narration = normalize(dto.narration);
+    if (!narration) throw new BadRequestException("Narration is required");
+    const chequeNumber = normalize(dto.chequeNumber);
+    const chequeDate = normalize(dto.chequeDate).slice(0, 10);
+    if (!chequeNumber || !chequeDate)
+      throw new BadRequestException("Cheque Number and Cheque Date are required");
+    if (dto.items.length !== 2 && dto.items.length !== 3)
+      throw new BadRequestException(
+        "Deposit / Withdrawal requires 2 lines, or 3 when handling fee is included",
+      );
+
+    const hash = this.payloadHash(type, dto);
+    const repeated = await this.findIdempotent(dto.idempotencyKey, hash);
+    if (repeated) return repeated;
+
+    const workplace = await this.resolveWorkplace(dto, session);
+    await this.dayPolicy.assertTransactionDateAllowed(
+      workplace.branch.id,
+      actorId,
+      dto.transactionDate,
+      workplace.counter.id,
+    );
+
+    const [branchSnapshot, counterSnapshot, remark, accountType] =
+      await Promise.all([
+        this.snapshot(this.branchRepository, workplace.branch.id),
+        this.snapshot(this.counterRepository, workplace.counter.id),
+        dto.remarkOptionId
+          ? this.option(dto.remarkOptionId, "VOUCHER_REMARK")
+          : Promise.resolve(null),
+        this.resolveBankChequeAccountTypeOption(),
+      ]);
+
+    const depositedDto = dto.items[0];
+    const withdrawalDto = dto.items[1];
+    const feeDto = dto.items[2] ?? null;
+
+    const depositedType = await this.option(
+      depositedDto.itemTypeOptionId,
+      "VOUCHER_ITEM_TYPE",
+    );
+    const withdrawalType = await this.option(
+      withdrawalDto.itemTypeOptionId,
+      "VOUCHER_ITEM_TYPE",
+    );
+    if (
+      !isVoucherAccountItemType(depositedType.value) ||
+      !isVoucherAccountItemType(withdrawalType.value)
+    )
+      throw new BadRequestException(
+        "Deposit / Withdrawal lines must use Account item type",
+      );
+    if (depositedDto.direction !== VoucherEntryDirection.DEBIT)
+      throw new BadRequestException("Deposited in must be Debit");
+    if (withdrawalDto.direction !== VoucherEntryDirection.CREDIT)
+      throw new BadRequestException("Withdrawal from must be Credit");
+    if (normalize(depositedDto.settledTransactionId) || normalize(withdrawalDto.settledTransactionId))
+      throw new BadRequestException(
+        "Deposit / Withdrawal lines cannot settle a transaction",
+      );
+    if (depositedDto.subledgerPartyProfileId || withdrawalDto.subledgerPartyProfileId)
+      throw new BadRequestException(
+        "Deposit / Withdrawal lines do not support sub ledger",
+      );
+
+    const depositedAccountId = normalize(depositedDto.accountId);
+    const withdrawalAccountId = normalize(withdrawalDto.accountId);
+    if (!depositedAccountId || !withdrawalAccountId)
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from require accountId",
+      );
+    if (depositedAccountId === withdrawalAccountId)
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from must use different accounts",
+      );
+
+    const [depositedAccount, withdrawalAccount] = await Promise.all([
+      this.account(depositedAccountId, type, "item"),
+      this.account(withdrawalAccountId, type, "item"),
+    ]);
+    if (
+      !this.isCashOrBankLedgerAccount(depositedAccount) ||
+      !this.isCashOrBankLedgerAccount(withdrawalAccount)
+    )
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from must be Cash Ledger or Bank Ledger accounts",
+      );
+    const depositedIsBank = this.isBankLedgerAccount(depositedAccount);
+    const withdrawalIsBank = this.isBankLedgerAccount(withdrawalAccount);
+    if (!depositedIsBank && !withdrawalIsBank)
+      throw new BadRequestException(
+        "At least one of Deposited in or Withdrawal from must be a Bank Ledger account",
+      );
+
+    const depositedCents = cents(depositedDto.amount);
+    const withdrawalCents = cents(withdrawalDto.amount);
+    if (depositedCents <= 0 || withdrawalCents <= 0)
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from amounts must be greater than zero",
+      );
+
+    let feeAccount: AccountProfile | null = null;
+    let feeType: SelectOption | null = null;
+    let feeCents = 0;
+    if (feeDto) {
+      feeCents = cents(feeDto.amount);
+      if (feeCents <= 0)
+        throw new BadRequestException(
+          "Handling fee amount must be greater than zero when fee line is sent",
+        );
+      feeType = await this.option(feeDto.itemTypeOptionId, "VOUCHER_ITEM_TYPE");
+      if (!isVoucherAccountItemType(feeType.value))
+        throw new BadRequestException(
+          "Handling fee line must use Account item type",
+        );
+      if (feeDto.direction !== VoucherEntryDirection.DEBIT)
+        throw new BadRequestException("Handling fee must be Debit");
+      if (normalize(feeDto.settledTransactionId))
+        throw new BadRequestException(
+          "Handling fee line cannot settle a transaction",
+        );
+      if (feeDto.subledgerPartyProfileId)
+        throw new BadRequestException(
+          "Handling fee line does not support sub ledger",
+        );
+      if (normalize(feeDto.accountId))
+        throw new BadRequestException(
+          "Handling fee account is resolved from additional settings",
+        );
+      feeAccount = await this.resolveHandlingFeeAccount();
+    }
+
+    if (depositedCents + feeCents !== withdrawalCents)
+      throw new BadRequestException(
+        feeCents > 0
+          ? "Withdrawal from must equal Deposited in plus Handling fee"
+          : "Withdrawal from must equal Deposited in when handling fee is omitted",
+      );
+
+    const resolvedItems: ResolvedAccountVoucherItem[] = [
+      {
+        kind: "ACCOUNT",
+        dto: depositedDto,
+        type: depositedType,
+        account: depositedAccount,
+        subledger: null,
+      },
+      {
+        kind: "ACCOUNT",
+        dto: withdrawalDto,
+        type: withdrawalType,
+        account: withdrawalAccount,
+        subledger: null,
+      },
+    ];
+    if (feeDto && feeAccount && feeType) {
+      resolvedItems.push({
+        kind: "ACCOUNT",
+        dto: {
+          ...feeDto,
+          accountId: feeAccount.id,
+          direction: VoucherEntryDirection.DEBIT,
+        },
+        type: feeType,
+        account: feeAccount,
+        subledger: null,
+      });
+    }
+
+    const totals = this.calculate(
+      type,
+      resolvedItems.map((row) => row.dto),
+    );
+    const headerAccount = depositedIsBank
+      ? depositedAccount
+      : withdrawalAccount;
+    const accountMode = VoucherAccountMode.BANK_CHEQUE;
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[type],
+      workplace.branch.code,
+      new Date(),
+    );
+
+    return this.database2
+      .transaction(async (manager) => {
+        const voucherRepo = manager.getRepository(AccountingVoucher);
+        const itemRepo = manager.getRepository(AccountingVoucherItem);
+        const voucher = await voucherRepo.save(
+          voucherRepo.create({
+            voucherType: type,
+            number,
+            idempotencyKey: dto.idempotencyKey,
+            payloadHash: hash,
+            transactionDate: dto.transactionDate.slice(0, 10),
+            branchId: workplace.branch.id,
+            branchSnapshot,
+            counterId: workplace.counter.id,
+            counterSnapshot,
+            accountTypeOptionId: accountType.id,
+            accountTypeSnapshot: await this.snapshot(
+              this.optionRepository,
+              accountType.id,
+            ),
+            accountMode,
+            headerAccountId: headerAccount.id,
+            headerAccountSnapshot: await this.snapshot(
+              this.accountRepository,
+              headerAccount.id,
+            ),
+            entityTypeOptionId: null,
+            entityTypeSnapshot: null,
+            partyProfileId: null,
+            partyProfileSnapshot: null,
+            panNumber: null,
+            panName: null,
+            panDob: null,
+            chequeNumber,
+            normalizedChequeNumber: normalizeUpper(chequeNumber),
+            chequeDate,
+            chequeBranch: null,
+            drawnOn: null,
+            remarkOptionId: remark?.id ?? null,
+            remarkSnapshot: remark
+              ? await this.snapshot(this.optionRepository, remark.id)
+              : null,
+            narration,
+            ...totals,
+            advanceControlAccountId: null,
+            advanceControlAccountSnapshot: null,
+            createdBy: actorId,
+            updatedBy: actorId,
+          }),
+        );
+        for (let index = 0; index < resolvedItems.length; index++) {
+          const row = resolvedItems[index];
+          await itemRepo.save(
+            itemRepo.create({
+              voucherId: voucher.id,
+              voucher,
+              lineNo: index + 1,
+              itemTypeOptionId: row.type.id,
+              itemTypeSnapshot: await this.snapshot(
+                this.optionRepository,
+                row.type.id,
+              ),
+              subledgerPartyProfileId: null,
+              subledgerPartyProfileSnapshot: null,
+              accountId: row.account.id,
+              accountSnapshot: await this.snapshot(
+                this.accountRepository,
+                row.account.id,
+              ),
+              direction: row.dto.direction,
+              amount: money(cents(row.dto.amount)),
+              settledTransactionId: null,
+              settledTransactionSnapshot: null,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+        }
+        return voucherRepo.findOneOrFail({
+          where: { id: voucher.id },
+          relations: ["items"],
+        });
+      })
+      .catch(async (error) => {
+        if (
+          error?.code === "23505" &&
+          String(error?.constraint ?? "").includes("idempotency")
+        ) {
+          const existing = await this.findIdempotent(dto.idempotencyKey, hash);
+          if (existing) return existing;
+        }
+        if (
+          error?.code === "23505" &&
+          String(error?.constraint ?? "").includes("cheque")
+        )
+          throw new ConflictException(
+            "Cheque Number already exists for this voucher type and account",
+          );
+        throw error;
+      });
+  }
+
+  async create(
+    type: VoucherType,
+    dto:
+      | CreatePartyVoucherDto
+      | CreateJournalVoucherDto
+      | CreateDepositWithdrawalVoucherDto,
+    session: VoucherSession,
+  ) {
+    if (type === VoucherType.DEPOSIT_WITHDRAWAL) {
+      return this.createDepositWithdrawal(
+        dto as CreateDepositWithdrawalVoucherDto,
+        session,
+      );
+    }
     const actorId = this.getActor(session);
     const narration = normalize(dto.narration);
     if (!narration) throw new BadRequestException("Narration is required");
@@ -426,7 +910,6 @@ export class VoucherService implements OnModuleInit {
       dto.transactionDate,
       workplace.counter.id,
     );
-    const totals = this.calculate(type, dto.items);
     const [branchSnapshot, counterSnapshot, remark] = await Promise.all([
       this.snapshot(this.branchRepository, workplace.branch.id),
       this.snapshot(this.counterRepository, workplace.counter.id),
@@ -504,47 +987,114 @@ export class VoucherService implements OnModuleInit {
         );
     }
 
-    const resolvedItems = [] as Array<{
-      dto: CreateVoucherItemDto;
-      type: SelectOption;
-      account: AccountProfile;
-      subledger: PartyProfile | null;
-    }>;
+    const resolvedItems = [] as ResolvedVoucherItem[];
+    const settledTransactionIds = new Set<string>();
     for (const item of dto.items) {
-      const [itemType, itemAccount, subledger] = await Promise.all([
-        this.option(item.itemTypeOptionId, "VOUCHER_ITEM_TYPE"),
-        this.account(item.accountId, type, "item"),
-        item.subledgerPartyProfileId
-          ? this.party(item.subledgerPartyProfileId)
-          : Promise.resolve(null),
-      ]);
-      if (type !== VoucherType.JOURNAL) {
-        if (!subledger)
+      const itemType = await this.option(item.itemTypeOptionId, "VOUCHER_ITEM_TYPE");
+      const itemTypeValue = normalizeUpper(itemType.value);
+      const isAccountLine = isVoucherAccountItemType(itemTypeValue);
+      const isBillLine = isVoucherBillItemType(itemTypeValue);
+
+      if (type === VoucherType.JOURNAL) {
+        if (!isAccountLine)
           throw new BadRequestException(
-            "Sub Ledger is required for Receipt and Payment items",
+            "Journal vouchers only support Account item lines",
           );
-        if (party!.group?.id) {
-          if (
-            subledger.group?.id !== party!.group.id ||
-            subledger.entityType?.id !== party!.entityType?.id
-          )
-            throw new BadRequestException(
-              "Sub Ledger must match the header Party Group and Entity Type",
-            );
-        } else if (subledger.id !== party!.id)
-          throw new BadRequestException(
-            "Without a Party Group, the header Party must be used as Sub Ledger",
-          );
+      } else if (!isAccountLine && !isBillLine) {
+        throw new BadRequestException("Unsupported voucher item type");
       }
-      if (subledger)
-        await this.assertPartyVisible(subledger, actorId, workplace.branch.id);
+
+      if (isAccountLine) {
+        const accountId = normalize(item.accountId);
+        if (!accountId)
+          throw new BadRequestException(
+            "Account item lines require accountId",
+          );
+        if (normalize(item.settledTransactionId))
+          throw new BadRequestException(
+            "Account item lines cannot settle a transaction",
+          );
+        const [itemAccount, subledger] = await Promise.all([
+          this.account(accountId, type, "item"),
+          item.subledgerPartyProfileId
+            ? this.party(item.subledgerPartyProfileId)
+            : Promise.resolve(null),
+        ]);
+        if (type !== VoucherType.JOURNAL) {
+          if (!subledger)
+            throw new BadRequestException(
+              "Sub Ledger is required for Receipt and Payment items",
+            );
+          if (party!.group?.id) {
+            if (
+              subledger.group?.id !== party!.group.id ||
+              subledger.entityType?.id !== party!.entityType?.id
+            )
+              throw new BadRequestException(
+                "Sub Ledger must match the header Party Group and Entity Type",
+              );
+          } else if (subledger.id !== party!.id)
+            throw new BadRequestException(
+              "Without a Party Group, the header Party must be used as Sub Ledger",
+            );
+        }
+        if (subledger)
+          await this.assertPartyVisible(subledger, actorId, workplace.branch.id);
+        resolvedItems.push({
+          kind: "ACCOUNT",
+          dto: item,
+          type: itemType,
+          account: itemAccount,
+          subledger,
+        });
+        continue;
+      }
+
+      const settledTransactionId = normalize(item.settledTransactionId);
+      if (!settledTransactionId)
+        throw new BadRequestException(
+          "Bill item lines require settledTransactionId",
+        );
+      if (normalize(item.accountId))
+        throw new BadRequestException(
+          "Bill item lines must not specify accountId",
+        );
+      if (settledTransactionIds.has(settledTransactionId))
+        throw new BadRequestException(
+          "The same transaction cannot be settled twice in one voucher",
+        );
+      settledTransactionIds.add(settledTransactionId);
+
+      const billType = voucherBillTransactionType(itemTypeValue);
+      const expectedDirection =
+        billType === "SALE"
+          ? VoucherEntryDirection.CREDIT
+          : VoucherEntryDirection.DEBIT;
+      if (item.direction !== expectedDirection)
+        throw new BadRequestException(
+          "Bill item direction does not match the selected profile",
+        );
+
+      const billSubledger = party!;
+      if (item.subledgerPartyProfileId && item.subledgerPartyProfileId !== party!.id)
+        throw new BadRequestException(
+          "Bill item subledger must match the header party",
+        );
+      await this.assertPartyVisible(billSubledger, actorId, workplace.branch.id);
       resolvedItems.push({
-        dto: item,
+        kind: "BILL",
+        dto: { ...item, direction: expectedDirection },
         type: itemType,
-        account: itemAccount,
-        subledger,
+        direction: expectedDirection,
+        subledger: billSubledger,
+        settledTransactionId,
       });
     }
+
+    const totals = this.calculate(
+      type,
+      resolvedItems.map((row) => row.dto),
+    );
 
     const number = await this.additionalSettings.reserveTransactionNumber(
       VOUCHER_NUMBER_SERIES[type],
@@ -622,8 +1172,64 @@ export class VoucherService implements OnModuleInit {
             updatedBy: actorId,
           }),
         );
+        const billSettlements: Array<{
+          transaction: Transaction;
+          amountCents: number;
+        }> = [];
         for (let index = 0; index < resolvedItems.length; index++) {
           const row = resolvedItems[index];
+          if (row.kind === "ACCOUNT") {
+            await itemRepo.save(
+              itemRepo.create({
+                voucherId: voucher.id,
+                voucher,
+                lineNo: index + 1,
+                itemTypeOptionId: row.type.id,
+                itemTypeSnapshot: await this.snapshot(
+                  this.optionRepository,
+                  row.type.id,
+                ),
+                subledgerPartyProfileId: row.subledger?.id ?? null,
+                subledgerPartyProfileSnapshot: row.subledger
+                  ? await this.snapshot(this.partyRepository, row.subledger.id)
+                  : null,
+                accountId: row.account.id,
+                accountSnapshot: await this.snapshot(
+                  this.accountRepository,
+                  row.account.id,
+                ),
+                direction: row.dto.direction,
+                amount: money(cents(row.dto.amount)),
+                settledTransactionId: null,
+                settledTransactionSnapshot: null,
+                createdBy: actorId,
+                updatedBy: actorId,
+              }),
+            );
+            continue;
+          }
+
+          const txRepo = manager.getRepository(Transaction);
+          const settledTransaction = await txRepo
+            .createQueryBuilder("tx")
+            .where("tx.id = :id", { id: row.settledTransactionId })
+            .setLock("pessimistic_write")
+            .getOne();
+          if (!settledTransaction)
+            throw new NotFoundException("Settled transaction not found");
+          const amountCents = cents(row.dto.amount);
+          this.validateSettledBillTransaction(
+            settledTransaction,
+            row.type.value,
+            party!.id,
+            workplace.branch.id,
+            dto.transactionDate,
+            amountCents,
+          );
+          const controlAccount = await this.resolveBillControlAccount(
+            row.type.value,
+            type,
+          );
           await itemRepo.save(
             itemRepo.create({
               voucherId: voucher.id,
@@ -638,17 +1244,35 @@ export class VoucherService implements OnModuleInit {
               subledgerPartyProfileSnapshot: row.subledger
                 ? await this.snapshot(this.partyRepository, row.subledger.id)
                 : null,
-              accountId: row.account.id,
+              accountId: controlAccount.id,
               accountSnapshot: await this.snapshot(
                 this.accountRepository,
-                row.account.id,
+                controlAccount.id,
               ),
-              direction: row.dto.direction,
-              amount: money(cents(row.dto.amount)),
+              direction: row.direction,
+              amount: money(amountCents),
+              settledTransactionId: settledTransaction.id,
+              settledTransactionSnapshot: await this.snapshot(
+                this.transactionRepository,
+                settledTransaction.id,
+              ),
               createdBy: actorId,
               updatedBy: actorId,
             }),
           );
+          billSettlements.push({ transaction: settledTransaction, amountCents });
+        }
+        if (accountMode && billSettlements.length) {
+          const txRepo = manager.getRepository(Transaction);
+          for (const settlement of billSettlements) {
+            this.bumpBillSettlement(
+              settlement.transaction,
+              settlement.amountCents,
+              accountMode,
+              actorId,
+            );
+            await txRepo.save(settlement.transaction);
+          }
         }
         return voucherRepo.findOneOrFail({
           where: { id: voucher.id },
@@ -839,6 +1463,80 @@ export class VoucherService implements OnModuleInit {
         cents(voucher.finalAmount) - cents(rows.raw[index]?.consumed ?? 0),
       ),
     }));
+  }
+
+  async outstandingBills(
+    voucherType: VoucherType.RECEIPT | VoucherType.PAYMENT,
+    query: OutstandingBillsQueryDto,
+    session: VoucherSession,
+  ) {
+    const actorId = this.getActor(session);
+    const workplace = await this.resolveWorkplace(
+      { branchId: query.branchId, counterId: query.counterId },
+      session,
+    );
+    if (
+      workplace.branch.id !== query.branchId ||
+      workplace.counter.id !== query.counterId
+    )
+      throw new ForbiddenException(
+        "Outstanding bills lookup is outside the active workplace",
+      );
+    await this.dayPolicy.assertTransactionDateAllowed(
+      workplace.branch.id,
+      actorId,
+      query.transactionDate,
+      workplace.counter.id,
+    );
+    const party = await this.party(query.partyProfileId);
+    await this.assertPartyVisible(party, actorId, workplace.branch.id);
+
+    const slug = normalizeUpper(query.slug);
+    if (!isVoucherBillItemType(slug))
+      throw new BadRequestException("Invalid bill item type slug");
+    if (!voucherBillTransactionType(slug))
+      throw new BadRequestException("Invalid bill item type slug");
+
+    const pagination = normalizePagination(query);
+    const qb = this.transactionRepository
+      .createQueryBuilder("tx")
+      .where("tx.partyProfileId = :partyProfileId", {
+        partyProfileId: party.id,
+      })
+      .andWhere("UPPER(tx.slug) = :slug", { slug })
+      .andWhere("tx.branchId = :branchId", { branchId: workplace.branch.id })
+      .andWhere("tx.status = :status", { status: TransactionStatus.APPROVED })
+      .andWhere("tx.isLatest = true")
+      .andWhere("tx.transactionDate <= :transactionDate", {
+        transactionDate: query.transactionDate.slice(0, 10),
+      })
+      .andWhere(
+        `(tx.final_amount - COALESCE(tx.by_cash, 0) - COALESCE(tx.by_cheque, 0)) > 0`,
+      );
+    if (query.search)
+      qb.andWhere("tx.number ILIKE :search", {
+        search: `%${query.search.trim()}%`,
+      });
+    qb.orderBy("tx.transactionDate", "ASC").addOrderBy("tx.number", "ASC");
+    applyPagination(qb, pagination);
+    const [transactions, total] = await qb.getManyAndCount();
+    const data = transactions.map((transaction) => ({
+      id: transaction.id,
+      number: transaction.number,
+      transactionDate: transaction.transactionDate,
+      transactionType: transaction.transactionType,
+      slug: transaction.slug,
+      partyProfileId: transaction.partyProfileId,
+      partyProfileSnapshot: transaction.partyProfileSnapshot,
+      passengerId: transaction.passengerId,
+      passengerSnapshot: transaction.passengerSnapshot,
+      finalAmount: transaction.finalAmount,
+      byCash: transaction.byCash,
+      byCheque: transaction.byCheque,
+      outstanding: money(this.billOutstandingCents(transaction)),
+      branchId: transaction.branchId,
+    }));
+    return buildPaginatedResponse(data, total, pagination);
   }
 
   async prepareAdvancePayment(input: {

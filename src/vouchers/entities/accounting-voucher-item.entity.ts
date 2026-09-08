@@ -8,6 +8,9 @@ import { AccountingVoucher } from "./accounting-voucher.entity";
 @Index("UQ_accounting_voucher_items_line", ["voucherId", "lineNo"], {
   unique: true,
 })
+@Index("IDX_accounting_voucher_items_settled_transaction", [
+  "settledTransactionId",
+])
 @Check("CHK_accounting_voucher_items_amount_positive", `"amount" > 0`)
 export class AccountingVoucherItem extends BaseEntity {
   @Column({ type: "uuid", name: "voucher_id" }) voucherId: string;
@@ -38,4 +41,12 @@ export class AccountingVoucherItem extends BaseEntity {
   @Column({ type: "enum", enum: VoucherEntryDirection })
   direction: VoucherEntryDirection;
   @Column({ type: "numeric", precision: 18, scale: 2 }) amount: string;
+  @Column({ type: "uuid", name: "settled_transaction_id", nullable: true })
+  settledTransactionId: string | null;
+  @Column({
+    type: "jsonb",
+    name: "settled_transaction_snapshot",
+    nullable: true,
+  })
+  settledTransactionSnapshot: TransactionReferenceSnapshotValue | null;
 }

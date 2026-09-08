@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type, Transform } from "class-transformer";
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
@@ -22,11 +23,37 @@ export class CreateVoucherItemDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() subledgerPartyProfileId?:
     | string
     | null;
-  @ApiProperty() @IsUUID() accountId: string;
+  @ApiPropertyOptional({
+    description:
+      "Required for ACCOUNT lines. Optional for bill lines (server fills purchase/sale control account).",
+  })
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
   @ApiProperty({ enum: VoucherEntryDirection })
   @IsEnum(VoucherEntryDirection)
   direction: VoucherEntryDirection;
   @ApiProperty({ example: "100.00" }) @IsNumberString() amount: string;
+  @ApiPropertyOptional({
+    description: "Required when item type is a purchase/sale profile.",
+  })
+  @IsOptional()
+  @IsUUID()
+  settledTransactionId?: string | null;
+}
+
+export class OutstandingBillsQueryDto extends PaginationQueryDto {
+  @ApiProperty() @IsUUID() partyProfileId: string;
+  @ApiProperty({
+    description: "VOUCHER_ITEM_TYPE / transactions.slug value e.g. SALE_FFMC",
+  })
+  @IsString()
+  @IsNotEmpty()
+  slug: string;
+  @ApiProperty() @IsUUID() branchId: string;
+  @ApiProperty() @IsUUID() counterId: string;
+  @ApiProperty() @IsDateString() transactionDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
 }
 
 export class CreatePartyVoucherDto {
@@ -91,6 +118,32 @@ export class CreateJournalVoucherDto {
   @ApiProperty({ type: [CreateVoucherItemDto] })
   @IsArray()
   @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateVoucherItemDto)
+  items: CreateVoucherItemDto[];
+}
+
+export class CreateDepositWithdrawalVoucherDto {
+  @ApiProperty() @IsDateString() transactionDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() counterId?: string;
+  @ApiProperty() @IsString() @IsNotEmpty() chequeNumber: string;
+  @ApiProperty() @IsDateString() chequeDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
+  @ApiProperty()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  narration: string;
+  @ApiProperty() @IsString() @IsNotEmpty() idempotencyKey: string;
+  @ApiProperty({
+    type: [CreateVoucherItemDto],
+    description:
+      "Exactly 2 lines (deposited in, withdrawal from) or 3 when handling fee > 0",
+  })
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(3)
   @ValidateNested({ each: true })
   @Type(() => CreateVoucherItemDto)
   items: CreateVoucherItemDto[];

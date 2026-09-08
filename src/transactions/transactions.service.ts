@@ -2574,6 +2574,15 @@ export class TransactionsService {
       !isFakeCurrency &&
       (requiresPaymentRows || (paymentRows.length > 0 && !allowPartialPayment));
     if (
+      !isFakeCurrency &&
+      paymentRows.length > 0 &&
+      totalPaid > Number(payableTotal.toString())
+    ) {
+      throw new BadRequestException(
+        `Payment total ${totalPaid.toFixed(2)} cannot exceed payable total ${payableTotal}`,
+      );
+    }
+    if (
       shouldMatchPaymentTotal &&
       Number(payableTotal.toString()) !== totalPaid
     ) {

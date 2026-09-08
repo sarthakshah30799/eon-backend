@@ -587,6 +587,27 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
     sortOrder: 2,
   },
   {
+    path: "/reports/bank-report",
+    name: "Bank Report",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
+    path: "/reports/cash-report",
+    name: "Cash Report",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
+    path: "/reports/generate-ledger",
+    name: "Generate Ledger",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
     path: "/reports/stock-revaluations",
     name: "Stock Revaluation",
     parentPath: "/reports",
@@ -827,6 +848,11 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
   ...buildCrudMenuSeeds({
     basePath: "/journal-vouchers",
     name: "Journal Vouchers",
+    isAdmin: false,
+  }),
+  ...buildCrudMenuSeeds({
+    basePath: "/deposit-withdrawals",
+    name: "Deposit / Withdrawals",
     isAdmin: false,
   }),
   ...buildCrudMenuSeeds({
