@@ -4,7 +4,7 @@ import { In, Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { Branch } from "../branches/branch.entity";
-import { TransactionStatus } from "../transactions/transactions.enums";
+import { formatPaymentChequeReference, TransactionStatus } from "../transactions/transactions.enums";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import {
@@ -578,7 +578,10 @@ export class BankReportService {
         transactionDate: toDateOnly(tx.transactionDate),
         createdAt,
         number: toText(tx.number),
-        chequeNumber: toText(payment.referenceNumber),
+        chequeNumber: formatPaymentChequeReference(
+          payment.paymentMethod,
+          payment.referenceNumber,
+        ),
         chequeDate: toDateOnly(payment.referenceDate),
         party: partyLabel,
         narration: toText(payment.remarks) || toText(tx.remarks) || "",

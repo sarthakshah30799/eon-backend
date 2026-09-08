@@ -82,6 +82,7 @@ export type TransactionDocumentStatus =
 export const TransactionPaymentMethod = {
   CASH: "CASH",
   CHEQUE: "CHEQUE",
+  ONLINE: "ONLINE",
   BANK_TRANSFER: "BANK_TRANSFER",
   UPI: "UPI",
   NEFT: "NEFT",
@@ -93,6 +94,31 @@ export const TransactionPaymentMethod = {
 
 export type TransactionPaymentMethod =
   (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
+
+export const ONLINE_PAYMENT_LABEL = "Online Payment";
+
+export const isOnlinePaymentMethod = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toUpperCase() === TransactionPaymentMethod.ONLINE;
+
+export const isChequeFamilyPaymentMethod = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    normalized === TransactionPaymentMethod.CHEQUE ||
+    normalized === TransactionPaymentMethod.ONLINE
+  );
+};
+
+export const formatPaymentChequeReference = (
+  paymentMethod: unknown,
+  referenceNumber?: string | null,
+) =>
+  isOnlinePaymentMethod(paymentMethod)
+    ? ONLINE_PAYMENT_LABEL
+    : String(referenceNumber ?? "").trim();
 
 export const TransactionPaymentDirection = {
   PAYMENT: "PAYMENT",

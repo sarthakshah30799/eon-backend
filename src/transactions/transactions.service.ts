@@ -707,7 +707,61 @@ export class TransactionsService {
       return TransactionPaymentMethod.CHEQUE;
     }
 
-    throw new BadRequestException("Payment mode must be CASH or CHEQUE");
+    if (normalized === TransactionPaymentMethod.ONLINE) {
+      return TransactionPaymentMethod.ONLINE;
+    }
+
+    throw new BadRequestException(
+      "Payment mode must be CASH, CHEQUE, or ONLINE",
+    );
+  }
+
+  private assertCompatiblePaymentMethods(
+    rows: Array<{
+      paymentMethod: TransactionPaymentMethod;
+      isAdvance: boolean;
+    }>,
+  ) {
+    if (rows.some((row) => row.isAdvance && row.paymentMethod === TransactionPaymentMethod.ONLINE)) {
+      throw new BadRequestException(
+        "Online payment is not allowed for advance settlement",
+      );
+    }
+
+    const methods = new Set(rows.map((row) => row.paymentMethod));
+    const hasCash = methods.has(TransactionPaymentMethod.CASH);
+    const hasChequeFamily =
+      methods.has(TransactionPaymentMethod.CHEQUE) ||
+      methods.has(TransactionPaymentMethod.ONLINE);
+    if (hasCash && hasChequeFamily) {
+      throw new BadRequestException(
+        "All payment rows must use the same payment method",
+      );
+    }
+
+    const normalMethods = new Set(
+      rows
+        .filter((row) => !row.isAdvance)
+        .map((row) => row.paymentMethod),
+    );
+    if (normalMethods.size > 1) {
+      throw new BadRequestException(
+        "All payment rows must use the same payment method",
+      );
+    }
+  }
+
+  private assertOnlinePaymentFieldsCleared(row: TransactionPaymentPayload) {
+    if (normalizeNullableString(row.referenceNumber)) {
+      throw new BadRequestException(
+        "Cheque / ref no must be empty for online payment",
+      );
+    }
+    if (normalizeNullableString(row.chequePageId)) {
+      throw new BadRequestException(
+        "Cheque page must be empty for online payment",
+      );
+    }
   }
 
   private getFileIndex(fieldname: string) {
@@ -2385,12 +2439,15 @@ export class TransactionsService {
       allowPartialPayment = creditPreview.outstandingAllowed;
     }
 
-    const paymentMethods = isFakeCurrency
-      ? []
-      : paymentRows.map((row) => this.resolvePaymentMethod(row.paymentMethod));
-    if (new Set(paymentMethods).size > 1) {
-      throw new BadRequestException(
-        "All payment rows must use the same payment method",
+    if (!isFakeCurrency) {
+      this.assertCompatiblePaymentMethods(
+        paymentRows.map((row) => ({
+          paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
+          isAdvance: Boolean(
+            normalizeNullableString(row.advanceVoucherId) ||
+              row.settlementSource === TransactionSettlementSource.ADVANCE,
+          ),
+        })),
       );
     }
 
@@ -2414,6 +2471,11 @@ export class TransactionsService {
         throw new BadRequestException(
           "Advance voucher is required for an advance settlement row",
         );
+      if (isAdvance && paymentMethod === TransactionPaymentMethod.ONLINE) {
+        throw new BadRequestException(
+          "Online payment is not allowed for advance settlement",
+        );
+      }
       const preparedAdvance = advanceVoucherId
         ? await this.voucherService.prepareAdvancePayment({
             voucherId: advanceVoucherId,
@@ -2471,6 +2533,13 @@ export class TransactionsService {
         cashTotal += amount;
       } else {
         chequeTotal += amount;
+      }
+
+      if (paymentMethod === TransactionPaymentMethod.ONLINE) {
+        this.assertOnlinePaymentFieldsCleared(row);
+        if (!String(row.referenceDate ?? "").trim()) {
+          throw new BadRequestException("Cheque date is required");
+        }
       }
 
       if (

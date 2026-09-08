@@ -298,4 +298,28 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     expect(result.passengerId).toBe("passenger-nri-2");
     expect(result.passengerMatchTier).toBe(1);
   });
+
+  it("blocks NRI purchases settled by online payment", async () => {
+    const body = purchaseBody({
+      passenger: {
+        entityType: PassengerEntityType.INDIVIDUAL,
+        nationalityType: PassengerNationalityType.NRI,
+        passportNumber: "P1234567",
+        passportPassengerName: "John Smith",
+        contactNo: "9999999999",
+        address1: "12 Test Street",
+      },
+      payments: [
+        {
+          paymentMethod: TransactionPaymentMethod.ONLINE,
+          amount: 500,
+        },
+      ],
+    });
+
+    const result = await service.preview(body);
+
+    expect(result.allowed).toBe(false);
+    expect(result.ruleType).toBe("CHEQUE_NOT_ALLOWED");
+  });
 });
