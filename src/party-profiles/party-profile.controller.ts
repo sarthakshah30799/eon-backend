@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -30,6 +31,7 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
 import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
+import { UpgradePartyProfileCreditPolicyDto } from "./dto/upgrade-party-profile-credit-policy.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { PartyProfileService } from "./party-profile.service";
@@ -113,6 +115,22 @@ export class PartyProfileController {
       dto,
       session.userId,
       effectiveBranchId,
+    );
+  }
+
+  @Patch(":id/credit-policy")
+  @ApiOperation({ summary: "Upgrade party profile credit policy limits" })
+  @ApiParam({ name: "id", description: "Party profile UUID" })
+  @ApiResponse({ status: 200, type: PartyProfileResponseDto })
+  async upgradeCreditPolicy(
+    @Param("id") id: string,
+    @Body() dto: UpgradePartyProfileCreditPolicyDto,
+    @Session() session: any,
+  ): Promise<PartyProfileResponseDto> {
+    return this.partyProfileService.upgradeCreditPolicy(
+      id,
+      dto,
+      session.userId,
     );
   }
 
