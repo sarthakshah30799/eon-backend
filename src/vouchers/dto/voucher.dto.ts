@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type, Transform } from "class-transformer";
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
@@ -117,6 +118,32 @@ export class CreateJournalVoucherDto {
   @ApiProperty({ type: [CreateVoucherItemDto] })
   @IsArray()
   @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateVoucherItemDto)
+  items: CreateVoucherItemDto[];
+}
+
+export class CreateDepositWithdrawalVoucherDto {
+  @ApiProperty() @IsDateString() transactionDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() counterId?: string;
+  @ApiProperty() @IsString() @IsNotEmpty() chequeNumber: string;
+  @ApiProperty() @IsDateString() chequeDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
+  @ApiProperty()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  narration: string;
+  @ApiProperty() @IsString() @IsNotEmpty() idempotencyKey: string;
+  @ApiProperty({
+    type: [CreateVoucherItemDto],
+    description:
+      "Exactly 2 lines (deposited in, withdrawal from) or 3 when handling fee > 0",
+  })
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(3)
   @ValidateNested({ each: true })
   @Type(() => CreateVoucherItemDto)
   items: CreateVoucherItemDto[];

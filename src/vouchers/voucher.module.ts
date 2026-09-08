@@ -18,6 +18,7 @@ import {
   VoucherAdvanceApplication,
 } from "./entities";
 import {
+  DepositWithdrawalVoucherController,
   JournalVoucherController,
   PaymentVoucherController,
   ReceiptVoucherController,
@@ -53,6 +54,7 @@ import { VoucherService } from "./voucher.service";
     ReceiptVoucherController,
     PaymentVoucherController,
     JournalVoucherController,
+    DepositWithdrawalVoucherController,
   ],
   providers: [VoucherService],
   exports: [VoucherService, TypeOrmModule],

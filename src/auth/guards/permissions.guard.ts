@@ -152,6 +152,8 @@ export class PermissionsGuard implements CanActivate {
       menuPath = "/card-stock";
     } else if (path.includes("/journal-vouchers")) {
       menuPath = "/journal-vouchers";
+    } else if (path.includes("/deposit-withdrawals")) {
+      menuPath = "/deposit-withdrawals";
     } else if (path.includes("/receipts")) {
       menuPath = "/receipts";
     } else if (path.includes("/payments")) {

@@ -1,11 +1,16 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { TransactionAdditionalCharge } from "../transactions/entities/transaction-additional-charge.entity";
 import { TransactionAccountPosting } from "../transactions/entities/transaction-account-posting.entity";
 import { TransactionBalanceCurrency } from "../transactions/entities/transaction-balance-currency.entity";
+import {
+  AccountingVoucher,
+  AccountingVoucherItem,
+} from "../vouchers/entities";
 import { SalePurchaseReportController } from "./sale-purchase-report.controller";
 import { SalePurchaseReportService } from "./sale-purchase-report.service";
 import { ProductProfitReportController } from "./product-profit-report.controller";
@@ -14,6 +19,12 @@ import { SpecialReportController } from "./special-report.controller";
 import { SpecialReportService } from "./special-report.service";
 import { CurrencyBalanceReportController } from "./currency-balance-report.controller";
 import { CurrencyBalanceReportService } from "./currency-balance-report.service";
+import { BankReportController } from "./bank-report.controller";
+import { BankReportService } from "./bank-report.service";
+import { CashReportController } from "./cash-report.controller";
+import { CashReportService } from "./cash-report.service";
+import { GenerateLedgerController } from "./generate-ledger.controller";
+import { GenerateLedgerService } from "./generate-ledger.service";
 import { CardUnsettledReportController } from "./card-unsettled-report.controller";
 import { CardUnsettledReportService } from "./card-unsettled-report.service";
 import { CardSettledReportController } from "./card-settled-report.controller";
@@ -46,7 +57,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     PurposeModule,
     DayEndStartProcessModule,
     TransactionDataLocksModule,
-    TypeOrmModule.forFeature([Branch, UserRole, Currency]),
+    TypeOrmModule.forFeature([Branch, UserRole, Currency, AccountProfile]),
     TypeOrmModule.forFeature(
       [
         Transaction,
@@ -55,6 +66,8 @@ import { UserRole } from "../user-roles/user-role.entity";
         TransactionAdditionalCharge,
         TransactionAccountPosting,
         TransactionBalanceCurrency,
+        AccountingVoucher,
+        AccountingVoucherItem,
       ],
       "database2",
     ),
@@ -64,6 +77,9 @@ import { UserRole } from "../user-roles/user-role.entity";
     ProductProfitReportController,
     SpecialReportController,
     CurrencyBalanceReportController,
+    BankReportController,
+    CashReportController,
+    GenerateLedgerController,
     CardUnsettledReportController,
     CardSettledReportController,
     CardBlankStockReportController,
@@ -79,6 +95,9 @@ import { UserRole } from "../user-roles/user-role.entity";
     ProductProfitReportService,
     SpecialReportService,
     CurrencyBalanceReportService,
+    BankReportService,
+    CashReportService,
+    GenerateLedgerService,
     CardUnsettledReportService,
     CardSettledReportService,
     CardBlankStockReportService,

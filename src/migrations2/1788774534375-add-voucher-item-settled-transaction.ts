@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddVoucherItemSettledTransaction1788771756018 implements MigrationInterface {
-    name = 'AddVoucherItemSettledTransaction1788771756018'
+export class AddVoucherItemSettledTransaction1788774534375 implements MigrationInterface {
+    name = 'AddVoucherItemSettledTransaction1788774534375'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`ALTER TABLE "accounting_voucher_items" ADD "settled_transaction_id" uuid`);

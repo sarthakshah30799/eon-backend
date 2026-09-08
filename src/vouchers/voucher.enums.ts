@@ -4,6 +4,7 @@ export enum VoucherType {
   RECEIPT = "RECEIPT",
   PAYMENT = "PAYMENT",
   JOURNAL = "JOURNAL",
+  DEPOSIT_WITHDRAWAL = "DEPOSIT_WITHDRAWAL",
 }
 
 export enum VoucherEntryDirection {
@@ -102,4 +103,5 @@ export const VOUCHER_NUMBER_SERIES: Record<VoucherType, string> = {
   [VoucherType.RECEIPT]: "RECEIPT_VOUCHER",
   [VoucherType.PAYMENT]: "PAYMENT_VOUCHER",
   [VoucherType.JOURNAL]: "JOURNAL_VOUCHER",
+  [VoucherType.DEPOSIT_WITHDRAWAL]: "DEPOSIT_WITHDRAWAL_VOUCHER",
 };

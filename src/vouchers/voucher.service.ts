@@ -32,6 +32,7 @@ import { TransactionPayment } from "../transactions/entities/transaction-payment
 import {
   AdvanceApplicationPayloadDto,
   AvailableAdvanceQueryDto,
+  CreateDepositWithdrawalVoucherDto,
   CreateJournalVoucherDto,
   CreatePartyVoucherDto,
   CreateVoucherItemDto,
@@ -417,6 +418,52 @@ export class VoucherService implements OnModuleInit {
     return this.account(id, usage, "item");
   }
 
+  private async resolveHandlingFeeAccount() {
+    const id = normalize(
+      await this.additionalSettings.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "HANDLING_CHARGE_ACCOUNT",
+      ),
+    );
+    if (!id)
+      throw new BadRequestException(
+        "Missing HANDLING_CHARGE_ACCOUNT additional setting",
+      );
+    return this.account(id, undefined, "item");
+  }
+
+  private accountLedgerTokens(account: AccountProfile) {
+    return new Set(
+      [account.accountType?.value, account.accountType?.label]
+        .map(normalizeUpper)
+        .filter(Boolean),
+    );
+  }
+
+  private isBankLedgerAccount(account: AccountProfile) {
+    return this.accountLedgerTokens(account).has("BANK_LEDGER");
+  }
+
+  private isCashOrBankLedgerAccount(account: AccountProfile) {
+    const tokens = this.accountLedgerTokens(account);
+    return tokens.has("BANK_LEDGER") || tokens.has("CASH_LEDGER");
+  }
+
+  private async resolveBankChequeAccountTypeOption() {
+    const option = await this.optionRepository.findOne({
+      where: {
+        code: "VOUCHER_ACCOUNT_TYPE",
+        value: VoucherAccountMode.BANK_CHEQUE,
+        isActive: true,
+      },
+    });
+    if (!option)
+      throw new BadRequestException(
+        "Missing active VOUCHER_ACCOUNT_TYPE Bank / Cheque option",
+      );
+    return option;
+  }
+
   private billOutstandingCents(transaction: Transaction) {
     return (
       cents(transaction.finalAmount) -
@@ -524,6 +571,13 @@ export class VoucherService implements OnModuleInit {
       throw new BadRequestException(
         "Journal voucher debit and credit totals must be positive and equal",
       );
+    if (
+      type === VoucherType.DEPOSIT_WITHDRAWAL &&
+      (debit <= 0 || credit <= 0 || debit !== credit)
+    )
+      throw new BadRequestException(
+        "Deposit / Withdrawal debit and credit totals must be positive and equal",
+      );
     return {
       totalDebit: money(debit),
       totalCredit: money(credit),
@@ -537,11 +591,312 @@ export class VoucherService implements OnModuleInit {
     };
   }
 
-  async create(
-    type: VoucherType,
-    dto: CreatePartyVoucherDto | CreateJournalVoucherDto,
+  private async createDepositWithdrawal(
+    dto: CreateDepositWithdrawalVoucherDto,
     session: VoucherSession,
   ) {
+    const type = VoucherType.DEPOSIT_WITHDRAWAL;
+    const actorId = this.getActor(session);
+    const narration = normalize(dto.narration);
+    if (!narration) throw new BadRequestException("Narration is required");
+    const chequeNumber = normalize(dto.chequeNumber);
+    const chequeDate = normalize(dto.chequeDate).slice(0, 10);
+    if (!chequeNumber || !chequeDate)
+      throw new BadRequestException("Cheque Number and Cheque Date are required");
+    if (dto.items.length !== 2 && dto.items.length !== 3)
+      throw new BadRequestException(
+        "Deposit / Withdrawal requires 2 lines, or 3 when handling fee is included",
+      );
+
+    const hash = this.payloadHash(type, dto);
+    const repeated = await this.findIdempotent(dto.idempotencyKey, hash);
+    if (repeated) return repeated;
+
+    const workplace = await this.resolveWorkplace(dto, session);
+    await this.dayPolicy.assertTransactionDateAllowed(
+      workplace.branch.id,
+      actorId,
+      dto.transactionDate,
+      workplace.counter.id,
+    );
+
+    const [branchSnapshot, counterSnapshot, remark, accountType] =
+      await Promise.all([
+        this.snapshot(this.branchRepository, workplace.branch.id),
+        this.snapshot(this.counterRepository, workplace.counter.id),
+        dto.remarkOptionId
+          ? this.option(dto.remarkOptionId, "VOUCHER_REMARK")
+          : Promise.resolve(null),
+        this.resolveBankChequeAccountTypeOption(),
+      ]);
+
+    const depositedDto = dto.items[0];
+    const withdrawalDto = dto.items[1];
+    const feeDto = dto.items[2] ?? null;
+
+    const depositedType = await this.option(
+      depositedDto.itemTypeOptionId,
+      "VOUCHER_ITEM_TYPE",
+    );
+    const withdrawalType = await this.option(
+      withdrawalDto.itemTypeOptionId,
+      "VOUCHER_ITEM_TYPE",
+    );
+    if (
+      !isVoucherAccountItemType(depositedType.value) ||
+      !isVoucherAccountItemType(withdrawalType.value)
+    )
+      throw new BadRequestException(
+        "Deposit / Withdrawal lines must use Account item type",
+      );
+    if (depositedDto.direction !== VoucherEntryDirection.DEBIT)
+      throw new BadRequestException("Deposited in must be Debit");
+    if (withdrawalDto.direction !== VoucherEntryDirection.CREDIT)
+      throw new BadRequestException("Withdrawal from must be Credit");
+    if (normalize(depositedDto.settledTransactionId) || normalize(withdrawalDto.settledTransactionId))
+      throw new BadRequestException(
+        "Deposit / Withdrawal lines cannot settle a transaction",
+      );
+    if (depositedDto.subledgerPartyProfileId || withdrawalDto.subledgerPartyProfileId)
+      throw new BadRequestException(
+        "Deposit / Withdrawal lines do not support sub ledger",
+      );
+
+    const depositedAccountId = normalize(depositedDto.accountId);
+    const withdrawalAccountId = normalize(withdrawalDto.accountId);
+    if (!depositedAccountId || !withdrawalAccountId)
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from require accountId",
+      );
+    if (depositedAccountId === withdrawalAccountId)
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from must use different accounts",
+      );
+
+    const [depositedAccount, withdrawalAccount] = await Promise.all([
+      this.account(depositedAccountId, type, "item"),
+      this.account(withdrawalAccountId, type, "item"),
+    ]);
+    if (
+      !this.isCashOrBankLedgerAccount(depositedAccount) ||
+      !this.isCashOrBankLedgerAccount(withdrawalAccount)
+    )
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from must be Cash Ledger or Bank Ledger accounts",
+      );
+    const depositedIsBank = this.isBankLedgerAccount(depositedAccount);
+    const withdrawalIsBank = this.isBankLedgerAccount(withdrawalAccount);
+    if (!depositedIsBank && !withdrawalIsBank)
+      throw new BadRequestException(
+        "At least one of Deposited in or Withdrawal from must be a Bank Ledger account",
+      );
+
+    const depositedCents = cents(depositedDto.amount);
+    const withdrawalCents = cents(withdrawalDto.amount);
+    if (depositedCents <= 0 || withdrawalCents <= 0)
+      throw new BadRequestException(
+        "Deposited in and Withdrawal from amounts must be greater than zero",
+      );
+
+    let feeAccount: AccountProfile | null = null;
+    let feeType: SelectOption | null = null;
+    let feeCents = 0;
+    if (feeDto) {
+      feeCents = cents(feeDto.amount);
+      if (feeCents <= 0)
+        throw new BadRequestException(
+          "Handling fee amount must be greater than zero when fee line is sent",
+        );
+      feeType = await this.option(feeDto.itemTypeOptionId, "VOUCHER_ITEM_TYPE");
+      if (!isVoucherAccountItemType(feeType.value))
+        throw new BadRequestException(
+          "Handling fee line must use Account item type",
+        );
+      if (feeDto.direction !== VoucherEntryDirection.DEBIT)
+        throw new BadRequestException("Handling fee must be Debit");
+      if (normalize(feeDto.settledTransactionId))
+        throw new BadRequestException(
+          "Handling fee line cannot settle a transaction",
+        );
+      if (feeDto.subledgerPartyProfileId)
+        throw new BadRequestException(
+          "Handling fee line does not support sub ledger",
+        );
+      if (normalize(feeDto.accountId))
+        throw new BadRequestException(
+          "Handling fee account is resolved from additional settings",
+        );
+      feeAccount = await this.resolveHandlingFeeAccount();
+    }
+
+    if (depositedCents + feeCents !== withdrawalCents)
+      throw new BadRequestException(
+        feeCents > 0
+          ? "Withdrawal from must equal Deposited in plus Handling fee"
+          : "Withdrawal from must equal Deposited in when handling fee is omitted",
+      );
+
+    const resolvedItems: ResolvedAccountVoucherItem[] = [
+      {
+        kind: "ACCOUNT",
+        dto: depositedDto,
+        type: depositedType,
+        account: depositedAccount,
+        subledger: null,
+      },
+      {
+        kind: "ACCOUNT",
+        dto: withdrawalDto,
+        type: withdrawalType,
+        account: withdrawalAccount,
+        subledger: null,
+      },
+    ];
+    if (feeDto && feeAccount && feeType) {
+      resolvedItems.push({
+        kind: "ACCOUNT",
+        dto: {
+          ...feeDto,
+          accountId: feeAccount.id,
+          direction: VoucherEntryDirection.DEBIT,
+        },
+        type: feeType,
+        account: feeAccount,
+        subledger: null,
+      });
+    }
+
+    const totals = this.calculate(
+      type,
+      resolvedItems.map((row) => row.dto),
+    );
+    const headerAccount = depositedIsBank
+      ? depositedAccount
+      : withdrawalAccount;
+    const accountMode = VoucherAccountMode.BANK_CHEQUE;
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[type],
+      workplace.branch.code,
+      new Date(),
+    );
+
+    return this.database2
+      .transaction(async (manager) => {
+        const voucherRepo = manager.getRepository(AccountingVoucher);
+        const itemRepo = manager.getRepository(AccountingVoucherItem);
+        const voucher = await voucherRepo.save(
+          voucherRepo.create({
+            voucherType: type,
+            number,
+            idempotencyKey: dto.idempotencyKey,
+            payloadHash: hash,
+            transactionDate: dto.transactionDate.slice(0, 10),
+            branchId: workplace.branch.id,
+            branchSnapshot,
+            counterId: workplace.counter.id,
+            counterSnapshot,
+            accountTypeOptionId: accountType.id,
+            accountTypeSnapshot: await this.snapshot(
+              this.optionRepository,
+              accountType.id,
+            ),
+            accountMode,
+            headerAccountId: headerAccount.id,
+            headerAccountSnapshot: await this.snapshot(
+              this.accountRepository,
+              headerAccount.id,
+            ),
+            entityTypeOptionId: null,
+            entityTypeSnapshot: null,
+            partyProfileId: null,
+            partyProfileSnapshot: null,
+            panNumber: null,
+            panName: null,
+            panDob: null,
+            chequeNumber,
+            normalizedChequeNumber: normalizeUpper(chequeNumber),
+            chequeDate,
+            chequeBranch: null,
+            drawnOn: null,
+            remarkOptionId: remark?.id ?? null,
+            remarkSnapshot: remark
+              ? await this.snapshot(this.optionRepository, remark.id)
+              : null,
+            narration,
+            ...totals,
+            advanceControlAccountId: null,
+            advanceControlAccountSnapshot: null,
+            createdBy: actorId,
+            updatedBy: actorId,
+          }),
+        );
+        for (let index = 0; index < resolvedItems.length; index++) {
+          const row = resolvedItems[index];
+          await itemRepo.save(
+            itemRepo.create({
+              voucherId: voucher.id,
+              voucher,
+              lineNo: index + 1,
+              itemTypeOptionId: row.type.id,
+              itemTypeSnapshot: await this.snapshot(
+                this.optionRepository,
+                row.type.id,
+              ),
+              subledgerPartyProfileId: null,
+              subledgerPartyProfileSnapshot: null,
+              accountId: row.account.id,
+              accountSnapshot: await this.snapshot(
+                this.accountRepository,
+                row.account.id,
+              ),
+              direction: row.dto.direction,
+              amount: money(cents(row.dto.amount)),
+              settledTransactionId: null,
+              settledTransactionSnapshot: null,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+        }
+        return voucherRepo.findOneOrFail({
+          where: { id: voucher.id },
+          relations: ["items"],
+        });
+      })
+      .catch(async (error) => {
+        if (
+          error?.code === "23505" &&
+          String(error?.constraint ?? "").includes("idempotency")
+        ) {
+          const existing = await this.findIdempotent(dto.idempotencyKey, hash);
+          if (existing) return existing;
+        }
+        if (
+          error?.code === "23505" &&
+          String(error?.constraint ?? "").includes("cheque")
+        )
+          throw new ConflictException(
+            "Cheque Number already exists for this voucher type and account",
+          );
+        throw error;
+      });
+  }
+
+  async create(
+    type: VoucherType,
+    dto:
+      | CreatePartyVoucherDto
+      | CreateJournalVoucherDto
+      | CreateDepositWithdrawalVoucherDto,
+    session: VoucherSession,
+  ) {
+    if (type === VoucherType.DEPOSIT_WITHDRAWAL) {
+      return this.createDepositWithdrawal(
+        dto as CreateDepositWithdrawalVoucherDto,
+        session,
+      );
+    }
     const actorId = this.getActor(session);
     const narration = normalize(dto.narration);
     if (!narration) throw new BadRequestException("Narration is required");

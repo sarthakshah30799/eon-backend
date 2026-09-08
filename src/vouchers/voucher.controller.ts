@@ -14,6 +14,7 @@ import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   AvailableAdvanceQueryDto,
+  CreateDepositWithdrawalVoucherDto,
   CreateJournalVoucherDto,
   CreatePaymentVoucherDto,
   CreateReceiptVoucherDto,
@@ -131,5 +132,40 @@ export class JournalVoucherController {
     @Session() session: any,
   ) {
     return this.service.findById(VoucherType.JOURNAL, id, session);
+  }
+}
+
+@ApiCookieAuth("sessionId")
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
+@ApiTags("deposit-withdrawals")
+@Controller("deposit-withdrawals")
+export class DepositWithdrawalVoucherController {
+  constructor(private readonly service: VoucherService) {}
+  @Post()
+  @ApiOperation({ summary: "Create immutable Deposit / Withdrawal voucher" })
+  create(
+    @Body() dto: CreateDepositWithdrawalVoucherDto,
+    @Session() session: any,
+  ) {
+    return this.service.create(VoucherType.DEPOSIT_WITHDRAWAL, dto, session);
+  }
+  @Get() list(@Query() query: VoucherListQueryDto, @Session() session: any) {
+    return this.service.list(VoucherType.DEPOSIT_WITHDRAWAL, query, session);
+  }
+  @Get("next-number") next(
+    @Query("branchId") branchId: string,
+    @Session() session: any,
+  ) {
+    return this.service.nextNumber(
+      VoucherType.DEPOSIT_WITHDRAWAL,
+      branchId,
+      session,
+    );
+  }
+  @Get(":id") find(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Session() session: any,
+  ) {
+    return this.service.findById(VoucherType.DEPOSIT_WITHDRAWAL, id, session);
   }
 }
