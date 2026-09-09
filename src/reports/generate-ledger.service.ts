@@ -84,6 +84,7 @@ const TECHNICAL_SLUGS = [
 const SOURCE_TYPE_LABELS: Partial<Record<string, string>> = {
   [TransactionPostingSourceType.ADDITIONAL_CHARGE]: "Additional charge",
   [TransactionPostingSourceType.TDS]: "TDS",
+  [TransactionPostingSourceType.TCS]: "TCS",
   [TransactionPostingSourceType.ROUND_OFF]: "Round off",
   [TransactionPostingSourceType.PARTY_CONTROL]: "Party control",
   [TransactionPostingSourceType.TAX_ITEM]: "Tax",

@@ -1,7 +1,8 @@
 import { Injectable, NestMiddleware } from "@nestjs/common";
-import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction, RequestHandler } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { Pool } from "pg";
 import { ConfigService } from "../config/config.service";
 import { SessionPolicyService } from "../session-policy/session-policy.service";
 
@@ -9,24 +10,30 @@ const PgSession = connectPgSimple(session);
 
 @Injectable()
 export class SessionMiddleware implements NestMiddleware {
+  private readonly sessionMiddleware: RequestHandler;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly sessionPolicyService: SessionPolicyService,
-  ) {}
-
-  async use(req: Request, res: Response, next: NextFunction) {
+  ) {
     const ssl = this.configService.database.ssl;
 
-    const sessionMiddleware = session({
+    // One shared pool for the process. Creating PgSession inside use() leaked
+    // a new pool (and connections) on every HTTP request.
+    const pool = new Pool({
+      host: this.configService.database.host,
+      port: this.configService.database.port,
+      user: this.configService.database.username,
+      password: this.configService.database.password,
+      database: this.configService.database.database,
+      ssl,
+      max: 5,
+      idleTimeoutMillis: 30_000,
+    });
+
+    this.sessionMiddleware = session({
       store: new PgSession({
-        conObject: {
-          host: this.configService.database.host,
-          port: this.configService.database.port,
-          user: this.configService.database.username,
-          password: this.configService.database.password,
-          database: this.configService.database.database,
-          ssl,
-        },
+        pool,
         tableName: "user_sessions",
         createTableIfMissing: true,
       }),
@@ -43,8 +50,10 @@ export class SessionMiddleware implements NestMiddleware {
       },
       name: "sessionId",
     });
+  }
 
-    sessionMiddleware(req, res, async (error) => {
+  async use(req: Request, res: Response, next: NextFunction) {
+    this.sessionMiddleware(req, res, async (error) => {
       if (error) {
         next(error);
         return;

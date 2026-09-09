@@ -1494,6 +1494,214 @@ export class TransactionAccountPostingWorker
       );
     }
 
+    if (isFinalStandardTransaction) {
+      const toMoneyCents = (value: string | number | null | undefined) =>
+        Math.round(Number(roundMoney(Number(value ?? 0))) * 100);
+
+      let chargeIgstCents = 0;
+      let chargeCgstCents = 0;
+      let chargeSgstCents = 0;
+      for (const charge of chargeRows) {
+        chargeIgstCents += toMoneyCents(charge.igstAmount);
+        chargeCgstCents += toMoneyCents(charge.cgstAmount);
+        chargeSgstCents += toMoneyCents(charge.sgstAmount);
+      }
+
+      const headerIgstCents = toMoneyCents(transaction.igstAmount);
+      const headerCgstCents = toMoneyCents(transaction.cgstAmount);
+      const headerSgstCents = toMoneyCents(transaction.sgstAmount);
+      const itemIgstCents = headerIgstCents - chargeIgstCents;
+      const itemCgstCents = headerCgstCents - chargeCgstCents;
+      const itemSgstCents = headerSgstCents - chargeSgstCents;
+
+      if (itemIgstCents < 0 || itemCgstCents < 0 || itemSgstCents < 0) {
+        throw new BadRequestException(
+          "Additional charge GST exceeds transaction GST totals",
+        );
+      }
+
+      const tcsAmount = Number(
+        roundMoney(Number(transaction.tcsAmount ?? 0)),
+      );
+      const hasGstOrTcs =
+        headerIgstCents > 0 ||
+        headerCgstCents > 0 ||
+        headerSgstCents > 0 ||
+        tcsAmount > 0;
+
+      if (hasGstOrTcs && !transaction.partyProfileId) {
+        throw new BadRequestException(
+          "Party profile is required when GST or TCS postings are present",
+        );
+      }
+
+      if (
+        hasGstOrTcs &&
+        (!controlAccountId ||
+          !controlAccountSnapshot ||
+          !igstAccountId ||
+          !cgstAccountId ||
+          !sgstAccountId ||
+          !igstAccountSnapshot ||
+          !cgstAccountSnapshot ||
+          !sgstAccountSnapshot)
+      ) {
+        throw new BadRequestException(
+          "Missing purchase/sale or GST control account for tax postings",
+        );
+      }
+
+      const addGstPostingPair = (
+        sourceType:
+          | typeof TransactionPostingSourceType.TAX_ITEM
+          | typeof TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE,
+        sourceId: string | null,
+        gstAccountId: string,
+        gstAccountSnapshot: TransactionReferenceSnapshotValue,
+        amountCents: number,
+        remarks: string,
+      ) => {
+        if (amountCents <= 0) {
+          return;
+        }
+
+        const amount = roundMoney(amountCents / 100);
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType,
+            sourceId,
+            accountId: gstAccountId,
+            accountSnapshot: gstAccountSnapshot,
+            profileId: null,
+            direction: TransactionPostingDirection.CREDIT,
+            amount,
+            remarks,
+          },
+          false,
+        );
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType,
+            sourceId,
+            accountId: controlAccountId as string,
+            accountSnapshot: controlAccountSnapshot,
+            profileId: transaction.partyProfileId,
+            direction: TransactionPostingDirection.DEBIT,
+            amount,
+            remarks: `${remarks} control`,
+          },
+          false,
+        );
+      };
+
+      for (const charge of chargeRows) {
+        addGstPostingPair(
+          TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE,
+          charge.id,
+          igstAccountId as string,
+          igstAccountSnapshot,
+          toMoneyCents(charge.igstAmount),
+          `Additional charge IGST ${charge.lineNo}`,
+        );
+        addGstPostingPair(
+          TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE,
+          charge.id,
+          cgstAccountId as string,
+          cgstAccountSnapshot,
+          toMoneyCents(charge.cgstAmount),
+          `Additional charge CGST ${charge.lineNo}`,
+        );
+        addGstPostingPair(
+          TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE,
+          charge.id,
+          sgstAccountId as string,
+          sgstAccountSnapshot,
+          toMoneyCents(charge.sgstAmount),
+          `Additional charge SGST ${charge.lineNo}`,
+        );
+      }
+
+      addGstPostingPair(
+        TransactionPostingSourceType.TAX_ITEM,
+        null,
+        igstAccountId as string,
+        igstAccountSnapshot,
+        itemIgstCents,
+        "Item IGST",
+      );
+      addGstPostingPair(
+        TransactionPostingSourceType.TAX_ITEM,
+        null,
+        cgstAccountId as string,
+        cgstAccountSnapshot,
+        itemCgstCents,
+        "Item CGST",
+      );
+      addGstPostingPair(
+        TransactionPostingSourceType.TAX_ITEM,
+        null,
+        sgstAccountId as string,
+        sgstAccountSnapshot,
+        itemSgstCents,
+        "Item SGST",
+      );
+
+      if (tcsAmount > 0) {
+        const tcsControlAccountText =
+          await this.additionalSettingService.getSettingTextValue(
+            "TRANSACTION_ACCOUNTING",
+            "TCS_CONTROL_ACCOUNT",
+          );
+        if (!tcsControlAccountText) {
+          throw new BadRequestException(
+            "Missing TCS control account additional setting",
+          );
+        }
+
+        const tcsControlAccountSnapshot =
+          await resolveAccountSnapshot(tcsControlAccountText);
+
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: TransactionPostingSourceType.TCS,
+            sourceId: null,
+            accountId: tcsControlAccountText,
+            accountSnapshot: tcsControlAccountSnapshot,
+            profileId: null,
+            direction: TransactionPostingDirection.CREDIT,
+            amount: roundMoney(tcsAmount),
+            remarks: "TCS payable",
+          },
+          false,
+        );
+        addPosting(
+          {
+            transactionId: transaction.id,
+            createdBy: postingActorId,
+            updatedBy: postingActorId,
+            sourceType: TransactionPostingSourceType.TCS,
+            sourceId: null,
+            accountId: controlAccountId as string,
+            accountSnapshot: controlAccountSnapshot,
+            profileId: transaction.partyProfileId,
+            direction: TransactionPostingDirection.DEBIT,
+            amount: roundMoney(tcsAmount),
+            remarks: "TCS control",
+          },
+          false,
+        );
+      }
+    }
+
     for (const payment of paymentRows) {
       const accountSnapshot =
         payment.accountSnapshot ??
