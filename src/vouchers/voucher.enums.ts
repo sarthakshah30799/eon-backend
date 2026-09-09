@@ -19,15 +19,6 @@ export enum VoucherAccountMode {
   CREDIT_CARD = "CREDIT_CARD",
 }
 
-export const VoucherElectronicPaymentMethod = {
-  UPI: "UPI",
-  NEFT: "NEFT",
-  RTGS: "RTGS",
-} as const;
-
-export type VoucherElectronicPaymentMethod =
-  (typeof VoucherElectronicPaymentMethod)[keyof typeof VoucherElectronicPaymentMethod];
-
 export enum VoucherAdvanceApplicationState {
   RESERVED = "RESERVED",
   APPLIED = "APPLIED",

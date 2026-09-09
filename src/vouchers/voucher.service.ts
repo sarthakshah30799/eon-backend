@@ -48,7 +48,6 @@ import {
 import {
   VoucherAccountMode,
   VoucherAdvanceApplicationState,
-  VoucherElectronicPaymentMethod,
   VoucherEntryDirection,
   VoucherItemTypeValue,
   VOUCHER_ITEM_TYPE_LABELS,
@@ -922,7 +921,7 @@ export class VoucherService implements OnModuleInit {
 
     let party: PartyProfile | null = null;
     let accountMode: VoucherAccountMode | null = null;
-    let electronicPaymentMethod: VoucherElectronicPaymentMethod | null = null;
+    let electronicPaymentMethod: TransactionPaymentMethod | null = null;
     let accountType: SelectOption | null = null;
     let headerAccount: AccountProfile | null = null;
     let entityType: SelectOption | null = null;
@@ -971,7 +970,7 @@ export class VoucherService implements OnModuleInit {
       )
         ? (normalizeUpper(
             partyDto.paymentMethod,
-          ) as VoucherElectronicPaymentMethod)
+          ) as TransactionPaymentMethod)
         : null;
       if (partyDto.paymentMethod && !electronicPaymentMethod)
         throw new BadRequestException(
