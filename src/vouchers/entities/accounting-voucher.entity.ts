@@ -77,7 +77,6 @@ export class AccountingVoucher extends BaseEntity {
   @Column({
     type: "enum",
     enum: TransactionPaymentMethod,
-    enumName: "transaction_payments_method_enum",
     name: "payment_method",
     nullable: true,
   })
