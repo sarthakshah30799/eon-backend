@@ -299,7 +299,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     expect(result.passengerMatchTier).toBe(1);
   });
 
-  it("blocks NRI purchases settled by online payment", async () => {
+  it("blocks NRI purchases settled by UPI", async () => {
     const body = purchaseBody({
       passenger: {
         entityType: PassengerEntityType.INDIVIDUAL,
@@ -311,7 +311,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
       },
       payments: [
         {
-          paymentMethod: TransactionPaymentMethod.ONLINE,
+          paymentMethod: TransactionPaymentMethod.UPI,
           amount: 500,
         },
       ],

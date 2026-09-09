@@ -82,7 +82,6 @@ export type TransactionDocumentStatus =
 export const TransactionPaymentMethod = {
   CASH: "CASH",
   CHEQUE: "CHEQUE",
-  ONLINE: "ONLINE",
   BANK_TRANSFER: "BANK_TRANSFER",
   UPI: "UPI",
   NEFT: "NEFT",
@@ -95,12 +94,24 @@ export const TransactionPaymentMethod = {
 export type TransactionPaymentMethod =
   (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
 
-export const ONLINE_PAYMENT_LABEL = "Online Payment";
+export const SELECTABLE_TRANSACTION_PAYMENT_METHODS = [
+  { value: TransactionPaymentMethod.CASH, label: "Cash" },
+  { value: TransactionPaymentMethod.CHEQUE, label: "Cheque" },
+  { value: TransactionPaymentMethod.UPI, label: "UPI" },
+  { value: TransactionPaymentMethod.NEFT, label: "NEFT" },
+  { value: TransactionPaymentMethod.RTGS, label: "RTGS" },
+] as const;
 
-export const isOnlinePaymentMethod = (value: unknown) =>
-  String(value ?? "")
+export const isElectronicPaymentMethod = (value: unknown) => {
+  const normalized = String(value ?? "")
     .trim()
-    .toUpperCase() === TransactionPaymentMethod.ONLINE;
+    .toUpperCase();
+  return (
+    normalized === TransactionPaymentMethod.UPI ||
+    normalized === TransactionPaymentMethod.NEFT ||
+    normalized === TransactionPaymentMethod.RTGS
+  );
+};
 
 export const isChequeFamilyPaymentMethod = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -108,17 +119,23 @@ export const isChequeFamilyPaymentMethod = (value: unknown) => {
     .toUpperCase();
   return (
     normalized === TransactionPaymentMethod.CHEQUE ||
-    normalized === TransactionPaymentMethod.ONLINE
+    isElectronicPaymentMethod(normalized)
   );
 };
 
 export const formatPaymentChequeReference = (
   paymentMethod: unknown,
   referenceNumber?: string | null,
-) =>
-  isOnlinePaymentMethod(paymentMethod)
-    ? ONLINE_PAYMENT_LABEL
-    : String(referenceNumber ?? "").trim();
+) => {
+  const normalized = String(paymentMethod ?? "")
+    .trim()
+    .toUpperCase();
+  if (isElectronicPaymentMethod(normalized)) {
+    return normalized;
+  }
+
+  return String(referenceNumber ?? "").trim();
+};
 
 export const TransactionPaymentDirection = {
   PAYMENT: "PAYMENT",

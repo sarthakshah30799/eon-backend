@@ -13,10 +13,11 @@ import {
   IsUUID,
   Matches,
   ValidateNested,
+  IsIn,
 } from "class-validator";
 import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
 import { PaginationQueryDto } from "../../common/pagination";
-import { VoucherEntryDirection } from "../voucher.enums";
+import { VoucherEntryDirection, VoucherElectronicPaymentMethod } from "../voucher.enums";
 
 export class CreateVoucherItemDto {
   @ApiProperty() @IsUUID() itemTypeOptionId: string;
@@ -86,6 +87,11 @@ export class CreatePartyVoucherDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() chequeDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() chequeBranch?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() drawnOn?: string;
+  @ApiPropertyOptional({ enum: VoucherElectronicPaymentMethod })
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsIn(Object.values(VoucherElectronicPaymentMethod))
+  paymentMethod?: VoucherElectronicPaymentMethod;
   @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
   @ApiProperty()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))

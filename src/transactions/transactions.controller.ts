@@ -31,6 +31,7 @@ import { PartyCreditService } from "../party-profiles/party-credit.service";
 import { CreditPreviewDto } from "./dto/credit-preview.dto";
 import { Transaction } from "./entities/transaction.entity";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
+import { PaymentMethodOptionDto } from "./dto/payment-method-option.dto";
 import { PaginatedResponseDto } from "../common/pagination";
 import { AnyFilesInterceptor } from "@nestjs/platform-express";
 
@@ -264,6 +265,20 @@ export class TransactionsController {
   })
   async previewCredit(@Body() body: CreditPreviewDto) {
     return this.partyCreditService.preview(body);
+  }
+
+  @Get("payment-methods")
+  @ApiOperation({
+    summary: "Get selectable transaction payment methods as value/label pairs",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "List of payment method options",
+    type: PaymentMethodOptionDto,
+    isArray: true,
+  })
+  getPaymentMethods(): PaymentMethodOptionDto[] {
+    return this.transactionsService.getPaymentMethodOptions();
   }
 
   @Get("next-number")

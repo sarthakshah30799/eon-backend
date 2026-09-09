@@ -16,6 +16,9 @@ import {
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
+  isChequeFamilyPaymentMethod,
+  isElectronicPaymentMethod,
+  SELECTABLE_TRANSACTION_PAYMENT_METHODS,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
@@ -695,6 +698,13 @@ export class TransactionsService {
     return this.runTcsPreview(body);
   }
 
+  getPaymentMethodOptions() {
+    return SELECTABLE_TRANSACTION_PAYMENT_METHODS.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }));
+  }
+
   private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
     const normalized = String(value ?? "")
       .trim()
@@ -707,12 +717,20 @@ export class TransactionsService {
       return TransactionPaymentMethod.CHEQUE;
     }
 
-    if (normalized === TransactionPaymentMethod.ONLINE) {
-      return TransactionPaymentMethod.ONLINE;
+    if (normalized === TransactionPaymentMethod.UPI) {
+      return TransactionPaymentMethod.UPI;
+    }
+
+    if (normalized === TransactionPaymentMethod.NEFT) {
+      return TransactionPaymentMethod.NEFT;
+    }
+
+    if (normalized === TransactionPaymentMethod.RTGS) {
+      return TransactionPaymentMethod.RTGS;
     }
 
     throw new BadRequestException(
-      "Payment mode must be CASH, CHEQUE, or ONLINE",
+      "Payment mode must be CASH, CHEQUE, UPI, NEFT, or RTGS",
     );
   }
 
@@ -722,17 +740,21 @@ export class TransactionsService {
       isAdvance: boolean;
     }>,
   ) {
-    if (rows.some((row) => row.isAdvance && row.paymentMethod === TransactionPaymentMethod.ONLINE)) {
+    if (
+      rows.some(
+        (row) => row.isAdvance && isElectronicPaymentMethod(row.paymentMethod),
+      )
+    ) {
       throw new BadRequestException(
-        "Online payment is not allowed for advance settlement",
+        "UPI, NEFT, and RTGS are not allowed for advance settlement",
       );
     }
 
     const methods = new Set(rows.map((row) => row.paymentMethod));
     const hasCash = methods.has(TransactionPaymentMethod.CASH);
-    const hasChequeFamily =
-      methods.has(TransactionPaymentMethod.CHEQUE) ||
-      methods.has(TransactionPaymentMethod.ONLINE);
+    const hasChequeFamily = [...methods].some((method) =>
+      isChequeFamilyPaymentMethod(method),
+    );
     if (hasCash && hasChequeFamily) {
       throw new BadRequestException(
         "All payment rows must use the same payment method",
@@ -751,15 +773,15 @@ export class TransactionsService {
     }
   }
 
-  private assertOnlinePaymentFieldsCleared(row: TransactionPaymentPayload) {
+  private assertElectronicPaymentFieldsCleared(row: TransactionPaymentPayload) {
     if (normalizeNullableString(row.referenceNumber)) {
       throw new BadRequestException(
-        "Cheque / ref no must be empty for online payment",
+        "Cheque / ref no must be empty for UPI, NEFT, and RTGS",
       );
     }
     if (normalizeNullableString(row.chequePageId)) {
       throw new BadRequestException(
-        "Cheque page must be empty for online payment",
+        "Cheque page must be empty for UPI, NEFT, and RTGS",
       );
     }
   }
@@ -2471,9 +2493,9 @@ export class TransactionsService {
         throw new BadRequestException(
           "Advance voucher is required for an advance settlement row",
         );
-      if (isAdvance && paymentMethod === TransactionPaymentMethod.ONLINE) {
+      if (isAdvance && isElectronicPaymentMethod(paymentMethod)) {
         throw new BadRequestException(
-          "Online payment is not allowed for advance settlement",
+          "UPI, NEFT, and RTGS are not allowed for advance settlement",
         );
       }
       const preparedAdvance = advanceVoucherId
@@ -2535,8 +2557,8 @@ export class TransactionsService {
         chequeTotal += amount;
       }
 
-      if (paymentMethod === TransactionPaymentMethod.ONLINE) {
-        this.assertOnlinePaymentFieldsCleared(row);
+      if (isElectronicPaymentMethod(paymentMethod)) {
+        this.assertElectronicPaymentFieldsCleared(row);
         if (!String(row.referenceDate ?? "").trim()) {
           throw new BadRequestException("Cheque date is required");
         }
