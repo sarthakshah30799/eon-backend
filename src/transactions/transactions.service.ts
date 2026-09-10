@@ -16,9 +16,10 @@ import {
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
+  formatTransactionPaymentMethodLabel,
   isChequeFamilyPaymentMethod,
-  isElectronicPaymentMethod,
-  SELECTABLE_TRANSACTION_PAYMENT_METHODS,
+  isNonChequeBankPaymentMethod,
+  isTransactionPaymentMethod,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
@@ -699,9 +700,9 @@ export class TransactionsService {
   }
 
   getPaymentMethodOptions() {
-    return SELECTABLE_TRANSACTION_PAYMENT_METHODS.map((option) => ({
-      value: option.value,
-      label: option.label,
+    return Object.values(TransactionPaymentMethod).map((value) => ({
+      value,
+      label: formatTransactionPaymentMethodLabel(value),
     }));
   }
 
@@ -709,28 +710,12 @@ export class TransactionsService {
     const normalized = String(value ?? "")
       .trim()
       .toUpperCase();
-    if (normalized === TransactionPaymentMethod.CASH) {
-      return TransactionPaymentMethod.CASH;
-    }
-
-    if (normalized === TransactionPaymentMethod.CHEQUE) {
-      return TransactionPaymentMethod.CHEQUE;
-    }
-
-    if (normalized === TransactionPaymentMethod.UPI) {
-      return TransactionPaymentMethod.UPI;
-    }
-
-    if (normalized === TransactionPaymentMethod.NEFT) {
-      return TransactionPaymentMethod.NEFT;
-    }
-
-    if (normalized === TransactionPaymentMethod.RTGS) {
-      return TransactionPaymentMethod.RTGS;
+    if (isTransactionPaymentMethod(normalized)) {
+      return normalized;
     }
 
     throw new BadRequestException(
-      "Payment mode must be CASH, CHEQUE, UPI, NEFT, or RTGS",
+      `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
     );
   }
 
@@ -742,11 +727,11 @@ export class TransactionsService {
   ) {
     if (
       rows.some(
-        (row) => row.isAdvance && isElectronicPaymentMethod(row.paymentMethod),
+        (row) => row.isAdvance && isNonChequeBankPaymentMethod(row.paymentMethod),
       )
     ) {
       throw new BadRequestException(
-        "UPI, NEFT, and RTGS are not allowed for advance settlement",
+        "Bank payment modes are not allowed for advance settlement",
       );
     }
 
@@ -776,12 +761,12 @@ export class TransactionsService {
   private assertElectronicPaymentFieldsCleared(row: TransactionPaymentPayload) {
     if (normalizeNullableString(row.referenceNumber)) {
       throw new BadRequestException(
-        "Cheque / ref no must be empty for UPI, NEFT, and RTGS",
+        "Cheque / ref no must be empty for this payment mode",
       );
     }
     if (normalizeNullableString(row.chequePageId)) {
       throw new BadRequestException(
-        "Cheque page must be empty for UPI, NEFT, and RTGS",
+        "Cheque page must be empty for this payment mode",
       );
     }
   }
@@ -2493,9 +2478,9 @@ export class TransactionsService {
         throw new BadRequestException(
           "Advance voucher is required for an advance settlement row",
         );
-      if (isAdvance && isElectronicPaymentMethod(paymentMethod)) {
+      if (isAdvance && isNonChequeBankPaymentMethod(paymentMethod)) {
         throw new BadRequestException(
-          "UPI, NEFT, and RTGS are not allowed for advance settlement",
+          "Bank payment modes are not allowed for advance settlement",
         );
       }
       const preparedAdvance = advanceVoucherId
@@ -2557,7 +2542,7 @@ export class TransactionsService {
         chequeTotal += amount;
       }
 
-      if (isElectronicPaymentMethod(paymentMethod)) {
+      if (isNonChequeBankPaymentMethod(paymentMethod)) {
         this.assertElectronicPaymentFieldsCleared(row);
         if (!String(row.referenceDate ?? "").trim()) {
           throw new BadRequestException("Cheque date is required");

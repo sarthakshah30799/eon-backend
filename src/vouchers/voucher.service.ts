@@ -26,7 +26,8 @@ import {
   TransactionStatus,
   TransactionType,
   TransactionPaymentMethod,
-  isElectronicPaymentMethod,
+  isNonChequeBankPaymentMethod,
+  isTransactionPaymentMethod,
 } from "../transactions/transactions.enums";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
@@ -920,7 +921,7 @@ export class VoucherService implements OnModuleInit {
 
     let party: PartyProfile | null = null;
     let accountMode: VoucherAccountMode | null = null;
-    let electronicPaymentMethod: TransactionPaymentMethod | null = null;
+    let resolvedPaymentMethod: TransactionPaymentMethod | null = null;
     let accountType: SelectOption | null = null;
     let headerAccount: AccountProfile | null = null;
     let entityType: SelectOption | null = null;
@@ -964,24 +965,27 @@ export class VoucherService implements OnModuleInit {
         throw new BadRequestException(
           "Bank / Cheque vouchers require a BANK LEDGER account",
         );
-      electronicPaymentMethod = isElectronicPaymentMethod(
-        partyDto.paymentMethod,
-      )
-        ? (normalizeUpper(
-            partyDto.paymentMethod,
-          ) as TransactionPaymentMethod)
-        : null;
-      if (partyDto.paymentMethod && !electronicPaymentMethod)
-        throw new BadRequestException(
-          "Payment mode must be UPI, NEFT, or RTGS",
-        );
+      if (partyDto.paymentMethod) {
+        if (!isTransactionPaymentMethod(partyDto.paymentMethod))
+          throw new BadRequestException(
+            `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
+          );
+        resolvedPaymentMethod = normalizeUpper(
+          partyDto.paymentMethod,
+        ) as TransactionPaymentMethod;
+      }
       if (
-        electronicPaymentMethod &&
+        resolvedPaymentMethod &&
         accountMode !== VoucherAccountMode.BANK_CHEQUE
       )
         throw new BadRequestException(
-          "UPI, NEFT, and RTGS are only allowed for Bank / Cheque vouchers",
+          "Payment mode is only allowed for Bank / Cheque vouchers",
         );
+      const isBankNonCheque = isNonChequeBankPaymentMethod(
+        resolvedPaymentMethod,
+      );
+      const isCashMethod =
+        resolvedPaymentMethod === TransactionPaymentMethod.CASH;
       const hasCheque = [
         partyDto.chequeNumber,
         partyDto.chequeDate,
@@ -989,13 +993,25 @@ export class VoucherService implements OnModuleInit {
         partyDto.drawnOn,
       ].every((value) => normalize(value));
       if (accountMode === VoucherAccountMode.BANK_CHEQUE) {
-        if (electronicPaymentMethod) {
+        if (isBankNonCheque) {
           if (normalize(partyDto.chequeNumber))
             throw new BadRequestException(
-              "Cheque number must be empty for UPI, NEFT, and RTGS",
+              "Cheque number must be empty for this payment mode",
             );
           if (!normalize(partyDto.chequeDate))
             throw new BadRequestException("Cheque date is required");
+        } else if (isCashMethod) {
+          if (
+            [
+              partyDto.chequeNumber,
+              partyDto.chequeDate,
+              partyDto.chequeBranch,
+              partyDto.drawnOn,
+            ].some((value) => normalize(value))
+          )
+            throw new BadRequestException(
+              "Cheque fields are not allowed for cash payment mode",
+            );
         } else if (!hasCheque) {
           throw new BadRequestException(
             "Cheque Number, Cheque Date, Branch, and Drawn On are required",
@@ -1169,27 +1185,32 @@ export class VoucherService implements OnModuleInit {
               : { panNumber: null, panName: null, panDob: null }),
             chequeNumber:
               accountMode === VoucherAccountMode.BANK_CHEQUE &&
-              !electronicPaymentMethod
+              !isNonChequeBankPaymentMethod(resolvedPaymentMethod) &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.chequeNumber) || null
                 : null,
             normalizedChequeNumber:
               accountMode === VoucherAccountMode.BANK_CHEQUE &&
-              !electronicPaymentMethod
+              !isNonChequeBankPaymentMethod(resolvedPaymentMethod) &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalizeUpper(partyDto?.chequeNumber) || null
                 : null,
             chequeDate:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.chequeDate).slice(0, 10) || null
                 : null,
             chequeBranch:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.chequeBranch) || null
                 : null,
             drawnOn:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.drawnOn) || null
                 : null,
-            paymentMethod: electronicPaymentMethod,
+            paymentMethod: resolvedPaymentMethod,
             remarkOptionId: remark?.id ?? null,
             remarkSnapshot: remark
               ? await this.snapshot(this.optionRepository, remark.id)
