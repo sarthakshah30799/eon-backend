@@ -4,6 +4,8 @@ import { TransactionReferenceSnapshotValue } from "../../transactions/types/tran
 import { VoucherAccountMode, VoucherType } from "../voucher.enums";
 import { AccountingVoucherItem } from "./accounting-voucher-item.entity";
 import { VoucherAdvanceApplication } from "./voucher-advance-application.entity";
+import { VoucherAccountPosting } from "./voucher-account-posting.entity";
+import { VoucherEvent } from "./voucher-event.entity";
 
 @Entity("accounting_vouchers")
 @Index("IDX_accounting_vouchers_number", ["number"], { unique: true })
@@ -113,4 +115,8 @@ export class AccountingVoucher extends BaseEntity {
     (application) => application.voucher,
   )
   applications: VoucherAdvanceApplication[];
+  @OneToMany(() => VoucherAccountPosting, (posting) => posting.voucher)
+  postings: VoucherAccountPosting[];
+  @OneToMany(() => VoucherEvent, (event) => event.voucher)
+  events: VoucherEvent[];
 }

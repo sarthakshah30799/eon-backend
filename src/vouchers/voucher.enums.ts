@@ -30,6 +30,28 @@ export enum TransactionSettlementSource {
   ADVANCE = "ADVANCE",
 }
 
+export enum VoucherPostingSourceType {
+  HEADER = "HEADER",
+  ITEM = "ITEM",
+}
+
+export const VoucherEventType = {
+  ACCOUNT_POSTINGS_REBUILD: "ACCOUNT_POSTINGS_REBUILD",
+} as const;
+
+export type VoucherEventType =
+  (typeof VoucherEventType)[keyof typeof VoucherEventType];
+
+export const VoucherEventStatus = {
+  PENDING: "PENDING",
+  PROCESSING: "PROCESSING",
+  PROCESSED: "PROCESSED",
+  FAILED: "FAILED",
+} as const;
+
+export type VoucherEventStatus =
+  (typeof VoucherEventStatus)[keyof typeof VoucherEventStatus];
+
 /** Misc VOUCHER_ITEM_TYPE values: Account + party purchase/sale profiles. */
 export const VoucherItemTypeValue = {
   ACCOUNT: "ACCOUNT",

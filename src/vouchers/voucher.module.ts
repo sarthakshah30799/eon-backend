@@ -16,6 +16,8 @@ import {
   AccountingVoucher,
   AccountingVoucherItem,
   VoucherAdvanceApplication,
+  VoucherAccountPosting,
+  VoucherEvent,
 } from "./entities";
 import {
   DepositWithdrawalVoucherController,
@@ -24,6 +26,7 @@ import {
   ReceiptVoucherController,
 } from "./voucher.controller";
 import { VoucherService } from "./voucher.service";
+import { VoucherAccountPostingWorker } from "./voucher-account-posting.worker";
 
 @Module({
   imports: [
@@ -44,6 +47,8 @@ import { VoucherService } from "./voucher.service";
         AccountingVoucher,
         AccountingVoucherItem,
         VoucherAdvanceApplication,
+        VoucherAccountPosting,
+        VoucherEvent,
         Transaction,
         TransactionPayment,
       ],
@@ -56,7 +61,7 @@ import { VoucherService } from "./voucher.service";
     JournalVoucherController,
     DepositWithdrawalVoucherController,
   ],
-  providers: [VoucherService],
+  providers: [VoucherService, VoucherAccountPostingWorker],
   exports: [VoucherService, TypeOrmModule],
 })
 export class VoucherModule {}
