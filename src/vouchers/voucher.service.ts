@@ -965,22 +965,42 @@ export class VoucherService implements OnModuleInit {
         throw new BadRequestException(
           "Bank / Cheque vouchers require a BANK LEDGER account",
         );
-      if (partyDto.paymentMethod) {
-        if (!isTransactionPaymentMethod(partyDto.paymentMethod))
-          throw new BadRequestException(
-            `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
-          );
-        resolvedPaymentMethod = normalizeUpper(
-          partyDto.paymentMethod,
-        ) as TransactionPaymentMethod;
-      }
       if (
-        resolvedPaymentMethod &&
-        accountMode !== VoucherAccountMode.BANK_CHEQUE
-      )
-        throw new BadRequestException(
-          "Payment mode is only allowed for Bank / Cheque vouchers",
-        );
+        accountMode === VoucherAccountMode.CASH ||
+        accountMode === VoucherAccountMode.PETTY_CASH
+      ) {
+        if (
+          partyDto.paymentMethod &&
+          normalizeUpper(partyDto.paymentMethod) !==
+            TransactionPaymentMethod.CASH
+        )
+          throw new BadRequestException(
+            "Cash / Petty Cash vouchers require payment mode CASH",
+          );
+        resolvedPaymentMethod = TransactionPaymentMethod.CASH;
+      } else if (accountMode === VoucherAccountMode.CREDIT_CARD) {
+        if (
+          partyDto.paymentMethod &&
+          normalizeUpper(partyDto.paymentMethod) !==
+            TransactionPaymentMethod.CARD
+        )
+          throw new BadRequestException(
+            "Credit Card vouchers require payment mode CARD",
+          );
+        resolvedPaymentMethod = TransactionPaymentMethod.CARD;
+      } else if (accountMode === VoucherAccountMode.BANK_CHEQUE) {
+        if (partyDto.paymentMethod) {
+          if (!isTransactionPaymentMethod(partyDto.paymentMethod))
+            throw new BadRequestException(
+              `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
+            );
+          resolvedPaymentMethod = normalizeUpper(
+            partyDto.paymentMethod,
+          ) as TransactionPaymentMethod;
+        } else {
+          resolvedPaymentMethod = TransactionPaymentMethod.CHEQUE;
+        }
+      }
       const isBankNonCheque = isNonChequeBankPaymentMethod(
         resolvedPaymentMethod,
       );
