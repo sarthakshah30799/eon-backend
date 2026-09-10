@@ -94,6 +94,49 @@ export const TransactionPaymentMethod = {
 export type TransactionPaymentMethod =
   (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
 
+export const SELECTABLE_TRANSACTION_PAYMENT_METHODS = [
+  { value: TransactionPaymentMethod.CASH, label: "Cash" },
+  { value: TransactionPaymentMethod.CHEQUE, label: "Cheque" },
+  { value: TransactionPaymentMethod.UPI, label: "UPI" },
+  { value: TransactionPaymentMethod.NEFT, label: "NEFT" },
+  { value: TransactionPaymentMethod.RTGS, label: "RTGS" },
+] as const;
+
+export const isElectronicPaymentMethod = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    normalized === TransactionPaymentMethod.UPI ||
+    normalized === TransactionPaymentMethod.NEFT ||
+    normalized === TransactionPaymentMethod.RTGS
+  );
+};
+
+export const isChequeFamilyPaymentMethod = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    normalized === TransactionPaymentMethod.CHEQUE ||
+    isElectronicPaymentMethod(normalized)
+  );
+};
+
+export const formatPaymentChequeReference = (
+  paymentMethod: unknown,
+  referenceNumber?: string | null,
+) => {
+  const normalized = String(paymentMethod ?? "")
+    .trim()
+    .toUpperCase();
+  if (isElectronicPaymentMethod(normalized)) {
+    return normalized;
+  }
+
+  return String(referenceNumber ?? "").trim();
+};
+
 export const TransactionPaymentDirection = {
   PAYMENT: "PAYMENT",
   RECEIPT: "RECEIPT",

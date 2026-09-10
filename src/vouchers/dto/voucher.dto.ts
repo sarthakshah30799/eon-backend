@@ -13,9 +13,11 @@ import {
   IsUUID,
   Matches,
   ValidateNested,
+  IsIn,
 } from "class-validator";
 import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
 import { PaginationQueryDto } from "../../common/pagination";
+import { TransactionPaymentMethod } from "../../transactions/transactions.enums";
 import { VoucherEntryDirection } from "../voucher.enums";
 
 export class CreateVoucherItemDto {
@@ -86,6 +88,24 @@ export class CreatePartyVoucherDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() chequeDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() chequeBranch?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() drawnOn?: string;
+  @ApiPropertyOptional({
+    enum: [
+      TransactionPaymentMethod.UPI,
+      TransactionPaymentMethod.NEFT,
+      TransactionPaymentMethod.RTGS,
+    ],
+  })
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsIn([
+    TransactionPaymentMethod.UPI,
+    TransactionPaymentMethod.NEFT,
+    TransactionPaymentMethod.RTGS,
+  ])
+  paymentMethod?:
+    | typeof TransactionPaymentMethod.UPI
+    | typeof TransactionPaymentMethod.NEFT
+    | typeof TransactionPaymentMethod.RTGS;
   @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
   @ApiProperty()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))

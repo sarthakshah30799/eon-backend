@@ -16,6 +16,9 @@ import {
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
+  isChequeFamilyPaymentMethod,
+  isElectronicPaymentMethod,
+  SELECTABLE_TRANSACTION_PAYMENT_METHODS,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
@@ -695,6 +698,13 @@ export class TransactionsService {
     return this.runTcsPreview(body);
   }
 
+  getPaymentMethodOptions() {
+    return SELECTABLE_TRANSACTION_PAYMENT_METHODS.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }));
+  }
+
   private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
     const normalized = String(value ?? "")
       .trim()
@@ -707,7 +717,73 @@ export class TransactionsService {
       return TransactionPaymentMethod.CHEQUE;
     }
 
-    throw new BadRequestException("Payment mode must be CASH or CHEQUE");
+    if (normalized === TransactionPaymentMethod.UPI) {
+      return TransactionPaymentMethod.UPI;
+    }
+
+    if (normalized === TransactionPaymentMethod.NEFT) {
+      return TransactionPaymentMethod.NEFT;
+    }
+
+    if (normalized === TransactionPaymentMethod.RTGS) {
+      return TransactionPaymentMethod.RTGS;
+    }
+
+    throw new BadRequestException(
+      "Payment mode must be CASH, CHEQUE, UPI, NEFT, or RTGS",
+    );
+  }
+
+  private assertCompatiblePaymentMethods(
+    rows: Array<{
+      paymentMethod: TransactionPaymentMethod;
+      isAdvance: boolean;
+    }>,
+  ) {
+    if (
+      rows.some(
+        (row) => row.isAdvance && isElectronicPaymentMethod(row.paymentMethod),
+      )
+    ) {
+      throw new BadRequestException(
+        "UPI, NEFT, and RTGS are not allowed for advance settlement",
+      );
+    }
+
+    const methods = new Set(rows.map((row) => row.paymentMethod));
+    const hasCash = methods.has(TransactionPaymentMethod.CASH);
+    const hasChequeFamily = [...methods].some((method) =>
+      isChequeFamilyPaymentMethod(method),
+    );
+    if (hasCash && hasChequeFamily) {
+      throw new BadRequestException(
+        "All payment rows must use the same payment method",
+      );
+    }
+
+    const normalMethods = new Set(
+      rows
+        .filter((row) => !row.isAdvance)
+        .map((row) => row.paymentMethod),
+    );
+    if (normalMethods.size > 1) {
+      throw new BadRequestException(
+        "All payment rows must use the same payment method",
+      );
+    }
+  }
+
+  private assertElectronicPaymentFieldsCleared(row: TransactionPaymentPayload) {
+    if (normalizeNullableString(row.referenceNumber)) {
+      throw new BadRequestException(
+        "Cheque / ref no must be empty for UPI, NEFT, and RTGS",
+      );
+    }
+    if (normalizeNullableString(row.chequePageId)) {
+      throw new BadRequestException(
+        "Cheque page must be empty for UPI, NEFT, and RTGS",
+      );
+    }
   }
 
   private getFileIndex(fieldname: string) {
@@ -2385,12 +2461,15 @@ export class TransactionsService {
       allowPartialPayment = creditPreview.outstandingAllowed;
     }
 
-    const paymentMethods = isFakeCurrency
-      ? []
-      : paymentRows.map((row) => this.resolvePaymentMethod(row.paymentMethod));
-    if (new Set(paymentMethods).size > 1) {
-      throw new BadRequestException(
-        "All payment rows must use the same payment method",
+    if (!isFakeCurrency) {
+      this.assertCompatiblePaymentMethods(
+        paymentRows.map((row) => ({
+          paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
+          isAdvance: Boolean(
+            normalizeNullableString(row.advanceVoucherId) ||
+              row.settlementSource === TransactionSettlementSource.ADVANCE,
+          ),
+        })),
       );
     }
 
@@ -2414,6 +2493,11 @@ export class TransactionsService {
         throw new BadRequestException(
           "Advance voucher is required for an advance settlement row",
         );
+      if (isAdvance && isElectronicPaymentMethod(paymentMethod)) {
+        throw new BadRequestException(
+          "UPI, NEFT, and RTGS are not allowed for advance settlement",
+        );
+      }
       const preparedAdvance = advanceVoucherId
         ? await this.voucherService.prepareAdvancePayment({
             voucherId: advanceVoucherId,
@@ -2471,6 +2555,13 @@ export class TransactionsService {
         cashTotal += amount;
       } else {
         chequeTotal += amount;
+      }
+
+      if (isElectronicPaymentMethod(paymentMethod)) {
+        this.assertElectronicPaymentFieldsCleared(row);
+        if (!String(row.referenceDate ?? "").trim()) {
+          throw new BadRequestException("Cheque date is required");
+        }
       }
 
       if (
