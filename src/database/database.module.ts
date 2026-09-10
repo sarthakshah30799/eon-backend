@@ -26,6 +26,10 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         migrationsRun: false,
         logging: true,
         namingStrategy: new SnakeNamingStrategy(),
+        extra: {
+          max: 10,
+          idleTimeoutMillis: 30_000,
+        },
       }),
     }),
     // Secondary Database Connection
@@ -53,6 +57,10 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         migrationsRun: false,
         logging: true,
         namingStrategy: new SnakeNamingStrategy(),
+        extra: {
+          max: 10,
+          idleTimeoutMillis: 30_000,
+        },
       }),
     }),
   ],
