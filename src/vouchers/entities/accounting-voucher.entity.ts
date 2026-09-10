@@ -106,6 +106,8 @@ export class AccountingVoucher extends BaseEntity {
   totalCredit: string;
   @Column({ type: "numeric", precision: 18, scale: 2, name: "final_amount" })
   finalAmount: string;
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
   @Column({ type: "uuid", name: "advance_control_account_id", nullable: true })
   advanceControlAccountId: string | null;
   @Column({

@@ -42,6 +42,10 @@ import {
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
 import {
+  RecordVoucherPrintDto,
+  VoucherPrintCopyType,
+} from "./dto/record-voucher-print.dto";
+import {
   AccountingVoucher,
   AccountingVoucherItem,
   VoucherAdvanceApplication,
@@ -1435,6 +1439,57 @@ export class VoucherService implements OnModuleInit {
     )
       throw new ForbiddenException("Voucher is outside the active branch");
     return voucher;
+  }
+
+  async recordPrint(
+    type: VoucherType,
+    id: string,
+    dto: RecordVoucherPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: VoucherPrintCopyType;
+    printCount: number;
+  }> {
+    if (
+      type !== VoucherType.RECEIPT &&
+      type !== VoucherType.PAYMENT &&
+      type !== VoucherType.JOURNAL
+    ) {
+      throw new BadRequestException(
+        "Print is only supported for Receipt, Payment, and Journal vouchers",
+      );
+    }
+
+    const actorId = this.getActor(session);
+    const voucher = await this.findById(type, id, session);
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for voucher print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = voucher.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? VoucherPrintCopyType.CUSTOMER_COPY
+        : VoucherPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+
+    await this.voucherRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+
+    return {
+      message:
+        copyType === VoucherPrintCopyType.DUPLICATE_COPY
+          ? "Duplicate copy printed"
+          : "Original copy printed",
+      copyType,
+      printCount,
+    };
   }
 
   async nextNumber(
