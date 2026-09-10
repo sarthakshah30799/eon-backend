@@ -26,6 +26,8 @@ import {
   TransactionStatus,
   TransactionType,
   TransactionPaymentMethod,
+  isNonChequeBankPaymentMethod,
+  isTransactionPaymentMethod,
 } from "../transactions/transactions.enums";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
@@ -39,6 +41,10 @@ import {
   OutstandingBillsQueryDto,
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
+import {
+  RecordVoucherPrintDto,
+  VoucherPrintCopyType,
+} from "./dto/record-voucher-print.dto";
 import {
   AccountingVoucher,
   AccountingVoucherItem,
@@ -919,6 +925,7 @@ export class VoucherService implements OnModuleInit {
 
     let party: PartyProfile | null = null;
     let accountMode: VoucherAccountMode | null = null;
+    let resolvedPaymentMethod: TransactionPaymentMethod | null = null;
     let accountType: SelectOption | null = null;
     let headerAccount: AccountProfile | null = null;
     let entityType: SelectOption | null = null;
@@ -962,16 +969,79 @@ export class VoucherService implements OnModuleInit {
         throw new BadRequestException(
           "Bank / Cheque vouchers require a BANK LEDGER account",
         );
+      if (
+        accountMode === VoucherAccountMode.CASH ||
+        accountMode === VoucherAccountMode.PETTY_CASH
+      ) {
+        if (
+          partyDto.paymentMethod &&
+          normalizeUpper(partyDto.paymentMethod) !==
+            TransactionPaymentMethod.CASH
+        )
+          throw new BadRequestException(
+            "Cash / Petty Cash vouchers require payment mode CASH",
+          );
+        resolvedPaymentMethod = TransactionPaymentMethod.CASH;
+      } else if (accountMode === VoucherAccountMode.CREDIT_CARD) {
+        if (
+          partyDto.paymentMethod &&
+          normalizeUpper(partyDto.paymentMethod) !==
+            TransactionPaymentMethod.CARD
+        )
+          throw new BadRequestException(
+            "Credit Card vouchers require payment mode CARD",
+          );
+        resolvedPaymentMethod = TransactionPaymentMethod.CARD;
+      } else if (accountMode === VoucherAccountMode.BANK_CHEQUE) {
+        if (partyDto.paymentMethod) {
+          if (!isTransactionPaymentMethod(partyDto.paymentMethod))
+            throw new BadRequestException(
+              `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
+            );
+          resolvedPaymentMethod = normalizeUpper(
+            partyDto.paymentMethod,
+          ) as TransactionPaymentMethod;
+        } else {
+          resolvedPaymentMethod = TransactionPaymentMethod.CHEQUE;
+        }
+      }
+      const isBankNonCheque = isNonChequeBankPaymentMethod(
+        resolvedPaymentMethod,
+      );
+      const isCashMethod =
+        resolvedPaymentMethod === TransactionPaymentMethod.CASH;
       const hasCheque = [
         partyDto.chequeNumber,
         partyDto.chequeDate,
         partyDto.chequeBranch,
         partyDto.drawnOn,
       ].every((value) => normalize(value));
-      if (accountMode === VoucherAccountMode.BANK_CHEQUE && !hasCheque)
-        throw new BadRequestException(
-          "Cheque Number, Cheque Date, Branch, and Drawn On are required",
-        );
+      if (accountMode === VoucherAccountMode.BANK_CHEQUE) {
+        if (isBankNonCheque) {
+          if (normalize(partyDto.chequeNumber))
+            throw new BadRequestException(
+              "Cheque number must be empty for this payment mode",
+            );
+          if (!normalize(partyDto.chequeDate))
+            throw new BadRequestException("Cheque date is required");
+        } else if (isCashMethod) {
+          if (
+            [
+              partyDto.chequeNumber,
+              partyDto.chequeDate,
+              partyDto.chequeBranch,
+              partyDto.drawnOn,
+            ].some((value) => normalize(value))
+          )
+            throw new BadRequestException(
+              "Cheque fields are not allowed for cash payment mode",
+            );
+        } else if (!hasCheque) {
+          throw new BadRequestException(
+            "Cheque Number, Cheque Date, Branch, and Drawn On are required",
+          );
+        }
+      }
       if (
         accountMode !== VoucherAccountMode.BANK_CHEQUE &&
         [
@@ -1138,25 +1208,33 @@ export class VoucherService implements OnModuleInit {
               ? resolveVoucherPan(party, entityType, partyDto)
               : { panNumber: null, panName: null, panDob: null }),
             chequeNumber:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
-                ? normalize(partyDto?.chequeNumber)
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              !isNonChequeBankPaymentMethod(resolvedPaymentMethod) &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
+                ? normalize(partyDto?.chequeNumber) || null
                 : null,
             normalizedChequeNumber:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
-                ? normalizeUpper(partyDto?.chequeNumber)
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              !isNonChequeBankPaymentMethod(resolvedPaymentMethod) &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
+                ? normalizeUpper(partyDto?.chequeNumber) || null
                 : null,
             chequeDate:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
-                ? normalize(partyDto?.chequeDate).slice(0, 10)
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
+                ? normalize(partyDto?.chequeDate).slice(0, 10) || null
                 : null,
             chequeBranch:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
-                ? normalize(partyDto?.chequeBranch)
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
+                ? normalize(partyDto?.chequeBranch) || null
                 : null,
             drawnOn:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
-                ? normalize(partyDto?.drawnOn)
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
+                ? normalize(partyDto?.drawnOn) || null
                 : null,
+            paymentMethod: resolvedPaymentMethod,
             remarkOptionId: remark?.id ?? null,
             remarkSnapshot: remark
               ? await this.snapshot(this.optionRepository, remark.id)
@@ -1361,6 +1439,57 @@ export class VoucherService implements OnModuleInit {
     )
       throw new ForbiddenException("Voucher is outside the active branch");
     return voucher;
+  }
+
+  async recordPrint(
+    type: VoucherType,
+    id: string,
+    dto: RecordVoucherPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: VoucherPrintCopyType;
+    printCount: number;
+  }> {
+    if (
+      type !== VoucherType.RECEIPT &&
+      type !== VoucherType.PAYMENT &&
+      type !== VoucherType.JOURNAL
+    ) {
+      throw new BadRequestException(
+        "Print is only supported for Receipt, Payment, and Journal vouchers",
+      );
+    }
+
+    const actorId = this.getActor(session);
+    const voucher = await this.findById(type, id, session);
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for voucher print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = voucher.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? VoucherPrintCopyType.CUSTOMER_COPY
+        : VoucherPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+
+    await this.voucherRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+
+    return {
+      message:
+        copyType === VoucherPrintCopyType.DUPLICATE_COPY
+          ? "Duplicate copy printed"
+          : "Original copy printed",
+      copyType,
+      printCount,
+    };
   }
 
   async nextNumber(

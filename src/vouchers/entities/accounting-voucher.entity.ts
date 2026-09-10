@@ -1,6 +1,7 @@
 import { Check, Column, Entity, Index, OneToMany } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
+import { TransactionPaymentMethod } from "../../transactions/transactions.enums";
 import { VoucherAccountMode, VoucherType } from "../voucher.enums";
 import { AccountingVoucherItem } from "./accounting-voucher-item.entity";
 import { VoucherAdvanceApplication } from "./voucher-advance-application.entity";
@@ -73,6 +74,14 @@ export class AccountingVoucher extends BaseEntity {
     | string
     | null;
 
+  @Column({
+    type: "enum",
+    enum: TransactionPaymentMethod,
+    name: "payment_method",
+    nullable: true,
+  })
+  paymentMethod: TransactionPaymentMethod | null;
+
   @Column({ type: "citext", name: "cheque_number", nullable: true })
   chequeNumber: string | null;
   @Column({ type: "citext", name: "normalized_cheque_number", nullable: true })
@@ -97,6 +106,8 @@ export class AccountingVoucher extends BaseEntity {
   totalCredit: string;
   @Column({ type: "numeric", precision: 18, scale: 2, name: "final_amount" })
   finalAmount: string;
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
   @Column({ type: "uuid", name: "advance_control_account_id", nullable: true })
   advanceControlAccountId: string | null;
   @Column({
