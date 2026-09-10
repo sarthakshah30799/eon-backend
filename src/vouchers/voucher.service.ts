@@ -396,10 +396,7 @@ export class VoucherService implements OnModuleInit {
     return this.account(id, undefined, "advance");
   }
 
-  private async resolveBillControlAccount(
-    itemTypeValue: string,
-    usage: VoucherType,
-  ) {
+  private async resolveBillControlAccount(itemTypeValue: string) {
     const billType = voucherBillTransactionType(itemTypeValue);
     const settingCode =
       billType === "PURCHASE"
@@ -415,7 +412,9 @@ export class VoucherService implements OnModuleInit {
       throw new BadRequestException(
         `Missing ${settingCode} additional setting`,
       );
-    return this.account(id, usage, "item");
+    // Control accounts are system settings, not user-picked voucher ledgers —
+    // only require active INR (skip receipt/payment/journal enablement flags).
+    return this.account(id, undefined, "item");
   }
 
   private async resolveHandlingFeeAccount() {
@@ -499,8 +498,8 @@ export class VoucherService implements OnModuleInit {
         "Settled transaction branch does not match voucher branch",
       );
     if (
-      String(transaction.transactionDate).slice(0, 10) >
-      voucherDate.slice(0, 10)
+      (toDateOnly(transaction.transactionDate) ?? "") >
+      (toDateOnly(voucherDate) ?? "")
     )
       throw new BadRequestException(
         "Settled transaction date cannot be after voucher date",
@@ -1228,7 +1227,6 @@ export class VoucherService implements OnModuleInit {
           );
           const controlAccount = await this.resolveBillControlAccount(
             row.type.value,
-            type,
           );
           await itemRepo.save(
             itemRepo.create({
@@ -1575,7 +1573,8 @@ export class VoucherService implements OnModuleInit {
         "Advance voucher does not match transaction party and branch",
       );
     if (
-      voucher.transactionDate > String(input.transactionDate ?? "").slice(0, 10)
+      (toDateOnly(voucher.transactionDate) ?? "") >
+      (toDateOnly(input.transactionDate) ?? "")
     )
       throw new BadRequestException(
         "Advance voucher date cannot be after transaction date",
@@ -1631,8 +1630,8 @@ export class VoucherService implements OnModuleInit {
           "Advance voucher is not eligible for this transaction",
         );
       if (
-        voucher.transactionDate >
-        String(transaction.transactionDate).slice(0, 10)
+        (toDateOnly(voucher.transactionDate) ?? "") >
+        (toDateOnly(transaction.transactionDate) ?? "")
       )
         throw new BadRequestException(
           "Advance voucher date cannot be after transaction date",
