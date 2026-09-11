@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsUUID,
 } from "class-validator";
+import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 import { PurposeGroupProfileType } from "../../purpose/purpose.enums";
 import { CardSettlementReportFormat } from "./card-settlement-report-query.dto";
 
@@ -28,23 +29,6 @@ const parseArrayQuery = ({ value }: { value: unknown }) => {
 
   const values = Array.isArray(value) ? value : String(value).split(",");
   return values.map((item) => String(item).trim()).filter(Boolean);
-};
-
-const parseBooleanQuery = ({ value }: { value: unknown }) => {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-  if (typeof value === "boolean") {
-    return value;
-  }
-  const normalized = String(value).trim().toLowerCase();
-  if (normalized === "true" || normalized === "1") {
-    return true;
-  }
-  if (normalized === "false" || normalized === "0") {
-    return false;
-  }
-  return undefined;
 };
 
 export class Flm8CnStatementQueryDto {
@@ -93,7 +77,7 @@ export class Flm8CnStatementQueryDto {
     description:
       "AD only. When true, currency labels use currency name and country name from masters (Name(Country)).",
   })
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   apConnect?: boolean;

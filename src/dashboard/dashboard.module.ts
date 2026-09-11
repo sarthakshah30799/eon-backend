@@ -9,6 +9,7 @@ import { ChequeBook } from "../chequebooks/entities/cheque-book.entity";
 import { ManualBook } from "../manual-bill-books/entities/manual-book.entity";
 import { TransferRequest } from "../transfers/entities/transfer-request.entity";
 import { CardTransferRequest } from "../card-stock/entities/card-transfer-request.entity";
+import { AccountingVoucher } from "../vouchers/entities";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CardTransferRequest } from "../card-stock/entities/card-transfer-reques
         ManualBook,
         TransferRequest,
         CardTransferRequest,
+        AccountingVoucher,
       ],
       "database2",
     ),

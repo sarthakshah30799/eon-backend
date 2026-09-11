@@ -9,33 +9,9 @@ import {
   IsUUID,
 } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
+import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 import { ClientType } from "../party-profile.entity";
 import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
-
-const parseBooleanQuery = ({ value }: { value: unknown }) => {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    return value !== 0;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-  if (normalized === "true") {
-    return true;
-  }
-
-  if (normalized === "false") {
-    return false;
-  }
-
-  return undefined;
-};
 
 export class PartyProfileListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: "Search query by code, name, or city" })
@@ -56,7 +32,7 @@ export class PartyProfileListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: "Filter by Active status" })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   active?: boolean;
 
   @ApiPropertyOptional({
@@ -64,7 +40,7 @@ export class PartyProfileListQueryDto extends PaginationQueryDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   activeOnly?: boolean;
 
   @ApiPropertyOptional({
@@ -80,7 +56,7 @@ export class PartyProfileListQueryDto extends PaginationQueryDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   isIndividual?: boolean;
 
   @ApiPropertyOptional({
@@ -121,7 +97,7 @@ export class PartyProfileListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: "Filter by sale-enabled party profiles" })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   sale?: boolean;
 
   @ApiPropertyOptional({
@@ -129,7 +105,7 @@ export class PartyProfileListQueryDto extends PaginationQueryDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   purchase?: boolean;
 
   @ApiPropertyOptional({

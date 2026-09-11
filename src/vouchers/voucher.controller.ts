@@ -14,10 +14,12 @@ import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   AvailableAdvanceQueryDto,
+  CreateAdviceVoucherDto,
   CreateDepositWithdrawalVoucherDto,
   CreateJournalVoucherDto,
   CreatePaymentVoucherDto,
   CreateReceiptVoucherDto,
+  HonourAdviceVoucherDto,
   OutstandingBillsQueryDto,
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
@@ -167,5 +169,54 @@ export class DepositWithdrawalVoucherController {
     @Session() session: any,
   ) {
     return this.service.findById(VoucherType.DEPOSIT_WITHDRAWAL, id, session);
+  }
+}
+
+@ApiCookieAuth("sessionId")
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
+@ApiTags("advice-debit-credit")
+@Controller("advice-debit-credit")
+export class AdviceVoucherController {
+  constructor(private readonly service: VoucherService) {}
+
+  @Post()
+  @ApiOperation({ summary: "Create immutable Advice of Debit/Credit voucher" })
+  create(@Body() dto: CreateAdviceVoucherDto, @Session() session: any) {
+    return this.service.create(VoucherType.ADVICE, dto, session);
+  }
+
+  @Get() list(@Query() query: VoucherListQueryDto, @Session() session: any) {
+    return this.service.list(VoucherType.ADVICE, query, session);
+  }
+
+  @Get("next-number") next(
+    @Query("branchId") branchId: string,
+    @Session() session: any,
+  ) {
+    return this.service.nextNumber(VoucherType.ADVICE, branchId, session);
+  }
+
+  @Get("outstanding-bills") outstandingBills(
+    @Query() query: OutstandingBillsQueryDto,
+    @Session() session: any,
+  ) {
+    return this.service.outstandingBills(VoucherType.ADVICE, query, session);
+  }
+
+  @Post(":id/honour")
+  @ApiOperation({ summary: "Honour a pending Advice of Debit/Credit voucher" })
+  honour(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: HonourAdviceVoucherDto,
+    @Session() session: any,
+  ) {
+    return this.service.honourAdvice(id, dto ?? {}, session);
+  }
+
+  @Get(":id") find(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Session() session: any,
+  ) {
+    return this.service.findById(VoucherType.ADVICE, id, session);
   }
 }

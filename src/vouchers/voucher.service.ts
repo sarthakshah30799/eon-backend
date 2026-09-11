@@ -20,7 +20,7 @@ import { DayEndStartProcessService } from "../day-end-start-process/day-end-star
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { PartyProfileService } from "../party-profiles/party-profile.service";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
-import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
+import { loadEntitySnapshot, buildEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
 import { TransactionReferenceSnapshotValue } from "../transactions/types/transaction-snapshot.types";
 import {
   TransactionStatus,
@@ -33,10 +33,12 @@ import { TransactionPayment } from "../transactions/entities/transaction-payment
 import {
   AdvanceApplicationPayloadDto,
   AvailableAdvanceQueryDto,
+  CreateAdviceVoucherDto,
   CreateDepositWithdrawalVoucherDto,
   CreateJournalVoucherDto,
   CreatePartyVoucherDto,
   CreateVoucherItemDto,
+  HonourAdviceVoucherDto,
   OutstandingBillsQueryDto,
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
@@ -48,6 +50,8 @@ import {
 import {
   VoucherAccountMode,
   VoucherAdvanceApplicationState,
+  VoucherAdviceRole,
+  VoucherAdviceStatus,
   VoucherEntryDirection,
   VoucherItemTypeValue,
   VOUCHER_ITEM_TYPE_LABELS,
@@ -120,7 +124,11 @@ const isIndividualVoucherParty = (
 const resolveVoucherPan = (
   party: PartyProfile,
   entityType: SelectOption,
-  dto: CreatePartyVoucherDto,
+  dto: {
+    panNumber?: string;
+    panName?: string;
+    panDob?: string;
+  },
 ) => {
   if (!isIndividualVoucherParty(party, entityType)) {
     return {
@@ -224,6 +232,21 @@ export class VoucherService implements OnModuleInit {
     const userId = normalize(session.userId);
     if (!userId) throw new BadRequestException("User session not found");
     return userId;
+  }
+
+  private async findDefaultActiveCounterIdForBranch(
+    branchId: string,
+  ): Promise<string | null> {
+    const link = await this.branchCounterRepository
+      .createQueryBuilder("link")
+      .innerJoin("link.counter", "counter")
+      .where("link.branchId = :branchId", { branchId })
+      .andWhere("counter.isActive = true")
+      .orderBy("counter.counterNo", "ASC")
+      .addOrderBy("counter.name", "ASC")
+      .select("link.counterId", "counterId")
+      .getRawOne<{ counterId?: string }>();
+    return normalize(link?.counterId) || null;
   }
 
   private async resolveWorkplace(
@@ -338,19 +361,25 @@ export class VoucherService implements OnModuleInit {
     party: PartyProfile,
     actorId: string,
     branchId: string,
+    session: VoucherSession,
   ) {
+    // Admin/HO/HO staff may use parties across branches (same as party list UI).
+    // Branch users must only use parties homed at the workplace branch.
+    const privileged = Boolean(
+      session.isAdmin || session.isHo || session.isHoStaff,
+    );
     const result = await this.partyProfileService.findAll(
       {
         offset: 0,
         limit: 10,
         search: party.code,
         type: [party.type],
-        branchIds: [branchId],
+        ...(privileged ? {} : { branchIds: [branchId] }),
         activeOnly: true,
         status: WorkflowStatus.APPROVE,
       },
       actorId,
-      branchId,
+      privileged ? undefined : branchId,
     );
     if (!result.data.some((item) => item.id === party.id))
       throw new ForbiddenException(
@@ -468,7 +497,10 @@ export class VoucherService implements OnModuleInit {
     return (
       cents(transaction.finalAmount) -
       cents(transaction.byCash ?? 0) -
-      cents(transaction.byCheque ?? 0)
+      cents(transaction.byCheque ?? 0) -
+      cents(transaction.byCard ?? 0) -
+      cents(transaction.byTransfer ?? 0) -
+      cents(transaction.byOther ?? 0)
     );
   }
 
@@ -519,10 +551,14 @@ export class VoucherService implements OnModuleInit {
   private bumpBillSettlement(
     transaction: Transaction,
     amountCents: number,
-    accountMode: VoucherAccountMode,
+    accountMode: VoucherAccountMode | "BY_OTHER",
     actorId: string,
   ) {
-    if (
+    if (accountMode === "BY_OTHER") {
+      transaction.byOther = money(
+        cents(transaction.byOther ?? 0) + amountCents,
+      );
+    } else if (
       accountMode === VoucherAccountMode.CASH ||
       accountMode === VoucherAccountMode.PETTY_CASH
     ) {
@@ -542,6 +578,51 @@ export class VoucherService implements OnModuleInit {
       );
     }
     transaction.updatedBy = actorId;
+  }
+
+  private calculateAdviceTotals(items: CreateVoucherItemDto[]) {
+    let debit = 0;
+    let credit = 0;
+    for (const row of items) {
+      const amount = cents(row.amount);
+      if (amount <= 0)
+        throw new BadRequestException(
+          "Voucher item amount must be greater than zero",
+        );
+      if (row.direction === VoucherEntryDirection.DEBIT) debit += amount;
+      else credit += amount;
+    }
+    const net = Math.abs(debit - credit);
+    const headerDirection =
+      credit > debit
+        ? VoucherEntryDirection.DEBIT
+        : debit > credit
+          ? VoucherEntryDirection.CREDIT
+          : null;
+    return {
+      totalDebit: money(debit),
+      totalCredit: money(credit),
+      finalAmount: money(net),
+      headerDirection,
+    };
+  }
+
+  private async resolveBranchControlAccount() {
+    const accountId = await this.additionalSettings.getSettingTextValue(
+      "TRANSACTION_ACCOUNTING",
+      "BRANCH_CONTROL_ACCOUNT",
+    );
+    if (!accountId)
+      throw new BadRequestException(
+        "BRANCH_CONTROL_ACCOUNT additional setting is required",
+      );
+    return this.account(accountId, undefined, "header");
+  }
+
+  private oppositeDirection(direction: VoucherEntryDirection) {
+    return direction === VoucherEntryDirection.DEBIT
+      ? VoucherEntryDirection.CREDIT
+      : VoucherEntryDirection.DEBIT;
   }
 
   private calculate(type: VoucherType, items: CreateVoucherItemDto[]) {
@@ -883,12 +964,690 @@ export class VoucherService implements OnModuleInit {
       });
   }
 
+  async createAdvice(dto: CreateAdviceVoucherDto, session: VoucherSession) {
+    const type = VoucherType.ADVICE;
+    const actorId = this.getActor(session);
+    const narration = normalize(dto.narration);
+    if (!narration) throw new BadRequestException("Narration is required");
+    const hash = this.payloadHash(type, dto);
+    const repeated = await this.findIdempotent(dto.idempotencyKey, hash);
+    if (repeated) return repeated;
+
+    const workplace = await this.resolveWorkplace(dto, session);
+    await this.dayPolicy.assertTransactionDateAllowed(
+      workplace.branch.id,
+      actorId,
+      dto.transactionDate,
+      workplace.counter.id,
+    );
+
+    const destinationBranchId = normalize(dto.destinationBranchId);
+    if (!destinationBranchId)
+      throw new BadRequestException("Destination branch is required");
+    if (destinationBranchId === workplace.branch.id)
+      throw new BadRequestException(
+        "Destination branch must be different from the source branch",
+      );
+    const destinationBranch = await this.branchRepository.findOne({
+      where: { id: destinationBranchId, isActive: true },
+    });
+    if (!destinationBranch)
+      throw new NotFoundException("Destination branch not found or inactive");
+
+    const [branchSnapshot, counterSnapshot, remark, entityType, party, headerAccount] =
+      await Promise.all([
+        this.snapshot(this.branchRepository, workplace.branch.id),
+        this.snapshot(this.counterRepository, workplace.counter.id),
+        dto.remarkOptionId
+          ? this.option(dto.remarkOptionId, "VOUCHER_REMARK")
+          : Promise.resolve(null),
+        this.option(dto.entityTypeOptionId, "ENTITYTYPE"),
+        this.party(dto.partyProfileId),
+        this.resolveBranchControlAccount(),
+      ]);
+    if (party.entityType?.id !== entityType.id)
+      throw new BadRequestException(
+        "Party Profile does not match selected Entity Type",
+      );
+    await this.assertPartyVisible(party, actorId, workplace.branch.id, session);
+    const destinationBranchSnapshot = await this.snapshot(
+      this.branchRepository,
+      destinationBranch.id,
+    );
+
+    const resolvedItems = [] as ResolvedVoucherItem[];
+    const settledTransactionIds = new Set<string>();
+    for (const item of dto.items) {
+      const itemType = await this.option(item.itemTypeOptionId, "VOUCHER_ITEM_TYPE");
+      const itemTypeValue = normalizeUpper(itemType.value);
+      const isAccountLine = isVoucherAccountItemType(itemTypeValue);
+      const isBillLine = isVoucherBillItemType(itemTypeValue);
+      if (!isAccountLine && !isBillLine)
+        throw new BadRequestException("Unsupported voucher item type");
+
+      if (isAccountLine) {
+        const accountId = normalize(item.accountId);
+        if (!accountId)
+          throw new BadRequestException("Account item lines require accountId");
+        if (normalize(item.settledTransactionId))
+          throw new BadRequestException(
+            "Account item lines cannot settle a transaction",
+          );
+        const [itemAccount, subledger] = await Promise.all([
+          this.account(accountId, undefined, "item"),
+          item.subledgerPartyProfileId
+            ? this.party(item.subledgerPartyProfileId)
+            : Promise.resolve(null),
+        ]);
+        if (!subledger)
+          throw new BadRequestException(
+            "Sub Ledger is required for Advice voucher account items",
+          );
+        if (party.group?.id) {
+          if (
+            subledger.group?.id !== party.group.id ||
+            subledger.entityType?.id !== party.entityType?.id
+          )
+            throw new BadRequestException(
+              "Sub Ledger must match the header Party Group and Entity Type",
+            );
+        } else if (subledger.id !== party.id)
+          throw new BadRequestException(
+            "Without a Party Group, the header Party must be used as Sub Ledger",
+          );
+        await this.assertPartyVisible(subledger, actorId, workplace.branch.id, session);
+        resolvedItems.push({
+          kind: "ACCOUNT",
+          dto: item,
+          type: itemType,
+          account: itemAccount,
+          subledger,
+        });
+        continue;
+      }
+
+      const settledTransactionId = normalize(item.settledTransactionId);
+      if (!settledTransactionId)
+        throw new BadRequestException(
+          "Bill item lines require settledTransactionId",
+        );
+      if (normalize(item.accountId))
+        throw new BadRequestException(
+          "Bill item lines must not specify accountId",
+        );
+      if (settledTransactionIds.has(settledTransactionId))
+        throw new BadRequestException(
+          "The same transaction cannot be settled twice in one voucher",
+        );
+      settledTransactionIds.add(settledTransactionId);
+
+      const billType = voucherBillTransactionType(itemTypeValue);
+      const expectedDirection =
+        billType === "SALE"
+          ? VoucherEntryDirection.CREDIT
+          : VoucherEntryDirection.DEBIT;
+      if (item.direction !== expectedDirection)
+        throw new BadRequestException(
+          "Bill item direction does not match the selected profile",
+        );
+      if (
+        item.subledgerPartyProfileId &&
+        item.subledgerPartyProfileId !== party.id
+      )
+        throw new BadRequestException(
+          "Bill item subledger must match the header party",
+        );
+      await this.assertPartyVisible(party, actorId, workplace.branch.id, session);
+      resolvedItems.push({
+        kind: "BILL",
+        dto: { ...item, direction: expectedDirection },
+        type: itemType,
+        direction: expectedDirection,
+        subledger: party,
+        settledTransactionId,
+      });
+    }
+
+    const totals = this.calculateAdviceTotals(
+      resolvedItems.map((row) => row.dto),
+    );
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[type],
+      workplace.branch.code,
+      new Date(),
+    );
+
+    return this.database2
+      .transaction(async (manager) => {
+        const voucherRepo = manager.getRepository(AccountingVoucher);
+        const itemRepo = manager.getRepository(AccountingVoucherItem);
+        const voucher = await voucherRepo.save(
+          voucherRepo.create({
+            voucherType: type,
+            number,
+            idempotencyKey: dto.idempotencyKey,
+            payloadHash: hash,
+            transactionDate: dto.transactionDate.slice(0, 10),
+            branchId: workplace.branch.id,
+            branchSnapshot,
+            counterId: workplace.counter.id,
+            counterSnapshot,
+            accountTypeOptionId: null,
+            accountTypeSnapshot: null,
+            accountMode: null,
+            headerAccountId: headerAccount.id,
+            headerAccountSnapshot: await this.snapshot(
+              this.accountRepository,
+              headerAccount.id,
+            ),
+            entityTypeOptionId: entityType.id,
+            entityTypeSnapshot: await this.snapshot(
+              this.optionRepository,
+              entityType.id,
+            ),
+            partyProfileId: party.id,
+            partyProfileSnapshot: await this.snapshot(
+              this.partyRepository,
+              party.id,
+            ),
+            ...resolveVoucherPan(party, entityType, dto),
+            chequeNumber: null,
+            normalizedChequeNumber: null,
+            chequeDate: null,
+            chequeBranch: null,
+            drawnOn: null,
+            paymentMethod: null,
+            remarkOptionId: remark?.id ?? null,
+            remarkSnapshot: remark
+              ? await this.snapshot(this.optionRepository, remark.id)
+              : null,
+            narration,
+            totalDebit: totals.totalDebit,
+            totalCredit: totals.totalCredit,
+            finalAmount: totals.finalAmount,
+            headerDirection: totals.headerDirection,
+            sourceBranchId: workplace.branch.id,
+            sourceBranchSnapshot: branchSnapshot,
+            destinationBranchId: destinationBranch.id,
+            destinationBranchSnapshot,
+            adviceRole: VoucherAdviceRole.ISSUER,
+            adviceStatus: VoucherAdviceStatus.PENDING_HONOUR,
+            pairedVoucherId: null,
+            advanceControlAccountId: null,
+            advanceControlAccountSnapshot: null,
+            createdBy: actorId,
+            updatedBy: actorId,
+          }),
+        );
+
+        const billSettlements: Array<{
+          transaction: Transaction;
+          amountCents: number;
+        }> = [];
+
+        for (let index = 0; index < resolvedItems.length; index++) {
+          const row = resolvedItems[index];
+          if (row.kind === "ACCOUNT") {
+            await itemRepo.save(
+              itemRepo.create({
+                voucherId: voucher.id,
+                voucher,
+                lineNo: index + 1,
+                itemTypeOptionId: row.type.id,
+                itemTypeSnapshot: await this.snapshot(
+                  this.optionRepository,
+                  row.type.id,
+                ),
+                subledgerPartyProfileId: row.subledger?.id ?? null,
+                subledgerPartyProfileSnapshot: row.subledger
+                  ? await this.snapshot(this.partyRepository, row.subledger.id)
+                  : null,
+                accountId: row.account.id,
+                accountSnapshot: await this.snapshot(
+                  this.accountRepository,
+                  row.account.id,
+                ),
+                direction: row.dto.direction,
+                amount: money(cents(row.dto.amount)),
+                settledTransactionId: null,
+                settledTransactionSnapshot: null,
+                createdBy: actorId,
+                updatedBy: actorId,
+              }),
+            );
+            continue;
+          }
+
+          const amountCents = cents(row.dto.amount);
+          const settledTransaction = await manager
+            .getRepository(Transaction)
+            .createQueryBuilder("tx")
+            .setLock("pessimistic_write")
+            .where("tx.id = :id", { id: row.settledTransactionId })
+            .getOne();
+          if (!settledTransaction)
+            throw new NotFoundException(
+              `Settled transaction ${row.settledTransactionId} not found`,
+            );
+          this.validateSettledBillTransaction(
+            settledTransaction,
+            row.type.value,
+            party.id,
+            workplace.branch.id,
+            dto.transactionDate.slice(0, 10),
+            amountCents,
+          );
+          const controlAccount = await this.resolveBillControlAccount(
+            row.type.value,
+          );
+          await itemRepo.save(
+            itemRepo.create({
+              voucherId: voucher.id,
+              voucher,
+              lineNo: index + 1,
+              itemTypeOptionId: row.type.id,
+              itemTypeSnapshot: await this.snapshot(
+                this.optionRepository,
+                row.type.id,
+              ),
+              subledgerPartyProfileId: row.subledger?.id ?? null,
+              subledgerPartyProfileSnapshot: row.subledger
+                ? await this.snapshot(this.partyRepository, row.subledger.id)
+                : null,
+              accountId: controlAccount.id,
+              accountSnapshot: await this.snapshot(
+                this.accountRepository,
+                controlAccount.id,
+              ),
+              direction: row.direction,
+              amount: money(amountCents),
+              settledTransactionId: settledTransaction.id,
+              settledTransactionSnapshot: await this.snapshot(
+                this.transactionRepository,
+                settledTransaction.id,
+              ),
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+          billSettlements.push({ transaction: settledTransaction, amountCents });
+        }
+
+        if (billSettlements.length) {
+          const txRepo = manager.getRepository(Transaction);
+          for (const settlement of billSettlements) {
+            this.bumpBillSettlement(
+              settlement.transaction,
+              settlement.amountCents,
+              "BY_OTHER",
+              actorId,
+            );
+            await txRepo.save(settlement.transaction);
+          }
+        }
+
+        return voucherRepo.findOneOrFail({
+          where: { id: voucher.id },
+          relations: ["items"],
+        });
+      })
+      .catch(async (error) => {
+        if (
+          error?.code === "23505" &&
+          String(error?.constraint ?? "").includes("idempotency")
+        ) {
+          const existing = await this.findIdempotent(dto.idempotencyKey, hash);
+          if (existing) return existing;
+        }
+        throw error;
+      });
+  }
+
+  async honourAdvice(
+    sourceVoucherId: string,
+    dto: HonourAdviceVoucherDto,
+    session: VoucherSession,
+  ) {
+    const actorId = this.getActor(session);
+    const source = await this.voucherRepository.findOne({
+      where: { id: sourceVoucherId, voucherType: VoucherType.ADVICE },
+      relations: ["items"],
+    });
+    if (!source) throw new NotFoundException("Advice voucher not found");
+    if (source.adviceRole !== VoucherAdviceRole.ISSUER)
+      throw new BadRequestException("Only issuer advice vouchers can be honoured");
+    if (source.adviceStatus !== VoucherAdviceStatus.PENDING_HONOUR)
+      throw new BadRequestException("Advice voucher is not pending honour");
+    if (!source.destinationBranchId)
+      throw new BadRequestException("Advice voucher is missing destination branch");
+
+    const privileged = Boolean(
+      session.isAdmin || session.isHo || session.isHoStaff,
+    );
+    if (!privileged && session.activeBranchId !== source.destinationBranchId)
+      throw new ForbiddenException(
+        "Advice honour is only allowed from the destination branch",
+      );
+
+    const destinationBranchId = source.destinationBranchId;
+    const preferredCounterId = normalize(
+      dto.counterId ||
+        (session.activeBranchId === destinationBranchId
+          ? session.activeCounterId
+          : null) ||
+        (privileged ? session.activeCounterId : null),
+    );
+    let honourCounterId = preferredCounterId;
+    if (honourCounterId) {
+      try {
+        await assertCounterBelongsToBranch(
+          this.branchCounterRepository,
+          destinationBranchId,
+          honourCounterId,
+        );
+      } catch {
+        honourCounterId = null;
+      }
+    }
+    if (!honourCounterId && privileged) {
+      honourCounterId =
+        await this.findDefaultActiveCounterIdForBranch(destinationBranchId);
+    }
+    if (!honourCounterId)
+      throw new BadRequestException(
+        privileged
+          ? "No active counter is linked to the destination branch"
+          : "Branch and counter are required",
+      );
+
+    const workplace = await this.resolveWorkplace(
+      {
+        branchId: destinationBranchId,
+        counterId: honourCounterId,
+      },
+      {
+        ...session,
+        // Force dto workplace resolution for honour even when session workplace is empty.
+        isAdmin: privileged || session.isAdmin,
+      },
+    );
+    if (workplace.branch.id !== destinationBranchId)
+      throw new ForbiddenException(
+        "Advice honour workplace must be the destination branch",
+      );
+
+    // Honour is a destination-branch punch. Use that branch's allowed business
+    // date (not the issuer voucher date), otherwise older advice cannot be
+    // honoured after destination has moved to a later open day / PENDING_EOD.
+    const { allowedDate: honourTransactionDate } =
+      await this.dayPolicy.assertTransactionDateAllowed(
+        workplace.branch.id,
+        actorId,
+        undefined,
+        workplace.counter.id,
+      );
+
+    const [
+      branchSnapshot,
+      counterSnapshot,
+      sourceBranchSnapshot,
+      headerAccount,
+    ] = await Promise.all([
+      this.snapshot(this.branchRepository, workplace.branch.id),
+      this.snapshot(this.counterRepository, workplace.counter.id),
+      this.snapshot(this.branchRepository, source.branchId),
+      this.resolveBranchControlAccount(),
+    ]);
+
+    const honourHeaderDirection = source.headerDirection
+      ? this.oppositeDirection(source.headerDirection)
+      : null;
+    const sortedItems = [...(source.items ?? [])].sort(
+      (left, right) => left.lineNo - right.lineNo,
+    );
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[VoucherType.ADVICE],
+      workplace.branch.code,
+      new Date(),
+    );
+
+    return this.database2.transaction(async (manager) => {
+      const voucherRepo = manager.getRepository(AccountingVoucher);
+      const itemRepo = manager.getRepository(AccountingVoucherItem);
+      const txRepo = manager.getRepository(Transaction);
+
+      const lockedSource = await voucherRepo
+        .createQueryBuilder("voucher")
+        .setLock("pessimistic_write")
+        .where("voucher.id = :id", { id: source.id })
+        .getOne();
+      if (
+        !lockedSource ||
+        lockedSource.adviceStatus !== VoucherAdviceStatus.PENDING_HONOUR
+      )
+        throw new BadRequestException("Advice voucher is not pending honour");
+
+      const honourVoucher = await voucherRepo.save(
+        voucherRepo.create({
+          voucherType: VoucherType.ADVICE,
+          number,
+          idempotencyKey: `honour:${source.id}`,
+          payloadHash: `honour:${source.id}:${source.payloadHash}`,
+          transactionDate: honourTransactionDate,
+          branchId: workplace.branch.id,
+          branchSnapshot,
+          counterId: workplace.counter.id,
+          counterSnapshot,
+          accountTypeOptionId: null,
+          accountTypeSnapshot: null,
+          accountMode: null,
+          headerAccountId: headerAccount.id,
+          headerAccountSnapshot: await this.snapshot(
+            this.accountRepository,
+            headerAccount.id,
+          ),
+          entityTypeOptionId: source.entityTypeOptionId,
+          entityTypeSnapshot: source.entityTypeSnapshot,
+          partyProfileId: source.partyProfileId,
+          partyProfileSnapshot: source.partyProfileSnapshot,
+          panNumber: source.panNumber,
+          panName: source.panName,
+          panDob: source.panDob,
+          chequeNumber: null,
+          normalizedChequeNumber: null,
+          chequeDate: null,
+          chequeBranch: null,
+          drawnOn: null,
+          paymentMethod: null,
+          remarkOptionId: source.remarkOptionId,
+          remarkSnapshot: source.remarkSnapshot,
+          narration: source.narration,
+          totalDebit: source.totalCredit,
+          totalCredit: source.totalDebit,
+          finalAmount: source.finalAmount,
+          headerDirection: honourHeaderDirection,
+          sourceBranchId: source.branchId,
+          sourceBranchSnapshot,
+          destinationBranchId: source.destinationBranchId,
+          destinationBranchSnapshot: source.destinationBranchSnapshot,
+          adviceRole: VoucherAdviceRole.HONOUR,
+          adviceStatus: VoucherAdviceStatus.HONOURED,
+          pairedVoucherId: source.id,
+          advanceControlAccountId: null,
+          advanceControlAccountSnapshot: null,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+
+      for (let index = 0; index < sortedItems.length; index++) {
+        const sourceItem = sortedItems[index];
+        let settledTransactionId: string | null = null;
+        let settledTransactionSnapshot: TransactionReferenceSnapshotValue =
+          null;
+
+        if (sourceItem.settledTransactionId) {
+          const original = await txRepo.findOne({
+            where: { id: sourceItem.settledTransactionId },
+          });
+          if (!original)
+            throw new NotFoundException(
+              `Original settled transaction ${sourceItem.settledTransactionId} not found`,
+            );
+
+          const amount = money(cents(sourceItem.amount));
+          const seriesCode = normalize(original.slug);
+          if (!seriesCode)
+            throw new BadRequestException(
+              "Original transaction is missing number series slug",
+            );
+          const branchCode = String(
+            (workplace.branch as Branch).code ??
+              (branchSnapshot as { code?: string })?.code ??
+              "",
+          ).trim();
+          if (!branchCode)
+            throw new BadRequestException(
+              "Destination branch code is required to generate transaction number",
+            );
+
+          const txnNumber =
+            await this.additionalSettings.reserveTransactionNumber(
+              seriesCode,
+              branchCode,
+              new Date(honourTransactionDate),
+            );
+
+          const clone = await txRepo.save(
+            txRepo.create({
+              rootTransactionId: null,
+              revisionNo: 1,
+              number: txnNumber,
+              slug: original.slug,
+              transactionDate: honourTransactionDate,
+              branchId: workplace.branch.id,
+              branchSnapshot,
+              counterId: workplace.counter.id,
+              counterSnapshot,
+              companyId: original.companyId,
+              companySnapshot: original.companySnapshot,
+              sacCode: original.sacCode,
+              partyProfileId: original.partyProfileId,
+              partyProfileSnapshot: original.partyProfileSnapshot,
+              purposeId: null,
+              transactionPartyProfileType: original.transactionPartyProfileType,
+              purposeSnapshot: null,
+              passengerId: original.passengerId,
+              passengerSnapshot: original.passengerSnapshot,
+              passengerTravelId: null,
+              passengerTravelSnapshot: null,
+              transferRequestId: null,
+              agentProfileId: null,
+              agentProfileSnapshot: null,
+              manualBookPageId: null,
+              manualBookPageSnapshot: null,
+              transactionType: original.transactionType,
+              tradeMode: original.tradeMode,
+              status: TransactionStatus.APPROVED,
+              remarks: `Advice honour ${source.number}`.trim(),
+              submittedAt: new Date(),
+              approvedAt: new Date(),
+              rejectedAt: null,
+              approvedById: actorId,
+              rejectedById: null,
+              approvalRemarks: null,
+              rejectionReason: null,
+              isLatest: true,
+              byCash: null,
+              byCheque: null,
+              byCard: null,
+              byTransfer: null,
+              byOther: amount,
+              originalTransactionId: original.id,
+              originatingVoucherId: source.id,
+              taxRatePercent: null,
+              preTcsFinalAmount: "0.00",
+              tcsRatePercent: "0.00",
+              tcsRateType: null,
+              tcsAmount: "0.00",
+              commissionAmount: "0.00",
+              tdsAmount: "0.00",
+              taxableAmount: "0.00",
+              itemBaseAmount: "0.00",
+              itemTaxableAmount: "0.00",
+              itemTaxAmount: "0.00",
+              additionalChargeBaseAmount: "0.00",
+              additionalChargeTaxAmount: "0.00",
+              igstAmount: "0.00",
+              cgstAmount: "0.00",
+              sgstAmount: "0.00",
+              finalAmount: amount,
+              loanAmount: null,
+              declaredAmount: null,
+              itrFiled: null,
+              tcsDeclarationAccepted: null,
+              isProprietorship: null,
+              cdfNo: null,
+              cdfIssuingAuthority: null,
+              cdfApprovedUsd: null,
+              cdfArrivalDate: null,
+              splitMode: null,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+          settledTransactionId = clone.id;
+          // Build from the in-transaction entity. Reloading via
+          // this.transactionRepository cannot see the uncommitted clone.
+          const cloneSnapshot = buildEntitySnapshot(clone, txRepo);
+          if (!cloneSnapshot)
+            throw new NotFoundException(`Reference ${clone.id} not found`);
+          settledTransactionSnapshot =
+            cloneSnapshot as TransactionReferenceSnapshotValue;
+        }
+
+        await itemRepo.save(
+          itemRepo.create({
+            voucherId: honourVoucher.id,
+            voucher: honourVoucher,
+            lineNo: index + 1,
+            itemTypeOptionId: sourceItem.itemTypeOptionId,
+            itemTypeSnapshot: sourceItem.itemTypeSnapshot,
+            subledgerPartyProfileId: sourceItem.subledgerPartyProfileId,
+            subledgerPartyProfileSnapshot:
+              sourceItem.subledgerPartyProfileSnapshot,
+            accountId: sourceItem.accountId,
+            accountSnapshot: sourceItem.accountSnapshot,
+            direction: this.oppositeDirection(sourceItem.direction),
+            amount: sourceItem.amount,
+            settledTransactionId,
+            settledTransactionSnapshot,
+            createdBy: actorId,
+            updatedBy: actorId,
+          }),
+        );
+      }
+
+      lockedSource.adviceStatus = VoucherAdviceStatus.HONOURED;
+      lockedSource.pairedVoucherId = honourVoucher.id;
+      lockedSource.updatedBy = actorId;
+      await voucherRepo.save(lockedSource);
+
+      return voucherRepo.findOneOrFail({
+        where: { id: honourVoucher.id },
+        relations: ["items"],
+      });
+    });
+  }
+
   async create(
     type: VoucherType,
     dto:
       | CreatePartyVoucherDto
       | CreateJournalVoucherDto
-      | CreateDepositWithdrawalVoucherDto,
+      | CreateDepositWithdrawalVoucherDto
+      | CreateAdviceVoucherDto,
     session: VoucherSession,
   ) {
     if (type === VoucherType.DEPOSIT_WITHDRAWAL) {
@@ -896,6 +1655,9 @@ export class VoucherService implements OnModuleInit {
         dto as CreateDepositWithdrawalVoucherDto,
         session,
       );
+    }
+    if (type === VoucherType.ADVICE) {
+      return this.createAdvice(dto as CreateAdviceVoucherDto, session);
     }
     const actorId = this.getActor(session);
     const narration = normalize(dto.narration);
@@ -940,7 +1702,7 @@ export class VoucherService implements OnModuleInit {
         throw new BadRequestException(
           "Party Profile does not match selected Entity Type",
         );
-      await this.assertPartyVisible(party, actorId, workplace.branch.id);
+      await this.assertPartyVisible(party, actorId, workplace.branch.id, session);
       headerAccount = await this.account(
         partyDto.headerAccountId,
         undefined,
@@ -1068,7 +1830,7 @@ export class VoucherService implements OnModuleInit {
             );
         }
         if (subledger)
-          await this.assertPartyVisible(subledger, actorId, workplace.branch.id);
+          await this.assertPartyVisible(subledger, actorId, workplace.branch.id, session);
         resolvedItems.push({
           kind: "ACCOUNT",
           dto: item,
@@ -1109,7 +1871,7 @@ export class VoucherService implements OnModuleInit {
         throw new BadRequestException(
           "Bill item subledger must match the header party",
         );
-      await this.assertPartyVisible(billSubledger, actorId, workplace.branch.id);
+      await this.assertPartyVisible(billSubledger, actorId, workplace.branch.id, session);
       resolvedItems.push({
         kind: "BILL",
         dto: { ...item, direction: expectedDirection },
@@ -1388,11 +2150,19 @@ export class VoucherService implements OnModuleInit {
       relations: ["items"],
     });
     if (!voucher) throw new NotFoundException("Voucher not found");
-    if (
-      !(session.isAdmin || session.isHo || session.isHoStaff) &&
-      voucher.branchId !== session.activeBranchId
-    )
-      throw new ForbiddenException("Voucher is outside the active branch");
+    const privileged = Boolean(
+      session.isAdmin || session.isHo || session.isHoStaff,
+    );
+    if (!privileged) {
+      const isOwnBranch = voucher.branchId === session.activeBranchId;
+      const isPendingHonourDestination =
+        type === VoucherType.ADVICE &&
+        voucher.adviceRole === VoucherAdviceRole.ISSUER &&
+        voucher.adviceStatus === VoucherAdviceStatus.PENDING_HONOUR &&
+        voucher.destinationBranchId === session.activeBranchId;
+      if (!isOwnBranch && !isPendingHonourDestination)
+        throw new ForbiddenException("Voucher is outside the active branch");
+    }
     return voucher;
   }
 
@@ -1442,7 +2212,7 @@ export class VoucherService implements OnModuleInit {
     );
     const effectiveBranch = workplace.branch.id;
     const party = await this.party(query.partyProfileId);
-    await this.assertPartyVisible(party, actorId, effectiveBranch);
+    await this.assertPartyVisible(party, actorId, effectiveBranch, session);
     const expectedMode =
       query.paymentMethod === TransactionPaymentMethod.CASH
         ? VoucherAccountMode.CASH
@@ -1497,7 +2267,10 @@ export class VoucherService implements OnModuleInit {
   }
 
   async outstandingBills(
-    voucherType: VoucherType.RECEIPT | VoucherType.PAYMENT,
+    voucherType:
+      | VoucherType.RECEIPT
+      | VoucherType.PAYMENT
+      | VoucherType.ADVICE,
     query: OutstandingBillsQueryDto,
     session: VoucherSession,
   ) {
@@ -1513,14 +2286,8 @@ export class VoucherService implements OnModuleInit {
       throw new ForbiddenException(
         "Outstanding bills lookup is outside the active workplace",
       );
-    await this.dayPolicy.assertTransactionDateAllowed(
-      workplace.branch.id,
-      actorId,
-      query.transactionDate,
-      workplace.counter.id,
-    );
     const party = await this.party(query.partyProfileId);
-    await this.assertPartyVisible(party, actorId, workplace.branch.id);
+    await this.assertPartyVisible(party, actorId, workplace.branch.id, session);
 
     const slug = normalizeUpper(query.slug);
     if (!isVoucherBillItemType(slug))
@@ -1542,7 +2309,7 @@ export class VoucherService implements OnModuleInit {
         transactionDate: query.transactionDate.slice(0, 10),
       })
       .andWhere(
-        `(tx.final_amount - COALESCE(tx.by_cash, 0) - COALESCE(tx.by_cheque, 0)) > 0`,
+        `(tx.final_amount - COALESCE(tx.by_cash, 0) - COALESCE(tx.by_cheque, 0) - COALESCE(tx.by_card, 0) - COALESCE(tx.by_transfer, 0) - COALESCE(tx.by_other, 0)) > 0`,
       );
     if (query.search)
       qb.andWhere("tx.number ILIKE :search", {
@@ -1564,6 +2331,9 @@ export class VoucherService implements OnModuleInit {
       finalAmount: transaction.finalAmount,
       byCash: transaction.byCash,
       byCheque: transaction.byCheque,
+      byCard: transaction.byCard,
+      byTransfer: transaction.byTransfer,
+      byOther: transaction.byOther,
       outstanding: money(this.billOutstandingCents(transaction)),
       branchId: transaction.branchId,
     }));

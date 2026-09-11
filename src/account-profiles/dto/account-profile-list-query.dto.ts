@@ -1,13 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform } from "class-transformer";
 import { IsBoolean, IsOptional, IsString, IsUUID } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
-
-const parseBoolean = ({ value }: { value: unknown }) => {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return value;
-};
+import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 
 export class AccountProfileListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
@@ -43,37 +37,37 @@ export class AccountProfileListQueryDto extends PaginationQueryDto {
   currencyId?: string;
 
   @ApiPropertyOptional({ description: "Filter by active status" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   active?: boolean;
 
   @ApiPropertyOptional({ description: "Filter by bulk purchase support" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   bulkPurchase?: boolean;
 
   @ApiPropertyOptional({ description: "Filter by bulk sale support" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   bulkSale?: boolean;
 
   @ApiPropertyOptional({ description: "Filter by receipt voucher support" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   receipt?: boolean;
 
   @ApiPropertyOptional({ description: "Filter by payment voucher support" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   payment?: boolean;
 
   @ApiPropertyOptional({ description: "Filter by journal voucher support" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   journalVoucher?: boolean;

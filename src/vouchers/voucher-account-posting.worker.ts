@@ -13,6 +13,7 @@ import {
   VoucherEvent,
 } from "./entities";
 import {
+  VoucherAdviceRole,
   VoucherEntryDirection,
   VoucherEventStatus,
   VoucherEventType,
@@ -272,9 +273,11 @@ export class VoucherAccountPostingWorker
     );
 
     const pushHeader = () => {
+      const isAdvice = voucher.voucherType === VoucherType.ADVICE;
       if (
         voucher.voucherType !== VoucherType.RECEIPT &&
-        voucher.voucherType !== VoucherType.PAYMENT
+        voucher.voucherType !== VoucherType.PAYMENT &&
+        !isAdvice
       ) {
         return;
       }
@@ -286,6 +289,24 @@ export class VoucherAccountPostingWorker
         return;
       }
 
+      const direction = isAdvice
+        ? voucher.headerDirection
+        : voucher.voucherType === VoucherType.RECEIPT
+          ? VoucherEntryDirection.DEBIT
+          : VoucherEntryDirection.CREDIT;
+      if (!direction) {
+        return;
+      }
+
+      const otherBranchId =
+        voucher.adviceRole === VoucherAdviceRole.HONOUR
+          ? (voucher.sourceBranchId ?? null)
+          : (voucher.destinationBranchId ?? null);
+      const otherBranchSnapshot =
+        voucher.adviceRole === VoucherAdviceRole.HONOUR
+          ? (voucher.sourceBranchSnapshot ?? null)
+          : (voucher.destinationBranchSnapshot ?? null);
+
       drafts.push({
         voucherId: voucher.id,
         createdBy: actorId,
@@ -296,12 +317,9 @@ export class VoucherAccountPostingWorker
         transactionSnapshot: null,
         accountId: voucher.headerAccountId,
         accountSnapshot: voucher.headerAccountSnapshot ?? null,
-        profileId: null,
-        profileSnapshot: null,
-        direction:
-          voucher.voucherType === VoucherType.RECEIPT
-            ? VoucherEntryDirection.DEBIT
-            : VoucherEntryDirection.CREDIT,
+        profileId: isAdvice ? otherBranchId : null,
+        profileSnapshot: isAdvice ? otherBranchSnapshot : null,
+        direction,
         amount,
         remarks: voucher.narration || null,
       });

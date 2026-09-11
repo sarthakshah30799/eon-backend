@@ -56,6 +56,8 @@ import type { Company } from "../../company/company.entity";
 @Index("IDX_transactions_purpose_id", ["purposeId"])
 @Index("IDX_transactions_passenger_travel_id", ["passengerTravelId"])
 @Index("IDX_transactions_transfer_request_id", ["transferRequestId"])
+@Index("IDX_transactions_original_transaction_id", ["originalTransactionId"])
+@Index("IDX_transactions_originating_voucher_id", ["originatingVoucherId"])
 @Index("IDX_transactions_slug", ["slug"])
 @Index("IDX_transactions_status", ["status"])
 @Index("IDX_transactions_transaction_date", ["transactionDate"])
@@ -282,6 +284,12 @@ export class Transaction extends BaseEntity {
     nullable: true,
   })
   byOther: string | null;
+
+  @Column({ type: "uuid", name: "original_transaction_id", nullable: true })
+  originalTransactionId: string | null;
+
+  @Column({ type: "uuid", name: "originating_voucher_id", nullable: true })
+  originatingVoucherId: string | null;
 
   @Column({
     type: "numeric",

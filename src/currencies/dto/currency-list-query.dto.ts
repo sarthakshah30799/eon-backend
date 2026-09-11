@@ -1,28 +1,8 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsOptional, IsString, IsBoolean, IsEnum } from "class-validator";
-import { Transform } from "class-transformer";
 import { PaginationQueryDto } from "../../common/pagination";
+import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 import { CurrencyProductAllowed } from "../currency.entity";
-
-const parseBooleanQuery = ({ value }: { value: unknown }) => {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return value !== 0;
-  }
-  const normalized = String(value).trim().toLowerCase();
-  if (normalized === "true") {
-    return true;
-  }
-  if (normalized === "false") {
-    return false;
-  }
-  return undefined;
-};
 
 export class CurrencyListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
@@ -34,12 +14,13 @@ export class CurrencyListQueryDto extends PaginationQueryDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: "Filter by active status",
+    description:
+      "When false, include inactive currencies. Default true (active only).",
     default: true,
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   activeOnly?: boolean;
 
   @ApiPropertyOptional({
@@ -49,7 +30,7 @@ export class CurrencyListQueryDto extends PaginationQueryDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   includeAllStockingTypes?: boolean;
 
   @ApiPropertyOptional({
@@ -59,7 +40,7 @@ export class CurrencyListQueryDto extends PaginationQueryDto {
   })
   @IsBoolean()
   @IsOptional()
-  @Transform(parseBooleanQuery)
+  @BooleanQuery()
   includeOnlyStocking?: boolean;
 
   @ApiPropertyOptional({

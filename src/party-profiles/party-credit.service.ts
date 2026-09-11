@@ -135,7 +135,10 @@ export class PartyCreditService {
           GREATEST(
             COALESCE(transaction.finalAmount, 0)::numeric
             - COALESCE(transaction.byCash, 0)::numeric
-            - COALESCE(transaction.byCheque, 0)::numeric,
+            - COALESCE(transaction.byCheque, 0)::numeric
+            - COALESCE(transaction.byCard, 0)::numeric
+            - COALESCE(transaction.byTransfer, 0)::numeric
+            - COALESCE(transaction.byOther, 0)::numeric,
             0
           )
         ), 0)`,
@@ -173,7 +176,10 @@ export class PartyCreditService {
         `GREATEST(
           COALESCE(transaction.finalAmount, 0)::numeric
           - COALESCE(transaction.byCash, 0)::numeric
-          - COALESCE(transaction.byCheque, 0)::numeric,
+          - COALESCE(transaction.byCheque, 0)::numeric
+          - COALESCE(transaction.byCard, 0)::numeric
+          - COALESCE(transaction.byTransfer, 0)::numeric
+          - COALESCE(transaction.byOther, 0)::numeric,
           0
         ) > 0`,
       );

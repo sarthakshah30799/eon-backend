@@ -5,11 +5,22 @@ export enum VoucherType {
   PAYMENT = "PAYMENT",
   JOURNAL = "JOURNAL",
   DEPOSIT_WITHDRAWAL = "DEPOSIT_WITHDRAWAL",
+  ADVICE = "ADVICE",
 }
 
 export enum VoucherEntryDirection {
   DEBIT = "DEBIT",
   CREDIT = "CREDIT",
+}
+
+export enum VoucherAdviceRole {
+  ISSUER = "ISSUER",
+  HONOUR = "HONOUR",
+}
+
+export enum VoucherAdviceStatus {
+  PENDING_HONOUR = "PENDING_HONOUR",
+  HONOURED = "HONOURED",
 }
 
 export enum VoucherAccountMode {
@@ -126,4 +137,5 @@ export const VOUCHER_NUMBER_SERIES: Record<VoucherType, string> = {
   [VoucherType.PAYMENT]: "PAYMENT_VOUCHER",
   [VoucherType.JOURNAL]: "JOURNAL_VOUCHER",
   [VoucherType.DEPOSIT_WITHDRAWAL]: "DEPOSIT_WITHDRAWAL_VOUCHER",
+  [VoucherType.ADVICE]: "ADVICE_VOUCHER",
 };

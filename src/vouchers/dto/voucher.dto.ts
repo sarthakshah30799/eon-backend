@@ -169,6 +169,53 @@ export class CreateDepositWithdrawalVoucherDto {
   items: CreateVoucherItemDto[];
 }
 
+export class CreateAdviceVoucherDto {
+  @ApiProperty() @IsDateString() transactionDate: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() counterId?: string;
+  @ApiProperty({ description: "Destination branch that will honour the advice" })
+  @IsUUID()
+  destinationBranchId: string;
+  @ApiProperty() @IsUUID() entityTypeOptionId: string;
+  @ApiProperty() @IsUUID() partyProfileId: string;
+  @ApiPropertyOptional()
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]$/i, {
+    message: "PAN Number must be a valid 10-character Indian PAN",
+  })
+  panNumber?: string;
+  @ApiPropertyOptional()
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsString()
+  panName?: string;
+  @ApiPropertyOptional()
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsDateString()
+  panDob?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
+  @ApiProperty()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  narration: string;
+  @ApiProperty() @IsString() @IsNotEmpty() idempotencyKey: string;
+  @ApiProperty({ type: [CreateVoucherItemDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateVoucherItemDto)
+  items: CreateVoucherItemDto[];
+}
+
+export class HonourAdviceVoucherDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() counterId?: string;
+}
+
 const splitCsv = ({ value }: { value: unknown }) =>
   value === undefined || value === null || value === ""
     ? undefined

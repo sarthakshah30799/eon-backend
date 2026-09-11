@@ -20,6 +20,7 @@ import {
   VoucherEvent,
 } from "./entities";
 import {
+  AdviceVoucherController,
   DepositWithdrawalVoucherController,
   JournalVoucherController,
   PaymentVoucherController,
@@ -60,6 +61,7 @@ import { VoucherAccountPostingWorker } from "./voucher-account-posting.worker";
     PaymentVoucherController,
     JournalVoucherController,
     DepositWithdrawalVoucherController,
+    AdviceVoucherController,
   ],
   providers: [VoucherService, VoucherAccountPostingWorker],
   exports: [VoucherService, TypeOrmModule],
