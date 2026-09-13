@@ -5,11 +5,22 @@ export enum VoucherType {
   PAYMENT = "PAYMENT",
   JOURNAL = "JOURNAL",
   DEPOSIT_WITHDRAWAL = "DEPOSIT_WITHDRAWAL",
+  ADVICE = "ADVICE",
 }
 
 export enum VoucherEntryDirection {
   DEBIT = "DEBIT",
   CREDIT = "CREDIT",
+}
+
+export enum VoucherAdviceRole {
+  ISSUER = "ISSUER",
+  HONOUR = "HONOUR",
+}
+
+export enum VoucherAdviceStatus {
+  PENDING_HONOUR = "PENDING_HONOUR",
+  HONOURED = "HONOURED",
 }
 
 export enum VoucherAccountMode {
@@ -29,6 +40,28 @@ export enum TransactionSettlementSource {
   NORMAL = "NORMAL",
   ADVANCE = "ADVANCE",
 }
+
+export enum VoucherPostingSourceType {
+  HEADER = "HEADER",
+  ITEM = "ITEM",
+}
+
+export const VoucherEventType = {
+  ACCOUNT_POSTINGS_REBUILD: "ACCOUNT_POSTINGS_REBUILD",
+} as const;
+
+export type VoucherEventType =
+  (typeof VoucherEventType)[keyof typeof VoucherEventType];
+
+export const VoucherEventStatus = {
+  PENDING: "PENDING",
+  PROCESSING: "PROCESSING",
+  PROCESSED: "PROCESSED",
+  FAILED: "FAILED",
+} as const;
+
+export type VoucherEventStatus =
+  (typeof VoucherEventStatus)[keyof typeof VoucherEventStatus];
 
 /** Misc VOUCHER_ITEM_TYPE values: Account + party purchase/sale profiles. */
 export const VoucherItemTypeValue = {
@@ -104,4 +137,5 @@ export const VOUCHER_NUMBER_SERIES: Record<VoucherType, string> = {
   [VoucherType.PAYMENT]: "PAYMENT_VOUCHER",
   [VoucherType.JOURNAL]: "JOURNAL_VOUCHER",
   [VoucherType.DEPOSIT_WITHDRAWAL]: "DEPOSIT_WITHDRAWAL_VOUCHER",
+  [VoucherType.ADVICE]: "ADVICE_VOUCHER",
 };

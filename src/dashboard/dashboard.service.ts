@@ -11,6 +11,12 @@ import { TransferRequestStatus } from "../transfers/transfers.enums";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { CardTransferRequest } from "../card-stock/entities/card-transfer-request.entity";
 import { CardTransferStatus } from "../card-stock/card-stock.enums";
+import { AccountingVoucher } from "../vouchers/entities";
+import {
+  VoucherAdviceRole,
+  VoucherAdviceStatus,
+  VoucherType,
+} from "../vouchers/voucher.enums";
 import {
   DashboardStatsDto,
   VolumeByCurrencyDto,
@@ -36,6 +42,8 @@ export class DashboardService {
     private readonly transferRequestRepository: Repository<TransferRequest>,
     @InjectRepository(CardTransferRequest, "database2")
     private readonly cardTransferRequestRepository: Repository<CardTransferRequest>,
+    @InjectRepository(AccountingVoucher, "database2")
+    private readonly voucherRepository: Repository<AccountingVoucher>,
   ) {}
 
   private dateRange(key: string): { from: Date; to: Date } {
@@ -154,6 +162,10 @@ export class DashboardService {
       branchId,
       isAdminOrHo,
     );
+    const pendingAdvice = await this.getPendingAdviceCount(
+      branchId,
+      isAdminOrHo,
+    );
 
     const flaggedTxns = await this.transactionRepository
       .createQueryBuilder("t")
@@ -173,7 +185,8 @@ export class DashboardService {
         pendingChequeBooks +
         pendingManualBooks +
         pendingTransfers +
-        pendingCardTransfers,
+        pendingCardTransfers +
+        pendingAdvice,
       pendingPartyProfileReviews: pendingPP,
       pendingTransactions: pendingTxns,
       pendingChequeBooks,
@@ -351,6 +364,7 @@ export class DashboardService {
       .createQueryBuilder("t")
       .leftJoinAndSelect("t.items", "ti")
       .where("t.isLatest = true")
+      .andWhere("UPPER(COALESCE(t.slug, '')) NOT LIKE 'CARD_%'")
       .orderBy("t.createdAt", "DESC")
       .take(limit);
 
@@ -385,6 +399,7 @@ export class DashboardService {
         currencyCode: currencySnap?.currencyCode ?? "",
         productCode: productSnap?.code ?? productSnap?.productCode ?? "",
         transactionType: t.transactionType,
+        slug: t.slug ?? "",
         fcyAmount: fcyAmount.toFixed(2),
         lcyAmount: fcyAmount.toFixed(2),
         status: t.status,
@@ -438,6 +453,7 @@ export class DashboardService {
           code: t.number ?? t.id.slice(0, 8),
           name: partySnap?.name ?? partySnap?.label ?? "",
           type: t.transactionType,
+          subType: t.slug ?? undefined,
           createdAt: t.createdAt.toISOString(),
         });
       }
@@ -599,6 +615,55 @@ export class DashboardService {
       });
     }
 
+    const adviceQB = this.voucherRepository
+      .createQueryBuilder("voucher")
+      .where("voucher.voucherType = :voucherType", {
+        voucherType: VoucherType.ADVICE,
+      })
+      .andWhere("voucher.adviceRole = :adviceRole", {
+        adviceRole: VoucherAdviceRole.ISSUER,
+      })
+      .andWhere("voucher.adviceStatus = :adviceStatus", {
+        adviceStatus: VoucherAdviceStatus.PENDING_HONOUR,
+      })
+      .orderBy("voucher.createdAt", "DESC")
+      .take(limit);
+    if (!isAdminOrHo) {
+      if (!branchId) {
+        return results
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          )
+          .slice(0, limit);
+      }
+      adviceQB.andWhere("voucher.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      });
+    }
+    const adviceVouchers = await adviceQB.getMany();
+    for (const voucher of adviceVouchers) {
+      const source =
+        (voucher.branchSnapshot as Record<string, string> | null)?.label ??
+        (voucher.branchSnapshot as Record<string, string> | null)?.name ??
+        voucher.branchId;
+      const destination =
+        (voucher.destinationBranchSnapshot as Record<string, string> | null)
+          ?.label ??
+        (voucher.destinationBranchSnapshot as Record<string, string> | null)
+          ?.name ??
+        voucher.destinationBranchId;
+      results.push({
+        id: voucher.id,
+        entityType: "advice",
+        code: voucher.number,
+        name: `${source} -> ${destination}`,
+        type: "ADVICE",
+        subType: voucher.headerDirection ?? undefined,
+        createdAt: voucher.createdAt.toISOString(),
+      });
+    }
+
     results.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -641,6 +706,30 @@ export class DashboardService {
     if (!isAdminOrHo) {
       if (!branchId) return 0;
       qb.andWhere("transfer.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      });
+    }
+    return qb.getCount();
+  }
+
+  private async getPendingAdviceCount(
+    branchId?: string,
+    isAdminOrHo?: boolean,
+  ): Promise<number> {
+    const qb = this.voucherRepository
+      .createQueryBuilder("voucher")
+      .where("voucher.voucherType = :voucherType", {
+        voucherType: VoucherType.ADVICE,
+      })
+      .andWhere("voucher.adviceRole = :adviceRole", {
+        adviceRole: VoucherAdviceRole.ISSUER,
+      })
+      .andWhere("voucher.adviceStatus = :adviceStatus", {
+        adviceStatus: VoucherAdviceStatus.PENDING_HONOUR,
+      });
+    if (!isAdminOrHo) {
+      if (!branchId) return 0;
+      qb.andWhere("voucher.destinationBranchId = :destinationBranchId", {
         destinationBranchId: branchId,
       });
     }

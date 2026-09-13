@@ -11,6 +11,7 @@ import {
   AccountingVoucher,
   AccountingVoucherItem,
 } from "../vouchers/entities";
+import { AccountPostingsCombinedQuery } from "./account-postings-combined.query";
 import { SalePurchaseReportController } from "./sale-purchase-report.controller";
 import { SalePurchaseReportService } from "./sale-purchase-report.service";
 import { ProductProfitReportController } from "./product-profit-report.controller";
@@ -91,6 +92,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     Flm8CnStatementController,
   ],
   providers: [
+    AccountPostingsCombinedQuery,
     SalePurchaseReportService,
     ProductProfitReportService,
     SpecialReportService,

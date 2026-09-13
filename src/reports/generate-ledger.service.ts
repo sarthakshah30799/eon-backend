@@ -4,14 +4,12 @@ import { In, Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { Branch } from "../branches/branch.entity";
-import { TransactionAccountPosting } from "../transactions/entities/transaction-account-posting.entity";
-import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import {
-  TransactionPostingDirection,
   TransactionPostingSourceType,
-  TransactionStatus,
   TransactionType,
 } from "../transactions/transactions.enums";
+import { AccountPostingsCombinedQuery } from "./account-postings-combined.query";
+import { AccountPostingCombinedRow } from "./account-postings-combined.types";
 import {
   GenerateLedgerFormat,
   GenerateLedgerLayout,
@@ -94,6 +92,14 @@ const SOURCE_TYPE_LABELS: Partial<Record<string, string>> = {
   [TransactionPostingSourceType.FAKE_CURRENCY]: "Fake currency",
 };
 
+const VOUCHER_TYPE_LABELS: Record<string, string> = {
+  RECEIPT: "Receipt",
+  PAYMENT: "Payment",
+  JOURNAL: "Journal",
+  DEPOSIT_WITHDRAWAL: "Deposit / Withdrawal",
+  ADVICE: "Advice",
+};
+
 const toText = (value: unknown) => String(value ?? "").trim();
 
 const normalizeUpper = (value: unknown) =>
@@ -131,36 +137,6 @@ const getSnapshotName = (
   return toText(snapshot.name) || toText(snapshot.label) || getSnapshotLabel(snapshot);
 };
 
-const getPassengerName = (
-  snapshot: Record<string, unknown> | null | undefined,
-) => {
-  if (!snapshot) return "";
-  const candidates = [
-    snapshot.panHolderName,
-    snapshot.name,
-    snapshot.fullName,
-    snapshot.passengerName,
-    snapshot.label,
-  ];
-  for (const candidate of candidates) {
-    const value = toText(candidate);
-    if (value) return value;
-  }
-  return "";
-};
-
-const isIndividualParty = (
-  snapshot: Record<string, unknown> | null | undefined,
-) => {
-  if (!snapshot) return false;
-  if (snapshot.isIndividual === true) return true;
-  const entity = snapshot.entityType as Record<string, unknown> | undefined;
-  const tokens = [entity?.value, entity?.label, snapshot.entityType].map(
-    normalizeUpper,
-  );
-  return tokens.some((token) => token === "INDIVIDUAL");
-};
-
 const getPartyTypeLabel = (
   snapshot: Record<string, unknown> | null | undefined,
 ) => {
@@ -179,12 +155,9 @@ const getPartyTypeLabel = (
   );
 };
 
-const isTransferTransaction = (tx: {
-  transferRequestId?: string | null;
-  slug?: string | null;
-}) => {
-  if (tx.transferRequestId) return true;
-  const slug = normalizeUpper(tx.slug);
+const isTransferDocument = (row: AccountPostingCombinedRow) => {
+  if (row.documentKind !== "TRANSACTION") return false;
+  const slug = normalizeUpper(row.documentType);
   return slug.includes("TRANSFER");
 };
 
@@ -195,8 +168,7 @@ export class GenerateLedgerService {
     private readonly accountRepository: Repository<AccountProfile>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
-    @InjectRepository(TransactionAccountPosting, "database2")
-    private readonly postingRepository: Repository<TransactionAccountPosting>,
+    private readonly accountPostingsCombinedQuery: AccountPostingsCombinedQuery,
   ) {}
 
   async buildReport(query: GenerateLedgerQueryDto) {
@@ -395,101 +367,53 @@ export class GenerateLedgerService {
     endDate?: string;
     beforeDate?: string;
   }) {
-    const qb = this.postingRepository
-      .createQueryBuilder("posting")
-      .innerJoinAndSelect("posting.transaction", "tx")
-      .leftJoinAndSelect("tx.payments", "payments")
-      .where("tx.status = :status", { status: TransactionStatus.APPROVED })
-      .andWhere("tx.isLatest = true")
-      .andWhere("posting.accountId IN (:...accountIds)", {
-        accountIds: input.accountIds,
-      })
-      .andWhere("COALESCE(tx.slug, '') NOT IN (:...technicalSlugs)", {
-        technicalSlugs: TECHNICAL_SLUGS,
-      });
+    const postings = await this.accountPostingsCombinedQuery.list({
+      accountIds: input.accountIds,
+      branchIds: input.branchIds.length ? input.branchIds : undefined,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      beforeDate: input.beforeDate,
+    });
 
-    if (input.branchIds.length) {
-      qb.andWhere("tx.branchId IN (:...branchIds)", {
-        branchIds: input.branchIds,
-      });
-    }
-    if (input.beforeDate) {
-      qb.andWhere("tx.transactionDate < :beforeDate", {
-        beforeDate: input.beforeDate,
-      });
-    } else {
-      qb.andWhere("tx.transactionDate >= :startDate", {
-        startDate: input.startDate,
-      }).andWhere("tx.transactionDate <= :endDate", {
-        endDate: input.endDate,
-      });
-    }
-
-    qb.orderBy("tx.transactionDate", "ASC")
-      .addOrderBy("tx.createdAt", "ASC")
-      .addOrderBy("posting.lineNo", "ASC");
-
-    const postings = await qb.getMany();
     const movements: Movement[] = [];
 
     for (const posting of postings) {
-      const tx = posting.transaction;
-      if (!tx) continue;
+      if (
+        posting.documentKind === "TRANSACTION" &&
+        TECHNICAL_SLUGS.includes(posting.documentType)
+      ) {
+        continue;
+      }
 
       const amountCents = cents(posting.amount);
       if (amountCents <= 0) continue;
 
       const branchLabel =
-        input.branchLabelById.get(tx.branchId) ||
-        getSnapshotLabel(tx.branchSnapshot as Record<string, unknown>) ||
-        tx.branchId;
-      if (!input.branchLabelById.has(tx.branchId)) {
-        input.branchLabelById.set(tx.branchId, branchLabel);
+        input.branchLabelById.get(posting.branchId) || posting.branchId;
+      if (!input.branchLabelById.has(posting.branchId)) {
+        input.branchLabelById.set(posting.branchId, branchLabel);
       }
 
-      const partySnapshot = tx.partyProfileSnapshot as Record<
-        string,
-        unknown
-      > | null;
-      const passengerSnapshot = tx.passengerSnapshot as Record<
-        string,
-        unknown
-      > | null;
-      const accountSnapshot = posting.accountSnapshot as Record<
-        string,
-        unknown
-      > | null;
-
-      const isDebit = posting.direction === TransactionPostingDirection.DEBIT;
-      const createdAt =
-        posting.createdAt instanceof Date
-          ? posting.createdAt.toISOString()
-          : toText(posting.createdAt);
-
-      const payment =
-        posting.sourceType === TransactionPostingSourceType.PAYMENT
-          ? (tx.payments ?? []).find(
-              (item) => item.id === posting.sourceId,
-            ) ?? null
-          : null;
+      const partySnapshot = posting.partySnapshot;
+      const accountSnapshot = posting.accountSnapshot;
+      const isDebit = posting.direction === "DEBIT";
 
       movements.push({
-        branchId: tx.branchId,
+        branchId: posting.branchId,
         branchLabel,
         accountId: posting.accountId,
         accountLabel:
           input.accountLabelById.get(posting.accountId) ||
           getSnapshotLabel(accountSnapshot),
-        transactionDate: toDateOnly(tx.transactionDate),
-        createdAt,
+        transactionDate: toDateOnly(posting.transactionDate),
+        createdAt: posting.createdAt,
         lineNo: posting.lineNo,
-        type: this.resolveTypeLabel(posting, tx, payment, isDebit),
-        number: toText(tx.number),
-        subledger: this.resolveSubledger(tx, partySnapshot),
+        type: this.resolveTypeLabel(posting, isDebit),
+        number: toText(posting.documentNumber),
+        subledger: this.resolveSubledger(posting, partySnapshot),
         particulars: this.resolveParticulars(
           partySnapshot,
-          passengerSnapshot,
-          posting.remarks,
+          posting.remarks || posting.narration,
           accountSnapshot,
         ),
         debitCents: isDebit ? amountCents : 0,
@@ -508,43 +432,39 @@ export class GenerateLedgerService {
     });
   }
 
-  private resolveTypeLabel(
-    posting: TransactionAccountPosting,
-    tx: {
-      transferRequestId?: string | null;
-      slug?: string | null;
-      transactionType?: string;
-    },
-    payment: TransactionPayment | null,
-    isDebit: boolean,
-  ) {
-    if (isTransferTransaction(tx)) {
+  private resolveTypeLabel(row: AccountPostingCombinedRow, isDebit: boolean) {
+    if (row.documentKind === "VOUCHER") {
+      const voucherLabel =
+        VOUCHER_TYPE_LABELS[normalizeUpper(row.documentType)];
+      if (voucherLabel) return voucherLabel;
+      return toText(row.documentType) || "Voucher";
+    }
+
+    if (isTransferDocument(row)) {
       return "Transfer";
     }
 
-    if (posting.sourceType === TransactionPostingSourceType.PAYMENT) {
-      const direction = normalizeUpper(payment?.paymentDirection);
-      if (direction === "RECEIPT") return "Receipt";
-      if (direction === "PAYMENT") return "Payment";
+    if (row.sourceType === TransactionPostingSourceType.PAYMENT) {
       return isDebit ? "Receipt" : "Payment";
     }
 
-    const sourceLabel = SOURCE_TYPE_LABELS[posting.sourceType];
+    const sourceLabel = SOURCE_TYPE_LABELS[row.sourceType];
     if (sourceLabel) return sourceLabel;
 
-    if (tx.transactionType === TransactionType.PURCHASE) return "Purchase";
-    if (tx.transactionType === TransactionType.SALE) return "Sale";
-    return toText(tx.transactionType) || toText(posting.sourceType) || "-";
+    const documentType = normalizeUpper(row.documentType);
+    if (documentType === TransactionType.PURCHASE) return "Purchase";
+    if (documentType === TransactionType.SALE) return "Sale";
+    if (documentType.includes("PURCHASE")) return "Purchase";
+    if (documentType.includes("SALE") || documentType.includes("SELL"))
+      return "Sale";
+    return toText(row.documentType) || toText(row.sourceType) || "-";
   }
 
   private resolveSubledger(
-    tx: {
-      transferRequestId?: string | null;
-      slug?: string | null;
-    },
+    row: AccountPostingCombinedRow,
     partySnapshot: Record<string, unknown> | null,
   ) {
-    if (isTransferTransaction(tx)) {
+    if (isTransferDocument(row)) {
       return getPartyTypeLabel(partySnapshot) || "Transfer";
     }
     return getPartyTypeLabel(partySnapshot) || "-";
@@ -552,14 +472,9 @@ export class GenerateLedgerService {
 
   private resolveParticulars(
     partySnapshot: Record<string, unknown> | null,
-    passengerSnapshot: Record<string, unknown> | null,
     remarks: string | null,
     accountSnapshot: Record<string, unknown> | null,
   ) {
-    if (isIndividualParty(partySnapshot)) {
-      const passenger = getPassengerName(passengerSnapshot);
-      if (passenger) return passenger;
-    }
     const partyName = getSnapshotName(partySnapshot);
     if (partyName) return partyName;
     const remark = toText(remarks);
