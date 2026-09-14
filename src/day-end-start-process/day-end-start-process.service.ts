@@ -1,11 +1,16 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { AdvancedSetting } from "../additional-settings/advanced-setting.entity";
 import { MonthlyLocksService } from "../monthly-locks/monthly-locks.service";
 import { TransactionDataLocksService } from "../transaction-data-locks/transaction-data-locks.service";
 import { getEarliestAllowedPunchDate } from "../transaction-data-locks/transaction-data-lock.utils";
+import {
+  DAY_END_POST_PROCESS_EVENT_TYPES,
+  DayEndEventStatus,
+} from "./day-end-process.enums";
+import { DayEndEvent } from "./entities/day-end-event.entity";
 import {
   DayEndExecution,
   DayEndExecutionStatus,
@@ -57,9 +62,13 @@ const clampDate = (date: Date, min?: Date, max?: Date): Date => {
 
 @Injectable()
 export class DayEndStartProcessService {
+  private readonly logger = new Logger(DayEndStartProcessService.name);
+
   constructor(
     @InjectRepository(DayEndExecution, "database2")
     private readonly dayEndExecutionRepository: Repository<DayEndExecution>,
+    @InjectRepository(DayEndEvent, "database2")
+    private readonly dayEndEventRepository: Repository<DayEndEvent>,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly monthlyLocksService: MonthlyLocksService,
     private readonly transactionDataLocksService: TransactionDataLocksService,
@@ -464,7 +473,62 @@ export class DayEndStartProcessService {
     row.status = DayEndExecutionStatus.EOD_COMPLETED;
     row.checklistSnapshot = answers ?? {};
     row.updatedBy = actorUserId;
-    return this.dayEndExecutionRepository.save(row);
+    const saved = await this.dayEndExecutionRepository.save(row);
+
+    try {
+      await this.enqueuePostProcessEvents(saved, actorUserId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to enqueue day end post-process events for execution ${saved.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+
+    return saved;
+  }
+
+  private async enqueuePostProcessEvents(
+    execution: DayEndExecution,
+    actorUserId: string,
+  ) {
+    await this.dayEndEventRepository.manager.transaction(async (manager) => {
+      const eventRepository = manager.getRepository(DayEndEvent);
+
+      for (const eventType of DAY_END_POST_PROCESS_EVENT_TYPES) {
+        await eventRepository.delete({
+          dayEndExecutionId: execution.id,
+          eventType,
+          status: In([
+            DayEndEventStatus.PENDING,
+            DayEndEventStatus.PROCESSING,
+          ]),
+        });
+
+        await eventRepository.save(
+          eventRepository.create({
+            dayEndExecutionId: execution.id,
+            branchId: execution.branchId,
+            businessDate: execution.businessDate,
+            eventType,
+            payload: {
+              dayEndExecutionId: execution.id,
+              branchId: execution.branchId,
+              businessDate: execution.businessDate,
+              actorUserId,
+            },
+            status: DayEndEventStatus.PENDING,
+            attemptCount: 0,
+            availableAt: new Date(),
+            processedAt: null,
+            errorMessage: null,
+            lockedAt: null,
+            lockedById: null,
+            createdBy: actorUserId,
+            updatedBy: actorUserId,
+          }),
+        );
+      }
+    });
   }
 
   async startDay(
