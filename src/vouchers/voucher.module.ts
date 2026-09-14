@@ -15,6 +15,7 @@ import { UserModule } from "../users/user.module";
 import {
   AccountingVoucher,
   AccountingVoucherItem,
+  AccountingVoucherLog,
   VoucherAdvanceApplication,
 } from "./entities";
 import {
@@ -43,6 +44,7 @@ import { VoucherService } from "./voucher.service";
       [
         AccountingVoucher,
         AccountingVoucherItem,
+        AccountingVoucherLog,
         VoucherAdvanceApplication,
         Transaction,
         TransactionPayment,

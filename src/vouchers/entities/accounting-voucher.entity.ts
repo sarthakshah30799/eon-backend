@@ -4,6 +4,7 @@ import { TransactionReferenceSnapshotValue } from "../../transactions/types/tran
 import { TransactionPaymentMethod } from "../../transactions/transactions.enums";
 import { VoucherAccountMode, VoucherType } from "../voucher.enums";
 import { AccountingVoucherItem } from "./accounting-voucher-item.entity";
+import { AccountingVoucherLog } from "./accounting-voucher-log.entity";
 import { VoucherAdvanceApplication } from "./voucher-advance-application.entity";
 
 @Entity("accounting_vouchers")
@@ -106,8 +107,6 @@ export class AccountingVoucher extends BaseEntity {
   totalCredit: string;
   @Column({ type: "numeric", precision: 18, scale: 2, name: "final_amount" })
   finalAmount: string;
-  @Column({ type: "integer", name: "print_count", default: 0 })
-  printCount: number;
   @Column({ type: "uuid", name: "advance_control_account_id", nullable: true })
   advanceControlAccountId: string | null;
   @Column({
@@ -119,6 +118,8 @@ export class AccountingVoucher extends BaseEntity {
 
   @OneToMany(() => AccountingVoucherItem, (item) => item.voucher)
   items: AccountingVoucherItem[];
+  @OneToMany(() => AccountingVoucherLog, (log) => log.voucher)
+  logs: AccountingVoucherLog[];
   @OneToMany(
     () => VoucherAdvanceApplication,
     (application) => application.voucher,

@@ -48,6 +48,7 @@ import {
 import {
   AccountingVoucher,
   AccountingVoucherItem,
+  AccountingVoucherLog,
   VoucherAdvanceApplication,
 } from "./entities";
 import {
@@ -55,6 +56,7 @@ import {
   VoucherAdvanceApplicationState,
   VoucherEntryDirection,
   VoucherItemTypeValue,
+  VoucherLogAction,
   VOUCHER_ITEM_TYPE_LABELS,
   VoucherType,
   VOUCHER_NUMBER_SERIES,
@@ -183,6 +185,8 @@ export class VoucherService implements OnModuleInit {
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(AccountingVoucher, "database2")
     private readonly voucherRepository: Repository<AccountingVoucher>,
+    @InjectRepository(AccountingVoucherLog, "database2")
+    private readonly voucherLogRepository: Repository<AccountingVoucherLog>,
     @InjectRepository(Transaction, "database2")
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(VoucherAdvanceApplication, "database2")
@@ -1430,7 +1434,7 @@ export class VoucherService implements OnModuleInit {
     this.getActor(session);
     const voucher = await this.voucherRepository.findOne({
       where: { id, voucherType: type },
-      relations: ["items"],
+      relations: ["items", "logs"],
     });
     if (!voucher) throw new NotFoundException("Voucher not found");
     if (
@@ -1449,7 +1453,6 @@ export class VoucherService implements OnModuleInit {
   ): Promise<{
     message: string;
     copyType: VoucherPrintCopyType;
-    printCount: number;
   }> {
     if (
       type !== VoucherType.RECEIPT &&
@@ -1462,7 +1465,7 @@ export class VoucherService implements OnModuleInit {
     }
 
     const actorId = this.getActor(session);
-    const voucher = await this.findById(type, id, session);
+    await this.findById(type, id, session);
 
     if (dto.sendEmail) {
       throw new BadRequestException(
@@ -1470,25 +1473,43 @@ export class VoucherService implements OnModuleInit {
       );
     }
 
-    const existingPrintCount = voucher.printCount ?? 0;
+    const existingPrintCount = await this.voucherLogRepository.count({
+      where: {
+        voucherId: id,
+        action: VoucherLogAction.PRINT,
+      },
+    });
     const copyType =
       existingPrintCount === 0
         ? VoucherPrintCopyType.CUSTOMER_COPY
         : VoucherPrintCopyType.DUPLICATE_COPY;
-    const printCount = existingPrintCount + 1;
+    const message =
+      copyType === VoucherPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
 
-    await this.voucherRepository.update(id, {
-      printCount,
-      updatedBy: actorId,
-    });
+    await this.voucherLogRepository.save(
+      this.voucherLogRepository.create({
+        voucherId: id,
+        action: VoucherLogAction.PRINT,
+        message,
+        metadata: {
+          copyType,
+          requestedCopyType: dto.copyType ?? null,
+          sendEmail: Boolean(dto.sendEmail),
+          recipientEmail: dto.recipientEmail || null,
+          subject: dto.subject || null,
+          emailMessageId: null,
+        },
+        performedById: actorId,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
 
     return {
-      message:
-        copyType === VoucherPrintCopyType.DUPLICATE_COPY
-          ? "Duplicate copy printed"
-          : "Original copy printed",
+      message,
       copyType,
-      printCount,
     };
   }
 
