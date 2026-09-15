@@ -22,14 +22,80 @@ import { Role } from "../roles/role.entity";
 import { UserRole } from "../user-roles/user-role.entity";
 import { RolesMenuPermission } from "../roles-menu-permission/roles-menu-permission.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { CategoryOptionCodeEnum } from "../category-options/category-option-code.enum";
 import { Country } from "../country/country.entity";
 import { CountryGroup } from "../country-groups/country-group.entity";
 import { Currency } from "../currencies/currency.entity";
 import { State } from "../state/state.entity";
 import { normalizeMenuPath } from "../menu/menu-path.util";
+import {
+  BRANCH_CODE_LENGTH,
+  extractPanFromLegacyTaxId,
+  mapLegacyBranchRecord,
+  mapLegacyCompanyRecord,
+  pickSourceString,
+  toBoolean,
+  toNullableDate,
+  toNullableNumber,
+  toNullableString,
+  toStringOrFallback,
+  type SourceRow,
+} from "./migration-tool.mapping";
+import {
+  LEGACY_CURRENCY_TABLE_CANDIDATES,
+  indexCurrencyListCodes,
+  indexMastCurrByCode,
+  mapLegacyCurrencyRecord,
+} from "./migration-tool.currency";
+import {
+  LEGACY_ACCOUNT_TABLE_CANDIDATES,
+  accountCategoryCodes,
+  mapLegacyAccountProfile,
+} from "./migration-tool.account";
+import {
+  LEGACY_FINANCIAL_TABLE_CANDIDATES,
+  defaultSignCategoryCode,
+  financialTypeCategoryCode,
+  mapLegacyFinancialProfile,
+  mapLegacyFinancialSubProfile,
+} from "./migration-tool.financial";
+import {
+  LEGACY_PRODUCT_TABLE_CANDIDATES,
+  mapLegacyCurrencyProductLink,
+  mapLegacyProductRecord,
+} from "./migration-tool.product";
+import { FinancialCode } from "../financial-codes/financial-code.entity";
+import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
+import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { Product } from "../products/product.entity";
+import { ProductCurrencyRate } from "../currency-rates/product-currency-rate.entity";
+import {
+  LEGACY_CITY_TABLE_CANDIDATES,
+  LEGACY_COUNTRY_TABLE_CANDIDATES,
+  LEGACY_DISTRICT_TABLE_CANDIDATES,
+  LEGACY_LOCATION_TYPE_TABLE_CANDIDATES,
+  LEGACY_STATE_TABLE_CANDIDATES,
+  canonicalGeographyName,
+  cityNameLookupFromCities,
+  collectBranchStateLookupValues,
+  combineLegacyCities,
+  combineLegacyCountries,
+  combineLegacyStates,
+  countryLookupKeys,
+  districtLookupFromCities,
+  mapLegacyLocationType,
+  padGstStateCode,
+  pickLegacyDistrictReference,
+  resolveLegacyPlaceText,
+  resolveLegacyRecordCity,
+  stateLookupKeys,
+  type CombinedLegacyCity,
+  type CombinedLegacyCountry,
+  type CombinedLegacyState,
+  type LegacyPlaceLookup,
+} from "./migration-tool.geography";
 
 type MigrationMode = "mock" | "real";
-type SourceRow = Record<string, any>;
 
 type MigrationConnectionConfig =
   | { connectionString: string }
@@ -47,7 +113,14 @@ type MigrationConnectionConfig =
 
 type InternalTask =
   | "company"
+  | "country"
+  | "state"
+  | "locationType"
   | "currency"
+  | "financialCode"
+  | "account"
+  | "product"
+  | "currencyProductLink"
   | "branch"
   | "counter"
   | "user"
@@ -95,13 +168,23 @@ interface MigrationContext {
   sourceCache: Record<string, SourceRow[]>;
   companyMap: Map<string, string>;
   countryMap: Map<string, string>;
+  stateMap: Map<string, string>;
+  cityLookup: LegacyPlaceLookup;
+  districtLookup: LegacyPlaceLookup;
+  cityByCode: Map<string, CombinedLegacyCity>;
+  placeLookupsLoaded: boolean;
   currencyMap: Map<string, string>;
+  financialCodeMap: Map<string, string>;
+  financialSubProfileMap: Map<string, string>;
+  accountMap: Map<string, string>;
+  accountCodeMap: Map<string, string>;
+  productMap: Map<string, string>;
+  productCodeMap: Map<string, string>;
   branchMap: Map<string, string>;
   counterMap: Map<string, string>;
   userMap: Map<string, string>;
   roleMap: Map<string, string>;
   branchCounters: Map<string, string[]>;
-  branchMainCounter: Map<string, string>;
   branchUserLinks: Array<SourceRow>;
   counterUserLinks: Array<SourceRow>;
   userRows: Array<SourceRow>;
@@ -122,12 +205,91 @@ const TEMP_INITIAL_PASSWORD = "Temp@1234";
 const TABLE_DEPENDENCIES: Record<string, InternalTask[]> = {
   company: ["company"],
   mstcompanyrecord: ["company"],
-  currency: ["currency"],
-  mcurrency: ["currency"],
-  branches: ["company", "branch"],
-  mstcompany: ["company", "branch"],
-  counters: ["company", "branch", "counter", "branchCounterLinks"],
-  mstcounter: ["company", "branch", "counter", "branchCounterLinks"],
+  country: ["country"],
+  countries: ["country"],
+  ctrcountry: ["country"],
+  ctrcountry2: ["country"],
+  tb_MstCountry: ["country"],
+  tb_mstcountry: ["country"],
+  LRSCountry: ["country"],
+  lrscountry: ["country"],
+  LRSCOUNTRY: ["country"],
+  state: ["country", "state"],
+  states: ["country", "state"],
+  CTRSTATE: ["country", "state"],
+  ctrstate: ["country", "state"],
+  CTR_CUSTOMERSTATE: ["country", "state"],
+  GSTSTATE: ["country", "state"],
+  mstLocationType: ["locationType"],
+  mstlocationtype: ["locationType"],
+  currency: ["country", "currency"],
+  mcurrency: ["country", "currency"],
+  mCurrency: ["country", "currency"],
+  MASTCURR: ["country", "currency"],
+  mastcurr: ["country", "currency"],
+  MCURRENCYLIST: ["country", "currency"],
+  mcurrencylist: ["country", "currency"],
+  FinancialProfile: ["financialCode"],
+  financialprofile: ["financialCode"],
+  FinancialSubProfile: ["financialCode"],
+  financialsubprofile: ["financialCode"],
+  financialCode: ["financialCode"],
+  AccountsProfile: ["country", "currency", "financialCode", "account"],
+  accountsprofile: ["country", "currency", "financialCode", "account"],
+  account: ["country", "currency", "financialCode", "account"],
+  mProductM: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+  ],
+  mproductm: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+  ],
+  product: ["country", "currency", "financialCode", "account", "product"],
+  mCurrencyProductLink: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "currencyProductLink",
+  ],
+  mcurrencyproductlink: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "currencyProductLink",
+  ],
+  currencyProductLink: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "currencyProductLink",
+  ],
+  branches: ["company", "country", "state", "locationType", "branch"],
+  mstcompany: ["company", "country", "state", "locationType", "branch"],
+  branch: ["company", "country", "state", "locationType", "branch"],
+  locationType: ["locationType"],
+  counters: ["company", "country", "state", "locationType", "branch", "counter", "branchCounterLinks"],
+  mstcounter: [
+    "company",
+    "country",
+    "state",
+    "locationType",
+    "branch",
+    "counter",
+    "branchCounterLinks",
+  ],
   users: [
     "company",
     "branch",
@@ -215,44 +377,6 @@ const TABLE_DEPENDENCIES: Record<string, InternalTask[]> = {
   ],
 };
 
-const toBoolean = (value: any): boolean => {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return (
-      normalized === "1" ||
-      normalized === "true" ||
-      normalized === "y" ||
-      normalized === "yes"
-    );
-  }
-  return false;
-};
-
-const toNullableString = (value: any): string | null => {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text.length > 0 ? text : null;
-};
-
-const toStringOrFallback = (value: any, fallback: string): string => {
-  const resolved = toNullableString(value);
-  return resolved ?? fallback;
-};
-
-const toNullableDate = (value: any): Date | null => {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const toNullableNumber = (value: any): number | null => {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isNaN(n) ? null : n;
-};
-
 const escapeIdentifier = (value: string): string =>
   `[${value.replace(/]/g, "]]")}]`;
 
@@ -264,6 +388,11 @@ const normalizeMatchText = (value: string): string =>
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
+
+const isPersistedUuid = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 
 const levenshteinDistance = (a: string, b: string): number => {
   if (a === b) {
@@ -1024,8 +1153,46 @@ export class MigrationToolService {
     return this.activeContext?.countryMap ?? new Map<string, string>();
   }
 
+  private get stateMap() {
+    return this.activeContext?.stateMap ?? new Map<string, string>();
+  }
+
+  private get cityLookup() {
+    return this.activeContext?.cityLookup ?? new Map<string, string>();
+  }
+
+  private get districtLookup() {
+    return this.activeContext?.districtLookup ?? new Map<string, string>();
+  }
+
   private get currencyMap() {
     return this.activeContext?.currencyMap ?? new Map<string, string>();
+  }
+
+  private get financialCodeMap() {
+    return this.activeContext?.financialCodeMap ?? new Map<string, string>();
+  }
+
+  private get financialSubProfileMap() {
+    return (
+      this.activeContext?.financialSubProfileMap ?? new Map<string, string>()
+    );
+  }
+
+  private get accountMap() {
+    return this.activeContext?.accountMap ?? new Map<string, string>();
+  }
+
+  private get accountCodeMap() {
+    return this.activeContext?.accountCodeMap ?? new Map<string, string>();
+  }
+
+  private get productMap() {
+    return this.activeContext?.productMap ?? new Map<string, string>();
+  }
+
+  private get productCodeMap() {
+    return this.activeContext?.productCodeMap ?? new Map<string, string>();
   }
 
   private get counterMap() {
@@ -1042,10 +1209,6 @@ export class MigrationToolService {
 
   private get branchCounters() {
     return this.activeContext?.branchCounters ?? new Map<string, string[]>();
-  }
-
-  private get branchMainCounter() {
-    return this.activeContext?.branchMainCounter ?? new Map<string, string>();
   }
 
   private get branchUserLinks() {
@@ -1122,6 +1285,26 @@ export class MigrationToolService {
 
   private get targetCurrencyRepository() {
     return this.targetDataSource.getRepository(Currency);
+  }
+
+  private get targetFinancialCodeRepository() {
+    return this.targetDataSource.getRepository(FinancialCode);
+  }
+
+  private get targetFinancialSubProfileRepository() {
+    return this.targetDataSource.getRepository(FinancialSubProfile);
+  }
+
+  private get targetAccountProfileRepository() {
+    return this.targetDataSource.getRepository(AccountProfile);
+  }
+
+  private get targetProductRepository() {
+    return this.targetDataSource.getRepository(Product);
+  }
+
+  private get targetProductCurrencyRateRepository() {
+    return this.targetDataSource.getRepository(ProductCurrencyRate);
   }
 
   private getConnectionProfiles(
@@ -1517,13 +1700,23 @@ export class MigrationToolService {
       sourceCache: {},
       companyMap: new Map(),
       countryMap: new Map(),
+      stateMap: new Map(),
+      cityLookup: new Map(),
+      districtLookup: new Map(),
+      cityByCode: new Map(),
+      placeLookupsLoaded: false,
       currencyMap: new Map(),
+      financialCodeMap: new Map(),
+      financialSubProfileMap: new Map(),
+      accountMap: new Map(),
+      accountCodeMap: new Map(),
+      productMap: new Map(),
+      productCodeMap: new Map(),
       branchMap: new Map(),
       counterMap: new Map(),
       userMap: new Map(),
       roleMap: new Map(),
       branchCounters: new Map(),
-      branchMainCounter: new Map(),
       branchUserLinks: [],
       counterUserLinks: [],
       userRows: [],
@@ -1533,13 +1726,22 @@ export class MigrationToolService {
 
   private expandSelectedTables(selectedTables: string[]): string[] {
     const result = new Set<string>();
-
-    for (const table of selectedTables) {
+    const visit = (table: string) => {
       const dependencies = TABLE_DEPENDENCIES[table];
       if (!dependencies) {
-        continue;
+        return;
       }
-      dependencies.forEach((dep) => result.add(dep));
+      for (const dep of dependencies) {
+        if (result.has(dep)) {
+          continue;
+        }
+        result.add(dep);
+        visit(dep);
+      }
+    };
+
+    for (const table of selectedTables) {
+      visit(table);
     }
 
     return [...result];
@@ -1549,8 +1751,22 @@ export class MigrationToolService {
     switch (task) {
       case "company":
         return "company";
+      case "country":
+        return "countries";
+      case "state":
+        return "states";
+      case "locationType":
+        return "category_options";
       case "currency":
         return "currencies";
+      case "financialCode":
+        return "financial_codes";
+      case "account":
+        return "account_profiles";
+      case "product":
+        return "products";
+      case "currencyProductLink":
+        return "product_currency_rates";
       case "branch":
         return "branches";
       case "counter":
@@ -1562,7 +1778,7 @@ export class MigrationToolService {
       case "userRoleLinks":
         return "user_roles";
       case "branchCounterLinks":
-        return "mstBranchCounterLink";
+        return "branch_counters";
       case "branchUserLinks":
         return "mstBranchUserLink";
       case "counterUserLinks":
@@ -1576,8 +1792,22 @@ export class MigrationToolService {
     switch (task) {
       case "company":
         return "mstcompanyrecord";
+      case "country":
+        return "ctrcountry2";
+      case "state":
+        return "CTRSTATE";
+      case "locationType":
+        return "mstLocationType";
       case "currency":
         return "mcurrency";
+      case "financialCode":
+        return "FinancialProfile";
+      case "account":
+        return "AccountsProfile";
+      case "product":
+        return "mProductM";
+      case "currencyProductLink":
+        return "mCurrencyProductLink";
       case "branch":
         return "mstcompany";
       case "counter":
@@ -1780,13 +2010,7 @@ export class MigrationToolService {
   }
 
   private getSourceString(row: SourceRow, keys: string[]): string | null {
-    for (const key of keys) {
-      const value = toNullableString(row[key]);
-      if (value) {
-        return value;
-      }
-    }
-    return null;
+    return pickSourceString(row, keys);
   }
 
   private resolveAuditFields(
@@ -1983,6 +2207,202 @@ export class MigrationToolService {
     return rows;
   }
 
+  private async findSourceTableName(
+    pool: mssql.ConnectionPool,
+    candidates: readonly string[],
+  ): Promise<string | null> {
+    const lowered = candidates.map((name) =>
+      name.replace(/'/g, "''").toLowerCase(),
+    );
+    const result = await pool.request().query(
+      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND LOWER(TABLE_NAME) IN (${lowered
+        .map((name) => `'${name}'`)
+        .join(", ")})`,
+    );
+    const names = (result.recordset ?? []).flatMap((row) => {
+      const tableName = toNullableString((row as SourceRow).TABLE_NAME);
+      return tableName ? [tableName] : [];
+    });
+    const byLower = new Map<string, string>(
+      names.map((name) => [name.toLowerCase(), name]),
+    );
+    for (const candidate of candidates) {
+      const matched = byLower.get(candidate.toLowerCase());
+      if (matched) {
+        return matched;
+      }
+    }
+    return null;
+  }
+
+  private async readSourceTableIfExists(
+    pool: mssql.ConnectionPool,
+    candidates: readonly string[],
+  ): Promise<{ tableName: string; rows: SourceRow[] } | null> {
+    const tableName = await this.findSourceTableName(pool, candidates);
+    if (!tableName) {
+      return null;
+    }
+    const rows = await this.readSourceRows(pool, tableName);
+    return { tableName, rows };
+  }
+
+  private async ensureLegacyPlaceLookups(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (context.placeLookupsLoaded) {
+      return;
+    }
+
+    const city = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_CITY_TABLE_CANDIDATES.city,
+    );
+    const city2 = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_CITY_TABLE_CANDIDATES.city2,
+    );
+    const combinedCities = combineLegacyCities({
+      cityRows: city?.rows ?? [],
+      city2Rows: city2?.rows ?? [],
+    });
+    const cityLookup = cityNameLookupFromCities(combinedCities);
+    const districtLookup = districtLookupFromCities(combinedCities);
+    const cityByCode = new Map(
+      combinedCities.map((item) => [item.cityCode, item]),
+    );
+
+    const districtTables: Array<{ tableName: string; rows: SourceRow[] }> = [];
+    const loadedDistrictTables = new Set<string>();
+    for (const candidate of LEGACY_DISTRICT_TABLE_CANDIDATES) {
+      const source = await this.readSourceTableIfExists(pool, [candidate]);
+      if (
+        source &&
+        !loadedDistrictTables.has(source.tableName.toLowerCase())
+      ) {
+        loadedDistrictTables.add(source.tableName.toLowerCase());
+        districtTables.push(source);
+      }
+    }
+    for (const table of districtTables) {
+      for (const row of table.rows) {
+        const code =
+          toNullableString(row.DISTRICTCODE) ??
+          toNullableString(row.DistrictCode);
+        const name =
+          toNullableString(row.DISTRICTNAME) ??
+          toNullableString(row.DistrictName);
+        if (code && name && !districtLookup.has(code)) {
+          districtLookup.set(code, name);
+        }
+      }
+    }
+
+    context.cityLookup = cityLookup;
+    context.districtLookup = districtLookup;
+    context.cityByCode = cityByCode;
+    context.placeLookupsLoaded = true;
+
+    if (!city && !city2) {
+      this.addWarning(context, {
+        sourceTable: "CTRCITY",
+        note: "No CTRCITY/CTRCITY2 table found. City IDs on later records cannot be resolved to names until those tables exist on the old master.",
+      });
+    } else {
+      this.logger.log(
+        `[cities] loaded lookup from ${[city, city2]
+          .filter(Boolean)
+          .map((table) => `${table!.tableName}:${table!.rows.length}`)
+          .join(", ")} cities=${combinedCities.length}`,
+      );
+    }
+
+    if (districtTables.length === 0 && districtLookup.size === 0) {
+      this.addWarning(context, {
+        sourceTable: "CTRDISTRICT",
+        note: "No CTRDISTRICT table found. District names still resolve from CTRCITY2 when a city id is present.",
+      });
+    }
+  }
+
+  private resolveRecordCityText(
+    row: SourceRow,
+    context: MigrationContext,
+    params: {
+      sourceTable: string;
+      fallback: string;
+      targetColumn: string;
+    },
+  ): string {
+    const resolved = resolveLegacyRecordCity(row, {
+      nameLookup: context.cityLookup,
+      cityByCode: context.cityByCode,
+      fallback: params.fallback,
+    });
+
+    if (resolved.resolvedFrom === "id") {
+      const city = resolved.city;
+      this.addTransformation(context, {
+        sourceTable: params.sourceTable,
+        sourceField: resolved.sourceColumn ?? "nCityID",
+        ruleName: "city-id-to-name",
+        originalValue: resolved.raw,
+        transformedValue: resolved.value,
+        result: "transformed",
+      });
+      this.addFieldStatus(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: resolved.sourceColumn ?? "nCityID",
+        sourceValue: resolved.raw,
+        targetColumn: params.targetColumn,
+        targetValue: resolved.value,
+        status: "transformed",
+        note: city
+          ? `Old city id ${city.cityCode} resolved to ${city.name}. CTRCITY2 state=${city.stateName ?? ""} customerStateId=${city.customerStateId ?? ""} district=${city.districtName ?? ""}. Name stored; no cities table is created.`
+          : "Old city id resolved through CTRCITY/CTRCITY2; name stored on the new record. No cities table is created.",
+      });
+    } else if (resolved.resolvedFrom === "unresolved-id") {
+      this.addUnmappedColumn(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: resolved.sourceColumn ?? "nCityID",
+        sourceValue: resolved.raw,
+        reason:
+          "City id was not found in CTRCITY/CTRCITY2; the numeric id was not stored as city text",
+      });
+    }
+
+    const district = resolveLegacyPlaceText(
+      pickLegacyDistrictReference(row),
+      context.districtLookup,
+      "",
+    );
+    if (district.raw) {
+      this.addUnmappedColumn(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: district.sourceColumn ?? "nDistrictID",
+        sourceValue:
+          district.resolvedFrom === "id" || district.resolvedFrom === "name"
+            ? `${district.raw} -> ${district.value}`
+            : district.raw,
+        reason:
+          "No district column on the new record; resolved district name is logged only",
+      });
+    }
+
+    return resolved.value;
+  }
+
+  private rememberLookup(
+    map: Map<string, string>,
+    keys: string[],
+    id: string,
+  ) {
+    for (const key of keys) {
+      map.set(key, id);
+    }
+  }
+
   private ensureSourceRows(
     context: MigrationContext,
     task: InternalTask,
@@ -2073,13 +2493,17 @@ export class MigrationToolService {
       };
     }
 
-    const name = toStringOrFallback(row.vCompanyName, `Company ${oldId}`);
-    const panNo = toStringOrFallback(
-      row.cgstno ?? row.panNo ?? row.PANNO,
-      `PAN_PENDING_${oldId}`,
-    );
-    const fromDate = toNullableDate(row.FROMDATE);
-    const toDate = toNullableDate(row.TODATE);
+    const mapped = mapLegacyCompanyRecord(row);
+    const name = mapped.name;
+    const legacyTaxId = mapped.legacyTaxId;
+    const extractedPan = {
+      pan: mapped.panKind === "invalid" ? null : mapped.panNo,
+      kind: mapped.panKind,
+    };
+    const panNo = mapped.panNo;
+    const licenseNo = mapped.fxRegNo;
+    const fromDate = mapped.fromDate;
+    const toDate = mapped.toDate;
     const createdBy = this.resolveAuditUserId(
       context,
       row.nCreatedBy ?? row.vCreatedBy,
@@ -2102,7 +2526,7 @@ export class MigrationToolService {
       sourceTable: "mstcompanyrecord",
       sourceRowIdentifier: String(oldId ?? ""),
     });
-    const existing = await this.targetCompanyRepository.findOne({
+    let existing = await this.targetCompanyRepository.findOne({
       where: {
         panNo,
         name,
@@ -2110,18 +2534,57 @@ export class MigrationToolService {
         toDate,
       },
     });
+    if (!existing && extractedPan.kind === "gstin" && legacyTaxId) {
+      existing = await this.targetCompanyRepository.findOne({
+        where: {
+          panNo: legacyTaxId,
+          name,
+          fromDate,
+          toDate,
+        },
+      });
+    }
 
     if (existing) {
       this.logger.log(
         `[mstcompanyrecord] reused company oldId=${String(oldId ?? "")} targetId=${existing.id}`,
       );
+      let reusedChanged = false;
       if (audit.wasDeleted && context.mode === "real") {
         existing.deletedAt = audit.deletedAt;
         existing.deletedBy = audit.deletedBy;
-        await this.targetCompanyRepository.save(existing);
+        reusedChanged = true;
         this.logger.warn(
           `[mstcompanyrecord] applied soft-delete to reused company id=${existing.id}`,
         );
+      }
+      const legacyRbiName = toNullableString(row.vRBIName);
+      if (
+        legacyRbiName &&
+        toNullableString(existing.cinNo) === legacyRbiName
+      ) {
+        existing.cinNo = null;
+        reusedChanged = true;
+        this.addWarning(context, {
+          sourceTable: "mstcompanyrecord",
+          sourceColumn: "vRBIName",
+          note: `Cleared company.cinNo on reused row ${existing.id} because it previously stored vRBIName`,
+        });
+      }
+      if (
+        extractedPan.pan &&
+        toNullableString(existing.panNo)?.toUpperCase() !== extractedPan.pan
+      ) {
+        existing.panNo = extractedPan.pan;
+        reusedChanged = true;
+        this.addWarning(context, {
+          sourceTable: "mstcompanyrecord",
+          sourceColumn: "cgstno",
+          note: `Updated company.panNo on reused row ${existing.id} to extracted PAN ${extractedPan.pan}`,
+        });
+      }
+      if (reusedChanged && context.mode === "real") {
+        await this.targetCompanyRepository.save(existing);
       }
       this.companyMap.set(String(oldId), existing.id);
       this.addIdMap(context, {
@@ -2131,6 +2594,8 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
+      this.logUnmappedCompanyColumns(row, context);
+      this.logCompanyPanMapping(row, context, legacyTaxId, extractedPan, panNo);
       return {
         id: existing.id,
         created: false,
@@ -2141,17 +2606,17 @@ export class MigrationToolService {
       };
     }
     const company = this.targetCompanyRepository.create({
-      name,
+      name: mapped.name,
       shortCode: null,
-      formerlyKnownName: toNullableString(row.VCOMPANYNAME2),
-      cinNo: toNullableString(row.vRBIName),
-      panNo,
-      fxRegNo: toNullableString(row.VRBILICENCENUMBER),
-      fxRegDate: fromDate,
-      fromDate,
-      toDate,
-      logo: toNullableString(row.LOGOPATH),
-      aeonLicNo: toNullableString(row.VRBILICENCENUMBER),
+      formerlyKnownName: mapped.formerlyKnownName,
+      cinNo: mapped.cinNo,
+      panNo: mapped.panNo,
+      fxRegNo: mapped.fxRegNo,
+      fxRegDate: mapped.fxRegDate,
+      fromDate: mapped.fromDate,
+      toDate: mapped.toDate,
+      logo: mapped.logo,
+      aeonLicNo: mapped.aeonLicNo,
       website: null,
       email: null,
       createdBy,
@@ -2160,15 +2625,8 @@ export class MigrationToolService {
       deletedBy: audit.deletedBy,
     });
 
-    if (row.vBranchCode) {
-      this.addUnmappedColumn(context, {
-        sourceTable: "mstcompanyrecord",
-        sourceColumn: "vBranchCode",
-        sourceValue: row.vBranchCode,
-        reason:
-          "Branch code is kept for sheet review only and is not stored on company",
-      });
-    }
+    this.logUnmappedCompanyColumns(row, context);
+    this.logCompanyPanMapping(row, context, legacyTaxId, extractedPan, panNo);
 
     if (context.mode === "real") {
       const saved = await this.targetCompanyRepository.save(company);
@@ -2215,35 +2673,114 @@ export class MigrationToolService {
     };
   }
 
-  private transformBranchCode(row: SourceRow): {
-    value: string;
-    transformed: boolean;
-    sourceField: string;
-  } {
-    const raw =
-      toNullableString(row.Prefix) ||
-      toNullableString(row.vBranchCode) ||
-      "BRAN";
-    const sourceField = toNullableString(row.Prefix) ? "Prefix" : "vBranchCode";
-    const base = raw.trim();
-    if (base.length === 4) {
-      return {
-        value: base.toUpperCase(),
-        transformed: sourceField === "Prefix" ? false : false,
-        sourceField,
-      };
+  private logUnmappedCompanyColumns(row: SourceRow, context: MigrationContext) {
+    const unmapped: Array<[string, any, string]> = [
+      [
+        "vRBIName",
+        row.vRBIName,
+        "RBI person name is not CIN No.; company.cinNo stays empty unless a real CIN source exists",
+      ],
+      [
+        "vRBIDesig",
+        row.vRBIDesig,
+        "RBI designation has no matching company column",
+      ],
+      [
+        "vRBIPlace",
+        row.vRBIPlace,
+        "RBI place has no matching company column",
+      ],
+      [
+        "vRBIAdd1",
+        row.vRBIAdd1,
+        "RBI address has no matching company column",
+      ],
+      [
+        "vRBIAdd2",
+        row.vRBIAdd2,
+        "RBI address has no matching company column",
+      ],
+      [
+        "vRBIAdd3",
+        row.vRBIAdd3,
+        "RBI address has no matching company column",
+      ],
+      [
+        "vBranchCode",
+        row.vBranchCode,
+        "Branch code is kept for sheet review only and is not stored on company",
+      ],
+    ];
+
+    for (const [sourceColumn, sourceValue, reason] of unmapped) {
+      if (sourceValue === undefined || sourceValue === null || sourceValue === "") {
+        continue;
+      }
+      this.addUnmappedColumn(context, {
+        sourceTable: "mstcompanyrecord",
+        sourceColumn,
+        sourceValue,
+        reason,
+      });
+    }
+  }
+
+  private logCompanyPanMapping(
+    row: SourceRow,
+    context: MigrationContext,
+    legacyTaxId: string | null,
+    extractedPan: { pan: string | null; kind: "pan" | "gstin" | "invalid" },
+    panNo: string,
+  ) {
+    if (!legacyTaxId) {
+      this.addWarning(context, {
+        sourceTable: "mstcompanyrecord",
+        sourceColumn: "cgstno",
+        note: `No tax id on source row; panNo fell back to ${panNo}`,
+      });
+      return;
     }
 
-    if (base.length > 4) {
-      return {
-        value: base.slice(0, 4).toUpperCase(),
-        transformed: true,
-        sourceField,
-      };
+    if (extractedPan.kind === "gstin" && extractedPan.pan) {
+      this.addTransformation(context, {
+        sourceTable: "mstcompanyrecord",
+        sourceField: "cgstno",
+        ruleName: "gstin-to-pan",
+        originalValue: legacyTaxId,
+        transformedValue: extractedPan.pan,
+        result: "transformed",
+      });
+      this.addFieldStatus(context, {
+        sourceTable: "mstcompanyrecord",
+        sourceColumn: "cgstno",
+        sourceValue: legacyTaxId,
+        targetColumn: "panNo",
+        targetValue: extractedPan.pan,
+        status: "transformed",
+        note: "GSTIN is not PAN; characters 3-12 stored as company.panNo. Company has no GST column",
+      });
+      this.addUnmappedColumn(context, {
+        sourceTable: "mstcompanyrecord",
+        sourceColumn: "cgstno",
+        sourceValue: legacyTaxId,
+        reason:
+          "Full GSTIN is not stored on company; PAN was extracted. Branch GST stays on branches.gstNo from vServiceTaxRegNo",
+      });
+      return;
     }
 
-    const padded = base.padEnd(4, "0").slice(0, 4).toUpperCase();
-    return { value: padded, transformed: true, sourceField };
+    this.addFieldStatus(context, {
+      sourceTable: "mstcompanyrecord",
+      sourceColumn: "cgstno",
+      sourceValue: legacyTaxId,
+      targetColumn: "panNo",
+      targetValue: panNo,
+      status: extractedPan.kind === "pan" ? "saved" : "transformed",
+      note:
+        extractedPan.kind === "pan"
+          ? "Source value was already a PAN"
+          : `Source tax id was not a PAN or GSTIN; panNo used ${panNo}`,
+    });
   }
 
   private getSourceLocationType(row: SourceRow): string | null {
@@ -2374,6 +2911,97 @@ export class MigrationToolService {
     gstState: string | null;
     note: string;
   }> {
+    const lookupValues = collectBranchStateLookupValues(
+      row,
+      context.cityByCode,
+    );
+    const gstNo = toNullableString(row.vServiceTaxRegNo);
+    const indianGst =
+      extractPanFromLegacyTaxId(gstNo).kind === "gstin" ||
+      (gstNo !== null && gstNo.length === 15);
+
+    const findState = async (value: string): Promise<State | null> => {
+      const mappedId =
+        this.stateMap.get(`gst:${padGstStateCode(value) ?? value}`) ??
+        this.stateMap.get(`code:${value}`) ??
+        this.stateMap.get(`ctr:${value}`) ??
+        this.stateMap.get(value) ??
+        this.stateMap.get(`name:${canonicalGeographyName(value)}`);
+      if (mappedId) {
+        if (!isPersistedUuid(mappedId)) {
+          return { id: mappedId } as State;
+        }
+        const fromMap = await this.targetStateRepository.findOne({
+          where: { id: mappedId },
+          relations: { country: true },
+        });
+        if (fromMap) {
+          return fromMap;
+        }
+        return { id: mappedId } as State;
+      }
+
+      return this.targetStateRepository.findOne({
+        where: [
+          { code: value },
+          { name: value },
+          { gstStateCode: padGstStateCode(value) ?? value },
+          { ctrStateCode: value },
+        ],
+        relations: { country: true },
+      });
+    };
+
+    for (const value of lookupValues) {
+      const stateMatch = await findState(value);
+      if (!stateMatch) {
+        continue;
+      }
+      const indiaId = indianGst ? await this.resolveIndiaCountryId() : null;
+      const country =
+        stateMatch.country ?? (indiaId ? ({ id: indiaId } as Country) : null);
+      this.addFieldStatus(context, {
+        sourceTable: "mstcompany",
+        sourceColumn: "vServiceTaxRegNo / STDCode / vLocation",
+        sourceValue: lookupValues.join(", "),
+        targetColumn: "state_id / country_id / gstState",
+        targetValue: {
+          stateId: stateMatch.id,
+          countryId: country?.id ?? stateMatch.country?.id ?? null,
+          gstState: stateMatch.gstStateCode ?? stateMatch.name,
+        },
+        status: "saved",
+        note: `Resolved branch geography through state lookup using ${value}`,
+      });
+      this.addColumnMapping(context, {
+        sourceTable: "mstcompany",
+        sourceColumn: "vLocation",
+        sourceValue: row.vLocation,
+        targetColumn: "state_id",
+        targetValue: stateMatch.id,
+        result: "reused",
+      });
+      return {
+        country: country ?? stateMatch.country ?? null,
+        state: stateMatch,
+        gstState: stateMatch.gstStateCode ?? stateMatch.name,
+        note: `Resolved as state reference via ${value}`,
+      };
+    }
+
+    const indiaId = indianGst ? await this.resolveIndiaCountryId() : null;
+    if (indiaId) {
+      return {
+        country: { id: indiaId } as Country,
+        state: null,
+        gstState:
+          padGstStateCode(gstNo?.slice(0, 2)) ??
+          toNullableString(row.vLocation) ??
+          toNullableString(row.vCity),
+        note: "Indian GSTIN present; country_id set to India. State was not matched.",
+      };
+    }
+
     const rawLocation = toNullableString(row.vLocation);
     const city = toNullableString(row.vCity);
     if (!rawLocation) {
@@ -2385,48 +3013,6 @@ export class MigrationToolService {
       };
     }
 
-    const stateMatch = await this.targetStateRepository.findOne({
-      where: [
-        { code: rawLocation },
-        { name: rawLocation },
-        { gstStateCode: rawLocation },
-        { ctrStateCode: rawLocation },
-      ],
-      relations: {
-        country: true,
-      },
-    });
-
-    if (stateMatch) {
-      this.addFieldStatus(context, {
-        sourceTable: "mstcompany",
-        sourceColumn: "vLocation",
-        sourceValue: rawLocation,
-        targetColumn: "state_id / country_id / gstState",
-        targetValue: {
-          stateId: stateMatch.id,
-          countryId: stateMatch.country?.id ?? null,
-          gstState: stateMatch.name,
-        },
-        status: "saved",
-        note: "Resolved branch geography through state lookup",
-      });
-      this.addColumnMapping(context, {
-        sourceTable: "mstcompany",
-        sourceColumn: "vLocation",
-        sourceValue: rawLocation,
-        targetColumn: "state_id",
-        targetValue: stateMatch.id,
-        result: "reused",
-      });
-      return {
-        country: stateMatch.country ?? null,
-        state: stateMatch,
-        gstState: stateMatch.name,
-        note: "Resolved as state reference",
-      };
-    }
-
     const countryMatch = await this.targetCountryRepository.findOne({
       where: [
         { code: rawLocation },
@@ -2434,32 +3020,9 @@ export class MigrationToolService {
         { lrsCountryCode: rawLocation },
         { ctrCountryCode: rawLocation },
       ],
-      relations: {
-        countryGroup: true,
-      },
     });
 
     if (countryMatch) {
-      this.addFieldStatus(context, {
-        sourceTable: "mstcompany",
-        sourceColumn: "vLocation",
-        sourceValue: rawLocation,
-        targetColumn: "country_id / gstState",
-        targetValue: {
-          countryId: countryMatch.id,
-          gstState: city ?? rawLocation,
-        },
-        status: "saved",
-        note: "Resolved branch geography through country lookup",
-      });
-      this.addColumnMapping(context, {
-        sourceTable: "mstcompany",
-        sourceColumn: "vLocation",
-        sourceValue: rawLocation,
-        targetColumn: "country_id",
-        targetValue: countryMatch.id,
-        result: "reused",
-      });
       return {
         country: countryMatch,
         state: null,
@@ -2468,15 +3031,6 @@ export class MigrationToolService {
       };
     }
 
-    this.addFieldStatus(context, {
-      sourceTable: "mstcompany",
-      sourceColumn: "vLocation",
-      sourceValue: rawLocation,
-      targetColumn: "gstState",
-      targetValue: rawLocation,
-      status: "unmapped",
-      note: "No safe state/country match found; raw geography preserved as fallback text",
-    });
     this.addUnmappedColumn(context, {
       sourceTable: "mstcompany",
       sourceColumn: "vLocation",
@@ -2661,12 +3215,71 @@ export class MigrationToolService {
     }
 
     const legacyKey = String(legacyCountryId);
+    const lookupKeys = [
+      legacyKey,
+      `ctr:${legacyKey}`,
+      `mst:${legacyKey}`,
+      `lrs:${legacyKey}`,
+      `code:${legacyKey}`,
+      `lrs-code:${legacyKey}`,
+    ];
+    for (const key of lookupKeys) {
+      const cachedTargetId = this.countryMap.get(key);
+      if (!cachedTargetId) {
+        continue;
+      }
+      const cachedCountry = isPersistedUuid(cachedTargetId)
+        ? await this.targetCountryRepository.findOne({
+            where: { id: cachedTargetId },
+            relations: { countryGroup: true },
+          })
+        : null;
+      if (cachedCountry) {
+        return cachedCountry;
+      }
+      return {
+        id: cachedTargetId,
+      } as Country;
+    }
+
+    const existingByCode = await this.targetCountryRepository.findOne({
+      where: [
+        { code: legacyKey },
+        { lrsCountryCode: legacyKey },
+        { ctrCountryCode: legacyKey },
+      ],
+      relations: { countryGroup: true },
+    });
+    if (existingByCode) {
+      this.countryMap.set(legacyKey, existingByCode.id);
+      return existingByCode;
+    }
+
+    if (this.isTaskIncluded(context, "country")) {
+      this.addSkippedRow(context, {
+        sourceTable: params.sourceTable,
+        sourceRowIdentifier: params.sourceRowIdentifier,
+        reason: `Could not resolve legacy country id ${legacyKey} from combined country migration`,
+        fallbackAction: "Currency row skipped",
+      });
+      this.addUnmappedColumn(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: "nCountryID",
+        sourceValue: legacyCountryId,
+        reason:
+          "Country id was not present in CTRCOUNTRY/ctrcountry2/tb_MstCountry/LRSCountry maps",
+      });
+      return null;
+    }
+
     const cachedTargetId = this.countryMap.get(legacyKey);
     if (cachedTargetId) {
-      const cachedCountry = await this.targetCountryRepository.findOne({
-        where: { id: cachedTargetId },
-        relations: { countryGroup: true },
-      });
+      const cachedCountry = isPersistedUuid(cachedTargetId)
+        ? await this.targetCountryRepository.findOne({
+            where: { id: cachedTargetId },
+            relations: { countryGroup: true },
+          })
+        : null;
       if (cachedCountry) {
         return cachedCountry;
       }
@@ -2856,6 +3469,7 @@ export class MigrationToolService {
     context: MigrationContext,
   ): Promise<ResolvedRecord> {
     const oldId = row.nBranchID ?? row.nbranchid ?? row.id ?? row.ID;
+    const mappedBranch = mapLegacyBranchRecord(row);
     const lookupKey = toNullableString(row.vBranchCode) || `branch-${oldId}`;
     const targetTable = "branches";
     this.logger.log(
@@ -2872,12 +3486,16 @@ export class MigrationToolService {
       };
     }
 
-    const transformedCode = this.transformBranchCode(row);
+    const transformedCode = {
+      value: mappedBranch.code,
+      transformed: mappedBranch.codeTransformed,
+      sourceField: mappedBranch.codeSourceField,
+    };
     const branchNumber =
       toNullableNumber(row.nBranchID) ?? toNullableNumber(oldId) ?? 0;
-    const companyOldId = row.nCompID ?? row.ncompid;
+    const companyOldId = mappedBranch.companyOldId;
     const companyId =
-      companyOldId !== undefined
+      companyOldId !== undefined && companyOldId !== null
         ? (this.companyMap.get(String(companyOldId)) ?? null)
         : null;
     const locationType = await this.resolveBranchLocationType(
@@ -2948,33 +3566,33 @@ export class MigrationToolService {
         ? ({ id: geography.country.id } as Country)
         : null,
       state: geography.state ? ({ id: geography.state.id } as State) : null,
-      code: transformedCode.value,
-      name: toStringOrFallback(
-        row.vLocation || row.vCity || row.vBranchCode,
-        `Branch ${oldId}`,
-      ),
+      code: mappedBranch.code,
+      name: mappedBranch.name,
       branchNumber,
       address1: toStringOrFallback(row.vAddress1, "UNKNOWN"),
       address2: toNullableString(row.vAddress2),
       address3: toNullableString(row.vAddress3),
-      city: toStringOrFallback(row.vCity, "UNKNOWN"),
+      city: this.resolveRecordCityText(row, context, {
+        sourceTable: "mstcompany",
+        fallback: mappedBranch.city,
+        targetColumn: "city",
+      }),
       gstState: geography.gstState,
-      pinCode: toStringOrFallback(row.vPinCode, "000000"),
-      gstNo: toNullableString(row.vServiceTaxRegNo),
-      fxRegNo: toNullableString(row.vRBILicenseNo),
-      fxRegDate: toNullableDate(row.dRBIRegDate),
-      contactName: toNullableString(row.vContactPeron),
-      contactNo: toNullableString(row.vContactPeronNo || row.vTellNo1),
-      branchEmail: toNullableString(row.vEmailID),
-      aeonBranchLic: toNullableString(row.vRBILicenseNo),
+      pinCode: mappedBranch.pinCode,
+      gstNo: mappedBranch.gstNo,
+      fxRegNo: mappedBranch.fxRegNo,
+      fxRegDate: mappedBranch.fxRegDate,
+      contactName: mappedBranch.contactName,
+      contactNo: mappedBranch.contactNo,
+      branchEmail: mappedBranch.branchEmail,
+      aeonBranchLic: mappedBranch.fxRegNo,
       locationType: locationType?.id ? ({ id: locationType.id } as any) : null,
       cashHolding: toNullableNumber(row.nCashLimit),
       cashHoldingTemp: toNullableNumber(row.ntempCashLimit),
       currHolding: toNullableNumber(row.nCurrencyLimit),
       currHoldingTemp: toNullableNumber(row.ntempCurrencyLimit),
-      isHeadOffice:
-        toBoolean(row.IsHubBranch) || transformedCode.value === "HO",
-      isActive: toBoolean(row.bActive),
+      isHeadOffice: mappedBranch.isHeadOffice,
+      isActive: mappedBranch.isActive,
       createdBy,
       updatedBy,
       deletedAt: audit.deletedAt,
@@ -3057,7 +3675,7 @@ export class MigrationToolService {
         targetColumn: "code",
         targetValue: transformedCode.value,
         status: "transformed",
-        note: "Branch code normalized to four characters",
+        note: `Branch code normalized to ${BRANCH_CODE_LENGTH} characters`,
       });
     }
 
@@ -3105,6 +3723,7 @@ export class MigrationToolService {
   private async resolveCounter(
     row: SourceRow,
     context: MigrationContext,
+    pool?: mssql.ConnectionPool,
   ): Promise<ResolvedRecord> {
     const oldId =
       row.nCounterID ?? row.nCounterId ?? row.ncounterid ?? row.id ?? row.ID;
@@ -3119,20 +3738,17 @@ export class MigrationToolService {
     );
 
     if (this.counterMap.has(String(oldId))) {
-      return {
+      const mapped = {
         id: this.counterMap.get(String(oldId))!,
         created: false,
         sourceId: oldId,
         targetTable,
         lookupKey,
       };
+      await this.linkCounterHintBranch(row, mapped.id, context, pool);
+      return mapped;
     }
 
-    const branchOldId = row.nBranchID ?? row.nbranchid;
-    const branchId =
-      branchOldId !== undefined
-        ? (this.branchMap.get(String(branchOldId)) ?? null)
-        : null;
     const counterNo =
       toNullableNumber(row.vCounterID) ??
       toNullableNumber(row.vCounterId) ??
@@ -3193,6 +3809,7 @@ export class MigrationToolService {
         newUuid: existing.id,
         lookupKey,
       });
+      await this.linkCounterHintBranch(row, existing.id, context, pool);
       return {
         id: existing.id,
         created: false,
@@ -3221,21 +3838,6 @@ export class MigrationToolService {
 
     if (context.mode === "real") {
       const saved = await this.targetCounterRepository.save(counter);
-      if (branchId) {
-        const existingLink = await this.targetBranchCounterRepository.findOne({
-          where: { branchId, counterId: saved.id },
-        });
-        if (!existingLink) {
-          await this.targetBranchCounterRepository.save(
-            this.targetBranchCounterRepository.create({
-              branchId,
-              counterId: saved.id,
-              createdBy,
-              updatedBy,
-            }),
-          );
-        }
-      }
       this.logger.log(`[mstcounter] created counter id=${saved.id}`);
       this.counterMap.set(String(oldId), saved.id);
       this.addIdMap(context, {
@@ -3245,6 +3847,7 @@ export class MigrationToolService {
         newUuid: saved.id,
         lookupKey,
       });
+      await this.linkCounterHintBranch(row, saved.id, context, pool);
       return {
         id: saved.id,
         created: true,
@@ -3265,6 +3868,7 @@ export class MigrationToolService {
       newUuid: mockId,
       lookupKey,
     });
+    await this.linkCounterHintBranch(row, mockId, context, pool);
     return {
       id: mockId,
       created: true,
@@ -3273,6 +3877,129 @@ export class MigrationToolService {
       lookupKey,
       softDeleted: audit.wasDeleted,
     };
+  }
+
+  private auditActorId(context: MigrationContext): string {
+    return context.bootstrapAdminUserId ?? context.actorUserId;
+  }
+
+  private rememberBranchCounter(
+    context: MigrationContext,
+    branchId: string,
+    counterId: string,
+  ) {
+    const counters = context.branchCounters.get(branchId) ?? [];
+    if (!counters.includes(counterId)) {
+      counters.push(counterId);
+      context.branchCounters.set(branchId, counters);
+    }
+  }
+
+  private async linkCounterHintBranch(
+    row: SourceRow,
+    counterId: string,
+    context: MigrationContext,
+    pool?: mssql.ConnectionPool,
+  ) {
+    const branchOldId = row.nBranchID ?? row.nbranchid;
+    if (branchOldId === undefined || branchOldId === null || branchOldId === "") {
+      return;
+    }
+
+    let branchId = this.branchMap.get(String(branchOldId)) ?? null;
+    if (!branchId && pool) {
+      branchId = await this.resolveBranchByOldId(pool, context, branchOldId);
+    }
+    if (!branchId) {
+      this.addWarning(context, {
+        sourceTable: "mstcounter",
+        sourceColumn: "nBranchID",
+        note: `Counter ${counterId} had nBranchID=${String(branchOldId)} but the branch is not resolved yet; mstBranchCounterLink can still attach it`,
+      });
+      return;
+    }
+
+    await this.upsertBranchCounterLink(context, {
+      sourceTable: "mstcounter",
+      sourceRowIdentifier: String(
+        row.nCounterID ?? row.nCounterId ?? row.id ?? row.ID ?? "",
+      ),
+      branchId,
+      counterId,
+      sourceValue: { nBranchID: branchOldId },
+    });
+  }
+
+  private async upsertBranchCounterLink(
+    context: MigrationContext,
+    params: {
+      sourceTable: string;
+      sourceRowIdentifier: string;
+      branchId: string;
+      counterId: string;
+      sourceValue?: Record<string, unknown>;
+    },
+  ): Promise<{ created: boolean }> {
+    this.rememberBranchCounter(context, params.branchId, params.counterId);
+
+    const targetValue = {
+      branchId: params.branchId,
+      counterId: params.counterId,
+    };
+
+    if (context.mode !== "real") {
+      this.addFieldStatus(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: "nBranchID / nCounterID",
+        sourceValue: params.sourceValue ?? null,
+        targetColumn:
+          "branch_counters.branch_id / branch_counters.counter_id",
+        targetValue,
+        status: "saved",
+        note: "Mock run would create a branch_counters many-to-many link",
+      });
+      return { created: true };
+    }
+
+    const existingLink = await this.targetBranchCounterRepository.findOne({
+      where: { branchId: params.branchId, counterId: params.counterId },
+    });
+    if (existingLink) {
+      this.addFieldStatus(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: "nBranchID / nCounterID",
+        sourceValue: params.sourceValue ?? null,
+        targetColumn:
+          "branch_counters.branch_id / branch_counters.counter_id",
+        targetValue,
+        status: "saved",
+        note: "Reused existing branch_counters link",
+      });
+      return { created: false };
+    }
+
+    const actorId = this.auditActorId(context);
+    await this.targetBranchCounterRepository.save(
+      this.targetBranchCounterRepository.create({
+        branchId: params.branchId,
+        counterId: params.counterId,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    this.logger.log(
+      `[${params.sourceTable}] created branch_counters link counterId=${params.counterId} branchId=${params.branchId}`,
+    );
+    this.addFieldStatus(context, {
+      sourceTable: params.sourceTable,
+      sourceColumn: "nBranchID / nCounterID",
+      sourceValue: params.sourceValue ?? null,
+      targetColumn: "branch_counters.branch_id / branch_counters.counter_id",
+      targetValue,
+      status: "saved",
+      note: "Created branch_counters many-to-many link",
+    });
+    return { created: true };
   }
 
   private getOldIdFromRow(
@@ -3389,7 +4116,7 @@ export class MigrationToolService {
       return null;
     }
 
-    const resolved = await this.resolveCounter(row, context);
+    const resolved = await this.resolveCounter(row, context, pool);
     return resolved.id;
   }
 
@@ -4403,39 +5130,613 @@ export class MigrationToolService {
     };
   }
 
-  private mapCurrencyCalculationMethod(value: any): {
-    value: string;
-    transformed: boolean;
-  } {
-    const text = toNullableString(value);
-    if (!text) {
-      return { value: "MULTIPLICATION", transformed: false };
+  private logUnmappedGeographyFields(
+    context: MigrationContext,
+    fields: CombinedLegacyCountry["unmapped"] | CombinedLegacyState["unmapped"],
+  ) {
+    for (const field of fields) {
+      this.addUnmappedColumn(context, {
+        sourceTable: field.sourceTable,
+        sourceColumn: field.sourceColumn,
+        sourceValue: field.sourceValue,
+        reason: field.reason,
+      });
     }
+  }
 
-    const normalized = normalizeMatchText(text);
-    if (normalized.includes("div") || normalized.includes("divide")) {
-      return { value: "DIVISION", transformed: true };
-    }
+  private async resolveIndiaCountryId(): Promise<string | null> {
+    return (
+      this.countryMap.get("code:IN") ??
+      this.countryMap.get("lrs-code:IN") ??
+      this.countryMap.get("name:india") ??
+      (
+        await this.targetCountryRepository.findOne({
+          where: [{ baseCountry: true }, { code: "IN" }, { name: "India" }],
+        })
+      )?.id ??
+      null
+    );
+  }
 
-    if (normalized.includes("mul") || normalized.includes("mult")) {
+  private async upsertMappedCountry(
+    mapped: CombinedLegacyCountry,
+    context: MigrationContext,
+  ): Promise<ResolvedRecord> {
+    const sourceTable = mapped.sourceTables.join("+") || "legacy-country";
+    const lookupKey = `${mapped.code}:${mapped.name}`;
+    const existing = await this.targetCountryRepository.findOne({
+      where: [
+        { code: mapped.code },
+        { name: mapped.name },
+        ...(mapped.lrsCountryCode
+          ? [{ lrsCountryCode: mapped.lrsCountryCode }]
+          : []),
+        ...(mapped.ctrCountryCode
+          ? [{ ctrCountryCode: mapped.ctrCountryCode }]
+          : []),
+      ],
+    });
+    const createdBy = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    const applyLookups = (id: string) => {
+      this.rememberLookup(this.countryMap, countryLookupKeys(mapped), id);
+    };
+
+    if (existing) {
+      let changed = false;
+      if (!existing.lrsCountryCode && mapped.lrsCountryCode) {
+        existing.lrsCountryCode = mapped.lrsCountryCode;
+        changed = true;
+      }
+      if (!existing.ctrCountryCode && mapped.ctrCountryCode) {
+        existing.ctrCountryCode = mapped.ctrCountryCode;
+        changed = true;
+      }
+      if (!existing.baseCountry && mapped.baseCountry) {
+        existing.baseCountry = true;
+        changed = true;
+      }
+      if (!existing.restrictedCountry && mapped.restrictedCountry) {
+        existing.restrictedCountry = true;
+        changed = true;
+      }
+      if (!existing.greyListCountry && mapped.greyListCountry) {
+        existing.greyListCountry = true;
+        changed = true;
+      }
+      if (context.mode === "real" && changed) {
+        await this.targetCountryRepository.save(existing);
+      }
+      applyLookups(existing.id);
+      this.addIdMap(context, {
+        oldTable: sourceTable,
+        oldId: mapped.mstCountryId ?? mapped.ctrNumericCode ?? mapped.lrsCountryId,
+        newTable: "countries",
+        newUuid: existing.id,
+        lookupKey,
+      });
       return {
-        value: "MULTIPLICATION",
-        transformed: normalized !== "multiplication",
+        id: existing.id,
+        created: false,
+        sourceId: mapped.mstCountryId ?? mapped.ctrNumericCode,
+        targetTable: "countries",
+        lookupKey,
       };
     }
 
-    if (normalized === "division" || normalized === "divide") {
-      return { value: "DIVISION", transformed: false };
+    const country = this.targetCountryRepository.create({
+      code: mapped.code,
+      name: mapped.name,
+      lrsCountryCode: mapped.lrsCountryCode,
+      ctrCountryCode: mapped.ctrCountryCode,
+      riskCategory: mapped.riskCategory,
+      restrictedCountry: mapped.restrictedCountry,
+      greyListCountry: mapped.greyListCountry,
+      baseCountry: mapped.baseCountry,
+      isCisCountry: false,
+      isBlocked: false,
+      createdBy,
+      updatedBy: createdBy,
+    });
+
+    if (context.mode === "real") {
+      const saved = await this.targetCountryRepository.save(country);
+      applyLookups(saved.id);
+      this.addIdMap(context, {
+        oldTable: sourceTable,
+        oldId: mapped.mstCountryId ?? mapped.ctrNumericCode ?? mapped.lrsCountryId,
+        newTable: "countries",
+        newUuid: saved.id,
+        lookupKey,
+      });
+      return {
+        id: saved.id,
+        created: true,
+        sourceId: mapped.mstCountryId ?? mapped.ctrNumericCode,
+        targetTable: "countries",
+        lookupKey,
+      };
     }
 
-    return { value: "MULTIPLICATION", transformed: true };
+    const mockId = `mock-country-${mapped.code}`;
+    applyLookups(mockId);
+    this.addIdMap(context, {
+      oldTable: sourceTable,
+      oldId: mapped.mstCountryId ?? mapped.ctrNumericCode ?? mapped.lrsCountryId,
+      newTable: "countries",
+      newUuid: mockId,
+      lookupKey,
+    });
+    return {
+      id: mockId,
+      created: true,
+      sourceId: mapped.mstCountryId ?? mapped.ctrNumericCode,
+      targetTable: "countries",
+      lookupKey,
+    };
   }
 
-  private mapCurrencyProductAllowed(value: any): string {
-    const normalized = toNullableString(value)?.toUpperCase() ?? "";
-    return ["CN", "CM", "CC", "ET", "TC", "TM"].includes(normalized)
-      ? normalized
-      : "";
+  private async processCountries(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "country")) {
+      return;
+    }
+
+    this.logger.log(`[countries] combined country migration started mode=${context.mode}`);
+    const ctr = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_COUNTRY_TABLE_CANDIDATES.ctrcountry,
+    );
+    const ctr2 = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_COUNTRY_TABLE_CANDIDATES.ctrcountry2,
+    );
+    const mst = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_COUNTRY_TABLE_CANDIDATES.mstCountry,
+    );
+    const lrs = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_COUNTRY_TABLE_CANDIDATES.lrsCountry,
+    );
+
+    if (!ctr) {
+      this.addWarning(context, {
+        sourceTable: "CTRCOUNTRY",
+        note: "CTRCOUNTRY was not found; continuing with ctrcountry2 / tb_MstCountry / LRSCountry if present",
+      });
+    }
+    if (!ctr2) {
+      this.addWarning(context, {
+        sourceTable: "ctrcountry2",
+        note: "ctrcountry2 was not found",
+      });
+    }
+
+    const combined = combineLegacyCountries({
+      ctrRows: ctr?.rows ?? [],
+      ctr2Rows: ctr2?.rows ?? [],
+      mstRows: mst?.rows ?? [],
+      lrsRows: lrs?.rows ?? [],
+    });
+    this.ensureSourceRows(context, "country", combined as unknown as SourceRow[]);
+
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const scanned =
+      (ctr?.rows.length ?? 0) +
+      (ctr2?.rows.length ?? 0) +
+      (mst?.rows.length ?? 0) +
+      (lrs?.rows.length ?? 0);
+    context.summary.rowsScanned += scanned;
+
+    if (combined.length === 0) {
+      skipped += 1;
+      this.addWarning(context, {
+        sourceTable: "countries",
+        note: "No country source rows were found to combine",
+      });
+    }
+
+    for (const mapped of combined) {
+      try {
+        this.logUnmappedGeographyFields(context, mapped.unmapped);
+        const resolved = await this.upsertMappedCountry(mapped, context);
+        this.addRowResult(context, {
+          sourceTable: mapped.sourceTables.join("+"),
+          sourcePrimaryKey: mapped.code,
+          targetId: resolved.id,
+          status:
+            context.mode === "real" && resolved.created ? "inserted" : "mocked",
+          note: `Combined country ${mapped.name} from ${mapped.sourceTables.join(", ")}`,
+        });
+        this.addColumnMapping(context, {
+          sourceTable: mapped.sourceTables.join("+"),
+          sourceColumn: "COUNTRYCODE/LRSCode/CountryCode",
+          sourceValue: mapped.ctrNumericCode ?? mapped.lrsCountryCode,
+          targetColumn: "code / lrsCountryCode / ctrCountryCode",
+          targetValue: {
+            code: mapped.code,
+            lrsCountryCode: mapped.lrsCountryCode,
+            ctrCountryCode: mapped.ctrCountryCode,
+          },
+          result: resolved.created ? "created" : "reused",
+        });
+        if (resolved.created) {
+          inserted += 1;
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: mapped.sourceTables.join("+"),
+          sourceRowIdentifier: mapped.name,
+          fieldName: "country",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown country migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    this.addTableResult(context, {
+      sourceTable: [ctr?.tableName, ctr2?.tableName, mst?.tableName, lrs?.tableName]
+        .filter(Boolean)
+        .join("+"),
+      targetTable: "countries",
+      rowCountScanned: scanned,
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: "CTRCOUNTRY and ctrcountry2 are unioned by name, then overlaid with tb_MstCountry and LRSCountry. country_group_id left null this wave.",
+    });
+  }
+
+  private async processStates(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "state")) {
+      return;
+    }
+
+    this.logger.log(`[states] combined state migration started mode=${context.mode}`);
+    const ctr = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_STATE_TABLE_CANDIDATES.ctrState,
+    );
+    const customer = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_STATE_TABLE_CANDIDATES.customerState,
+    );
+    const gst = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_STATE_TABLE_CANDIDATES.gstState,
+    );
+    const combined = combineLegacyStates({
+      ctrRows: ctr?.rows ?? [],
+      customerRows: customer?.rows ?? [],
+      gstRows: gst?.rows ?? [],
+    });
+    const indiaId = await this.resolveIndiaCountryId();
+    const createdBy = context.bootstrapAdminUserId ?? context.actorUserId;
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const scanned =
+      (ctr?.rows.length ?? 0) +
+      (customer?.rows.length ?? 0) +
+      (gst?.rows.length ?? 0);
+    context.summary.rowsScanned += scanned;
+
+    if (!indiaId) {
+      this.addWarning(context, {
+        sourceTable: "states",
+        note: "India country row is required for states.country_id; states were skipped",
+      });
+      this.addTableResult(context, {
+        sourceTable: [ctr?.tableName, customer?.tableName, gst?.tableName]
+          .filter(Boolean)
+          .join("+"),
+        targetTable: "states",
+        rowCountScanned: scanned,
+        rowCountInserted: 0,
+        rowCountSkipped: combined.length,
+        rowCountFailed: 0,
+        note: "Skipped because countries.India was not resolved",
+      });
+      return;
+    }
+
+    for (const mapped of combined) {
+      if (!mapped.code) {
+        skipped += 1;
+        this.addSkippedRow(context, {
+          sourceTable: mapped.sourceTables.join("+"),
+          sourceRowIdentifier: mapped.name,
+          reason: "Combined state had no CTR letter code, GST code, or customer id",
+          fallbackAction: "State row skipped",
+        });
+        continue;
+      }
+
+      try {
+        this.logUnmappedGeographyFields(context, mapped.unmapped);
+        const existing =
+          isPersistedUuid(indiaId)
+            ? await this.targetStateRepository.findOne({
+                where: [
+                  { country: { id: indiaId }, code: mapped.code },
+                  { country: { id: indiaId }, name: mapped.name },
+                ],
+                relations: { country: true },
+              })
+            : null;
+
+        const persistLookups = (id: string) => {
+          this.rememberLookup(this.stateMap, stateLookupKeys(mapped), id);
+        };
+
+        if (existing) {
+          let changed = false;
+          if (!existing.gstStateCode && mapped.gstStateCode) {
+            existing.gstStateCode = mapped.gstStateCode;
+            changed = true;
+          }
+          if (!existing.ctrStateCode && mapped.ctrStateCode) {
+            existing.ctrStateCode = mapped.ctrStateCode;
+            changed = true;
+          }
+          if (context.mode === "real" && changed) {
+            await this.targetStateRepository.save(existing);
+          }
+          persistLookups(existing.id);
+          this.addIdMap(context, {
+            oldTable: mapped.sourceTables.join("+"),
+            oldId: mapped.customerStateId ?? mapped.ctrStateCode,
+            newTable: "states",
+            newUuid: existing.id,
+            lookupKey: `${mapped.code}:${mapped.name}`,
+          });
+          continue;
+        }
+
+        const state = this.targetStateRepository.create({
+          country: { id: indiaId } as Country,
+          code: mapped.code,
+          name: mapped.name,
+          gstStateCode: mapped.gstStateCode,
+          ctrStateCode: mapped.ctrStateCode,
+          createdBy,
+          updatedBy: createdBy,
+        });
+
+        if (context.mode === "real") {
+          const saved = await this.targetStateRepository.save(state);
+          persistLookups(saved.id);
+          inserted += 1;
+          this.addIdMap(context, {
+            oldTable: mapped.sourceTables.join("+"),
+            oldId: mapped.customerStateId ?? mapped.ctrStateCode,
+            newTable: "states",
+            newUuid: saved.id,
+            lookupKey: `${mapped.code}:${mapped.name}`,
+          });
+        } else {
+          const mockId = `mock-state-IN-${mapped.code}`;
+          persistLookups(mockId);
+          inserted += 1;
+          this.addIdMap(context, {
+            oldTable: mapped.sourceTables.join("+"),
+            oldId: mapped.customerStateId ?? mapped.ctrStateCode,
+            newTable: "states",
+            newUuid: mockId,
+            lookupKey: `${mapped.code}:${mapped.name}`,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: mapped.sourceTables.join("+"),
+          sourceRowIdentifier: mapped.name,
+          fieldName: "state",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown state migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    this.addTableResult(context, {
+      sourceTable: [ctr?.tableName, customer?.tableName, gst?.tableName]
+        .filter(Boolean)
+        .join("+"),
+      targetTable: "states",
+      rowCountScanned: scanned,
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: "Indian states only. states.country_id is the migrated India country UUID.",
+    });
+  }
+
+  private async processLocationTypes(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "locationType")) {
+      return;
+    }
+
+    this.logger.log(
+      `[mstLocationType] category_options LOCATIONTYPE migration started mode=${context.mode}`,
+    );
+    const source = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_LOCATION_TYPE_TABLE_CANDIDATES,
+    );
+    if (!source) {
+      this.addWarning(context, {
+        sourceTable: "mstLocationType",
+        note: "mstLocationType was not found; branch rows may still create LOCATIONTYPE options from nLocationType",
+      });
+      this.addTableResult(context, {
+        sourceTable: "mstLocationType",
+        targetTable: "category_options",
+        rowCountScanned: 0,
+        rowCountInserted: 0,
+        rowCountSkipped: 1,
+        rowCountFailed: 0,
+        note: "Lookup table missing",
+      });
+      return;
+    }
+
+    const createdBy = context.bootstrapAdminUserId ?? context.actorUserId;
+    let inserted = 0;
+    let failed = 0;
+    context.summary.rowsScanned += source.rows.length;
+    this.ensureSourceRows(context, "locationType", source.rows);
+
+    for (const row of source.rows) {
+      const mapped = mapLegacyLocationType(row);
+      try {
+        const existing = await this.targetSelectOptionRepository.findOne({
+          where: {
+            code: CategoryOptionCodeEnum.LocationType,
+            value: mapped.value,
+          },
+        });
+        if (existing) {
+          if (
+            context.mode === "real" &&
+            existing.label === existing.value &&
+            mapped.label !== mapped.value
+          ) {
+            existing.label = mapped.label;
+            await this.targetSelectOptionRepository.save(existing);
+          }
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "category_options",
+            newUuid: existing.id,
+            lookupKey: `${CategoryOptionCodeEnum.LocationType}:${mapped.value}`,
+          });
+          continue;
+        }
+
+        if (context.mode === "real") {
+          const saved = await this.targetSelectOptionRepository.save(
+            this.targetSelectOptionRepository.create({
+              code: CategoryOptionCodeEnum.LocationType,
+              value: mapped.value,
+              label: mapped.label,
+              sortOrder: mapped.sortOrder,
+              isActive: true,
+              createdBy,
+              updatedBy: createdBy,
+            }),
+          );
+          inserted += 1;
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "category_options",
+            newUuid: saved.id,
+            lookupKey: `${CategoryOptionCodeEnum.LocationType}:${mapped.value}`,
+          });
+        } else {
+          inserted += 1;
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "category_options",
+            newUuid: `mock-location-type-${mapped.value}`,
+            lookupKey: `${CategoryOptionCodeEnum.LocationType}:${mapped.value}`,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: source.tableName,
+          sourceRowIdentifier: mapped.value,
+          fieldName: "locationType",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown location type migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    this.addTableResult(context, {
+      sourceTable: source.tableName,
+      targetTable: "category_options",
+      rowCountScanned: source.rows.length,
+      rowCountInserted: inserted,
+      rowCountSkipped: 0,
+      rowCountFailed: failed,
+      note: "LId is category_options.value so branch nLocationType=2 resolves to Rural Location",
+    });
+  }
+
+  private async resolveCurrencyCountry(
+    mapped: ReturnType<typeof mapLegacyCurrencyRecord>,
+    context: MigrationContext,
+    sourceRowIdentifier: string,
+  ): Promise<Country | null> {
+    for (const key of mapped.countryLookupKeys) {
+      const cachedId = this.countryMap.get(key);
+      if (!cachedId) {
+        continue;
+      }
+      if (!isPersistedUuid(cachedId)) {
+        return { id: cachedId } as Country;
+      }
+      const cached = await this.targetCountryRepository.findOne({
+        where: { id: cachedId },
+      });
+      if (cached) {
+        return cached;
+      }
+    }
+
+    if (mapped.countryIsoHint) {
+      const byIso = await this.targetCountryRepository.findOne({
+        where: [
+          { code: mapped.countryIsoHint },
+          { lrsCountryCode: mapped.countryIsoHint },
+        ],
+      });
+      if (byIso) {
+        return byIso;
+      }
+    }
+
+    this.addSkippedRow(context, {
+      sourceTable: "mcurrency",
+      sourceRowIdentifier,
+      reason: mapped.missingLegacyCountryId
+        ? `nCountryID missing/0 and ISO hint ${mapped.countryIsoHint ?? "none"} did not match a migrated country`
+        : `nCountryID ${mapped.legacyCountryId} is not in country maps and ISO hint ${mapped.countryIsoHint ?? "none"} did not match`,
+      fallbackAction: "Currency row skipped; country_id is required",
+    });
+    this.addUnmappedColumn(context, {
+      sourceTable: "mcurrency",
+      sourceColumn: "nCountryID",
+      sourceValue: mapped.legacyCountryId,
+      reason:
+        "Currency country could not be resolved from country maps or ISO hint (AED→AE, INR→IN). Row skipped.",
+    });
+    return null;
   }
 
   private async processCurrencies(
@@ -4447,59 +5748,81 @@ export class MigrationToolService {
     }
 
     this.logger.log(`[mcurrency] table migration started mode=${context.mode}`);
-    const rows = await this.readSourceRows(pool, "mcurrency");
+    const source = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_CURRENCY_TABLE_CANDIDATES.mCurrency,
+    );
+    if (!source) {
+      this.addWarning(context, {
+        sourceTable: "mcurrency",
+        note: "mCurrency was not found on the old master",
+      });
+      return;
+    }
+    const mastCurr = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_CURRENCY_TABLE_CANDIDATES.mastCurr,
+    );
+    const currencyList = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_CURRENCY_TABLE_CANDIDATES.currencyList,
+    );
+    const mastCurrByCode = indexMastCurrByCode(mastCurr?.rows ?? []);
+    const listedCodes = indexCurrencyListCodes(currencyList?.rows ?? []);
+    const rows = source.rows;
     this.ensureSourceRows(context, "currency", rows);
     let inserted = 0;
     let skipped = 0;
     let failed = 0;
 
+    for (const extraCode of mastCurrByCode.keys()) {
+      if (!rows.some((row) => toNullableString(row.vCncode)?.toUpperCase() === extraCode)) {
+        this.addUnmappedColumn(context, {
+          sourceTable: mastCurr?.tableName ?? "MASTCURR",
+          sourceColumn: "CNCODENEW",
+          sourceValue: extraCode,
+          reason:
+            "MASTCURR catalog code has no mCurrency operational row; not inserted",
+        });
+      }
+    }
+
     for (const row of rows) {
       context.summary.rowsScanned += 1;
-      const oldId =
-        row.nCurrencyID ??
-        row.nCurrencyId ??
-        row.ncurrencyid ??
-        row.id ??
-        row.ID;
-      const lookupKey =
-        toNullableString(row.vCncode) ||
-        toNullableString(row.vCnName) ||
-        `currency-${oldId}`;
+      const mapped = mapLegacyCurrencyRecord(row);
+      const oldId = mapped.oldId;
+      const lookupKey = mapped.currencyCode || `currency-${oldId}`;
 
       try {
-        const country = await this.resolveLegacyCountryReference(
-          pool,
+        const country = await this.resolveCurrencyCountry(
+          mapped,
           context,
-          row.nCountryID ?? row.nCountryId ?? row.ncountryid,
-          {
-            sourceTable: "mcurrency",
-            sourceRowIdentifier: String(oldId ?? ""),
-          },
+          String(oldId ?? ""),
         );
         if (!country) {
           skipped += 1;
           continue;
         }
 
+        for (const field of mapped.unmapped) {
+          this.addUnmappedColumn(context, {
+            sourceTable: source.tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            reason: field.reason,
+          });
+        }
+
         const existing = await this.targetCurrencyRepository.findOne({
           where: {
-            currencyCode: toStringOrFallback(row.vCncode, `CURRENCY_${oldId}`),
+            currencyCode: mapped.currencyCode,
           },
           relations: { country: true, pricingGroup: true },
         });
-        const calculationMethod = this.mapCurrencyCalculationMethod(
-          row.vCalculationMethod,
-        );
-        const productAllowed = this.mapCurrencyProductAllowed(
-          row.vProductAlloowd,
-        );
-        const onlyStocking = toBoolean(row.bTradedCurrency);
-        const pricingGroupCode = toNullableString(row.nCurrencyGroupID) ?? null;
-        const currencyCode = toStringOrFallback(
-          row.vCncode,
-          `CURRENCY_${oldId}`,
-        );
-        const currencyName = toStringOrFallback(row.vCnName, currencyCode);
+        const onlyStocking = mapped.onlyStocking;
+        const productAllowed = mapped.productAllowed;
+        const currencyCode = mapped.currencyCode;
+        const currencyName = mapped.currencyName;
         const resolvedCountryLabel = (country as any).name ?? currencyCode;
         const createdBy = this.resolveAuditUserId(
           context,
@@ -4599,8 +5922,8 @@ export class MigrationToolService {
             );
             changed = true;
           }
-          if (existing.calculationMethod !== calculationMethod.value) {
-            existing.calculationMethod = calculationMethod.value as any;
+          if (existing.calculationMethod !== mapped.calculationMethod) {
+            existing.calculationMethod = mapped.calculationMethod as any;
             changed = true;
           }
           if (
@@ -4641,36 +5964,10 @@ export class MigrationToolService {
             existing.onlyStocking = onlyStocking;
             changed = true;
           }
-          const desiredProductAllowed = onlyStocking ? productAllowed : "";
+          const desiredProductAllowed = productAllowed;
           if (existing.productAllowed !== desiredProductAllowed) {
             existing.productAllowed = desiredProductAllowed as any;
             changed = true;
-          }
-          if (pricingGroupCode) {
-            this.addUnmappedColumn(context, {
-              sourceTable: "mcurrency",
-              sourceColumn: "nCurrencyGroupID",
-              sourceValue: pricingGroupCode,
-              reason:
-                "Pricing group mapping is not yet confirmed; logged for review only",
-            });
-          }
-          if (row.VIssuerAllowed !== undefined) {
-            this.addUnmappedColumn(context, {
-              sourceTable: "mcurrency",
-              sourceColumn: "VIssuerAllowed",
-              sourceValue: row.VIssuerAllowed,
-              reason:
-                "Issuer allowance is not mapped to a current currency column",
-            });
-          }
-          if (row.vBranchCode !== undefined) {
-            this.addUnmappedColumn(context, {
-              sourceTable: "mcurrency",
-              sourceColumn: "vBranchCode",
-              sourceValue: row.vBranchCode,
-              reason: "Branch code is logged for review only",
-            });
           }
           if (changed && context.mode === "real") {
             existing.createdBy = createdBy;
@@ -4705,59 +6002,32 @@ export class MigrationToolService {
           currencyCode,
           currencyName,
           country: { id: country.id } as Country,
-          priority: toStringOrFallback(row.nPriority, "0"),
-          ratePer: toStringOrFallback(row.nRatePer, "1"),
-          defaultMinRate: toStringOrFallback(row.nDefaultMinRate, "0"),
-          defaultMaxRate: toStringOrFallback(row.nDefaultMaxRate, "0"),
-          calculationMethod: calculationMethod.value as any,
-          openRatePremium: toStringOrFallback(row.nOpenRatePremium, "0"),
-          gulfDiscFactor: toStringOrFallback(row.nGulfDiscFactor, "0"),
-          amexMapCode: toStringOrFallback(row.vAmexCode, ""),
-          group: "ASIA",
+          priority: mapped.priority,
+          ratePer: mapped.ratePer,
+          defaultMinRate: mapped.defaultMinRate,
+          defaultMaxRate: mapped.defaultMaxRate,
+          calculationMethod: mapped.calculationMethod as any,
+          openRatePremium: mapped.openRatePremium,
+          gulfDiscFactor: mapped.gulfDiscFactor,
+          amexMapCode: mapped.amexMapCode,
+          group: mapped.group,
           pricingGroup: null,
-          active: toBoolean(row.bIsActive),
+          active: mapped.active,
           onlyStocking,
-          productAllowed: (onlyStocking ? productAllowed : "") as any,
+          productAllowed: productAllowed as any,
           createdBy,
           updatedBy,
           deletedAt: audit.deletedAt,
           deletedBy: audit.deletedBy,
         } as Currency;
 
-        if (pricingGroupCode) {
-          this.addUnmappedColumn(context, {
-            sourceTable: "mcurrency",
-            sourceColumn: "nCurrencyGroupID",
-            sourceValue: pricingGroupCode,
-            reason:
-              "Pricing group mapping is not yet confirmed; logged for review only",
-          });
-        }
-        if (row.VIssuerAllowed !== undefined) {
-          this.addUnmappedColumn(context, {
-            sourceTable: "mcurrency",
-            sourceColumn: "VIssuerAllowed",
-            sourceValue: row.VIssuerAllowed,
-            reason:
-              "Issuer allowance is not mapped to a current currency column",
-          });
-        }
-        if (row.vBranchCode !== undefined) {
-          this.addUnmappedColumn(context, {
-            sourceTable: "mcurrency",
-            sourceColumn: "vBranchCode",
-            sourceValue: row.vBranchCode,
-            reason: "Branch code is logged for review only",
-          });
-        }
-
-        if (calculationMethod.transformed) {
+        if (mapped.calculationMethodTransformed) {
           this.addTransformation(context, {
             sourceTable: "mcurrency",
             sourceField: "vCalculationMethod",
             ruleName: "currency-calculation-method-normalization",
             originalValue: row.vCalculationMethod,
-            transformedValue: calculationMethod.value,
+            transformedValue: mapped.calculationMethod,
             result: "transformed",
           });
         }
@@ -4768,8 +6038,10 @@ export class MigrationToolService {
           sourceValue: row.nCountryID,
           targetColumn: "country_id",
           targetValue: country.id,
-          status: "saved",
-          note: `Resolved via legacy country lookup for currency ${currencyCode}`,
+          status: mapped.missingLegacyCountryId ? "transformed" : "saved",
+          note: mapped.missingLegacyCountryId
+            ? `nCountryID missing/0; country resolved from currency ISO hint ${mapped.countryIsoHint}`
+            : `nCountryID ${mapped.legacyCountryId} plus ISO hint ${mapped.countryIsoHint ?? "none"} resolved to country ${resolvedCountryLabel}`,
         });
 
         if (context.mode === "real") {
@@ -4823,6 +6095,22 @@ export class MigrationToolService {
       }
     }
 
+    for (const extraCode of listedCodes) {
+      if (
+        !rows.some(
+          (row) => toNullableString(row.vCncode)?.toUpperCase() === extraCode,
+        )
+      ) {
+        this.addUnmappedColumn(context, {
+          sourceTable: currencyList?.tableName ?? "MCURRENCYLIST",
+          sourceColumn: "cncode",
+          sourceValue: extraCode,
+          reason:
+            "MCURRENCYLIST code has no mCurrency row; list is catalog-only and is not inserted",
+        });
+      }
+    }
+
     context.summary.rowsInserted += inserted;
     context.summary.rowsSkipped += skipped;
     context.summary.rowsFailed += failed;
@@ -4833,11 +6121,905 @@ export class MigrationToolService {
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
       rowCountFailed: failed,
-      note: context.mode === "mock" ? "Preview only" : "Persisted to target db",
+      note: "mCurrency is the operational master. MASTCURR/MCURRENCYLIST are catalogs only. Country uses nCountryID maps, then ISO hint (INR→IN).",
     });
     this.logger.log(
       `[mcurrency] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
     );
+  }
+
+  private async ensureCategoryOption(
+    context: MigrationContext,
+    code: string,
+    value: string,
+    label: string,
+  ): Promise<SelectOption | null> {
+    const normalizedValue = value.trim().toUpperCase();
+    const lookupKey = `${code}:${normalizedValue}`;
+    const cachedId = this.activeContext?.idMap.find(
+      (row) =>
+        row.oldTable === "category_options" &&
+        row.lookupKey === lookupKey &&
+        typeof row.newUuid === "string",
+    )?.newUuid;
+    if (typeof cachedId === "string" && cachedId && !cachedId.startsWith("mock-")) {
+      const existingCached = await this.targetSelectOptionRepository.findOne({
+        where: { id: cachedId },
+      });
+      if (existingCached) {
+        return existingCached;
+      }
+    }
+
+    const existing = await this.targetSelectOptionRepository.findOne({
+      where: { code, value: normalizedValue },
+    });
+    if (existing) {
+      this.addIdMap(context, {
+        oldTable: "category_options",
+        oldId: normalizedValue,
+        newTable: "category_options",
+        newUuid: existing.id,
+        lookupKey,
+      });
+      return existing;
+    }
+
+    const actor = context.bootstrapAdminUserId ?? context.actorUserId;
+    if (context.mode !== "real") {
+      const mockId = `mock-cat-${code}-${normalizedValue}`;
+      this.addIdMap(context, {
+        oldTable: "category_options",
+        oldId: normalizedValue,
+        newTable: "category_options",
+        newUuid: mockId,
+        lookupKey,
+      });
+      return { id: mockId, code, value: normalizedValue, label } as SelectOption;
+    }
+
+    const saved = await this.targetSelectOptionRepository.save(
+      this.targetSelectOptionRepository.create({
+        code,
+        value: normalizedValue,
+        label: label.trim() || normalizedValue,
+        sortOrder: 0,
+        isActive: true,
+        createdBy: actor,
+        updatedBy: actor,
+      }),
+    );
+    this.addIdMap(context, {
+      oldTable: "category_options",
+      oldId: normalizedValue,
+      newTable: "category_options",
+      newUuid: saved.id,
+      lookupKey,
+    });
+    return saved;
+  }
+
+  private async processFinancialCodes(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "financialCode")) {
+      return;
+    }
+
+    this.logger.log(
+      `[FinancialProfile] table migration started mode=${context.mode}`,
+    );
+    const source = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_FINANCIAL_TABLE_CANDIDATES.financialProfile,
+    );
+    if (!source) {
+      this.addWarning(context, {
+        sourceTable: "FinancialProfile",
+        note: "FinancialProfile was not found on the old master",
+      });
+      return;
+    }
+    const subSource = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_FINANCIAL_TABLE_CANDIDATES.financialSubProfile,
+    );
+    const rows = source.rows;
+    this.ensureSourceRows(context, "financialCode", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actor = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyFinancialProfile(row);
+      try {
+        for (const field of mapped.unmapped) {
+          this.addUnmappedColumn(context, {
+            sourceTable: source.tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            reason: field.reason,
+          });
+        }
+        if (mapped.defaultSignTransformed) {
+          this.addTransformation(context, {
+            sourceTable: source.tableName,
+            sourceField: "vDefaultSign",
+            ruleName: "financial-default-sign",
+            originalValue: row.vDefaultSign,
+            transformedValue: mapped.defaultSignValue,
+            result: "transformed",
+          });
+        }
+
+        const financialType = await this.ensureCategoryOption(
+          context,
+          financialTypeCategoryCode,
+          mapped.financialTypeValue,
+          mapped.financialTypeLabel,
+        );
+        const defaultSign = await this.ensureCategoryOption(
+          context,
+          defaultSignCategoryCode,
+          mapped.defaultSignValue,
+          mapped.defaultSignLabel,
+        );
+        if (!financialType || !defaultSign) {
+          skipped += 1;
+          continue;
+        }
+
+        const existing = await this.targetFinancialCodeRepository.findOne({
+          where: { financialCode: mapped.financialCode },
+          relations: { financialType: true, defaultSign: true },
+        });
+
+        if (existing) {
+          this.financialCodeMap.set(String(mapped.oldId), existing.id);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "financial_codes",
+            newUuid: existing.id,
+            lookupKey: mapped.financialCode,
+          });
+          this.addRowResult(context, {
+            sourceTable: source.tableName,
+            sourcePrimaryKey: String(mapped.oldId ?? ""),
+            targetId: existing.id,
+            status: "mapped",
+            note: `Reused financial code ${mapped.financialCode}`,
+          });
+          continue;
+        }
+
+        if (context.mode === "real") {
+          const saved = await this.targetFinancialCodeRepository.save(
+            this.targetFinancialCodeRepository.create({
+              financialCode: mapped.financialCode,
+              financialName: mapped.financialName,
+              financialType: { id: financialType.id } as SelectOption,
+              defaultSign: { id: defaultSign.id } as SelectOption,
+              priority: mapped.priority,
+              createdBy: actor,
+              updatedBy: actor,
+            }),
+          );
+          inserted += 1;
+          this.financialCodeMap.set(String(mapped.oldId), saved.id);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "financial_codes",
+            newUuid: saved.id,
+            lookupKey: mapped.financialCode,
+          });
+          this.addRowResult(context, {
+            sourceTable: source.tableName,
+            sourcePrimaryKey: String(mapped.oldId ?? ""),
+            targetId: saved.id,
+            status: "inserted",
+            note: `Created financial code ${mapped.financialCode}`,
+          });
+        } else {
+          const mockId = `mock-fin-${mapped.oldId ?? mapped.financialCode}`;
+          inserted += 1;
+          this.financialCodeMap.set(String(mapped.oldId), mockId);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "financial_codes",
+            newUuid: mockId,
+            lookupKey: mapped.financialCode,
+          });
+          this.addRowResult(context, {
+            sourceTable: source.tableName,
+            sourcePrimaryKey: String(mapped.oldId ?? ""),
+            targetId: mockId,
+            status: "inserted",
+            note: `Would create financial code ${mapped.financialCode}`,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: source.tableName,
+          sourceRowIdentifier: String(mapped.oldId ?? ""),
+          fieldName: "financialCode",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown financial code migration failure",
+        });
+      }
+    }
+
+    for (const row of subSource?.rows ?? []) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyFinancialSubProfile(row);
+      try {
+        const parentId =
+          (mapped.legacyFinancialId
+            ? this.financialCodeMap.get(mapped.legacyFinancialId)
+            : null) ?? null;
+        if (!parentId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: subSource?.tableName ?? "FinancialSubProfile",
+            sourceRowIdentifier: String(mapped.oldId ?? ""),
+            reason: `Parent financial nFID ${mapped.legacyFinancialId} not resolved`,
+            fallbackAction: "Sub-profile skipped",
+          });
+          continue;
+        }
+        for (const field of mapped.unmapped) {
+          this.addUnmappedColumn(context, {
+            sourceTable: subSource?.tableName ?? "FinancialSubProfile",
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            reason: field.reason,
+          });
+        }
+
+        const existing = await this.targetFinancialSubProfileRepository.findOne({
+          where: {
+            financialSubCode: mapped.financialSubCode,
+            financialCode: { id: parentId } as any,
+          },
+        });
+        if (existing) {
+          this.financialSubProfileMap.set(String(mapped.oldId), existing.id);
+          continue;
+        }
+
+        if (context.mode === "real" && !parentId.startsWith("mock-")) {
+          const saved = await this.targetFinancialSubProfileRepository.save(
+            this.targetFinancialSubProfileRepository.create({
+              financialCode: { id: parentId } as FinancialCode,
+              financialSubCode: mapped.financialSubCode,
+              financialSubName: mapped.financialSubName,
+              priority: mapped.priority,
+              createdBy: actor,
+              updatedBy: actor,
+            }),
+          );
+          inserted += 1;
+          this.financialSubProfileMap.set(String(mapped.oldId), saved.id);
+        } else {
+          const mockId = `mock-finsub-${mapped.oldId ?? mapped.financialSubCode}`;
+          inserted += 1;
+          this.financialSubProfileMap.set(String(mapped.oldId), mockId);
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: subSource?.tableName ?? "FinancialSubProfile",
+          sourceRowIdentifier: String(mapped.oldId ?? ""),
+          fieldName: "financialSubProfile",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown financial sub-profile migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    this.addTableResult(context, {
+      sourceTable: "FinancialProfile",
+      targetTable: "financial_codes",
+      rowCountScanned: rows.length + (subSource?.rows.length ?? 0),
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: "vFinType B/P/T → FINANCIALTYPE; blank vDefaultSign → NONE",
+    });
+  }
+
+  private async processAccounts(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "account")) {
+      return;
+    }
+
+    this.logger.log(
+      `[AccountsProfile] table migration started mode=${context.mode}`,
+    );
+    const source = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_ACCOUNT_TABLE_CANDIDATES.accountsProfile,
+    );
+    if (!source) {
+      this.addWarning(context, {
+        sourceTable: "AccountsProfile",
+        note: "AccountsProfile was not found on the old master",
+      });
+      return;
+    }
+    const bankDtls = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_ACCOUNT_TABLE_CANDIDATES.accountsBankDtls,
+    );
+    if (bankDtls && bankDtls.rows.length === 0) {
+      this.addWarning(context, {
+        sourceTable: bankDtls.tableName,
+        note: "AccountsBankDtls has no rows; bank detail fields skipped",
+      });
+    }
+
+    const rows = source.rows;
+    this.ensureSourceRows(context, "account", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actor = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyAccountProfile(row);
+      try {
+        for (const field of mapped.unmapped) {
+          this.addUnmappedColumn(context, {
+            sourceTable: source.tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            reason: field.reason,
+          });
+        }
+
+        let financialCodeId =
+          (mapped.legacyFinancialId
+            ? this.financialCodeMap.get(mapped.legacyFinancialId)
+            : null) ?? null;
+        if (!financialCodeId && mapped.legacyFinancialCode) {
+          const byCode = await this.targetFinancialCodeRepository.findOne({
+            where: { financialCode: mapped.legacyFinancialCode },
+          });
+          financialCodeId = byCode?.id ?? null;
+        }
+        if (!financialCodeId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: source.tableName,
+            sourceRowIdentifier: String(mapped.oldId ?? mapped.accountCode),
+            reason: `Financial code not resolved for account ${mapped.accountCode}`,
+            fallbackAction: "Account skipped",
+          });
+          continue;
+        }
+
+        let currencyId: string | null = null;
+        if (mapped.legacyCurrencyId) {
+          currencyId = this.currencyMap.get(mapped.legacyCurrencyId) ?? null;
+        }
+        if (!currencyId && mapped.currencyIsoHint) {
+          const inr = await this.targetCurrencyRepository.findOne({
+            where: { currencyCode: mapped.currencyIsoHint },
+          });
+          currencyId = inr?.id ?? null;
+        }
+        if (!currencyId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: source.tableName,
+            sourceRowIdentifier: String(mapped.oldId ?? mapped.accountCode),
+            reason: `Currency not resolved for account ${mapped.accountCode} (need INR)`,
+            fallbackAction: "Account skipped",
+          });
+          continue;
+        }
+
+        const accountType = mapped.accountTypeValue
+          ? await this.ensureCategoryOption(
+              context,
+              accountCategoryCodes.accountType,
+              mapped.accountTypeValue,
+              mapped.accountTypeLabel ?? mapped.accountTypeValue,
+            )
+          : null;
+        const subLedger = mapped.subLedgerValue
+          ? await this.ensureCategoryOption(
+              context,
+              accountCategoryCodes.subLedger,
+              mapped.subLedgerValue,
+              mapped.subLedgerValue,
+            )
+          : null;
+        const bankNature = await this.ensureCategoryOption(
+          context,
+          accountCategoryCodes.bankNature,
+          mapped.bankNatureValue,
+          mapped.bankNatureLabel,
+        );
+        const divisionDept = mapped.divisionDeptValue
+          ? await this.ensureCategoryOption(
+              context,
+              accountCategoryCodes.divisionDept,
+              mapped.divisionDeptValue,
+              mapped.divisionDeptValue,
+            )
+          : null;
+        const subProfileId = mapped.legacySubFinancialId
+          ? this.financialSubProfileMap.get(mapped.legacySubFinancialId) ?? null
+          : null;
+
+        const existing = await this.targetAccountProfileRepository.findOne({
+          where: { accountCode: mapped.accountCode },
+        });
+        if (existing) {
+          this.accountMap.set(String(mapped.oldId), existing.id);
+          this.accountCodeMap.set(mapped.accountCode, existing.id);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "account_profiles",
+            newUuid: existing.id,
+            lookupKey: mapped.accountCode,
+          });
+          continue;
+        }
+
+        if (context.mode === "real" && !String(currencyId).startsWith("mock-")) {
+          const saved = await this.targetAccountProfileRepository.save(
+            this.targetAccountProfileRepository.create({
+              accountCode: mapped.accountCode,
+              accountName: mapped.accountName,
+              currency: { id: currencyId } as Currency,
+              currencyId,
+              financialCode: { id: financialCodeId } as FinancialCode,
+              financialCodeId,
+              financialSubProfile: subProfileId
+                ? ({ id: subProfileId } as FinancialSubProfile)
+                : null,
+              financialSubProfileId: subProfileId,
+              divisionDept: divisionDept
+                ? ({ id: divisionDept.id } as SelectOption)
+                : null,
+              accountType: accountType
+                ? ({ id: accountType.id } as SelectOption)
+                : null,
+              subLedger: subLedger
+                ? ({ id: subLedger.id } as SelectOption)
+                : null,
+              bankNature: bankNature
+                ? ({ id: bankNature.id } as SelectOption)
+                : null,
+              zeroBalanceAtEod: mapped.zeroBalanceAtEod,
+              retailPurchase: mapped.retailPurchase,
+              retailSale: mapped.retailSale,
+              receipt: mapped.receipt,
+              payment: mapped.payment,
+              journalVoucher: mapped.isSystemAccount,
+              active: mapped.active,
+              cmsBank: mapped.cmsBank,
+              directRemittance: mapped.directRemittance,
+              createdBy: actor,
+              updatedBy: actor,
+            }),
+          );
+          inserted += 1;
+          this.accountMap.set(String(mapped.oldId), saved.id);
+          this.accountCodeMap.set(mapped.accountCode, saved.id);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "account_profiles",
+            newUuid: saved.id,
+            lookupKey: mapped.accountCode,
+          });
+        } else {
+          const mockId = `mock-acc-${mapped.oldId ?? mapped.accountCode}`;
+          inserted += 1;
+          this.accountMap.set(String(mapped.oldId), mockId);
+          this.accountCodeMap.set(mapped.accountCode, mockId);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "account_profiles",
+            newUuid: mockId,
+            lookupKey: mapped.accountCode,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: source.tableName,
+          sourceRowIdentifier: String(mapped.oldId ?? ""),
+          fieldName: "account",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown account migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    this.addTableResult(context, {
+      sourceTable: "AccountsProfile",
+      targetTable: "account_profiles",
+      rowCountScanned: rows.length,
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: "nCurrencyID 0 → INR; vCode unique accountCode; AccountsBankDtls empty skipped",
+    });
+  }
+
+  private resolveAccountRef(
+    code: string | null,
+  ): AccountProfile | null {
+    if (!code) {
+      return null;
+    }
+    const id = this.accountCodeMap.get(code);
+    if (!id || id.startsWith("mock-")) {
+      return null;
+    }
+    return { id } as AccountProfile;
+  }
+
+  private async processProducts(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "product")) {
+      return;
+    }
+
+    this.logger.log(`[mProductM] table migration started mode=${context.mode}`);
+    const source = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_PRODUCT_TABLE_CANDIDATES.product,
+    );
+    if (!source) {
+      this.addWarning(context, {
+        sourceTable: "mProductM",
+        note: "mProductM was not found on the old master",
+      });
+      return;
+    }
+    const rows = source.rows;
+    this.ensureSourceRows(context, "product", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actor = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    // Warm accountCodeMap from DB for soft/real reuse
+    if (this.accountCodeMap.size === 0) {
+      const accounts = await this.targetAccountProfileRepository.find({
+        select: ["id", "accountCode"],
+      });
+      for (const account of accounts) {
+        this.accountCodeMap.set(
+          String(account.accountCode).toUpperCase(),
+          account.id,
+        );
+      }
+    }
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyProductRecord(row);
+      try {
+        for (const field of mapped.unmapped) {
+          this.addUnmappedColumn(context, {
+            sourceTable: source.tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            reason: field.reason,
+          });
+        }
+
+        for (const [field, code] of Object.entries(mapped.accountCodes)) {
+          if (code && !this.accountCodeMap.get(code)) {
+            this.addUnmappedColumn(context, {
+              sourceTable: source.tableName,
+              sourceColumn: field,
+              sourceValue: code,
+              reason: `Account code ${code} not in account map; product FK left null`,
+            });
+          }
+        }
+
+        const existing = await this.targetProductRepository.findOne({
+          where: { productCode: mapped.productCode },
+        });
+        if (existing) {
+          this.productMap.set(String(mapped.oldId), existing.id);
+          this.productCodeMap.set(mapped.productCode, existing.id);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "products",
+            newUuid: existing.id,
+            lookupKey: mapped.productCode,
+          });
+          continue;
+        }
+
+        const payload = {
+          productCode: mapped.productCode,
+          productDescription: mapped.productDescription,
+          availableInRetailBuying: mapped.availableInRetailBuying,
+          retailBuyingSeriesApplicable: mapped.retailBuyingSeriesApplicable,
+          availableInRetailSelling: mapped.availableInRetailSelling,
+          retailSellingSeriesApplicable: mapped.retailSellingSeriesApplicable,
+          availableInBulkBuying: mapped.availableInBulkBuying,
+          bulkBuyingSeriesApplicable: mapped.bulkBuyingSeriesApplicable,
+          availableInBulkSelling: mapped.availableInBulkSelling,
+          bulkSellingSeriesApplicable: mapped.bulkSellingSeriesApplicable,
+          instrumentIssuingAuthorityRequired:
+            mapped.instrumentIssuingAuthorityRequired,
+          maintainBlankStockOfProduct: mapped.maintainBlankStockOfProduct,
+          denominationApplicable: mapped.denominationApplicable,
+          productRequiresSettlement: mapped.productRequiresSettlement,
+          isActiveProduct: mapped.isActiveProduct,
+          levelPriority: mapped.levelPriority,
+          reversalEffectOfProfits: mapped.reversalEffectOfProfits,
+          passAutoReceiptOfStockWhenSold: mapped.passAutoReceiptOfStockWhenSold,
+          allowFractionInFEAmount: mapped.allowFractionInFEAmount,
+          allowMulticard: mapped.allowMulticard,
+          retail: mapped.retail,
+          commLimit: mapped.commLimit,
+          maxAmtComm: mapped.maxAmtComm,
+          automateSettlementRate: mapped.automateSettlementRate,
+          separateSettlementForEachInstrument:
+            mapped.separateSettlementForEachInstrument,
+          pickSaleRateAvgAsSettlementRate:
+            mapped.pickSaleRateAvgAsSettlementRate,
+          bulkFee: mapped.bulkFee,
+          splitAndStoreBlankStockReceived:
+            mapped.splitAndStoreBlankStockReceived,
+          allowChangingDenominationInSales:
+            mapped.allowChangingDenominationInSales,
+          reload: mapped.reload,
+          allowAddOnLinking: mapped.allowAddOnLinking,
+          askReference: mapped.askReference,
+          allowProductCancellation: mapped.allowProductCancellation,
+          profitAc: this.resolveAccountRef(mapped.accountCodes.profitAc),
+          acOfIssuer: this.resolveAccountRef(mapped.accountCodes.acOfIssuer),
+          commissionAc: this.resolveAccountRef(mapped.accountCodes.commissionAc),
+          openAc: this.resolveAccountRef(mapped.accountCodes.openAc),
+          closingAc: this.resolveAccountRef(mapped.accountCodes.closingAc),
+          expenseAc: this.resolveAccountRef(mapped.accountCodes.expenseAc),
+          purchaseAc: this.resolveAccountRef(mapped.accountCodes.purchaseAc),
+          saleAc: this.resolveAccountRef(mapped.accountCodes.saleAc),
+          fakeAccount: this.resolveAccountRef(mapped.accountCodes.fakeAccount),
+          bulkPurAc: this.resolveAccountRef(mapped.accountCodes.bulkPurAc),
+          bulkSaleAc: this.resolveAccountRef(mapped.accountCodes.bulkSaleAc),
+          bulkProficAc: this.resolveAccountRef(mapped.accountCodes.bulkProficAc),
+          purchaseRetCancAc: this.resolveAccountRef(
+            mapped.accountCodes.purchaseRetCancAc,
+          ),
+          purchaseBlkCancAc: this.resolveAccountRef(
+            mapped.accountCodes.purchaseBlkCancAc,
+          ),
+          saleRetCancAc: this.resolveAccountRef(
+            mapped.accountCodes.saleRetCancAc,
+          ),
+          saleBlkCancAc: this.resolveAccountRef(
+            mapped.accountCodes.saleBlkCancAc,
+          ),
+          branchPurAc: this.resolveAccountRef(mapped.accountCodes.branchPurAc),
+          branchSaleAc: this.resolveAccountRef(mapped.accountCodes.branchSaleAc),
+          profitAcBrnSale: this.resolveAccountRef(
+            mapped.accountCodes.profitAcBrnSale,
+          ),
+          createdBy: actor,
+          updatedBy: actor,
+        } as Product;
+
+        if (context.mode === "real") {
+          const saved = await this.targetProductRepository.save(payload);
+          inserted += 1;
+          this.productMap.set(String(mapped.oldId), saved.id);
+          this.productCodeMap.set(mapped.productCode, saved.id);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "products",
+            newUuid: saved.id,
+            lookupKey: mapped.productCode,
+          });
+        } else {
+          const mockId = `mock-product-${mapped.oldId ?? mapped.productCode}`;
+          inserted += 1;
+          this.productMap.set(String(mapped.oldId), mockId);
+          this.productCodeMap.set(mapped.productCode, mockId);
+          this.addIdMap(context, {
+            oldTable: source.tableName,
+            oldId: mapped.oldId,
+            newTable: "products",
+            newUuid: mockId,
+            lookupKey: mapped.productCode,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: source.tableName,
+          sourceRowIdentifier: String(mapped.oldId ?? ""),
+          fieldName: "product",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown product migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    this.addTableResult(context, {
+      sourceTable: "mProductM",
+      targetTable: "products",
+      rowCountScanned: rows.length,
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: "Account FKs resolved by v*AccountCode when accounts migrated; EEFC codes logged unmapped",
+    });
+  }
+
+  private async processCurrencyProductLinks(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "currencyProductLink")) {
+      return;
+    }
+
+    this.logger.log(
+      `[mCurrencyProductLink] table migration started mode=${context.mode}`,
+    );
+    const source = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_PRODUCT_TABLE_CANDIDATES.currencyProductLink,
+    );
+    if (!source) {
+      this.addWarning(context, {
+        sourceTable: "mCurrencyProductLink",
+        note: "mCurrencyProductLink was not found on the old master",
+      });
+      return;
+    }
+    const rows = source.rows;
+    this.ensureSourceRows(context, "currencyProductLink", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actor = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    if (this.productCodeMap.size === 0) {
+      const products = await this.targetProductRepository.find({
+        select: ["id", "productCode"],
+      });
+      for (const product of products) {
+        this.productCodeMap.set(
+          String(product.productCode).toUpperCase(),
+          product.id,
+        );
+      }
+    }
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyCurrencyProductLink(row);
+      try {
+        const currencyId = mapped.legacyCurrencyId
+          ? this.currencyMap.get(mapped.legacyCurrencyId) ?? null
+          : null;
+        const productId = mapped.productCode
+          ? this.productCodeMap.get(mapped.productCode) ?? null
+          : null;
+        if (!currencyId || !productId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: source.tableName,
+            sourceRowIdentifier: `${mapped.legacyCurrencyId}:${mapped.productCode}`,
+            reason: !currencyId
+              ? `Currency nCurrencyID ${mapped.legacyCurrencyId} not resolved`
+              : `Product ${mapped.productCode} not resolved`,
+            fallbackAction: "Link skipped; margins stay null when created later",
+          });
+          continue;
+        }
+        if (currencyId.startsWith("mock-") || productId.startsWith("mock-")) {
+          inserted += 1;
+          continue;
+        }
+
+        const existing = await this.targetProductCurrencyRateRepository.findOne({
+          where: { currencyId, productId },
+        });
+        if (existing) {
+          if (existing.isActive !== mapped.isActive && context.mode === "real") {
+            existing.isActive = mapped.isActive;
+            await this.targetProductCurrencyRateRepository.save(existing);
+          }
+          continue;
+        }
+
+        if (context.mode === "real") {
+          await this.targetProductCurrencyRateRepository.save(
+            this.targetProductCurrencyRateRepository.create({
+              productId,
+              currencyId,
+              product: { id: productId } as Product,
+              currency: { id: currencyId } as Currency,
+              buyMarginType: null,
+              buyMarginValue: null,
+              buyMinRate: null,
+              buyMaxRate: null,
+              saleMarginType: null,
+              saleMarginValue: null,
+              saleMinRate: null,
+              saleMaxRate: null,
+              isActive: mapped.isActive,
+              createdBy: actor,
+              updatedBy: actor,
+            }),
+          );
+        }
+        inserted += 1;
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: source.tableName,
+          sourceRowIdentifier: `${mapped.legacyCurrencyId}:${mapped.productCode}`,
+          fieldName: "currencyProductLink",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Unknown currency-product link migration failure",
+        });
+      }
+    }
+
+    context.summary.rowsInserted += inserted;
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    this.addTableResult(context, {
+      sourceTable: "mCurrencyProductLink",
+      targetTable: "product_currency_rates",
+      rowCountScanned: rows.length,
+      rowCountInserted: inserted,
+      rowCountSkipped: skipped,
+      rowCountFailed: failed,
+      note: "Allow-list only; all margin/rate fields null; bIsActive=0 → isActive false",
+    });
   }
 
   private async processCompanies(
@@ -4995,7 +7177,7 @@ export class MigrationToolService {
     for (const row of rows) {
       context.summary.rowsScanned += 1;
       try {
-        const resolved = await this.resolveCounter(row, context);
+        const resolved = await this.resolveCounter(row, context, pool);
         this.addRowResult(context, {
           sourceTable: "mstcounter",
           sourcePrimaryKey: String(
@@ -5167,49 +7349,38 @@ export class MigrationToolService {
       return null;
     }
 
-    const key = String(branchOldId);
-    const counters = context.branchCounters.get(key) ?? [];
-    if (!counters.includes(counterId)) {
-      counters.push(counterId);
-      context.branchCounters.set(key, counters);
-    }
-    if (toBoolean(row.bMainCounter)) {
-      context.branchMainCounter.set(key, counterId);
+    if (row.NUSERID !== undefined && row.NUSERID !== null && row.NUSERID !== "") {
+      this.addUnmappedColumn(context, {
+        sourceTable,
+        sourceColumn: "NUSERID",
+        sourceValue: row.NUSERID,
+        reason: "Link-table user id is relation metadata only; not stored on branch_counters",
+      });
     }
 
-    if (context.mode === "real") {
-      const existingLink = await this.targetBranchCounterRepository.findOne({
-        where: { branchId, counterId },
+    if (
+      row.bMainCounter !== undefined &&
+      row.bMainCounter !== null &&
+      row.bMainCounter !== ""
+    ) {
+      this.addUnmappedColumn(context, {
+        sourceTable,
+        sourceColumn: "bMainCounter",
+        sourceValue: row.bMainCounter,
+        reason: "Ignored; current branch_counters has no main-counter concept",
       });
-      if (!existingLink) {
-        const actorId = "00000000-0000-0000-0000-000000000000";
-        await this.targetBranchCounterRepository.save(
-          this.targetBranchCounterRepository.create({
-            branchId,
-            counterId,
-            createdBy: actorId,
-            updatedBy: actorId,
-          }),
-        );
-        this.logger.log(
-          `[mstBranchCounterLink] created branch-counter link counterId=${counterId} branchId=${branchId}`,
-        );
-        this.addFieldStatus(context, {
-          sourceTable,
-          sourceColumn: "nBranchID / nCounterID",
-          sourceValue: {
-            nBranchID: branchOldId,
-            nCounterID: counterOldId,
-            bMainCounter: toBoolean(row.bMainCounter),
-          },
-          targetColumn:
-            "branch_counters.branch_id / branch_counters.counter_id",
-          targetValue: { branchId, counterId },
-          status: "saved",
-          note: "Branch-counter link created from mstBranchCounterLink",
-        });
-      }
     }
+
+    await this.upsertBranchCounterLink(context, {
+      sourceTable,
+      sourceRowIdentifier: String(row.nCBLId ?? row.id ?? row.ID ?? ""),
+      branchId,
+      counterId,
+      sourceValue: {
+        nBranchID: branchOldId,
+        nCounterID: counterOldId,
+      },
+    });
 
     return { branchId, counterId };
   }
@@ -5250,7 +7421,7 @@ export class MigrationToolService {
           sourcePrimaryKey: String(row.nCBLId ?? row.id ?? row.ID ?? ""),
           targetId: `${relation.branchId}:${relation.counterId}`,
           status: "mapped",
-          note: "Branch-counter relationship resolved",
+          note: "Resolved onto branch_counters many-to-many",
         });
         inserted += 1;
       } catch (error) {
@@ -5272,7 +7443,7 @@ export class MigrationToolService {
     context.summary.rowsFailed += failed;
     this.addTableResult(context, {
       sourceTable: "mstBranchCounterLink",
-      targetTable: "branch-counter relation",
+      targetTable: "branch_counters",
       rowCountScanned: rows.length,
       rowCountInserted: inserted,
       rowCountSkipped: skipped,
@@ -5280,7 +7451,7 @@ export class MigrationToolService {
       note:
         context.mode === "mock"
           ? "Preview only"
-          : "Persisted as relation metadata",
+          : "Persisted to branch_counters",
     });
     this.logger.log(
       `[mstBranchCounterLink] table migration finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
@@ -5419,8 +7590,6 @@ export class MigrationToolService {
     branchId: string,
     context: MigrationContext,
   ): string | null {
-    const mainCounter = context.branchMainCounter.get(branchId);
-    if (mainCounter) return mainCounter;
     const counters = context.branchCounters.get(branchId);
     return counters && counters.length > 0 ? counters[0] : null;
   }
@@ -5507,7 +7676,7 @@ export class MigrationToolService {
         roleId,
         branchId,
         counterId,
-        "Derived from mstuser row",
+        "Derived from mstuser row using the first linked counter for the branch",
       );
     }
 
@@ -5536,7 +7705,7 @@ export class MigrationToolService {
         roleId,
         branchId,
         counterId,
-        "Derived from mstBranchUserLink",
+        "Derived from mstBranchUserLink using the first linked counter for the branch",
       );
     }
 
@@ -5693,7 +7862,14 @@ export class MigrationToolService {
           );
           const taskOrder: InternalTask[] = [
             "company",
+            "country",
+            "state",
+            "locationType",
             "currency",
+            "financialCode",
+            "account",
+            "product",
+            "currencyProductLink",
             "branch",
             "counter",
             "user",
@@ -5716,10 +7892,32 @@ export class MigrationToolService {
               case "company":
                 await this.processCompanies(pools.master, context);
                 break;
+              case "country":
+                await this.processCountries(pools.master, context);
+                break;
+              case "state":
+                await this.processStates(pools.master, context);
+                break;
+              case "locationType":
+                await this.processLocationTypes(pools.master, context);
+                break;
               case "currency":
-                await this.processCurrencies(sourcePool, context);
+                await this.processCurrencies(pools.master, context);
+                break;
+              case "financialCode":
+                await this.processFinancialCodes(pools.master, context);
+                break;
+              case "account":
+                await this.processAccounts(pools.master, context);
+                break;
+              case "product":
+                await this.processProducts(pools.master, context);
+                break;
+              case "currencyProductLink":
+                await this.processCurrencyProductLinks(pools.master, context);
                 break;
               case "branch":
+                await this.ensureLegacyPlaceLookups(pools.master, context);
                 await this.processBranches(sourcePool, context);
                 break;
               case "counter":
@@ -5779,9 +7977,58 @@ export class MigrationToolService {
     )
       return true;
     if (
+      task === "country" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("country"),
+      )
+    )
+      return true;
+    if (
+      task === "state" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("state"),
+      )
+    )
+      return true;
+    if (
+      task === "locationType" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("locationType"),
+      )
+    )
+      return true;
+    if (
       task === "currency" &&
       [...selectedSet].some((sel) =>
         TABLE_DEPENDENCIES[sel]?.includes("currency"),
+      )
+    )
+      return true;
+    if (
+      task === "financialCode" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("financialCode"),
+      )
+    )
+      return true;
+    if (
+      task === "account" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("account"),
+      )
+    )
+      return true;
+    if (
+      task === "product" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("product"),
+      )
+    )
+      return true;
+    if (
+      task === "currencyProductLink" &&
+      [...selectedSet].some((sel) =>
+        TABLE_DEPENDENCIES[sel]?.includes("currencyProductLink"),
       )
     )
       return true;
