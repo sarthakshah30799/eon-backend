@@ -36,6 +36,13 @@ export enum VoucherAdvanceApplicationState {
   RELEASED = "RELEASED",
 }
 
+export const VoucherLogAction = {
+  PRINT: "PRINT",
+} as const;
+
+export type VoucherLogAction =
+  (typeof VoucherLogAction)[keyof typeof VoucherLogAction];
+
 export enum TransactionSettlementSource {
   NORMAL = "NORMAL",
   ADVANCE = "ADVANCE",
