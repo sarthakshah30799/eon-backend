@@ -15,6 +15,7 @@ import { UserModule } from "../users/user.module";
 import {
   AccountingVoucher,
   AccountingVoucherItem,
+  AccountingVoucherLog,
   VoucherAdvanceApplication,
   VoucherAccountPosting,
   VoucherEvent,
@@ -47,6 +48,7 @@ import { VoucherAccountPostingWorker } from "./voucher-account-posting.worker";
       [
         AccountingVoucher,
         AccountingVoucherItem,
+        AccountingVoucherLog,
         VoucherAdvanceApplication,
         VoucherAccountPosting,
         VoucherEvent,

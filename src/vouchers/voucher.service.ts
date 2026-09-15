@@ -26,7 +26,8 @@ import {
   TransactionStatus,
   TransactionType,
   TransactionPaymentMethod,
-  isElectronicPaymentMethod,
+  isNonChequeBankPaymentMethod,
+  isTransactionPaymentMethod,
 } from "../transactions/transactions.enums";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
@@ -43,8 +44,13 @@ import {
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
 import {
+  RecordVoucherPrintDto,
+  VoucherPrintCopyType,
+} from "./dto/record-voucher-print.dto";
+import {
   AccountingVoucher,
   AccountingVoucherItem,
+  AccountingVoucherLog,
   VoucherAdvanceApplication,
 } from "./entities";
 import {
@@ -54,6 +60,7 @@ import {
   VoucherAdviceStatus,
   VoucherEntryDirection,
   VoucherItemTypeValue,
+  VoucherLogAction,
   VOUCHER_ITEM_TYPE_LABELS,
   VoucherType,
   VOUCHER_NUMBER_SERIES,
@@ -186,6 +193,8 @@ export class VoucherService implements OnModuleInit {
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(AccountingVoucher, "database2")
     private readonly voucherRepository: Repository<AccountingVoucher>,
+    @InjectRepository(AccountingVoucherLog, "database2")
+    private readonly voucherLogRepository: Repository<AccountingVoucherLog>,
     @InjectRepository(Transaction, "database2")
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(VoucherAdvanceApplication, "database2")
@@ -1682,7 +1691,7 @@ export class VoucherService implements OnModuleInit {
 
     let party: PartyProfile | null = null;
     let accountMode: VoucherAccountMode | null = null;
-    let electronicPaymentMethod: TransactionPaymentMethod | null = null;
+    let resolvedPaymentMethod: TransactionPaymentMethod | null = null;
     let accountType: SelectOption | null = null;
     let headerAccount: AccountProfile | null = null;
     let entityType: SelectOption | null = null;
@@ -1726,24 +1735,47 @@ export class VoucherService implements OnModuleInit {
         throw new BadRequestException(
           "Bank / Cheque vouchers require a BANK LEDGER account",
         );
-      electronicPaymentMethod = isElectronicPaymentMethod(
-        partyDto.paymentMethod,
-      )
-        ? (normalizeUpper(
-            partyDto.paymentMethod,
-          ) as TransactionPaymentMethod)
-        : null;
-      if (partyDto.paymentMethod && !electronicPaymentMethod)
-        throw new BadRequestException(
-          "Payment mode must be UPI, NEFT, or RTGS",
-        );
       if (
-        electronicPaymentMethod &&
-        accountMode !== VoucherAccountMode.BANK_CHEQUE
-      )
-        throw new BadRequestException(
-          "UPI, NEFT, and RTGS are only allowed for Bank / Cheque vouchers",
-        );
+        accountMode === VoucherAccountMode.CASH ||
+        accountMode === VoucherAccountMode.PETTY_CASH
+      ) {
+        if (
+          partyDto.paymentMethod &&
+          normalizeUpper(partyDto.paymentMethod) !==
+            TransactionPaymentMethod.CASH
+        )
+          throw new BadRequestException(
+            "Cash / Petty Cash vouchers require payment mode CASH",
+          );
+        resolvedPaymentMethod = TransactionPaymentMethod.CASH;
+      } else if (accountMode === VoucherAccountMode.CREDIT_CARD) {
+        if (
+          partyDto.paymentMethod &&
+          normalizeUpper(partyDto.paymentMethod) !==
+            TransactionPaymentMethod.CARD
+        )
+          throw new BadRequestException(
+            "Credit Card vouchers require payment mode CARD",
+          );
+        resolvedPaymentMethod = TransactionPaymentMethod.CARD;
+      } else if (accountMode === VoucherAccountMode.BANK_CHEQUE) {
+        if (partyDto.paymentMethod) {
+          if (!isTransactionPaymentMethod(partyDto.paymentMethod))
+            throw new BadRequestException(
+              `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
+            );
+          resolvedPaymentMethod = normalizeUpper(
+            partyDto.paymentMethod,
+          ) as TransactionPaymentMethod;
+        } else {
+          resolvedPaymentMethod = TransactionPaymentMethod.CHEQUE;
+        }
+      }
+      const isBankNonCheque = isNonChequeBankPaymentMethod(
+        resolvedPaymentMethod,
+      );
+      const isCashMethod =
+        resolvedPaymentMethod === TransactionPaymentMethod.CASH;
       const hasCheque = [
         partyDto.chequeNumber,
         partyDto.chequeDate,
@@ -1751,13 +1783,25 @@ export class VoucherService implements OnModuleInit {
         partyDto.drawnOn,
       ].every((value) => normalize(value));
       if (accountMode === VoucherAccountMode.BANK_CHEQUE) {
-        if (electronicPaymentMethod) {
+        if (isBankNonCheque) {
           if (normalize(partyDto.chequeNumber))
             throw new BadRequestException(
-              "Cheque number must be empty for UPI, NEFT, and RTGS",
+              "Cheque number must be empty for this payment mode",
             );
           if (!normalize(partyDto.chequeDate))
             throw new BadRequestException("Cheque date is required");
+        } else if (isCashMethod) {
+          if (
+            [
+              partyDto.chequeNumber,
+              partyDto.chequeDate,
+              partyDto.chequeBranch,
+              partyDto.drawnOn,
+            ].some((value) => normalize(value))
+          )
+            throw new BadRequestException(
+              "Cheque fields are not allowed for cash payment mode",
+            );
         } else if (!hasCheque) {
           throw new BadRequestException(
             "Cheque Number, Cheque Date, Branch, and Drawn On are required",
@@ -1931,27 +1975,32 @@ export class VoucherService implements OnModuleInit {
               : { panNumber: null, panName: null, panDob: null }),
             chequeNumber:
               accountMode === VoucherAccountMode.BANK_CHEQUE &&
-              !electronicPaymentMethod
+              !isNonChequeBankPaymentMethod(resolvedPaymentMethod) &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.chequeNumber) || null
                 : null,
             normalizedChequeNumber:
               accountMode === VoucherAccountMode.BANK_CHEQUE &&
-              !electronicPaymentMethod
+              !isNonChequeBankPaymentMethod(resolvedPaymentMethod) &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalizeUpper(partyDto?.chequeNumber) || null
                 : null,
             chequeDate:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.chequeDate).slice(0, 10) || null
                 : null,
             chequeBranch:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.chequeBranch) || null
                 : null,
             drawnOn:
-              accountMode === VoucherAccountMode.BANK_CHEQUE
+              accountMode === VoucherAccountMode.BANK_CHEQUE &&
+              resolvedPaymentMethod !== TransactionPaymentMethod.CASH
                 ? normalize(partyDto?.drawnOn) || null
                 : null,
-            paymentMethod: electronicPaymentMethod,
+            paymentMethod: resolvedPaymentMethod,
             remarkOptionId: remark?.id ?? null,
             remarkSnapshot: remark
               ? await this.snapshot(this.optionRepository, remark.id)
@@ -2147,7 +2196,7 @@ export class VoucherService implements OnModuleInit {
     this.getActor(session);
     const voucher = await this.voucherRepository.findOne({
       where: { id, voucherType: type },
-      relations: ["items"],
+      relations: ["items", "logs"],
     });
     if (!voucher) throw new NotFoundException("Voucher not found");
     const privileged = Boolean(
@@ -2164,6 +2213,74 @@ export class VoucherService implements OnModuleInit {
         throw new ForbiddenException("Voucher is outside the active branch");
     }
     return voucher;
+  }
+
+  async recordPrint(
+    type: VoucherType,
+    id: string,
+    dto: RecordVoucherPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: VoucherPrintCopyType;
+  }> {
+    if (
+      type !== VoucherType.RECEIPT &&
+      type !== VoucherType.PAYMENT &&
+      type !== VoucherType.JOURNAL
+    ) {
+      throw new BadRequestException(
+        "Print is only supported for Receipt, Payment, and Journal vouchers",
+      );
+    }
+
+    const actorId = this.getActor(session);
+    await this.findById(type, id, session);
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for voucher print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = await this.voucherLogRepository.count({
+      where: {
+        voucherId: id,
+        action: VoucherLogAction.PRINT,
+      },
+    });
+    const copyType =
+      existingPrintCount === 0
+        ? VoucherPrintCopyType.CUSTOMER_COPY
+        : VoucherPrintCopyType.DUPLICATE_COPY;
+    const message =
+      copyType === VoucherPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
+
+    await this.voucherLogRepository.save(
+      this.voucherLogRepository.create({
+        voucherId: id,
+        action: VoucherLogAction.PRINT,
+        message,
+        metadata: {
+          copyType,
+          requestedCopyType: dto.copyType ?? null,
+          sendEmail: Boolean(dto.sendEmail),
+          recipientEmail: dto.recipientEmail || null,
+          subject: dto.subject || null,
+          emailMessageId: null,
+        },
+        performedById: actorId,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+
+    return {
+      message,
+      copyType,
+    };
   }
 
   async nextNumber(

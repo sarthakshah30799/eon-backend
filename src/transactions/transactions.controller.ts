@@ -269,7 +269,7 @@ export class TransactionsController {
 
   @Get("payment-methods")
   @ApiOperation({
-    summary: "Get selectable transaction payment methods as value/label pairs",
+    summary: "Get all transaction payment methods as value/label pairs",
   })
   @ApiResponse({
     status: 200,

@@ -94,13 +94,27 @@ export const TransactionPaymentMethod = {
 export type TransactionPaymentMethod =
   (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
 
-export const SELECTABLE_TRANSACTION_PAYMENT_METHODS = [
-  { value: TransactionPaymentMethod.CASH, label: "Cash" },
-  { value: TransactionPaymentMethod.CHEQUE, label: "Cheque" },
-  { value: TransactionPaymentMethod.UPI, label: "UPI" },
-  { value: TransactionPaymentMethod.NEFT, label: "NEFT" },
-  { value: TransactionPaymentMethod.RTGS, label: "RTGS" },
-] as const;
+export const isTransactionPaymentMethod = (
+  value: unknown,
+): value is TransactionPaymentMethod =>
+  Object.values(TransactionPaymentMethod).includes(
+    String(value ?? "")
+      .trim()
+      .toUpperCase() as TransactionPaymentMethod,
+  );
+
+export const formatTransactionPaymentMethodLabel = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (normalized === TransactionPaymentMethod.CASH) return "Cash";
+  if (normalized === TransactionPaymentMethod.CHEQUE) return "Cheque";
+  if (normalized === TransactionPaymentMethod.BANK_TRANSFER)
+    return "Bank Transfer";
+  if (normalized === TransactionPaymentMethod.CARD) return "Card";
+  if (normalized === TransactionPaymentMethod.OTHER) return "Other";
+  return normalized;
+};
 
 export const isElectronicPaymentMethod = (value: unknown) => {
   const normalized = String(value ?? "")
@@ -113,13 +127,19 @@ export const isElectronicPaymentMethod = (value: unknown) => {
   );
 };
 
-export const isChequeFamilyPaymentMethod = (value: unknown) => {
-  const normalized = String(value ?? "")
-    .trim()
-    .toUpperCase();
+export const isNonChequeBankPaymentMethod = (value: unknown) => {
+  if (!isTransactionPaymentMethod(value)) return false;
+  const normalized = String(value).trim().toUpperCase();
   return (
-    normalized === TransactionPaymentMethod.CHEQUE ||
-    isElectronicPaymentMethod(normalized)
+    normalized !== TransactionPaymentMethod.CASH &&
+    normalized !== TransactionPaymentMethod.CHEQUE
+  );
+};
+
+export const isChequeFamilyPaymentMethod = (value: unknown) => {
+  if (!isTransactionPaymentMethod(value)) return false;
+  return (
+    String(value).trim().toUpperCase() !== TransactionPaymentMethod.CASH
   );
 };
 
@@ -130,7 +150,7 @@ export const formatPaymentChequeReference = (
   const normalized = String(paymentMethod ?? "")
     .trim()
     .toUpperCase();
-  if (isElectronicPaymentMethod(normalized)) {
+  if (isNonChequeBankPaymentMethod(normalized)) {
     return normalized;
   }
 

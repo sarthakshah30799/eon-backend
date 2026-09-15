@@ -10,6 +10,7 @@ import {
   VoucherType,
 } from "../voucher.enums";
 import { AccountingVoucherItem } from "./accounting-voucher-item.entity";
+import { AccountingVoucherLog } from "./accounting-voucher-log.entity";
 import { VoucherAdvanceApplication } from "./voucher-advance-application.entity";
 import { VoucherAccountPosting } from "./voucher-account-posting.entity";
 import { VoucherEvent } from "./voucher-event.entity";
@@ -172,6 +173,8 @@ export class AccountingVoucher extends BaseEntity {
 
   @OneToMany(() => AccountingVoucherItem, (item) => item.voucher)
   items: AccountingVoucherItem[];
+  @OneToMany(() => AccountingVoucherLog, (log) => log.voucher)
+  logs: AccountingVoucherLog[];
   @OneToMany(
     () => VoucherAdvanceApplication,
     (application) => application.voucher,

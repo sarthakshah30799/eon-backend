@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import {
   formatPaymentChequeReference,
-  isElectronicPaymentMethod,
+  isNonChequeBankPaymentMethod,
   TransactionPartyProfileTypeEnum,
   TransactionType,
 } from "../transactions/transactions.enums";
@@ -189,7 +189,7 @@ const getItemProfitRate = (item: TransactionItem) => {
 };
 
 const getPaymentNumber = (payment: TransactionPayment) => {
-  if (isElectronicPaymentMethod(payment.paymentMethod)) {
+  if (isNonChequeBankPaymentMethod(payment.paymentMethod)) {
     return String(payment.paymentMethod).trim().toUpperCase();
   }
   const chequePageNo = toText(
