@@ -17,21 +17,18 @@ import {
   ApiParam,
   ApiResponse,
   ApiTags,
-  ApiQuery,
 } from "@nestjs/swagger";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CreateSelectOptionDto } from "./dto/create-category-option.dto";
 import { UpdateSelectOptionDto } from "./dto/update-category-option.dto";
 import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
+import { SelectOptionGroupResponseDto } from "./dto/select-option-group-response.dto";
 import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { SelectOptionService } from "./category-option.service";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
 import { SelectOptionListQueryDto } from "./dto/select-option-list-query.dto";
-import {
-  PaginatedResponseDto,
-  buildPaginatedResponse,
-} from "../common/pagination";
+import { PaginatedResponseDto } from "../common/pagination";
 
 type SelectOptionSession = ExpressSession & SessionData;
 
@@ -58,15 +55,19 @@ export class SelectOptionController {
   }
 
   @Get("all")
-  @ApiOperation({ summary: "Get all select options" })
+  @ApiOperation({
+    summary: "Get select options grouped by category code",
+    description:
+      "Paginates distinct category codes and returns each code with all of its option values.",
+  })
   @ApiResponse({
     status: 200,
-    description: "Paginated list of select options",
+    description: "Paginated list of category codes with all option values",
     type: PaginatedResponseDto,
   })
   async getAllOptions(
     @Query() query: SelectOptionListQueryDto,
-  ): Promise<PaginatedResponseDto<SelectOptionResponseDto>> {
+  ): Promise<PaginatedResponseDto<SelectOptionGroupResponseDto>> {
     return this.selectOptionService.getAllOptions(query);
   }
 
