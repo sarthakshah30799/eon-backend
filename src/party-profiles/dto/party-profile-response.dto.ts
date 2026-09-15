@@ -4,6 +4,7 @@ import { WorkflowStatus } from "../../common/enums/workflow-status.enum";
 import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
 import { PartyProfileCommissionRuleResponseDto } from "./party-profile-commission-rule-response.dto";
 import { BranchResponseDto } from "../../branches/dto/branch-response.dto";
+import { PartyProfileReferenceResponseDto } from "./party-profile-reference-response.dto";
 import { User } from "../../users/user.entity";
 
 export type PartyProfileCreatedByReference = {
@@ -79,10 +80,10 @@ export class PartyProfileResponseDto {
   defaultHandlingCharges?: number;
 
   @ApiPropertyOptional({
-    description: "Default Agent",
-    type: SelectOptionResponseDto,
+    description: "Default Agent party profile",
+    type: PartyProfileReferenceResponseDto,
   })
-  defaultAgent?: SelectOptionResponseDto | null;
+  defaultAgent?: PartyProfileReferenceResponseDto | null;
 
   @ApiPropertyOptional({ description: "Phone No" })
   phoneNo?: string;
@@ -124,10 +125,10 @@ export class PartyProfileResponseDto {
   panNo?: string;
 
   @ApiPropertyOptional({
-    description: "Marketing Executive",
-    type: SelectOptionResponseDto,
+    description: "Marketing Executive party profile",
+    type: PartyProfileReferenceResponseDto,
   })
-  marketingExecutive?: SelectOptionResponseDto | null;
+  marketingExecutive?: PartyProfileReferenceResponseDto | null;
 
   @ApiPropertyOptional({
     description: "Business Nature",
@@ -304,9 +305,9 @@ export class PartyProfileResponseDto {
     dto.defaultHandlingCharges = entity.defaultHandlingCharges
       ? Number(entity.defaultHandlingCharges)
       : undefined;
-    dto.defaultAgent = entity.defaultAgent
-      ? SelectOptionResponseDto.fromEntity(entity.defaultAgent)
-      : null;
+    dto.defaultAgent = PartyProfileReferenceResponseDto.fromEntity(
+      entity.defaultAgent,
+    );
     dto.phoneNo = entity.phoneNo;
     dto.blockDateFrom = entity.blockDateFrom;
     dto.establishmentDate = entity.establishmentDate;
@@ -323,9 +324,9 @@ export class PartyProfileResponseDto {
     dto.panName = entity.panName;
     dto.panDob = entity.panDob;
     dto.panNo = entity.panNo;
-    dto.marketingExecutive = entity.marketingExecutive
-      ? SelectOptionResponseDto.fromEntity(entity.marketingExecutive)
-      : null;
+    dto.marketingExecutive = PartyProfileReferenceResponseDto.fromEntity(
+      entity.marketingExecutive,
+    );
     dto.businessNature = entity.businessNature
       ? SelectOptionResponseDto.fromEntity(entity.businessNature)
       : null;

@@ -99,11 +99,15 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "numeric", precision: 15, scale: 2, nullable: true })
   defaultHandlingCharges: number;
 
-  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => PartyProfile, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({
+    name: "default_agent_id",
     foreignKeyConstraintName: "FK_party_profiles_defaultAgent",
   })
-  defaultAgent: SelectOption | null;
+  defaultAgent: PartyProfile | null;
+
+  @Column({ type: "uuid", nullable: true, name: "default_agent_id" })
+  defaultAgentId: string | null;
 
   @Column({ type: "citext", nullable: true })
   phoneNo: string;
@@ -147,11 +151,15 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "citext", nullable: true })
   panNo: string;
 
-  @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => PartyProfile, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({
+    name: "marketing_executive_id",
     foreignKeyConstraintName: "FK_party_profiles_marketingExecutive",
   })
-  marketingExecutive: SelectOption | null;
+  marketingExecutive: PartyProfile | null;
+
+  @Column({ type: "uuid", nullable: true, name: "marketing_executive_id" })
+  marketingExecutiveId: string | null;
 
   @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({

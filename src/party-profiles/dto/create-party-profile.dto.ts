@@ -136,7 +136,9 @@ export class CreatePartyProfileDto {
   @IsOptional()
   defaultHandlingCharges?: number;
 
-  @ApiPropertyOptional({ description: "Default Agent" })
+  @ApiPropertyOptional({
+    description: "Default agent party profile UUID",
+  })
   @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
@@ -204,7 +206,9 @@ export class CreatePartyProfileDto {
   @IsOptional()
   panNo?: string;
 
-  @ApiPropertyOptional({ description: "Marketing Executive" })
+  @ApiPropertyOptional({
+    description: "Marketing executive party profile UUID",
+  })
   @EmptyStringToUndefined()
   @IsUUID()
   @IsOptional()
