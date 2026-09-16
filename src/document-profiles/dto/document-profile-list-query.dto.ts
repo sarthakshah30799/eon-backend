@@ -1,13 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform } from "class-transformer";
 import { IsBoolean, IsOptional, IsString } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
-
-const parseBoolean = ({ value }: { value: unknown }) => {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return value;
-};
+import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 
 export class DocumentProfileListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional()
@@ -16,7 +10,7 @@ export class DocumentProfileListQueryDto extends PaginationQueryDto {
   search?: string;
 
   @ApiPropertyOptional()
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   active?: boolean;

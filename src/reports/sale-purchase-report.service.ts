@@ -3,8 +3,12 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { Transaction } from "../transactions/entities/transaction.entity";
-import { TransactionType } from "../transactions/transactions.enums";
-import { TransactionPartyProfileTypeEnum } from "../transactions/transactions.enums";
+import {
+  formatPaymentChequeReference,
+  isNonChequeBankPaymentMethod,
+  TransactionPartyProfileTypeEnum,
+  TransactionType,
+} from "../transactions/transactions.enums";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { TransactionAdditionalCharge } from "../transactions/entities/transaction-additional-charge.entity";
@@ -185,6 +189,9 @@ const getItemProfitRate = (item: TransactionItem) => {
 };
 
 const getPaymentNumber = (payment: TransactionPayment) => {
+  if (isNonChequeBankPaymentMethod(payment.paymentMethod)) {
+    return String(payment.paymentMethod).trim().toUpperCase();
+  }
   const chequePageNo = toText(
     (payment.chequePageSnapshot as Record<string, unknown> | null | undefined)
       ?.pageNo,
@@ -575,7 +582,10 @@ export class SalePurchaseReportService {
         row[`${prefix}_inBank`] = getSnapshotLabel(
           payment.accountSnapshot as Record<string, unknown> | null | undefined,
         );
-        row[`${prefix}_chequeRef`] = toText(payment.referenceNumber);
+        row[`${prefix}_chequeRef`] = formatPaymentChequeReference(
+          payment.paymentMethod,
+          payment.referenceNumber,
+        );
         row[`${prefix}_amount`] = formatNumber(payment.amount, 2);
         row[`${prefix}_drawnOn`] = toText(payment.drawnOn);
       });

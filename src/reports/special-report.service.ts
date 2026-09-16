@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import * as XLSX from "xlsx";
-import { Transaction } from "../transactions/entities/transaction.entity";
-import { TransactionStatus } from "../transactions/transactions.enums";
+import { Branch } from "../branches/branch.entity";
+import { AccountPostingsCombinedQuery } from "./account-postings-combined.query";
+import { AccountPostingCombinedRow } from "./account-postings-combined.types";
 import { ReportSortBy } from "./dto/report-sort.dto";
 import {
   SpecialReportFormat,
@@ -60,6 +61,12 @@ const formatDateOnly = (value: Date | string | null | undefined) => {
     return "";
   }
 
+  const raw = toText(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const [year, month, day] = raw.slice(0, 10).split("-");
+    return `${day}/${month}/${year}`;
+  }
+
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "";
@@ -111,18 +118,14 @@ const getSnapshotName = (
   return toText(snapshot.name) || getSnapshotLabel(snapshot);
 };
 
-const formatTransactionTypeLabel = (transaction: Transaction) =>
-  [
-    toText(transaction.slug) || transaction.transactionType.toLowerCase(),
-    transaction.tradeMode.toLowerCase(),
-  ]
+const formatDocumentTypeLabel = (row: AccountPostingCombinedRow) => {
+  if (row.documentKind === "VOUCHER") {
+    return toText(row.documentType).toLowerCase() || "voucher";
+  }
+
+  return [toText(row.documentType), toText(row.tradeMode).toLowerCase()]
     .filter(Boolean)
     .join(" ");
-
-const getTransactionDate = (transaction: Transaction) => {
-  return (
-    transaction.approvedAt ?? transaction.createdAt ?? transaction.submittedAt
-  );
 };
 
 const compareIsoDateStrings = (
@@ -141,8 +144,9 @@ const compareIsoDateStrings = (
 @Injectable()
 export class SpecialReportService {
   constructor(
-    @InjectRepository(Transaction, "database2")
-    private readonly transactionRepository: Repository<Transaction>,
+    private readonly accountPostingsCombinedQuery: AccountPostingsCombinedQuery,
+    @InjectRepository(Branch)
+    private readonly branchRepository: Repository<Branch>,
   ) {}
 
   private resolveFilters(query: SpecialReportQueryDto) {
@@ -177,107 +181,71 @@ export class SpecialReportService {
     };
   }
 
-  private async loadTransactions(
-    branchIds: string[],
-    transactionNumbers: string[],
-  ) {
-    const qb = this.transactionRepository
-      .createQueryBuilder("transaction")
-      .innerJoinAndSelect("transaction.postings", "posting")
-      .where("transaction.isLatest = true")
-      .andWhere("transaction.status = :status", {
-        status: TransactionStatus.APPROVED,
-      })
-      .andWhere("COALESCE(transaction.slug, '') NOT IN (:...technicalSlugs)", {
-        technicalSlugs: [
-          "CARD_STOCK",
-          "CARD_TRANSFER_OUT",
-          "CARD_TRANSFER_IN",
-          "CARD_STOCK_LOAD",
-          "CARD_SELL",
-          "CARD_SETTLE",
-          "CARD_RETURN",
-          "CARD_VOID",
-        ],
-      })
-      .andWhere("transaction.branchId IN (:...branchIds)", { branchIds });
-
-    if (transactionNumbers.length > 0) {
-      qb.andWhere("transaction.number IN (:...transactionNumbers)", {
-        transactionNumbers,
-      });
-    }
-
-    qb.orderBy(
-      `COALESCE(transaction.branch_snapshot->>'code', transaction.branch_id::text)`,
-      "ASC",
-    )
-      .addOrderBy("transaction.approvedAt", "ASC")
-      .addOrderBy("transaction.number", "ASC")
-      .addOrderBy("posting.lineNo", "ASC");
-
-    return qb.getMany();
+  private async resolveBranchLabels(branchIds: string[]) {
+    const branches = await this.branchRepository.find({
+      where: { id: In(branchIds) },
+    });
+    return new Map(
+      branches.map((branch) => [
+        branch.id,
+        getSnapshotLabel({
+          code: branch.code,
+          name: branch.name,
+          label: `${branch.code} - ${branch.name}`,
+        }) || branch.id,
+      ]),
+    );
   }
 
-  private buildRows(transaction: Transaction): SpecialReportRow[] {
-    const transactionDate = getTransactionDate(transaction);
-    const dateLabel = formatDateOnly(transactionDate);
-    const sortDateTime = transactionDate
-      ? new Date(transactionDate).toISOString()
-      : "";
-    const branchLabel = getSnapshotLabel(
-      transaction.branchSnapshot as Record<string, unknown> | null | undefined,
-    );
-    const partyProfileSnapshot = transaction.partyProfileSnapshot as
-      | Record<string, unknown>
-      | null
-      | undefined;
-    const partyProfileCode = toText(partyProfileSnapshot?.code);
-    const partyProfileName = getSnapshotLabel(partyProfileSnapshot);
-    const typeLabel = formatTransactionTypeLabel(transaction);
+  private buildRow(
+    row: AccountPostingCombinedRow,
+    branchLabelById: Map<string, string>,
+  ): SpecialReportRow {
+    const amount = Number(row.amount ?? 0);
+    const isDebit = row.direction === "DEBIT";
+    const branchLabel =
+      branchLabelById.get(row.branchId) ||
+      getSnapshotLabel(row.partySnapshot) ||
+      row.branchId;
+    const partyProfileCode = toText(row.partySnapshot?.code);
+    const partyProfileName = getSnapshotLabel(row.partySnapshot);
+    const dateLabel = formatDateOnly(row.transactionDate);
+    const sortDateTime = row.transactionDate
+      ? `${row.transactionDate}T${row.createdAt || "00:00:00.000Z"}`
+      : row.createdAt;
 
-    const postings = [...(transaction.postings ?? [])].sort(
-      (left, right) => left.lineNo - right.lineNo,
-    );
-
-    return postings.map((posting) => {
-      const accountSnapshot = posting.accountSnapshot as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const amount = Number(posting.amount ?? 0);
-      const isDebit = posting.direction === "DEBIT";
-
-      return {
-        rowType: "ITEM",
-        transactionId: transaction.id,
-        sortBranch: branchLabel,
-        sortDateTime,
-        sortTransactionNumber: transaction.number ?? "",
-        branch: branchLabel,
-        type: typeLabel,
-        date: dateLabel,
-        transactionNumber: transaction.number ?? "",
-        accountCode: getSnapshotCode(accountSnapshot),
-        accountName: getSnapshotName(accountSnapshot),
-        partyProfileCode,
-        partyProfileName,
-        direction: posting.direction,
-        debit: isDebit ? formatNumber(amount, 2) : "0.00",
-        credit: isDebit ? "0.00" : formatNumber(amount, 2),
-      };
-    });
+    return {
+      rowType: "ITEM",
+      transactionId: row.documentId,
+      sortBranch: branchLabel,
+      sortDateTime,
+      sortTransactionNumber: row.documentNumber ?? "",
+      branch: branchLabel,
+      type: formatDocumentTypeLabel(row),
+      date: dateLabel,
+      transactionNumber: row.documentNumber ?? "",
+      accountCode: getSnapshotCode(row.accountSnapshot),
+      accountName: getSnapshotName(row.accountSnapshot),
+      partyProfileCode,
+      partyProfileName,
+      direction: row.direction,
+      debit: isDebit ? formatNumber(amount, 2) : "0.00",
+      credit: isDebit ? "0.00" : formatNumber(amount, 2),
+    };
   }
 
   async buildReport(query: SpecialReportQueryDto) {
     const filters = this.resolveFilters(query);
-    const transactions = await this.loadTransactions(
-      filters.branchIds,
-      filters.transactionNumbers,
-    );
+    const [postings, branchLabelById] = await Promise.all([
+      this.accountPostingsCombinedQuery.list({
+        branchIds: filters.branchIds,
+        documentNumbers: filters.transactionNumbers,
+      }),
+      this.resolveBranchLabels(filters.branchIds),
+    ]);
 
-    const rows = transactions
-      .flatMap((transaction) => this.buildRows(transaction))
+    const rows = postings
+      .map((posting) => this.buildRow(posting, branchLabelById))
       .sort((left, right) => {
         if (left.sortBranch !== right.sortBranch) {
           return left.sortBranch.localeCompare(right.sortBranch);

@@ -14,13 +14,16 @@ import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   AvailableAdvanceQueryDto,
+  CreateAdviceVoucherDto,
   CreateDepositWithdrawalVoucherDto,
   CreateJournalVoucherDto,
   CreatePaymentVoucherDto,
   CreateReceiptVoucherDto,
+  HonourAdviceVoucherDto,
   OutstandingBillsQueryDto,
   VoucherListQueryDto,
 } from "./dto/voucher.dto";
+import { RecordVoucherPrintDto } from "./dto/record-voucher-print.dto";
 import { VoucherType } from "./voucher.enums";
 import { VoucherService } from "./voucher.service";
 
@@ -56,6 +59,15 @@ export class ReceiptVoucherController {
     @Session() session: any,
   ) {
     return this.service.outstandingBills(VoucherType.RECEIPT, query, session);
+  }
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Receipt voucher print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordVoucherPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(VoucherType.RECEIPT, id, dto, session);
   }
   @Get(":id") find(
     @Param("id", ParseUUIDPipe) id: string,
@@ -98,6 +110,15 @@ export class PaymentVoucherController {
   ) {
     return this.service.outstandingBills(VoucherType.PAYMENT, query, session);
   }
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Payment voucher print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordVoucherPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(VoucherType.PAYMENT, id, dto, session);
+  }
   @Get(":id") find(
     @Param("id", ParseUUIDPipe) id: string,
     @Session() session: any,
@@ -126,6 +147,15 @@ export class JournalVoucherController {
     @Session() session: any,
   ) {
     return this.service.nextNumber(VoucherType.JOURNAL, branchId, session);
+  }
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Journal voucher print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordVoucherPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(VoucherType.JOURNAL, id, dto, session);
   }
   @Get(":id") find(
     @Param("id", ParseUUIDPipe) id: string,
@@ -167,5 +197,54 @@ export class DepositWithdrawalVoucherController {
     @Session() session: any,
   ) {
     return this.service.findById(VoucherType.DEPOSIT_WITHDRAWAL, id, session);
+  }
+}
+
+@ApiCookieAuth("sessionId")
+@UseGuards(AuthenticatedGuard, PermissionsGuard)
+@ApiTags("advice-debit-credit")
+@Controller("advice-debit-credit")
+export class AdviceVoucherController {
+  constructor(private readonly service: VoucherService) {}
+
+  @Post()
+  @ApiOperation({ summary: "Create immutable Advice of Debit/Credit voucher" })
+  create(@Body() dto: CreateAdviceVoucherDto, @Session() session: any) {
+    return this.service.create(VoucherType.ADVICE, dto, session);
+  }
+
+  @Get() list(@Query() query: VoucherListQueryDto, @Session() session: any) {
+    return this.service.list(VoucherType.ADVICE, query, session);
+  }
+
+  @Get("next-number") next(
+    @Query("branchId") branchId: string,
+    @Session() session: any,
+  ) {
+    return this.service.nextNumber(VoucherType.ADVICE, branchId, session);
+  }
+
+  @Get("outstanding-bills") outstandingBills(
+    @Query() query: OutstandingBillsQueryDto,
+    @Session() session: any,
+  ) {
+    return this.service.outstandingBills(VoucherType.ADVICE, query, session);
+  }
+
+  @Post(":id/honour")
+  @ApiOperation({ summary: "Honour a pending Advice of Debit/Credit voucher" })
+  honour(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: HonourAdviceVoucherDto,
+    @Session() session: any,
+  ) {
+    return this.service.honourAdvice(id, dto ?? {}, session);
+  }
+
+  @Get(":id") find(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Session() session: any,
+  ) {
+    return this.service.findById(VoucherType.ADVICE, id, session);
   }
 }

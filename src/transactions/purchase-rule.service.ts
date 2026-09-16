@@ -10,6 +10,7 @@ import {
 } from "../passengers/passenger.entity";
 import { Transaction } from "./entities/transaction.entity";
 import {
+  isChequeFamilyPaymentMethod,
   TransactionPaymentMethod,
   TransactionStatus,
   TransactionType,
@@ -746,10 +747,8 @@ export class PurchaseRuleService {
     );
     const chequeTotalAmount = this.convertAmountToReferenceCurrency(
       payments
-        .filter(
-          (payment: PurchaseRulePaymentInput) =>
-            normalizeUpper(payment.paymentMethod) ===
-            TransactionPaymentMethod.CHEQUE,
+        .filter((payment: PurchaseRulePaymentInput) =>
+          isChequeFamilyPaymentMethod(payment.paymentMethod),
         )
         .reduce(
           (sum: number, payment: PurchaseRulePaymentInput) =>

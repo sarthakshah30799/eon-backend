@@ -1,9 +1,19 @@
 import { Check, Column, Entity, Index, OneToMany } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
-import { VoucherAccountMode, VoucherType } from "../voucher.enums";
+import { TransactionPaymentMethod } from "../../transactions/transactions.enums";
+import {
+  VoucherAccountMode,
+  VoucherAdviceRole,
+  VoucherAdviceStatus,
+  VoucherEntryDirection,
+  VoucherType,
+} from "../voucher.enums";
 import { AccountingVoucherItem } from "./accounting-voucher-item.entity";
+import { AccountingVoucherLog } from "./accounting-voucher-log.entity";
 import { VoucherAdvanceApplication } from "./voucher-advance-application.entity";
+import { VoucherAccountPosting } from "./voucher-account-posting.entity";
+import { VoucherEvent } from "./voucher-event.entity";
 
 @Entity("accounting_vouchers")
 @Index("IDX_accounting_vouchers_number", ["number"], { unique: true })
@@ -16,6 +26,13 @@ import { VoucherAdvanceApplication } from "./voucher-advance-application.entity"
   "transactionDate",
 ])
 @Index("IDX_accounting_vouchers_type_date", ["voucherType", "transactionDate"])
+@Index("IDX_accounting_vouchers_destination_branch", ["destinationBranchId"])
+@Index("IDX_accounting_vouchers_source_branch", ["sourceBranchId"])
+@Index("IDX_accounting_vouchers_advice_status", [
+  "voucherType",
+  "adviceStatus",
+  "destinationBranchId",
+])
 @Index(
   "UQ_accounting_vouchers_cheque",
   ["voucherType", "headerAccountId", "normalizedChequeNumber"],
@@ -73,6 +90,14 @@ export class AccountingVoucher extends BaseEntity {
     | string
     | null;
 
+  @Column({
+    type: "enum",
+    enum: TransactionPaymentMethod,
+    name: "payment_method",
+    nullable: true,
+  })
+  paymentMethod: TransactionPaymentMethod | null;
+
   @Column({ type: "citext", name: "cheque_number", nullable: true })
   chequeNumber: string | null;
   @Column({ type: "citext", name: "normalized_cheque_number", nullable: true })
@@ -106,11 +131,57 @@ export class AccountingVoucher extends BaseEntity {
   })
   advanceControlAccountSnapshot: TransactionReferenceSnapshotValue;
 
+  @Column({ type: "uuid", name: "source_branch_id", nullable: true })
+  sourceBranchId: string | null;
+  @Column({
+    type: "jsonb",
+    name: "source_branch_snapshot",
+    nullable: true,
+  })
+  sourceBranchSnapshot: TransactionReferenceSnapshotValue;
+  @Column({ type: "uuid", name: "destination_branch_id", nullable: true })
+  destinationBranchId: string | null;
+  @Column({
+    type: "jsonb",
+    name: "destination_branch_snapshot",
+    nullable: true,
+  })
+  destinationBranchSnapshot: TransactionReferenceSnapshotValue;
+  @Column({
+    type: "enum",
+    enum: VoucherEntryDirection,
+    name: "header_direction",
+    nullable: true,
+  })
+  headerDirection: VoucherEntryDirection | null;
+  @Column({
+    type: "enum",
+    enum: VoucherAdviceRole,
+    name: "advice_role",
+    nullable: true,
+  })
+  adviceRole: VoucherAdviceRole | null;
+  @Column({
+    type: "enum",
+    enum: VoucherAdviceStatus,
+    name: "advice_status",
+    nullable: true,
+  })
+  adviceStatus: VoucherAdviceStatus | null;
+  @Column({ type: "uuid", name: "paired_voucher_id", nullable: true })
+  pairedVoucherId: string | null;
+
   @OneToMany(() => AccountingVoucherItem, (item) => item.voucher)
   items: AccountingVoucherItem[];
+  @OneToMany(() => AccountingVoucherLog, (log) => log.voucher)
+  logs: AccountingVoucherLog[];
   @OneToMany(
     () => VoucherAdvanceApplication,
     (application) => application.voucher,
   )
   applications: VoucherAdvanceApplication[];
+  @OneToMany(() => VoucherAccountPosting, (posting) => posting.voucher)
+  postings: VoucherAccountPosting[];
+  @OneToMany(() => VoucherEvent, (event) => event.voucher)
+  events: VoucherEvent[];
 }

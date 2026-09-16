@@ -16,6 +16,10 @@ import {
   TransactionPaymentDirection,
   TransactionStatus,
   TransactionType,
+  formatTransactionPaymentMethodLabel,
+  isChequeFamilyPaymentMethod,
+  isNonChequeBankPaymentMethod,
+  isTransactionPaymentMethod,
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
@@ -695,19 +699,76 @@ export class TransactionsService {
     return this.runTcsPreview(body);
   }
 
+  getPaymentMethodOptions() {
+    return Object.values(TransactionPaymentMethod).map((value) => ({
+      value,
+      label: formatTransactionPaymentMethodLabel(value),
+    }));
+  }
+
   private resolvePaymentMethod(value: unknown): TransactionPaymentMethod {
     const normalized = String(value ?? "")
       .trim()
       .toUpperCase();
-    if (normalized === TransactionPaymentMethod.CASH) {
-      return TransactionPaymentMethod.CASH;
+    if (isTransactionPaymentMethod(normalized)) {
+      return normalized;
     }
 
-    if (normalized === TransactionPaymentMethod.CHEQUE) {
-      return TransactionPaymentMethod.CHEQUE;
+    throw new BadRequestException(
+      `Payment mode must be one of: ${Object.values(TransactionPaymentMethod).join(", ")}`,
+    );
+  }
+
+  private assertCompatiblePaymentMethods(
+    rows: Array<{
+      paymentMethod: TransactionPaymentMethod;
+      isAdvance: boolean;
+    }>,
+  ) {
+    if (
+      rows.some(
+        (row) => row.isAdvance && isNonChequeBankPaymentMethod(row.paymentMethod),
+      )
+    ) {
+      throw new BadRequestException(
+        "Bank payment modes are not allowed for advance settlement",
+      );
     }
 
-    throw new BadRequestException("Payment mode must be CASH or CHEQUE");
+    const methods = new Set(rows.map((row) => row.paymentMethod));
+    const hasCash = methods.has(TransactionPaymentMethod.CASH);
+    const hasChequeFamily = [...methods].some((method) =>
+      isChequeFamilyPaymentMethod(method),
+    );
+    if (hasCash && hasChequeFamily) {
+      throw new BadRequestException(
+        "All payment rows must use the same payment method",
+      );
+    }
+
+    const normalMethods = new Set(
+      rows
+        .filter((row) => !row.isAdvance)
+        .map((row) => row.paymentMethod),
+    );
+    if (normalMethods.size > 1) {
+      throw new BadRequestException(
+        "All payment rows must use the same payment method",
+      );
+    }
+  }
+
+  private assertElectronicPaymentFieldsCleared(row: TransactionPaymentPayload) {
+    if (normalizeNullableString(row.referenceNumber)) {
+      throw new BadRequestException(
+        "Cheque / ref no must be empty for this payment mode",
+      );
+    }
+    if (normalizeNullableString(row.chequePageId)) {
+      throw new BadRequestException(
+        "Cheque page must be empty for this payment mode",
+      );
+    }
   }
 
   private getFileIndex(fieldname: string) {
@@ -2385,12 +2446,15 @@ export class TransactionsService {
       allowPartialPayment = creditPreview.outstandingAllowed;
     }
 
-    const paymentMethods = isFakeCurrency
-      ? []
-      : paymentRows.map((row) => this.resolvePaymentMethod(row.paymentMethod));
-    if (new Set(paymentMethods).size > 1) {
-      throw new BadRequestException(
-        "All payment rows must use the same payment method",
+    if (!isFakeCurrency) {
+      this.assertCompatiblePaymentMethods(
+        paymentRows.map((row) => ({
+          paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
+          isAdvance: Boolean(
+            normalizeNullableString(row.advanceVoucherId) ||
+              row.settlementSource === TransactionSettlementSource.ADVANCE,
+          ),
+        })),
       );
     }
 
@@ -2414,6 +2478,11 @@ export class TransactionsService {
         throw new BadRequestException(
           "Advance voucher is required for an advance settlement row",
         );
+      if (isAdvance && isNonChequeBankPaymentMethod(paymentMethod)) {
+        throw new BadRequestException(
+          "Bank payment modes are not allowed for advance settlement",
+        );
+      }
       const preparedAdvance = advanceVoucherId
         ? await this.voucherService.prepareAdvancePayment({
             voucherId: advanceVoucherId,
@@ -2471,6 +2540,13 @@ export class TransactionsService {
         cashTotal += amount;
       } else {
         chequeTotal += amount;
+      }
+
+      if (isNonChequeBankPaymentMethod(paymentMethod)) {
+        this.assertElectronicPaymentFieldsCleared(row);
+        if (!String(row.referenceDate ?? "").trim()) {
+          throw new BadRequestException("Cheque date is required");
+        }
       }
 
       if (

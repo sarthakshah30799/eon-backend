@@ -51,6 +51,7 @@ BEGIN
   (160, 'Products & Rates',       NULL, 'Admin', NULL, TRUE,  'dollar-sign', 'folder'),
 
   -- Accounting
+  (195, 'Advice of Debit/Credit', '/advice-debit-credit',            'Accounting', NULL, FALSE, 'book-open', 'unique'),
   (200, 'Journal Vouchers',       '/journal-vouchers',               'Accounting', NULL, FALSE, 'book-open', 'unique'),
   (205, 'Deposit / Withdrawals',  '/deposit-withdrawals',            'Accounting', NULL, FALSE, 'arrow-left-right', 'unique'),
   (210, 'Payments',               '/payments',                       'Accounting', NULL, FALSE, 'credit-card','unique'),
