@@ -5,11 +5,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ILike, Repository } from "typeorm";
+import { In, Repository, SelectQueryBuilder } from "typeorm";
 import { SelectOption } from "./category-option.entity";
 import { CreateSelectOptionDto } from "./dto/create-category-option.dto";
 import { UpdateSelectOptionDto } from "./dto/update-category-option.dto";
 import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
+import { SelectOptionGroupResponseDto } from "./dto/select-option-group-response.dto";
 import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
 import {
@@ -201,24 +202,64 @@ export class SelectOptionService {
 
   async getAllOptions(
     query: SelectOptionListQueryDto = {},
-  ): Promise<PaginatedResponseDto<SelectOptionResponseDto>> {
+  ): Promise<PaginatedResponseDto<SelectOptionGroupResponseDto>> {
     const pagination = normalizePagination(query);
-    const normalizedSearch = query.search?.trim();
-    const [options, total] = await this.selectOptionRepository.findAndCount({
-      where: normalizedSearch
-        ? { code: ILike(`%${normalizedSearch}%`) }
-        : undefined,
+    const search = query.search?.trim();
+    const total = Number(
+      (
+        await this.applyCodeSearch(
+          this.selectOptionRepository
+            .createQueryBuilder("selectOption")
+            .select("COUNT(DISTINCT selectOption.code)", "cnt"),
+          search,
+        ).getRawOne<{ cnt: string | number }>()
+      )?.cnt ?? 0,
+    );
+
+    const codeRows = await this.applyCodeSearch(
+      this.selectOptionRepository
+        .createQueryBuilder("selectOption")
+        .select("selectOption.code", "code")
+        .distinct(true)
+        .orderBy("selectOption.code", "ASC")
+        .offset(pagination.offset)
+        .limit(pagination.limit),
+      search,
+    ).getRawMany<Record<string, unknown>>();
+
+    const codes = codeRows
+      .map((row) => this.readRawCode(row))
+      .filter((code): code is string => Boolean(code));
+
+    if (codes.length === 0) {
+      return buildPaginatedResponse([], total, pagination);
+    }
+
+    const options = await this.selectOptionRepository.find({
+      where: { code: In(codes) },
       order: {
         code: "ASC",
         sortOrder: "ASC",
         label: "ASC",
       },
-      skip: pagination.offset,
-      take: pagination.limit,
     });
 
+    const optionsByCode = new Map<string, SelectOption[]>();
+    for (const code of codes) {
+      optionsByCode.set(this.normalizeCode(code), []);
+    }
+
+    for (const option of options) {
+      optionsByCode.get(this.normalizeCode(option.code))?.push(option);
+    }
+
     return buildPaginatedResponse(
-      options.map(SelectOptionResponseDto.fromEntity),
+      codes.map((code) =>
+        SelectOptionGroupResponseDto.fromCodeAndOptions(
+          this.normalizeCode(code),
+          optionsByCode.get(this.normalizeCode(code)) ?? [],
+        ),
+      ),
       total,
       pagination,
     );
@@ -372,12 +413,35 @@ export class SelectOptionService {
   async getCodes(): Promise<CategoryOptionCodeEnum[]> {
     const rows = await this.selectOptionRepository
       .createQueryBuilder("selectOption")
-      .select("DISTINCT selectOption.code", "code")
+      .select("selectOption.code", "code")
+      .distinct(true)
       .orderBy("selectOption.code", "ASC")
-      .getRawMany<{ code: string }>();
+      .getRawMany<Record<string, unknown>>();
 
     return [
-      ...new Set(rows.map((row) => this.normalizeCode(row.code))),
+      ...new Set(
+        rows
+          .map((row) => this.readRawCode(row))
+          .filter((code): code is string => Boolean(code))
+          .map((code) => this.normalizeCode(code)),
+      ),
     ] as CategoryOptionCodeEnum[];
+  }
+
+  private applyCodeSearch(
+    qb: SelectQueryBuilder<SelectOption>,
+    search?: string,
+  ): SelectQueryBuilder<SelectOption> {
+    if (search) {
+      qb.andWhere("selectOption.code ILIKE :search", {
+        search: `%${search}%`,
+      });
+    }
+    return qb;
+  }
+
+  private readRawCode(row: Record<string, unknown>): string | undefined {
+    const value = row.code ?? row.selectOption_code ?? row.selectoption_code;
+    return typeof value === "string" && value.trim() ? value : undefined;
   }
 }
