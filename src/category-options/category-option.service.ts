@@ -225,10 +225,10 @@ export class SelectOptionService {
         .offset(pagination.offset)
         .limit(pagination.limit),
       search,
-    ).getRawMany<Record<string, unknown>>();
+    ).getRawMany<{ code: string }>();
 
     const codes = codeRows
-      .map((row) => this.readRawCode(row))
+      .map((row) => row.code)
       .filter((code): code is string => Boolean(code));
 
     if (codes.length === 0) {
@@ -416,12 +416,12 @@ export class SelectOptionService {
       .select("selectOption.code", "code")
       .distinct(true)
       .orderBy("selectOption.code", "ASC")
-      .getRawMany<Record<string, unknown>>();
+      .getRawMany<{ code: string }>();
 
     return [
       ...new Set(
         rows
-          .map((row) => this.readRawCode(row))
+          .map((row) => row.code)
           .filter((code): code is string => Boolean(code))
           .map((code) => this.normalizeCode(code)),
       ),
@@ -438,10 +438,5 @@ export class SelectOptionService {
       });
     }
     return qb;
-  }
-
-  private readRawCode(row: Record<string, unknown>): string | undefined {
-    const value = row.code ?? row.selectOption_code ?? row.selectoption_code;
-    return typeof value === "string" && value.trim() ? value : undefined;
   }
 }
