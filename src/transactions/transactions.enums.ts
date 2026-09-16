@@ -94,6 +94,69 @@ export const TransactionPaymentMethod = {
 export type TransactionPaymentMethod =
   (typeof TransactionPaymentMethod)[keyof typeof TransactionPaymentMethod];
 
+export const isTransactionPaymentMethod = (
+  value: unknown,
+): value is TransactionPaymentMethod =>
+  Object.values(TransactionPaymentMethod).includes(
+    String(value ?? "")
+      .trim()
+      .toUpperCase() as TransactionPaymentMethod,
+  );
+
+export const formatTransactionPaymentMethodLabel = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (normalized === TransactionPaymentMethod.CASH) return "Cash";
+  if (normalized === TransactionPaymentMethod.CHEQUE) return "Cheque";
+  if (normalized === TransactionPaymentMethod.BANK_TRANSFER)
+    return "Bank Transfer";
+  if (normalized === TransactionPaymentMethod.CARD) return "Card";
+  if (normalized === TransactionPaymentMethod.OTHER) return "Other";
+  return normalized;
+};
+
+export const isElectronicPaymentMethod = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    normalized === TransactionPaymentMethod.UPI ||
+    normalized === TransactionPaymentMethod.NEFT ||
+    normalized === TransactionPaymentMethod.RTGS
+  );
+};
+
+export const isNonChequeBankPaymentMethod = (value: unknown) => {
+  if (!isTransactionPaymentMethod(value)) return false;
+  const normalized = String(value).trim().toUpperCase();
+  return (
+    normalized !== TransactionPaymentMethod.CASH &&
+    normalized !== TransactionPaymentMethod.CHEQUE
+  );
+};
+
+export const isChequeFamilyPaymentMethod = (value: unknown) => {
+  if (!isTransactionPaymentMethod(value)) return false;
+  return (
+    String(value).trim().toUpperCase() !== TransactionPaymentMethod.CASH
+  );
+};
+
+export const formatPaymentChequeReference = (
+  paymentMethod: unknown,
+  referenceNumber?: string | null,
+) => {
+  const normalized = String(paymentMethod ?? "")
+    .trim()
+    .toUpperCase();
+  if (isNonChequeBankPaymentMethod(normalized)) {
+    return normalized;
+  }
+
+  return String(referenceNumber ?? "").trim();
+};
+
 export const TransactionPaymentDirection = {
   PAYMENT: "PAYMENT",
   RECEIPT: "RECEIPT",

@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { toUtcDateOnly, toUtcNextDate } from "../common/date/date.util";
 import { PassengerOtherIdProofType } from "../passengers/passenger.entity";
 import {
+  isChequeFamilyPaymentMethod,
   TransactionPaymentMethod,
   TransactionStatus,
   TransactionTypeProfileEnum,
@@ -311,7 +312,7 @@ const buildPaymentBuckets = (
       const method = String(payment.paymentMethod ?? "").toUpperCase();
       if (method === TransactionPaymentMethod.CASH) {
         totals.byCash += amount;
-      } else if (method === TransactionPaymentMethod.CHEQUE) {
+      } else if (isChequeFamilyPaymentMethod(method)) {
         totals.byCheque += amount;
       } else {
         totals.byOther += amount;

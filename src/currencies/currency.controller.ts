@@ -41,7 +41,29 @@ export class CurrencyController {
   })
   async findAll(
     @Query() query: CurrencyListQueryDto,
+    @Query("activeOnly") activeOnlyRaw?: string,
+    @Query("includeAllStockingTypes") includeAllStockingTypesRaw?: string,
+    @Query("includeOnlyStocking") includeOnlyStockingRaw?: string,
   ): Promise<PaginatedResponseDto<CurrencyResponseDto>> {
+    // Nest enableImplicitConversion turns query string "false" into boolean true.
+    // Re-read raw query strings so master list can include inactive currencies.
+    if (typeof activeOnlyRaw === "string") {
+      const normalized = activeOnlyRaw.trim().toLowerCase();
+      if (normalized === "false" || normalized === "0") {
+        query.activeOnly = false;
+      } else if (normalized === "true" || normalized === "1") {
+        query.activeOnly = true;
+      }
+    }
+    if (typeof includeAllStockingTypesRaw === "string") {
+      const normalized = includeAllStockingTypesRaw.trim().toLowerCase();
+      query.includeAllStockingTypes =
+        normalized === "true" || normalized === "1";
+    }
+    if (typeof includeOnlyStockingRaw === "string") {
+      const normalized = includeOnlyStockingRaw.trim().toLowerCase();
+      query.includeOnlyStocking = normalized === "true" || normalized === "1";
+    }
     return this.currencyService.findAll(query);
   }
 

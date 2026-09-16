@@ -245,6 +245,26 @@ export class TransactionAccountPostingWorker
         return;
       }
 
+      // Advice destination header clones: voucher postings own the accounting.
+      if (transaction.originalTransactionId) {
+        await this.database2.transaction(async (manager) => {
+          await manager.query(
+            `SELECT set_config('app.skip_transaction_account_postings_enqueue', 'true', true)`,
+          );
+          await manager.getRepository(TransactionAccountPosting).delete({
+            transactionId: transaction.id,
+          });
+        });
+        await this.finishEvent(event.id, {
+          status: TransactionEventStatus.PROCESSED,
+          processedAt: new Date(),
+          lockedAt: null,
+          lockedById: null,
+          errorMessage: null,
+        });
+        return;
+      }
+
       if (transaction.slug === "CARD_SETTLE") {
         const isBranchSettlement = transaction.items.some(
           (item) => item.cardStockReferenceType === "CARD_BRANCH_SETTLEMENT",

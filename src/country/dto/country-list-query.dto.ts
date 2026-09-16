@@ -1,14 +1,8 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform } from "class-transformer";
 import { IsBoolean, IsEnum, IsOptional, IsString } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
+import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 import { CountryRiskCategory } from "../country.entity";
-
-const parseBoolean = ({ value }: { value: unknown }) => {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return value;
-};
 
 export class CountryListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
@@ -37,19 +31,19 @@ export class CountryListQueryDto extends PaginationQueryDto {
   riskCategory?: CountryRiskCategory;
 
   @ApiPropertyOptional({ description: "Filter restricted countries" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   restrictedCountry?: boolean;
 
   @ApiPropertyOptional({ description: "Filter grey list countries" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   greyListCountry?: boolean;
 
   @ApiPropertyOptional({ description: "Filter base countries" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   baseCountry?: boolean;
@@ -57,19 +51,19 @@ export class CountryListQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
     description: "Hide blocked countries unless an override exists",
   })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   hideBlockedCountry?: boolean;
 
   @ApiPropertyOptional({ description: "Hide restricted countries" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   hideRestrictedCountry?: boolean;
 
   @ApiPropertyOptional({ description: "Hide base countries" })
-  @Transform(parseBoolean)
+  @BooleanQuery()
   @IsBoolean()
   @IsOptional()
   hideBaseCountry?: boolean;
