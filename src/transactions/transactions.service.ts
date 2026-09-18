@@ -1924,774 +1924,778 @@ export class TransactionsService {
       updatedBy: performedById,
     };
 
-    const transaction = await this.transactionRepository.save(
-      this.transactionRepository.create(transactionToSave),
-    );
-
-    const passengerOtherDocumentRows = Array.isArray(
-      passengerPayload?.otherDocuments,
-    )
-      ? passengerPayload.otherDocuments.filter(
-          (row) =>
-            Boolean(String(row.documentType ?? "").trim()) ||
-            Boolean(String(row.documentNumber ?? "").trim()) ||
-            Boolean(String(row.validTill ?? "").trim()) ||
-            Boolean(String(row.documentFile ?? "").trim()),
-        )
-      : [];
-
-    if (
-      passengerPayload?.nationalityType === PassengerNationalityType.INDIAN &&
-      passengerOtherDocumentRows.length === 0 &&
-      !hasCompletePassengerPan(passengerPayload) &&
-      !hasCompletePassengerPassport(passengerPayload)
-    ) {
-      throw new BadRequestException(
-        "PAN, passport, or at least one other document is required for Indian passengers",
+    const transaction = await this.database2.transaction(async (manager) => {
+      const transactionRepo = manager.getRepository(Transaction);
+      const transactionItemRepo = manager.getRepository(TransactionItem);
+      const transactionDocumentRepo = manager.getRepository(TransactionDocument);
+      const transactionAdditionalChargeRepo = manager.getRepository(
+        TransactionAdditionalCharge,
       );
-    }
+      const transactionPaymentRepo = manager.getRepository(TransactionPayment);
+      const transactionLogRepo = manager.getRepository(TransactionLog);
+      const transactionPassengerOtherDocumentRepo = manager.getRepository(
+        TransactionPassengerOtherDocument,
+      );
 
-    for (let index = 0; index < passengerOtherDocumentRows.length; index += 1) {
-      const row = passengerOtherDocumentRows[index];
-      const rawFile = String(row.documentFile ?? "").trim();
-      const hasDataUrlPrefix = rawFile.startsWith("data:");
-      const fileContent = rawFile
-        ? Buffer.from(
-            hasDataUrlPrefix ? (rawFile.split(",")[1] ?? "") : rawFile,
-            "base64",
+      let transaction = await transactionRepo.save(
+        transactionRepo.create(transactionToSave),
+      );
+
+      const passengerOtherDocumentRows = Array.isArray(
+        passengerPayload?.otherDocuments,
+      )
+        ? passengerPayload.otherDocuments.filter(
+            (row) =>
+              Boolean(String(row.documentType ?? "").trim()) ||
+              Boolean(String(row.documentNumber ?? "").trim()) ||
+              Boolean(String(row.validTill ?? "").trim()) ||
+              Boolean(String(row.documentFile ?? "").trim()),
           )
-        : null;
-      const mimeType = hasDataUrlPrefix
-        ? rawFile.slice(5, rawFile.indexOf(";"))
-        : null;
+        : [];
 
-      const passengerOtherDocumentToSave: DeepPartial<TransactionPassengerOtherDocument> =
-        {
+      if (
+        passengerPayload?.nationalityType === PassengerNationalityType.INDIAN &&
+        passengerOtherDocumentRows.length === 0 &&
+        !hasCompletePassengerPan(passengerPayload) &&
+        !hasCompletePassengerPassport(passengerPayload)
+      ) {
+        throw new BadRequestException(
+          "PAN, passport, or at least one other document is required for Indian passengers",
+        );
+      }
+
+      for (let index = 0; index < passengerOtherDocumentRows.length; index += 1) {
+        const row = passengerOtherDocumentRows[index];
+        const rawFile = String(row.documentFile ?? "").trim();
+        const hasDataUrlPrefix = rawFile.startsWith("data:");
+        const fileContent = rawFile
+          ? Buffer.from(
+              hasDataUrlPrefix ? (rawFile.split(",")[1] ?? "") : rawFile,
+              "base64",
+            )
+          : null;
+        const mimeType = hasDataUrlPrefix
+          ? rawFile.slice(5, rawFile.indexOf(";"))
+          : null;
+
+        const passengerOtherDocumentToSave: DeepPartial<TransactionPassengerOtherDocument> =
+          {
+            transactionId: transaction.id,
+            transaction,
+            lineNo: index + 1,
+            documentType: row.documentType as PassengerOtherIdProofType,
+            documentNumber: String(row.documentNumber),
+            validTill: row.validTill ?? null,
+            issueAt: row.issueAt ?? null,
+            issueDate: row.issueDate ?? null,
+            expiryDate: row.expiryDate ?? null,
+            fileName: rawFile
+              ? `${row.documentType || "document"}-${index + 1}`
+              : null,
+            originalFileName: rawFile
+              ? `${row.documentType || "document"}-${index + 1}`
+              : null,
+            mimeType,
+            fileSize: fileContent ? String(fileContent.length) : null,
+            storageKey: null,
+            storagePath: null,
+            storageUrl: null,
+            content: fileContent,
+            remarks: row.remarks ?? null,
+            createdBy: performedById,
+            updatedBy: performedById,
+          };
+
+        await transactionPassengerOtherDocumentRepo.save(
+          transactionPassengerOtherDocumentRepo.create(
+            passengerOtherDocumentToSave,
+          ),
+        );
+      }
+
+      const currencySnapshots = new Map<string, Record<string, unknown>>();
+      const productSnapshots = new Map<string, Record<string, unknown>>();
+      const accountSnapshots = new Map<string, Record<string, unknown>>();
+      const documentProfileSnapshots = new Map<string, Record<string, unknown>>();
+      const resolveSnapshot = async <T extends ObjectLiteral>(
+        cache: Map<string, Record<string, unknown>>,
+        repository: Repository<T>,
+        id: string,
+        label: string,
+      ) => {
+        if (!cache.has(id)) {
+          const snapshot = await loadEntitySnapshot(repository, id);
+          if (!snapshot) {
+            throw new NotFoundException(`${label} with id ${id} not found`);
+          }
+          cache.set(id, snapshot);
+        }
+        return cache.get(id)!;
+      };
+
+      const resolveCurrency = async (currencyId: string) => {
+        return resolveSnapshot(
+          currencySnapshots,
+          this.currencyRepository,
+          currencyId,
+          "Currency",
+        );
+      };
+
+      const resolveProduct = async (productId: string) => {
+        return resolveSnapshot(
+          productSnapshots,
+          this.productRepository,
+          productId,
+          "Product",
+        );
+      };
+
+      const resolveProductEntity = async (productId: string) => {
+        const product = await this.productRepository.findOne({
+          where: { id: productId },
+          relations: [
+            "bulkPurAc",
+            "purchaseAc",
+            "bulkSaleAc",
+            "saleAc",
+            "bulkProficAc",
+            "profitAc",
+            "fakeAccount",
+          ],
+        });
+
+        if (!product) {
+          throw new NotFoundException(`Product with id ${productId} not found`);
+        }
+
+        return product;
+      };
+
+      const resolveAccount = async (accountId: string) => {
+        return resolveSnapshot(
+          accountSnapshots,
+          this.accountProfileRepository,
+          accountId,
+          "Account",
+        );
+      };
+
+      const resolveDocumentProfile = async (documentProfileId: string) => {
+        return resolveSnapshot(
+          documentProfileSnapshots,
+          this.documentProfileRepository,
+          documentProfileId,
+          "Document profile",
+        );
+      };
+
+      const itemRows = requestedItemRows;
+      const cardSaleItems: TransactionItem[] = [];
+      const selectedCardCurrencyKeys = new Set<string>();
+      for (let index = 0; index < itemRows.length; index += 1) {
+        const row = itemRows[index];
+        const currency = await resolveCurrency(String(row.currencyId));
+        const product = await resolveProduct(String(row.productId));
+        const productEntity = await resolveProductEntity(String(row.productId));
+        const isCardItem = isCardProductCode(productEntity.productCode);
+        const isMultiCurrencyCard = isMultiCurrencyCardProduct(
+          productEntity.productCode,
+        );
+        if (isCardItem) {
+          if (transactionPayload.transactionType !== TransactionType.SALE) {
+            throw new BadRequestException(
+              "CARD products can only be sold through the CARD sale flow",
+            );
+          }
+          if (!row.cardId || !row.issuerPartyProfileId) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} requires issuer and card selection`,
+            );
+          }
+          const cardFeAmount = Number(row.quantity);
+          if (!Number.isFinite(cardFeAmount) || cardFeAmount <= 0) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} FE amount must be greater than 0`,
+            );
+          }
+          if (Boolean(currency.onlyStocking)) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} cannot use an only-stocking currency on sale`,
+            );
+          }
+          const cardCurrencyKey = `${row.cardId}:${row.currencyId}`;
+          if (selectedCardCurrencyKeys.has(cardCurrencyKey)) {
+            throw new BadRequestException(
+              `CARD ${row.cardId} cannot be selected more than once for the same currency in one transaction`,
+            );
+          }
+          if (!isMultiCurrencyCard) {
+            const sameCardOtherCurrency = [...selectedCardCurrencyKeys].some(
+              (key) => key.startsWith(`${row.cardId}:`),
+            );
+            if (sameCardOtherCurrency) {
+              throw new BadRequestException(
+                `CARD ${row.cardId} cannot be selected more than once in one transaction`,
+              );
+            }
+          }
+          selectedCardCurrencyKeys.add(cardCurrencyKey);
+          const selectedCard = await this.cardStockCardRepository.findOne({
+            where: { id: row.cardId },
+            relations: ["receiptItem"],
+          });
+          if (
+            !selectedCard ||
+            selectedCard.currentBranchId !== resolvedBranchId
+          ) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} is not available at the current branch`,
+            );
+          }
+          if (
+            !row.isReload &&
+            (selectedCard.status !== "AVAILABLE" ||
+              selectedCard.reservedByTransferId ||
+              selectedCard.reservedAt)
+          ) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} is not available for sale`,
+            );
+          }
+          if (
+            row.isReload &&
+            (selectedCard.status !== "SOLD" || selectedCard.reservedByTransferId)
+          ) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} is not eligible for reload`,
+            );
+          }
+          if (row.isReload) {
+            if (!passengerId || !matchedExistingPassenger) {
+              throw new BadRequestException(
+                "CARD reload requires an existing matched passenger",
+              );
+            }
+            const priorPassengerSale = await transactionItemRepo
+              .createQueryBuilder("item")
+              .innerJoin("item.transaction", "priorTransaction")
+              .where("item.card_id = :cardId", { cardId: String(row.cardId) })
+              .andWhere("priorTransaction.passenger_id = :passengerId", {
+                passengerId,
+              })
+              .andWhere("priorTransaction.transaction_type = :transactionType", {
+                transactionType: TransactionType.SALE,
+              })
+              .andWhere("priorTransaction.status = :status", {
+                status: TransactionStatus.APPROVED,
+              })
+              .andWhere("priorTransaction.id <> :currentTransactionId", {
+                currentTransactionId: transaction.id,
+              })
+              .getOne();
+            if (!priorPassengerSale) {
+              throw new BadRequestException(
+                `CARD item ${index + 1} was not previously sold to this passenger`,
+              );
+            }
+          }
+          if (
+            selectedCard.receiptItem?.issuerPartyProfileId !==
+            row.issuerPartyProfileId
+          ) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} issuer does not match the selected CARD`,
+            );
+          }
+          if (
+            selectedCard.receiptItem?.productId &&
+            selectedCard.receiptItem.productId !== String(product.id)
+          ) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} product does not match the selected CARD`,
+            );
+          }
+          if (
+            !isMultiCurrencyCard &&
+            selectedCard.receiptItem?.currencyId !== String(currency.id)
+          ) {
+            throw new BadRequestException(
+              `CARD item ${index + 1} currency does not match the selected CARD`,
+            );
+          }
+          const issuerLink = await this.productCardIssuerRepository.findOne({
+            where: {
+              productId: String(product.id),
+              partyProfileId: String(row.issuerPartyProfileId),
+            },
+          });
+          if (!issuerLink)
+            throw new BadRequestException(
+              `Issuer is not linked to CARD product for item ${index + 1}`,
+            );
+        }
+        const cardSellAccountId = isCardItem
+          ? await this.additionalSettingService.getSettingTextValue(
+              "TRANSACTION_ACCOUNTING",
+              "CARD_SELL_CONTROL_ACCOUNT",
+            )
+          : null;
+        const itemAccount = isCardItem
+          ? cardSellAccountId
+            ? await this.accountProfileRepository.findOne({
+                where: { id: cardSellAccountId, active: true },
+              })
+            : null
+          : isFakeCurrency
+            ? productEntity.fakeAccount
+            : resolveProductTransactionAccount(
+                productEntity,
+                transactionPayload.transactionType,
+                transactionPayload.tradeMode,
+                transactionPayload.transactionType === TransactionType.SALE
+                  ? "sale"
+                  : "purchase",
+              );
+
+        if (!itemAccount) {
+          throw new NotFoundException(
+            `${isCardItem ? "CARD sell control account" : isFakeCurrency ? "Fake account" : "Product account"} is not configured for product ${row.productId}`,
+          );
+        }
+
+        const accountSnapshot = await loadEntitySnapshot(
+          this.accountProfileRepository,
+          itemAccount.id,
+        );
+
+        const transactionItemToSave: DeepPartial<TransactionItem> = {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          documentType: row.documentType as PassengerOtherIdProofType,
-          documentNumber: String(row.documentNumber),
-          validTill: row.validTill ?? null,
-          issueAt: row.issueAt ?? null,
-          issueDate: row.issueDate ?? null,
-          expiryDate: row.expiryDate ?? null,
-          fileName: rawFile
-            ? `${row.documentType || "document"}-${index + 1}`
-            : null,
-          originalFileName: rawFile
-            ? `${row.documentType || "document"}-${index + 1}`
-            : null,
-          mimeType,
-          fileSize: fileContent ? String(fileContent.length) : null,
-          storageKey: null,
-          storagePath: null,
-          storageUrl: null,
-          content: fileContent,
+          currencyId: String(currency.id),
+          productId: String(product.id),
+          accountId: itemAccount.id,
+          accountSnapshot,
+          currencyRateId: row.currencyRateId ?? null,
+          productCurrencyRateId: row.productCurrencyRateId ?? null,
+          quantity: String(row.quantity),
+          per: row.per === null || row.per === undefined ? null : String(row.per),
+          rate: String(row.rate),
+          commission: row.commission ?? null,
+          currencySnapshot: currency as TransactionReferenceSnapshotValue,
+          productSnapshot: product as TransactionReferenceSnapshotValue,
+          currencyRateSnapshot: row.currencyRateSnapshot ?? null,
+          productCurrencyRateSnapshot: row.productCurrencyRateSnapshot ?? null,
+          pricingRuleSnapshot: row.pricingRuleSnapshot ?? null,
+          commissionSnapshot: row.commissionSnapshot ?? null,
+          cardId: row.cardId ?? null,
+          issuerPartyProfileId: row.issuerPartyProfileId ?? null,
+          issuerPartyProfileSnapshot: row.issuerPartyProfileSnapshot ?? null,
+          cardSnapshot: row.cardSnapshot ?? null,
+          isReload: Boolean(row.isReload),
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
         };
 
-      await this.transactionPassengerOtherDocumentRepository.save(
-        this.transactionPassengerOtherDocumentRepository.create(
-          passengerOtherDocumentToSave,
-        ),
-      );
-    }
-
-    const currencySnapshots = new Map<string, Record<string, unknown>>();
-    const productSnapshots = new Map<string, Record<string, unknown>>();
-    const accountSnapshots = new Map<string, Record<string, unknown>>();
-    const documentProfileSnapshots = new Map<string, Record<string, unknown>>();
-    const resolveSnapshot = async <T extends ObjectLiteral>(
-      cache: Map<string, Record<string, unknown>>,
-      repository: Repository<T>,
-      id: string,
-      label: string,
-    ) => {
-      if (!cache.has(id)) {
-        const snapshot = await loadEntitySnapshot(repository, id);
-        if (!snapshot) {
-          throw new NotFoundException(`${label} with id ${id} not found`);
-        }
-        cache.set(id, snapshot);
-      }
-      return cache.get(id)!;
-    };
-
-    const resolveCurrency = async (currencyId: string) => {
-      return resolveSnapshot(
-        currencySnapshots,
-        this.currencyRepository,
-        currencyId,
-        "Currency",
-      );
-    };
-
-    const resolveProduct = async (productId: string) => {
-      return resolveSnapshot(
-        productSnapshots,
-        this.productRepository,
-        productId,
-        "Product",
-      );
-    };
-
-    const resolveProductEntity = async (productId: string) => {
-      const product = await this.productRepository.findOne({
-        where: { id: productId },
-        relations: [
-          "bulkPurAc",
-          "purchaseAc",
-          "bulkSaleAc",
-          "saleAc",
-          "bulkProficAc",
-          "profitAc",
-          "fakeAccount",
-        ],
-      });
-
-      if (!product) {
-        throw new NotFoundException(`Product with id ${productId} not found`);
-      }
-
-      return product;
-    };
-
-    const resolveAccount = async (accountId: string) => {
-      return resolveSnapshot(
-        accountSnapshots,
-        this.accountProfileRepository,
-        accountId,
-        "Account",
-      );
-    };
-
-    const resolveDocumentProfile = async (documentProfileId: string) => {
-      return resolveSnapshot(
-        documentProfileSnapshots,
-        this.documentProfileRepository,
-        documentProfileId,
-        "Document profile",
-      );
-    };
-
-    const itemRows = requestedItemRows;
-    const cardSaleItems: TransactionItem[] = [];
-    const selectedCardCurrencyKeys = new Set<string>();
-    for (let index = 0; index < itemRows.length; index += 1) {
-      const row = itemRows[index];
-      const currency = await resolveCurrency(String(row.currencyId));
-      const product = await resolveProduct(String(row.productId));
-      const productEntity = await resolveProductEntity(String(row.productId));
-      const isCardItem = isCardProductCode(productEntity.productCode);
-      const isMultiCurrencyCard = isMultiCurrencyCardProduct(
-        productEntity.productCode,
-      );
-      if (isCardItem) {
-        if (transactionPayload.transactionType !== TransactionType.SALE) {
-          throw new BadRequestException(
-            "CARD products can only be sold through the CARD sale flow",
-          );
-        }
-        if (!row.cardId || !row.issuerPartyProfileId) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} requires issuer and card selection`,
-          );
-        }
-        const cardFeAmount = Number(row.quantity);
-        if (!Number.isFinite(cardFeAmount) || cardFeAmount <= 0) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} FE amount must be greater than 0`,
-          );
-        }
-        if (Boolean(currency.onlyStocking)) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} cannot use an only-stocking currency on sale`,
-          );
-        }
-        const cardCurrencyKey = `${row.cardId}:${row.currencyId}`;
-        if (selectedCardCurrencyKeys.has(cardCurrencyKey)) {
-          throw new BadRequestException(
-            `CARD ${row.cardId} cannot be selected more than once for the same currency in one transaction`,
-          );
-        }
-        if (!isMultiCurrencyCard) {
-          const sameCardOtherCurrency = [...selectedCardCurrencyKeys].some(
-            (key) => key.startsWith(`${row.cardId}:`),
-          );
-          if (sameCardOtherCurrency) {
-            throw new BadRequestException(
-              `CARD ${row.cardId} cannot be selected more than once in one transaction`,
-            );
-          }
-        }
-        selectedCardCurrencyKeys.add(cardCurrencyKey);
-        const selectedCard = await this.cardStockCardRepository.findOne({
-          where: { id: row.cardId },
-          relations: ["receiptItem"],
-        });
-        if (
-          !selectedCard ||
-          selectedCard.currentBranchId !== resolvedBranchId
-        ) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} is not available at the current branch`,
-          );
-        }
-        if (
-          !row.isReload &&
-          (selectedCard.status !== "AVAILABLE" ||
-            selectedCard.reservedByTransferId ||
-            selectedCard.reservedAt)
-        ) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} is not available for sale`,
-          );
-        }
-        if (
-          row.isReload &&
-          (selectedCard.status !== "SOLD" || selectedCard.reservedByTransferId)
-        ) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} is not eligible for reload`,
-          );
-        }
-        if (row.isReload) {
-          if (!passengerId || !matchedExistingPassenger) {
-            throw new BadRequestException(
-              "CARD reload requires an existing matched passenger",
-            );
-          }
-          const priorPassengerSale = await this.transactionItemRepository
-            .createQueryBuilder("item")
-            .innerJoin("item.transaction", "priorTransaction")
-            .where("item.card_id = :cardId", { cardId: String(row.cardId) })
-            .andWhere("priorTransaction.passenger_id = :passengerId", {
-              passengerId,
-            })
-            .andWhere("priorTransaction.transaction_type = :transactionType", {
-              transactionType: TransactionType.SALE,
-            })
-            .andWhere("priorTransaction.status = :status", {
-              status: TransactionStatus.APPROVED,
-            })
-            .andWhere("priorTransaction.id <> :currentTransactionId", {
-              currentTransactionId: transaction.id,
-            })
-            .getOne();
-          if (!priorPassengerSale) {
-            throw new BadRequestException(
-              `CARD item ${index + 1} was not previously sold to this passenger`,
-            );
-          }
-        }
-        if (
-          selectedCard.receiptItem?.issuerPartyProfileId !==
-          row.issuerPartyProfileId
-        ) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} issuer does not match the selected CARD`,
-          );
-        }
-        if (
-          selectedCard.receiptItem?.productId &&
-          selectedCard.receiptItem.productId !== String(product.id)
-        ) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} product does not match the selected CARD`,
-          );
-        }
-        if (
-          !isMultiCurrencyCard &&
-          selectedCard.receiptItem?.currencyId !== String(currency.id)
-        ) {
-          throw new BadRequestException(
-            `CARD item ${index + 1} currency does not match the selected CARD`,
-          );
-        }
-        const issuerLink = await this.productCardIssuerRepository.findOne({
-          where: {
-            productId: String(product.id),
-            partyProfileId: String(row.issuerPartyProfileId),
-          },
-        });
-        if (!issuerLink)
-          throw new BadRequestException(
-            `Issuer is not linked to CARD product for item ${index + 1}`,
-          );
-      }
-      const cardSellAccountId = isCardItem
-        ? await this.additionalSettingService.getSettingTextValue(
-            "TRANSACTION_ACCOUNTING",
-            "CARD_SELL_CONTROL_ACCOUNT",
-          )
-        : null;
-      const itemAccount = isCardItem
-        ? cardSellAccountId
-          ? await this.accountProfileRepository.findOne({
-              where: { id: cardSellAccountId, active: true },
-            })
-          : null
-        : isFakeCurrency
-          ? productEntity.fakeAccount
-          : resolveProductTransactionAccount(
-              productEntity,
-              transactionPayload.transactionType,
-              transactionPayload.tradeMode,
-              transactionPayload.transactionType === TransactionType.SALE
-                ? "sale"
-                : "purchase",
-            );
-
-      if (!itemAccount) {
-        throw new NotFoundException(
-          `${isCardItem ? "CARD sell control account" : isFakeCurrency ? "Fake account" : "Product account"} is not configured for product ${row.productId}`,
+        const savedItem = await transactionItemRepo.save(
+          transactionItemRepo.create(transactionItemToSave),
         );
-      }
-
-      const accountSnapshot = await loadEntitySnapshot(
-        this.accountProfileRepository,
-        itemAccount.id,
-      );
-
-      const transactionItemToSave: DeepPartial<TransactionItem> = {
-        transactionId: transaction.id,
-        transaction,
-        lineNo: index + 1,
-        currencyId: String(currency.id),
-        productId: String(product.id),
-        accountId: itemAccount.id,
-        accountSnapshot,
-        currencyRateId: row.currencyRateId ?? null,
-        productCurrencyRateId: row.productCurrencyRateId ?? null,
-        quantity: String(row.quantity),
-        per: row.per === null || row.per === undefined ? null : String(row.per),
-        rate: String(row.rate),
-        commission: row.commission ?? null,
-        currencySnapshot: currency as TransactionReferenceSnapshotValue,
-        productSnapshot: product as TransactionReferenceSnapshotValue,
-        currencyRateSnapshot: row.currencyRateSnapshot ?? null,
-        productCurrencyRateSnapshot: row.productCurrencyRateSnapshot ?? null,
-        pricingRuleSnapshot: row.pricingRuleSnapshot ?? null,
-        commissionSnapshot: row.commissionSnapshot ?? null,
-        cardId: row.cardId ?? null,
-        issuerPartyProfileId: row.issuerPartyProfileId ?? null,
-        issuerPartyProfileSnapshot: row.issuerPartyProfileSnapshot ?? null,
-        cardSnapshot: row.cardSnapshot ?? null,
-        isReload: Boolean(row.isReload),
-        remarks: row.remarks ?? null,
-        createdBy: performedById,
-        updatedBy: performedById,
-      };
-
-      const savedItem = await this.transactionItemRepository.save(
-        this.transactionItemRepository.create(transactionItemToSave),
-      );
-      if (
-        savedItem.cardId &&
-        transaction.transactionType === TransactionType.SALE
-      ) {
-        cardSaleItems.push(savedItem);
-      }
-    }
-
-    const documentRows = Array.isArray(transactionPayload.documents)
-      ? transactionPayload.documents
-      : [];
-    for (let index = 0; index < documentRows.length; index += 1) {
-      const row = documentRows[index];
-      const attachment = attachments[index];
-      const upload = filesByIndex.get(index);
-      const documentProfile = await resolveDocumentProfile(
-        String(row.documentProfileId),
-      );
-
-      let storageKey: string | null = null;
-      let storageUrl: string | null = null;
-      let content: Buffer | null = null;
-      let fileName: string | null =
-        attachment?.fileName ?? upload?.originalname ?? null;
-      let originalFileName: string | null = upload?.originalname ?? null;
-      let mimeType: string | null = upload?.mimetype ?? null;
-      let fileSize: string | null =
-        upload?.size != null ? String(upload.size) : null;
-
-      if (upload?.buffer) {
-        const safeName = upload.originalname.replace(/[^\w.\-]+/g, "_");
-        storageKey = `transactions/${transaction.id}/documents/${index + 1}-${documentProfile.id}-${safeName}`;
-        try {
-          storageUrl = await this.storageService.store(
-            storageKey,
-            upload.buffer,
-          );
-        } catch (error) {
-          console.warn(
-            "[TransactionsService] Falling back to database storage for transaction document upload",
-            {
-              transactionId: transaction.id,
-              documentProfileId: documentProfile.id,
-              storageKey,
-              reason: error instanceof Error ? error.message : error,
-            },
-          );
-          content = upload.buffer;
-          storageKey = null;
-          storageUrl = null;
+        if (
+          savedItem.cardId &&
+          transaction.transactionType === TransactionType.SALE
+        ) {
+          cardSaleItems.push(savedItem);
         }
       }
 
-      const transactionDocumentToSave: DeepPartial<TransactionDocument> = {
-        transactionId: transaction.id,
-        transaction,
-        lineNo: index + 1,
-        documentProfileId: String(documentProfile.id),
-        documentProfileSnapshot:
-          documentProfile as TransactionReferenceSnapshotValue,
-        status: row.status ?? TransactionDocumentStatus.ATTACHED,
-        fileName,
-        originalFileName,
-        mimeType,
-        fileSize,
-        storageKey,
-        storagePath: storageKey,
-        storageUrl,
-        content,
-        remarks: row.remarks ?? null,
-        createdBy: performedById,
-        updatedBy: performedById,
-      };
+      const documentRows = Array.isArray(transactionPayload.documents)
+        ? transactionPayload.documents
+        : [];
+      for (let index = 0; index < documentRows.length; index += 1) {
+        const row = documentRows[index];
+        const attachment = attachments[index];
+        const upload = filesByIndex.get(index);
+        const documentProfile = await resolveDocumentProfile(
+          String(row.documentProfileId),
+        );
 
-      await this.transactionDocumentRepository.save(
-        this.transactionDocumentRepository.create(transactionDocumentToSave),
-      );
-    }
+        let storageKey: string | null = null;
+        let storageUrl: string | null = null;
+        let content: Buffer | null = null;
+        let fileName: string | null =
+          attachment?.fileName ?? upload?.originalname ?? null;
+        let originalFileName: string | null = upload?.originalname ?? null;
+        let mimeType: string | null = upload?.mimetype ?? null;
+        let fileSize: string | null =
+          upload?.size != null ? String(upload.size) : null;
 
-    const additionalChargeRows = Array.isArray(
-      transactionPayload.additionalCharges,
-    )
-      ? transactionPayload.additionalCharges
-      : [];
-    for (let index = 0; index < additionalChargeRows.length; index += 1) {
-      const row = additionalChargeRows[index];
-      const account = await resolveAccount(String(row.accountId));
-      await this.transactionAdditionalChargeRepository.save(
-        this.transactionAdditionalChargeRepository.create({
+        if (upload?.buffer) {
+          const safeName = upload.originalname.replace(/[^\w.\-]+/g, "_");
+          storageKey = `transactions/${transaction.id}/documents/${index + 1}-${documentProfile.id}-${safeName}`;
+          try {
+            storageUrl = await this.storageService.store(
+              storageKey,
+              upload.buffer,
+            );
+          } catch (error) {
+            console.warn(
+              "[TransactionsService] Falling back to database storage for transaction document upload",
+              {
+                transactionId: transaction.id,
+                documentProfileId: documentProfile.id,
+                storageKey,
+                reason: error instanceof Error ? error.message : error,
+              },
+            );
+            content = upload.buffer;
+            storageKey = null;
+            storageUrl = null;
+          }
+        }
+
+        const transactionDocumentToSave: DeepPartial<TransactionDocument> = {
           transactionId: transaction.id,
           transaction,
           lineNo: index + 1,
-          accountId: String(account.id),
-          accountSnapshot: account as TransactionReferenceSnapshotValue,
-          amount: roundMoney(this.toNumber(row.amount)),
+          documentProfileId: String(documentProfile.id),
+          documentProfileSnapshot:
+            documentProfile as TransactionReferenceSnapshotValue,
+          status: row.status ?? TransactionDocumentStatus.ATTACHED,
+          fileName,
+          originalFileName,
+          mimeType,
+          fileSize,
+          storageKey,
+          storagePath: storageKey,
+          storageUrl,
+          content,
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
-        }),
-      );
-    }
+        };
 
-    const refreshedTransaction = await this.transactionRepository.findOne({
-      where: { id: transaction.id },
-    });
-    if (!refreshedTransaction) {
-      throw new BadRequestException("Failed to calculate transaction tax");
-    }
+        await transactionDocumentRepo.save(
+          transactionDocumentRepo.create(transactionDocumentToSave),
+        );
+      }
 
-    const paymentRows = isFakeCurrency
-      ? []
-      : Array.isArray(transactionPayload.payments)
-        ? transactionPayload.payments
+      const additionalChargeRows = Array.isArray(
+        transactionPayload.additionalCharges,
+      )
+        ? transactionPayload.additionalCharges
         : [];
-    const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
-    const payableTotalAmount = Number(payableTotal || 0);
-    const requiresPaymentRows = isCorporateIndividualTransactionContext(
-      transactionPayload.slug,
-      transactionPayload.transactionPartyProfileType ??
-        transactionPartyProfileType,
-      passengerPayload?.entityType,
-    );
-    if (
-      !isFakeCurrency &&
-      requiresPaymentRows &&
-      payableTotalAmount > 0 &&
-      paymentRows.length === 0
-    ) {
-      throw new BadRequestException("At least one payment row is required");
-    }
+      for (let index = 0; index < additionalChargeRows.length; index += 1) {
+        const row = additionalChargeRows[index];
+        const account = await resolveAccount(String(row.accountId));
+        await transactionAdditionalChargeRepo.save(
+          transactionAdditionalChargeRepo.create({
+            transactionId: transaction.id,
+            transaction,
+            lineNo: index + 1,
+            accountId: String(account.id),
+            accountSnapshot: account as TransactionReferenceSnapshotValue,
+            amount: roundMoney(this.toNumber(row.amount)),
+            remarks: row.remarks ?? null,
+            createdBy: performedById,
+            updatedBy: performedById,
+          }),
+        );
+      }
 
-    const totalPaidPreview =
-      this.partyCreditService.sumPaymentAmounts(paymentRows);
-    const currentOutstandingPreview = Math.max(
-      0,
-      Number((payableTotalAmount - totalPaidPreview).toFixed(2)),
-    );
-    let allowPartialPayment = false;
-    if (!isFakeCurrency && currentOutstandingPreview > 0) {
-      const creditPreview = await this.partyCreditService.preview({
-        partyProfileId: String(transactionPayload.partyProfileId),
-        transactionType: transactionPayload.transactionType,
-        transactionDate: resolvedTransactionDate,
-        payableAmount: payableTotalAmount,
-        payments: paymentRows,
-        excludeTransactionId: refreshedTransaction.id,
+      const refreshedTransaction = await transactionRepo.findOne({
+        where: { id: transaction.id },
       });
-
-      if (!creditPreview.allowed) {
-        throw new BadRequestException(
-          creditPreview.blockingReason || "Credit validation failed",
-        );
+      if (!refreshedTransaction) {
+        throw new BadRequestException("Failed to calculate transaction tax");
       }
 
-      allowPartialPayment = creditPreview.outstandingAllowed;
-    }
-
-    if (!isFakeCurrency) {
-      this.assertCompatiblePaymentMethods(
-        paymentRows.map((row) => ({
-          paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
-          isAdvance: Boolean(
-            normalizeNullableString(row.advanceVoucherId) ||
-              row.settlementSource === TransactionSettlementSource.ADVANCE,
-          ),
-        })),
+      const paymentRows = isFakeCurrency
+        ? []
+        : Array.isArray(transactionPayload.payments)
+          ? transactionPayload.payments
+          : [];
+      const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
+      const payableTotalAmount = Number(payableTotal || 0);
+      const requiresPaymentRows = isCorporateIndividualTransactionContext(
+        transactionPayload.slug,
+        transactionPayload.transactionPartyProfileType ??
+          transactionPartyProfileType,
+        passengerPayload?.entityType,
       );
-    }
+      if (
+        !isFakeCurrency &&
+        requiresPaymentRows &&
+        payableTotalAmount > 0 &&
+        paymentRows.length === 0
+      ) {
+        throw new BadRequestException("At least one payment row is required");
+      }
 
-    const paymentDirection =
-      transactionPayload.transactionType === TransactionType.SALE
-        ? TransactionPaymentDirection.RECEIPT
-        : TransactionPaymentDirection.PAYMENT;
-    let cashTotal = 0;
-    let chequeTotal = 0;
-    const savedPaymentRows: TransactionPayment[] = [];
-    const advanceRequests: Array<AdvanceApplicationPayloadDto | null> = [];
-    for (let index = 0; index < paymentRows.length; index += 1) {
-      const row = paymentRows[index];
-      const paymentMethod = this.resolvePaymentMethod(row.paymentMethod);
-      const advanceVoucherId = normalizeNullableString(row.advanceVoucherId);
-      const isAdvance = Boolean(
-        advanceVoucherId ||
-        row.settlementSource === TransactionSettlementSource.ADVANCE,
+      const totalPaidPreview =
+        this.partyCreditService.sumPaymentAmounts(paymentRows);
+      const currentOutstandingPreview = Math.max(
+        0,
+        Number((payableTotalAmount - totalPaidPreview).toFixed(2)),
       );
-      if (isAdvance && !advanceVoucherId)
-        throw new BadRequestException(
-          "Advance voucher is required for an advance settlement row",
-        );
-      if (isAdvance && isNonChequeBankPaymentMethod(paymentMethod)) {
-        throw new BadRequestException(
-          "Bank payment modes are not allowed for advance settlement",
-        );
-      }
-      const preparedAdvance = advanceVoucherId
-        ? await this.voucherService.prepareAdvancePayment({
-            voucherId: advanceVoucherId,
-            amount: row.amount,
-            transactionType: transactionPayload.transactionType,
-            paymentMethod,
-            partyProfileId: String(transactionPayload.partyProfileId),
-            branchId: String(resolvedBranchId),
-            transactionDate: resolvedTransactionDate,
-          })
-        : null;
-      const accountId = preparedAdvance
-        ? String(preparedAdvance.voucher.advanceControlAccountId)
-        : String(row.accountId);
-      const account = preparedAdvance
-        ? preparedAdvance.voucher.advanceControlAccountSnapshot
-        : await resolveAccount(accountId);
-      const chequePageId = normalizeNullableString(row.chequePageId);
-      const amount = this.toNumber(row.amount);
-      if (amount <= 0) {
-        throw new BadRequestException(
-          "Payment amount must be greater than zero",
-        );
-      }
+      let allowPartialPayment = false;
+      if (!isFakeCurrency && currentOutstandingPreview > 0) {
+        const creditPreview = await this.partyCreditService.preview({
+          partyProfileId: String(transactionPayload.partyProfileId),
+          transactionType: transactionPayload.transactionType,
+          transactionDate: resolvedTransactionDate,
+          payableAmount: payableTotalAmount,
+          payments: paymentRows,
+          excludeTransactionId: refreshedTransaction.id,
+        });
 
-      if (paymentMethod === TransactionPaymentMethod.CASH) {
-        if (!isAdvance) {
-          const cashAccount = await this.accountProfileRepository.findOne({
-            where: { id: accountId, active: true },
-            relations: ["accountType", "currency"],
-          });
-          const cashAccountTypes = [
-            cashAccount?.accountType?.value,
-            cashAccount?.accountType?.label,
-          ].map((value) =>
-            String(value ?? "")
-              .trim()
-              .replace(/[\s-]+/g, "_")
-              .toUpperCase(),
+        if (!creditPreview.allowed) {
+          throw new BadRequestException(
+            creditPreview.blockingReason || "Credit validation failed",
           );
-          if (!cashAccount || !cashAccountTypes.includes("CASH_LEDGER")) {
-            throw new BadRequestException(
-              "Cash payments require an active CASH LEDGER account",
+        }
+
+        allowPartialPayment = creditPreview.outstandingAllowed;
+      }
+
+      if (!isFakeCurrency) {
+        this.assertCompatiblePaymentMethods(
+          paymentRows.map((row) => ({
+            paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
+            isAdvance: Boolean(
+              normalizeNullableString(row.advanceVoucherId) ||
+                row.settlementSource === TransactionSettlementSource.ADVANCE,
+            ),
+          })),
+        );
+      }
+
+      const paymentDirection =
+        transactionPayload.transactionType === TransactionType.SALE
+          ? TransactionPaymentDirection.RECEIPT
+          : TransactionPaymentDirection.PAYMENT;
+      let cashTotal = 0;
+      let chequeTotal = 0;
+      const savedPaymentRows: TransactionPayment[] = [];
+      const advanceRequests: Array<AdvanceApplicationPayloadDto | null> = [];
+      for (let index = 0; index < paymentRows.length; index += 1) {
+        const row = paymentRows[index];
+        const paymentMethod = this.resolvePaymentMethod(row.paymentMethod);
+        const advanceVoucherId = normalizeNullableString(row.advanceVoucherId);
+        const isAdvance = Boolean(
+          advanceVoucherId ||
+          row.settlementSource === TransactionSettlementSource.ADVANCE,
+        );
+        if (isAdvance && !advanceVoucherId)
+          throw new BadRequestException(
+            "Advance voucher is required for an advance settlement row",
+          );
+        if (isAdvance && isNonChequeBankPaymentMethod(paymentMethod)) {
+          throw new BadRequestException(
+            "Bank payment modes are not allowed for advance settlement",
+          );
+        }
+        const preparedAdvance = advanceVoucherId
+          ? await this.voucherService.prepareAdvancePayment({
+              voucherId: advanceVoucherId,
+              amount: row.amount,
+              transactionType: transactionPayload.transactionType,
+              paymentMethod,
+              partyProfileId: String(transactionPayload.partyProfileId),
+              branchId: String(resolvedBranchId),
+              transactionDate: resolvedTransactionDate,
+            })
+          : null;
+        const accountId = preparedAdvance
+          ? String(preparedAdvance.voucher.advanceControlAccountId)
+          : String(row.accountId);
+        const account = preparedAdvance
+          ? preparedAdvance.voucher.advanceControlAccountSnapshot
+          : await resolveAccount(accountId);
+        const chequePageId = normalizeNullableString(row.chequePageId);
+        const amount = this.toNumber(row.amount);
+        if (amount <= 0) {
+          throw new BadRequestException(
+            "Payment amount must be greater than zero",
+          );
+        }
+
+        if (paymentMethod === TransactionPaymentMethod.CASH) {
+          if (!isAdvance) {
+            const cashAccount = await this.accountProfileRepository.findOne({
+              where: { id: accountId, active: true },
+              relations: ["accountType", "currency"],
+            });
+            const cashAccountTypes = [
+              cashAccount?.accountType?.value,
+              cashAccount?.accountType?.label,
+            ].map((value) =>
+              String(value ?? "")
+                .trim()
+                .replace(/[\s-]+/g, "_")
+                .toUpperCase(),
             );
+            if (!cashAccount || !cashAccountTypes.includes("CASH_LEDGER")) {
+              throw new BadRequestException(
+                "Cash payments require an active CASH LEDGER account",
+              );
+            }
+            if (
+              String(cashAccount.currency?.currencyCode ?? "").toUpperCase() !==
+              "INR"
+            ) {
+              throw new BadRequestException(
+                "Cash payment accounts must use INR currency",
+              );
+            }
           }
-          if (
-            String(cashAccount.currency?.currencyCode ?? "").toUpperCase() !==
-            "INR"
-          ) {
-            throw new BadRequestException(
-              "Cash payment accounts must use INR currency",
-            );
+          cashTotal += amount;
+        } else {
+          chequeTotal += amount;
+        }
+
+        if (isNonChequeBankPaymentMethod(paymentMethod)) {
+          this.assertElectronicPaymentFieldsCleared(row);
+          if (!String(row.referenceDate ?? "").trim()) {
+            throw new BadRequestException("Cheque date is required");
           }
         }
-        cashTotal += amount;
-      } else {
-        chequeTotal += amount;
-      }
 
-      if (isNonChequeBankPaymentMethod(paymentMethod)) {
-        this.assertElectronicPaymentFieldsCleared(row);
-        if (!String(row.referenceDate ?? "").trim()) {
+        if (
+          paymentMethod === TransactionPaymentMethod.CHEQUE &&
+          !String(
+            preparedAdvance?.voucher.chequeNumber ?? row.referenceNumber ?? "",
+          ).trim()
+        ) {
+          throw new BadRequestException("Cheque reference number is required");
+        }
+
+        if (
+          paymentMethod === TransactionPaymentMethod.CHEQUE &&
+          !String(
+            preparedAdvance?.voucher.chequeDate ?? row.referenceDate ?? "",
+          ).trim()
+        ) {
           throw new BadRequestException("Cheque date is required");
         }
-      }
 
-      if (
-        paymentMethod === TransactionPaymentMethod.CHEQUE &&
-        !String(
-          preparedAdvance?.voucher.chequeNumber ?? row.referenceNumber ?? "",
-        ).trim()
-      ) {
-        throw new BadRequestException("Cheque reference number is required");
-      }
+        if (
+          paymentMethod === TransactionPaymentMethod.CHEQUE &&
+          transactionPayload.transactionType === TransactionType.SALE &&
+          chequePageId
+        ) {
+          throw new BadRequestException(
+            "Cheque page lookup is not allowed for sale cheque payments",
+          );
+        }
 
-      if (
-        paymentMethod === TransactionPaymentMethod.CHEQUE &&
-        !String(
-          preparedAdvance?.voucher.chequeDate ?? row.referenceDate ?? "",
-        ).trim()
-      ) {
-        throw new BadRequestException("Cheque date is required");
-      }
+        if (
+          paymentMethod === TransactionPaymentMethod.CHEQUE &&
+          transactionPayload.transactionType === TransactionType.PURCHASE &&
+          !chequePageId &&
+          !isAdvance
+        ) {
+          throw new BadRequestException(
+            "Cheque page is required for purchase payments",
+          );
+        }
 
-      if (
-        paymentMethod === TransactionPaymentMethod.CHEQUE &&
-        transactionPayload.transactionType === TransactionType.SALE &&
-        chequePageId
-      ) {
-        throw new BadRequestException(
-          "Cheque page lookup is not allowed for sale cheque payments",
-        );
-      }
+        const chequePageSnapshot = chequePageId
+          ? ((await loadEntitySnapshot(
+              this.chequeBookPageTrackingRepository,
+              String(chequePageId),
+            )) as TransactionReferenceSnapshotValue)
+          : null;
 
-      if (
-        paymentMethod === TransactionPaymentMethod.CHEQUE &&
-        transactionPayload.transactionType === TransactionType.PURCHASE &&
-        !chequePageId &&
-        !isAdvance
-      ) {
-        throw new BadRequestException(
-          "Cheque page is required for purchase payments",
-        );
-      }
+        if (chequePageId && !chequePageSnapshot) {
+          throw new NotFoundException(
+            `Cheque page with id ${chequePageId} not found`,
+          );
+        }
 
-      const chequePageSnapshot = chequePageId
-        ? ((await loadEntitySnapshot(
-            this.chequeBookPageTrackingRepository,
-            String(chequePageId),
-          )) as TransactionReferenceSnapshotValue)
-        : null;
-
-      if (chequePageId && !chequePageSnapshot) {
-        throw new NotFoundException(
-          `Cheque page with id ${chequePageId} not found`,
-        );
-      }
-
-      const savedPayment = await this.transactionPaymentRepository.save(
-        this.transactionPaymentRepository.create({
-          transactionId: transaction.id,
-          transaction,
-          lineNo: index + 1,
-          accountId,
-          accountSnapshot: account as TransactionReferenceSnapshotValue,
-          settlementSource: isAdvance
-            ? TransactionSettlementSource.ADVANCE
-            : TransactionSettlementSource.NORMAL,
-          advanceVoucherId,
-          chequePageId,
-          chequePageSnapshot,
-          paymentMethod,
-          paymentDirection,
-          referenceNumber: normalizeNullableString(
-            preparedAdvance?.voucher.chequeNumber ?? row.referenceNumber,
-          ),
-          referenceDate: normalizeNullableString(
-            preparedAdvance?.voucher.chequeDate ?? row.referenceDate,
-          ),
-          branchName: normalizeNullableString(
-            preparedAdvance?.voucher.chequeBranch ?? row.branchName,
-          ),
-          drawnOn: normalizeNullableString(
-            preparedAdvance?.voucher.drawnOn ?? row.drawnOn,
-          ),
-          amount: String(row.amount),
-          remarks: normalizeNullableString(row.remarks),
-          createdBy: performedById,
-          updatedBy: performedById,
-        }),
-      );
-      savedPaymentRows.push(savedPayment);
-      advanceRequests.push(
-        preparedAdvance
-          ? {
-              voucherId: preparedAdvance.voucher.id,
-              amount: String(row.amount),
-            }
-          : null,
-      );
-    }
-
-    const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
-    const shouldMatchPaymentTotal =
-      !isFakeCurrency &&
-      (requiresPaymentRows || (paymentRows.length > 0 && !allowPartialPayment));
-    if (
-      !isFakeCurrency &&
-      paymentRows.length > 0 &&
-      totalPaid > Number(payableTotal.toString())
-    ) {
-      throw new BadRequestException(
-        `Payment total ${totalPaid.toFixed(2)} cannot exceed payable total ${payableTotal}`,
-      );
-    }
-    if (
-      shouldMatchPaymentTotal &&
-      Number(payableTotal.toString()) !== totalPaid
-    ) {
-      throw new BadRequestException(
-        `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
-      );
-    }
-
-    transaction.byCash = cashTotal.toFixed(2);
-    transaction.byCheque = chequeTotal.toFixed(2);
-    transaction.updatedBy = performedById;
-    await this.transactionRepository.save(transaction);
-
-    if (advanceRequests.some(Boolean)) {
-      try {
-        await this.database2.transaction((manager) =>
-          this.voucherService.reserveApplications(
-            manager,
+        const savedPayment = await transactionPaymentRepo.save(
+          transactionPaymentRepo.create({
+            transactionId: transaction.id,
             transaction,
-            savedPaymentRows,
-            advanceRequests,
-            performedById,
-          ),
+            lineNo: index + 1,
+            accountId,
+            accountSnapshot: account as TransactionReferenceSnapshotValue,
+            settlementSource: isAdvance
+              ? TransactionSettlementSource.ADVANCE
+              : TransactionSettlementSource.NORMAL,
+            advanceVoucherId,
+            chequePageId,
+            chequePageSnapshot,
+            paymentMethod,
+            paymentDirection,
+            referenceNumber: normalizeNullableString(
+              preparedAdvance?.voucher.chequeNumber ?? row.referenceNumber,
+            ),
+            referenceDate: normalizeNullableString(
+              preparedAdvance?.voucher.chequeDate ?? row.referenceDate,
+            ),
+            branchName: normalizeNullableString(
+              preparedAdvance?.voucher.chequeBranch ?? row.branchName,
+            ),
+            drawnOn: normalizeNullableString(
+              preparedAdvance?.voucher.drawnOn ?? row.drawnOn,
+            ),
+            amount: String(row.amount),
+            remarks: normalizeNullableString(row.remarks),
+            createdBy: performedById,
+            updatedBy: performedById,
+          }),
         );
-      } catch (error) {
-        await this.transactionRepository.delete(transaction.id);
-        throw error;
+        savedPaymentRows.push(savedPayment);
+        advanceRequests.push(
+          preparedAdvance
+            ? {
+                voucherId: preparedAdvance.voucher.id,
+                amount: String(row.amount),
+              }
+            : null,
+        );
       }
-    }
 
-    if (shouldAutoFinalizeCardSale && cardSaleItems.length) {
-      const finalized = await this.database2.transaction(async (manager) => {
-        const transactionRepo = manager.getRepository(Transaction);
+      const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
+      const shouldMatchPaymentTotal =
+        !isFakeCurrency &&
+        (requiresPaymentRows || (paymentRows.length > 0 && !allowPartialPayment));
+      if (
+        !isFakeCurrency &&
+        paymentRows.length > 0 &&
+        totalPaid > Number(payableTotal.toString())
+      ) {
+        throw new BadRequestException(
+          `Payment total ${totalPaid.toFixed(2)} cannot exceed payable total ${payableTotal}`,
+        );
+      }
+      if (
+        shouldMatchPaymentTotal &&
+        Number(payableTotal.toString()) !== totalPaid
+      ) {
+        throw new BadRequestException(
+          `Payment total ${totalPaid.toFixed(2)} must match payable total ${payableTotal}`,
+        );
+      }
+
+      transaction.byCash = cashTotal.toFixed(2);
+      transaction.byCheque = chequeTotal.toFixed(2);
+      transaction.updatedBy = performedById;
+      await transactionRepo.save(transaction);
+
+      if (advanceRequests.some(Boolean)) {
+        await this.voucherService.reserveApplications(
+          manager,
+          transaction,
+          savedPaymentRows,
+          advanceRequests,
+          performedById,
+        );
+      }
+
+      if (shouldAutoFinalizeCardSale && cardSaleItems.length) {
         const locked = await transactionRepo
           .createQueryBuilder("transaction")
           .where("transaction.id = :id", { id: transaction.id })
@@ -2721,27 +2725,27 @@ export class TransactionsService {
           approvedItems.filter((item) => Boolean(item.cardId)),
           performedById,
         );
-        return approved;
-      });
-      Object.assign(transaction, finalized);
-    }
+        Object.assign(transaction, approved);
+      }
 
-    await this.transactionLogRepository.save(
-      this.transactionLogRepository.create({
-        transactionId: transaction.id,
-        action: TransactionLogAction.CREATE,
-        message: shouldRequireApproval
-          ? "Transaction draft created"
-          : "Transaction approved on creation",
-        metadata: {
-          status: transactionStatus,
-          requiresApproval: shouldRequireApproval,
-        },
-        performedById,
-        createdBy: performedById,
-        updatedBy: performedById,
-      }),
-    );
+      await transactionLogRepo.save(
+        transactionLogRepo.create({
+          transactionId: transaction.id,
+          action: TransactionLogAction.CREATE,
+          message: shouldRequireApproval
+            ? "Transaction draft created"
+            : "Transaction approved on creation",
+          metadata: {
+            status: transactionStatus,
+            requiresApproval: shouldRequireApproval,
+          },
+          performedById,
+          createdBy: performedById,
+          updatedBy: performedById,
+        }),
+      );
+      return transaction;
+    });
 
     const partyProfileForEmail = await this.partyProfileRepository.findOne({
       where: { id: transaction.partyProfileId },
