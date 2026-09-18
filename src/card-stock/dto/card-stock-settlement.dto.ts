@@ -5,6 +5,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNumberString,
   IsOptional,
   IsString,
@@ -14,16 +15,30 @@ import {
   ValidateNested,
 } from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
+import { StringArrayQuery } from "../../common/transformers/parse-boolean-query";
 import {
   CardStockSettlementDocumentKind,
   CardStockSettlementDocumentStatus,
 } from "../card-stock.enums";
 
 export class CardStockSettlementDocumentQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    enum: CardStockSettlementDocumentStatus,
+    isArray: true,
+    description: "Filter by one or more settlement statuses",
+  })
+  @StringArrayQuery()
   @IsOptional()
-  @IsEnum(CardStockSettlementDocumentStatus)
-  status?: CardStockSettlementDocumentStatus;
+  @IsArray()
+  @IsIn(Object.values(CardStockSettlementDocumentStatus), { each: true })
+  status?: CardStockSettlementDocumentStatus[];
+  @ApiPropertyOptional({
+    description:
+      "Search transaction number, issuer, currency, branch, or reference",
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsEnum(CardStockSettlementDocumentKind)

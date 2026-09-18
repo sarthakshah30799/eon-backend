@@ -28,6 +28,7 @@ import {
   CardStockReceiptStatus,
   CardStockCardStatus,
   CardStockReferenceType,
+  CARD_STOCK_FIXED_DENOMINATION,
 } from "./card-stock.enums";
 import { CreateCardStockReceiptDto } from "./dto/card-stock-receipt.dto";
 import {
@@ -153,7 +154,13 @@ export class CardStockService {
         "denomination",
         "expiration date",
       ],
-      ["CC", "KIT-001", "1234567890123456", "1000", "31/12/2030"],
+      [
+        "CC",
+        "KIT-001",
+        "1234567890123456",
+        CARD_STOCK_FIXED_DENOMINATION,
+        "31/12/2030",
+      ],
       "Cards",
     );
   }
@@ -181,7 +188,7 @@ export class CardStockService {
       const expirationDate = this.spreadsheetUploadService.parseDate(
         record["expiration date"],
       );
-      const denomination = String(record.denomination ?? "").trim();
+      const denomination = CARD_STOCK_FIXED_DENOMINATION;
       const cardNumberCheck = validateCardNumber(
         String(record["card number"] ?? ""),
         {
@@ -200,8 +207,6 @@ export class CardStockService {
         errors.push("Kit number is required");
       if (!cardNumberCheck.valid)
         errors.push(`Row ${rowNumber}: ${cardNumberCheck.message}`);
-      if (!(Number(denomination) > 0))
-        errors.push("Denomination must be greater than zero");
       if (!expirationDate)
         errors.push("Expiration date must use dd/mm/yyyy format");
       else if (new Date(`${expirationDate}T00:00:00`) <= today)
@@ -561,6 +566,10 @@ export class CardStockService {
       if (!cardNumberCheck.valid)
         throw new BadRequestException(
           `Item ${item.lineNo}: ${cardNumberCheck.message}`,
+        );
+      if (Number(card.denomination) !== Number(CARD_STOCK_FIXED_DENOMINATION))
+        throw new BadRequestException(
+          `Item ${item.lineNo}: denomination must be ${CARD_STOCK_FIXED_DENOMINATION}`,
         );
       if (Number(card.amount) !== Number(card.denomination))
         throw new BadRequestException(

@@ -39,4 +39,27 @@ export const parseBooleanQuery = ({
   return undefined;
 };
 
+export const parseStringArrayQuery = ({
+  value,
+  obj,
+  key,
+}: TransformFnParams): string[] | undefined => {
+  const raw =
+    obj != null && key != null && Object.prototype.hasOwnProperty.call(obj, key)
+      ? (obj as Record<string, unknown>)[String(key)]
+      : value;
+
+  if (raw === undefined || raw === null || raw === "") {
+    return undefined;
+  }
+
+  const values = Array.isArray(raw) ? raw : String(raw).split(",");
+  const normalized = values
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+
+  return normalized.length ? normalized : undefined;
+};
+
 export const BooleanQuery = () => Transform(parseBooleanQuery);
+export const StringArrayQuery = () => Transform(parseStringArrayQuery);

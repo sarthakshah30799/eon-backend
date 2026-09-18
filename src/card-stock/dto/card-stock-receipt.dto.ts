@@ -25,7 +25,12 @@ export class CardStockCardDto {
   series: string;
   @ApiProperty() @IsString() kitNumber: string;
   @ApiProperty() @IsString() cardNumber: string;
-  @ApiProperty() @IsNumberString() denomination: string;
+  @ApiProperty({
+    example: "1",
+    description: "Fixed at 1 and not user-editable on receipt stock details.",
+  })
+  @IsNumberString()
+  denomination: string;
   @ApiProperty() @IsNumberString() amount: string;
   @ApiProperty() @IsDateString() expirationDate: string;
 }

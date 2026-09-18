@@ -867,7 +867,36 @@ export class CardStockSettlementService {
       add("d.branch_id = ?", session.activeBranchId);
       add("d.kind = ?", CardStockSettlementDocumentKind.BRANCH_HO);
     }
-    if (query.status) add("d.status = ?", query.status);
+    if (query.status?.length) {
+      const placeholders = query.status.map((value) => {
+        params.push(value);
+        return `$${params.length}`;
+      });
+      conditions.push(`d.status IN (${placeholders.join(", ")})`);
+    }
+    const search = query.search?.trim();
+    if (search) {
+      params.push(`%${search}%`);
+      const searchParam = `$${params.length}`;
+      conditions.push(`(
+        d.transaction_number ILIKE ${searchParam}
+        OR COALESCE(d.reference, '') ILIKE ${searchParam}
+        OR COALESCE(d.remarks, '') ILIKE ${searchParam}
+        OR COALESCE(d.issuer_party_profile_snapshot->>'name', '') ILIKE ${searchParam}
+        OR COALESCE(d.issuer_party_profile_snapshot->>'code', '') ILIKE ${searchParam}
+        OR COALESCE(d.issuer_party_profile_snapshot->>'label', '') ILIKE ${searchParam}
+        OR COALESCE(d.currency_snapshot->>'currencyCode', '') ILIKE ${searchParam}
+        OR COALESCE(d.currency_snapshot->>'name', '') ILIKE ${searchParam}
+        OR COALESCE(d.currency_snapshot->>'code', '') ILIKE ${searchParam}
+        OR COALESCE(d.currency_snapshot->>'label', '') ILIKE ${searchParam}
+        OR COALESCE(d.branch_snapshot->>'name', '') ILIKE ${searchParam}
+        OR COALESCE(d.branch_snapshot->>'code', '') ILIKE ${searchParam}
+        OR COALESCE(d.branch_snapshot->>'label', '') ILIKE ${searchParam}
+        OR COALESCE(d.ho_branch_snapshot->>'name', '') ILIKE ${searchParam}
+        OR COALESCE(d.ho_branch_snapshot->>'code', '') ILIKE ${searchParam}
+        OR COALESCE(d.ho_branch_snapshot->>'label', '') ILIKE ${searchParam}
+      )`);
+    }
     if (query.kind && this.isHo(session)) add("d.kind = ?", query.kind);
     if (query.issuerPartyProfileId)
       add("d.issuer_party_profile_id = ?", query.issuerPartyProfileId);
