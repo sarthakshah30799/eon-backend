@@ -127,6 +127,31 @@ export class PartyProfileService {
     private readonly partyProfileCommissionRuleRepository: Repository<PartyProfileCommissionRule>,
   ) {}
 
+  private async assertReferencedPartyProfile(
+    partyProfileId: string | null | undefined,
+    fieldLabel: string,
+    currentPartyProfileId?: string,
+  ): Promise<void> {
+    if (!partyProfileId) {
+      return;
+    }
+
+    if (currentPartyProfileId && partyProfileId === currentPartyProfileId) {
+      throw new BadRequestException(
+        `${fieldLabel} cannot reference the same party profile`,
+      );
+    }
+
+    const referenced = await this.partyProfileRepository.findOne({
+      where: { id: partyProfileId },
+    });
+    if (!referenced) {
+      throw new NotFoundException(
+        `${fieldLabel} party profile with id ${partyProfileId} not found`,
+      );
+    }
+  }
+
   private async getCurrentUser(userId: string) {
     return this.userRepository.findOne({
       where: { id: userId },
@@ -598,6 +623,12 @@ export class PartyProfileService {
       ...rest
     } = normalized;
 
+    await this.assertReferencedPartyProfile(defaultAgent, "Default agent");
+    await this.assertReferencedPartyProfile(
+      marketingExecutive,
+      "Marketing executive",
+    );
+
     const isCardIssuer =
       (normalized.type ?? dto.type) === ClientType.CARD_ISSUER_PROFILE;
     const client = this.partyProfileRepository.create({
@@ -613,11 +644,13 @@ export class PartyProfileService {
         ? ({ id: kycRiskCategory } as any)
         : null,
       defaultAgent: defaultAgent ? ({ id: defaultAgent } as any) : null,
+      defaultAgentId: defaultAgent,
       group: group ? ({ id: group } as any) : null,
       entityType: entityType ? ({ id: entityType } as any) : null,
       marketingExecutive: marketingExecutive
         ? ({ id: marketingExecutive } as any)
         : null,
+      marketingExecutiveId: marketingExecutive,
       businessNature: businessNature ? ({ id: businessNature } as any) : null,
       tdsGroup: tdsGroup ? ({ id: tdsGroup } as any) : null,
       dateOfIntro: normalized.dateOfIntro
@@ -759,7 +792,13 @@ export class PartyProfileService {
         : null;
     }
     if (defaultAgent !== undefined) {
+      await this.assertReferencedPartyProfile(
+        defaultAgent,
+        "Default agent",
+        client.id,
+      );
       client.defaultAgent = defaultAgent ? ({ id: defaultAgent } as any) : null;
+      client.defaultAgentId = defaultAgent;
     }
     if (group !== undefined) {
       client.group = group ? ({ id: group } as any) : null;
@@ -768,9 +807,15 @@ export class PartyProfileService {
       client.entityType = entityType ? ({ id: entityType } as any) : null;
     }
     if (marketingExecutive !== undefined) {
+      await this.assertReferencedPartyProfile(
+        marketingExecutive,
+        "Marketing executive",
+        client.id,
+      );
       client.marketingExecutive = marketingExecutive
         ? ({ id: marketingExecutive } as any)
         : null;
+      client.marketingExecutiveId = marketingExecutive;
     }
     if (businessNature !== undefined) {
       client.businessNature = businessNature
@@ -910,10 +955,10 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.statusUpdatedBy", "statusUpdatedBy")
       .leftJoinAndSelect("pp.location", "locationOption")
       .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
-      .leftJoinAndSelect("pp.defaultAgent", "defaultAgentOption")
+      .leftJoinAndSelect("pp.defaultAgent", "defaultAgentProfile")
       .leftJoinAndSelect("pp.group", "groupOption")
       .leftJoinAndSelect("pp.entityType", "entityTypeOption")
-      .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
+      .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveProfile")
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption")
       .leftJoinAndSelect("pp.commissionRules", "commissionRules")
@@ -1166,10 +1211,10 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.branch", "branch")
       .leftJoinAndSelect("pp.location", "locationOption")
       .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
-      .leftJoinAndSelect("pp.defaultAgent", "defaultAgentOption")
+      .leftJoinAndSelect("pp.defaultAgent", "defaultAgentProfile")
       .leftJoinAndSelect("pp.group", "groupOption")
       .leftJoinAndSelect("pp.entityType", "entityTypeOption")
-      .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveOption")
+      .leftJoinAndSelect("pp.marketingExecutive", "marketingExecutiveProfile")
       .leftJoinAndSelect("pp.businessNature", "businessNatureOption")
       .leftJoinAndSelect("pp.tdsGroup", "tdsGroupOption");
 
