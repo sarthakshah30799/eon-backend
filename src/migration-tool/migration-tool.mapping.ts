@@ -188,6 +188,13 @@ export type MappedBranchRecord = {
 export const mapLegacyBranchRecord = (row: SourceRow): MappedBranchRecord => {
   const oldId = row.nBranchID ?? row.nbranchid ?? row.id ?? row.ID ?? null;
   const transformedCode = transformBranchCode(row);
+  const rawCity = toNullableString(row.vCity);
+  // Numeric city ids must be resolved via CTRCITY in the migration service;
+  // never persist the raw id as free-text city from this sync mapper.
+  const cityLooksLikeId = Boolean(rawCity && /^\d+$/.test(rawCity));
+  const city = cityLooksLikeId
+    ? "UNKNOWN"
+    : toStringOrFallback(row.vCity, "UNKNOWN");
   return {
     oldId,
     companyOldId: row.nCompID ?? row.ncompid ?? null,
@@ -195,10 +202,10 @@ export const mapLegacyBranchRecord = (row: SourceRow): MappedBranchRecord => {
     codeTransformed: transformedCode.transformed,
     codeSourceField: transformedCode.sourceField,
     name: toStringOrFallback(
-      row.vLocation || row.vCity || row.vBranchCode,
+      row.vLocation || (cityLooksLikeId ? null : row.vCity) || row.vBranchCode,
       `Branch ${oldId}`,
     ),
-    city: toStringOrFallback(row.vCity, "UNKNOWN"),
+    city,
     pinCode: toStringOrFallback(row.vPinCode, "000000"),
     gstNo: toNullableString(row.vServiceTaxRegNo),
     fxRegNo: toNullableString(row.vRBILicenseNo),

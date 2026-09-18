@@ -27,6 +27,11 @@ import { Country } from "../country/country.entity";
 import { CountryGroup } from "../country-groups/country-group.entity";
 import { Currency } from "../currencies/currency.entity";
 import { State } from "../state/state.entity";
+import {
+  PartyProfile,
+} from "../party-profiles/party-profile.entity";
+import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { normalizeMenuPath } from "../menu/menu-path.util";
 import {
   BRANCH_CODE_LENGTH,
@@ -64,6 +69,81 @@ import {
   mapLegacyCurrencyProductLink,
   mapLegacyProductRecord,
 } from "./migration-tool.product";
+import {
+  LEGACY_PARTY_TABLE_CANDIDATES,
+  mapLegacyPartyProfile,
+  mapLegacyProductIssuerLink,
+  sortPartyRowsForMigration,
+  type MappedPartyProfile,
+} from "./migration-tool.party";
+import {
+  LEGACY_RATE_TABLE_CANDIDATES,
+  RATE_MIGRATION_SKIPPED_TABLES,
+  CurrencyRateProvider,
+  aggregateMarginMasterForProductCurrency,
+  aggregateMstRatesForProductCurrency,
+  mapLegacyMarginMasterRow,
+  mapLegacyMstRateRow,
+  mapLegacyTickerLiveRate,
+  mapLegacyTmpLiveRate,
+  selectCurrencyBaseRateRows,
+} from "./migration-tool.rates";
+import {
+  LEGACY_PURPOSE_TABLE_CANDIDATES,
+  PURPOSE_MIGRATION_SKIPPED_TABLES,
+  collapseMstPurposesByDescription,
+  mapLegacyMstPurposeRow,
+} from "./migration-tool.purpose";
+import {
+  LEGACY_TAX_TABLE_CANDIDATES,
+  TAX_MIGRATION_SKIPPED_TABLES,
+  mapLegacyGstInfoRow,
+  mapLegacyMstTaxRow,
+  mapLegacyTcsPerMasterRow,
+  selectTcsPerMasterRowsForSlabs,
+} from "./migration-tool.tax";
+import {
+  DAY_END_POLICY_CATEGORY_CODE,
+  LEGACY_SETTINGS_TABLE_CANDIDATES,
+  MAIL_PASSWORD_DUMMY_PLAINTEXT,
+  PASSWORD_POLICY_CATEGORY_CODE,
+  PASSWORD_POLICY_MAX_LENGTH_DEFAULT,
+  SETTINGS_MIGRATION_SKIPPED_TABLES,
+  collapseAdvSettingsByDataCode,
+  isPasswordPolicyChildCode,
+  mapEodQuestionRow,
+  mapMailConfigRow,
+  mapPasswordPolicyRow,
+  type CollapsedAdvSetting,
+} from "./migration-tool.settings";
+import {
+  LEGACY_DOCUMENT_TABLE_CANDIDATES,
+  disambiguateDocumentCode,
+  mapLegacyScanDocMasterRow,
+} from "./migration-tool.document";
+import {
+  LEGACY_LOCK_TABLE_CANDIDATES,
+  mapLegacyMonthLockRow,
+  mapLegacyMonthLockUserLink,
+  pickFirstMonthLockPerBranch,
+} from "./migration-tool.lock";
+import {
+  DocumentProfile,
+  DocumentSpecificationType,
+} from "../document-profiles/document-profile.entity";
+import { MailConfig } from "../mail/entities/mail-config.entity";
+import { EncryptionUtil } from "../mail/utils/encryption.util";
+import { MonthlyLockWindow } from "../monthly-locks/entities/monthly-lock-window.entity";
+import { PasswordPolicyCodeEnum } from "../password-policy/password-policy.enum";
+import { Purpose } from "../purpose/purpose.entity";
+import { PurposeSlab } from "../purpose/purpose-slab.entity";
+import { PurposeRateType } from "../purpose/purpose.enums";
+import {
+  AdvancedSetting,
+  NodeType,
+  ValueType,
+} from "../additional-settings/advanced-setting.entity";
+import { CurrencyRate } from "../currency-rates/currency-rate.entity";
 import { FinancialCode } from "../financial-codes/financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
@@ -128,7 +208,26 @@ type InternalTask =
   | "userRoleLinks"
   | "branchCounterLinks"
   | "branchUserLinks"
-  | "counterUserLinks";
+  | "counterUserLinks"
+  | "party"
+  | "productIssuerLink"
+  | "mstRate"
+  | "marginMaster"
+  | "tickerRate"
+  | "rateDeferredSkip"
+  | "purpose"
+  | "purposeDeferredSkip"
+  | "gstRate"
+  | "gstInfo"
+  | "tcsPerMaster"
+  | "taxDeferredSkip"
+  | "advSettings"
+  | "passwordPolicy"
+  | "mailConfig"
+  | "documentProfile"
+  | "monthlyLock"
+  | "dayEndPolicy"
+  | "settingsDeferredSkip";
 
 interface MigrationSummary {
   tables: number;
@@ -184,6 +283,8 @@ interface MigrationContext {
   counterMap: Map<string, string>;
   userMap: Map<string, string>;
   roleMap: Map<string, string>;
+  partyMap: Map<string, string>;
+  partyCodeMap: Map<string, string>;
   branchCounters: Map<string, string[]>;
   branchUserLinks: Array<SourceRow>;
   counterUserLinks: Array<SourceRow>;
@@ -375,6 +476,185 @@ const TABLE_DEPENDENCIES: Record<string, InternalTask[]> = {
     "counterUserLinks",
     "userRoleLinks",
   ],
+
+  mstCodes: ["company", "branch", "party"],
+  mstcodes: ["company", "branch", "party"],
+  party: ["company", "branch", "party"],
+  mProductIssuerLink: [
+    "company",
+    "branch",
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "party",
+    "productIssuerLink",
+  ],
+  mproductissuerlink: [
+    "company",
+    "branch",
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "party",
+    "productIssuerLink",
+  ],
+  productIssuerLink: [
+    "company",
+    "branch",
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "party",
+    "productIssuerLink",
+  ],
+  mstRates: ["currency", "product", "currencyProductLink", "mstRate"],
+  mstrates: ["currency", "product", "currencyProductLink", "mstRate"],
+  MarginMaster: ["currency", "product", "currencyProductLink", "marginMaster"],
+  marginmaster: ["currency", "product", "currencyProductLink", "marginMaster"],
+  tickerliverate: ["currency", "tickerRate"],
+  tmpliverate: ["currency", "tickerRate"],
+  StockCurrencyRate: ["rateDeferredSkip"],
+  stockcurrencyrate: ["rateDeferredSkip"],
+  PreMarginMaster: ["rateDeferredSkip"],
+  premarginmaster: ["rateDeferredSkip"],
+  MARGINMASTERTT: ["rateDeferredSkip"],
+  marginmastertt: ["rateDeferredSkip"],
+  mstRate: ["currency", "product", "currencyProductLink", "mstRate"],
+  marginMaster: ["currency", "product", "currencyProductLink", "marginMaster"],
+  tickerRate: ["currency", "tickerRate"],
+  rateDeferredSkip: ["rateDeferredSkip"],
+  mstPurpose: ["purpose"],
+  MstPurpose: ["purpose"],
+  MSTPURPOSE: ["purpose"],
+  purpose: ["purpose"],
+  mstAppPurpose: ["purposeDeferredSkip"],
+  SubPurpose: ["purposeDeferredSkip"],
+  subpurpose: ["purposeDeferredSkip"],
+  PurposeLimit: ["purposeDeferredSkip"],
+  purposelimit: ["purposeDeferredSkip"],
+  ADIPurposeMaster: ["purposeDeferredSkip"],
+  AD1Referral_Inc: ["purposeDeferredSkip"],
+  IBPurposes: ["purposeDeferredSkip"],
+  RBIPurpose: ["purposeDeferredSkip"],
+  RBIPURPOSE: ["purposeDeferredSkip"],
+  MstLRSPurpose: ["purposeDeferredSkip"],
+  TPPurpose: ["purposeDeferredSkip"],
+  TTPurpose: ["purposeDeferredSkip"],
+  TTSubPurpose: ["purposeDeferredSkip"],
+  purposeDeferredSkip: ["purposeDeferredSkip"],
+  mstTax: ["gstRate"],
+  MstTax: ["gstRate"],
+  gstRate: ["gstRate"],
+  GSTInfo: ["company", "branch", "party", "gstInfo"],
+  gstinfo: ["company", "branch", "party", "gstInfo"],
+  gstInfo: ["company", "branch", "party", "gstInfo"],
+  TCSPERMASTER: ["purpose", "tcsPerMaster"],
+  tcspermaster: ["purpose", "tcsPerMaster"],
+  tcsPerMaster: ["purpose", "tcsPerMaster"],
+  TCSApplyFor: ["taxDeferredSkip"],
+  tcsapplyfor: ["taxDeferredSkip"],
+  TCSPANTRANS: ["taxDeferredSkip"],
+  tcspantrans: ["taxDeferredSkip"],
+  tb_TCSAPI: ["taxDeferredSkip"],
+  mstTaxd: ["taxDeferredSkip"],
+  mstTaxExampt: ["taxDeferredSkip"],
+  GSTNoExempt: ["taxDeferredSkip"],
+  GSTNOUPDATE: ["taxDeferredSkip"],
+  gstrcmslab: ["taxDeferredSkip"],
+  gstexepmpt: ["taxDeferredSkip"],
+  taxDeferredSkip: ["taxDeferredSkip"],
+  advsettings: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "company",
+    "branch",
+    "user",
+    "party",
+    "purpose",
+    "advSettings",
+  ],
+  AdvSettings: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "company",
+    "branch",
+    "user",
+    "party",
+    "purpose",
+    "advSettings",
+  ],
+  ADVSETTINGS: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "company",
+    "branch",
+    "user",
+    "party",
+    "purpose",
+    "advSettings",
+  ],
+  advSettings: [
+    "country",
+    "currency",
+    "financialCode",
+    "account",
+    "product",
+    "company",
+    "branch",
+    "user",
+    "party",
+    "purpose",
+    "advSettings",
+  ],
+  mstPasswordPolicy: ["passwordPolicy"],
+  MstPasswordPolicy: ["passwordPolicy"],
+  passwordPolicy: ["passwordPolicy"],
+  MailConfig: ["mailConfig"],
+  mailconfig: ["mailConfig"],
+  mailConfig: ["mailConfig"],
+  ScanDocMaster: ["documentProfile"],
+  scandocmaster: ["documentProfile"],
+  documentProfile: ["documentProfile"],
+  monthlock: ["company", "branch", "user", "monthlyLock"],
+  MonthLock: ["company", "branch", "user", "monthlyLock"],
+  MLockBrnUserLink: ["company", "branch", "user", "monthlyLock"],
+  mlockbrnuserlink: ["company", "branch", "user", "monthlyLock"],
+  monthlyLock: ["company", "branch", "user", "monthlyLock"],
+  tb_EODQuestion: ["dayEndPolicy"],
+  TB_EODQUESTION: ["dayEndPolicy"],
+  dayEndPolicy: ["dayEndPolicy"],
+  DOCCHECK: ["settingsDeferredSkip"],
+  UpdateSettings: ["settingsDeferredSkip"],
+  tb_ConsoParameter: ["settingsDeferredSkip"],
+  yrMaster: ["settingsDeferredSkip"],
+  yrDetails: ["settingsDeferredSkip"],
+  ScannedDocs: ["settingsDeferredSkip"],
+  PreScannedDocs: ["settingsDeferredSkip"],
+  DOCCOLLECTED: ["settingsDeferredSkip"],
+  PAYDATALOCK: ["settingsDeferredSkip"],
+  MLRECORD: ["settingsDeferredSkip"],
+  tb_RestrictedMenuVsCounter: ["settingsDeferredSkip"],
+  tb_HolidayList: ["settingsDeferredSkip"],
+  mstShifts: ["settingsDeferredSkip"],
+  mstUserLogin: ["settingsDeferredSkip"],
+  mstUserLogonHours: ["settingsDeferredSkip"],
+  LOGUSERLOGIN: ["settingsDeferredSkip"],
+  settingsDeferredSkip: ["settingsDeferredSkip"],
 };
 
 const escapeIdentifier = (value: string): string =>
@@ -1207,6 +1487,14 @@ export class MigrationToolService {
     return this.activeContext?.roleMap ?? new Map<string, string>();
   }
 
+  private get partyMap() {
+    return this.activeContext?.partyMap ?? new Map<string, string>();
+  }
+
+  private get partyCodeMap() {
+    return this.activeContext?.partyCodeMap ?? new Map<string, string>();
+  }
+
   private get branchCounters() {
     return this.activeContext?.branchCounters ?? new Map<string, string[]>();
   }
@@ -1305,6 +1593,42 @@ export class MigrationToolService {
 
   private get targetProductCurrencyRateRepository() {
     return this.targetDataSource.getRepository(ProductCurrencyRate);
+  }
+
+  private get targetCurrencyRateRepository() {
+    return this.targetDataSource.getRepository(CurrencyRate);
+  }
+
+  private get targetPartyProfileRepository() {
+    return this.targetDataSource.getRepository(PartyProfile);
+  }
+
+  private get targetProductCardIssuerRepository() {
+    return this.targetDataSource.getRepository(ProductCardIssuer);
+  }
+
+  private get targetPurposeRepository() {
+    return this.targetDataSource.getRepository(Purpose);
+  }
+
+  private get targetPurposeSlabRepository() {
+    return this.targetDataSource.getRepository(PurposeSlab);
+  }
+
+  private get targetAdvancedSettingRepository() {
+    return this.targetDataSource.getRepository(AdvancedSetting);
+  }
+
+  private get targetDocumentProfileRepository() {
+    return this.targetDataSource.getRepository(DocumentProfile);
+  }
+
+  private get targetMailConfigRepository() {
+    return this.targetDataSource.getRepository(MailConfig);
+  }
+
+  private get targetMonthlyLockWindowRepository() {
+    return this.currentTransactionDataSource.getRepository(MonthlyLockWindow);
   }
 
   private getConnectionProfiles(
@@ -1716,6 +2040,8 @@ export class MigrationToolService {
       counterMap: new Map(),
       userMap: new Map(),
       roleMap: new Map(),
+      partyMap: new Map(),
+      partyCodeMap: new Map(),
       branchCounters: new Map(),
       branchUserLinks: [],
       counterUserLinks: [],
@@ -1733,8 +2059,8 @@ export class MigrationToolService {
       }
       for (const dep of dependencies) {
         if (result.has(dep)) {
-          continue;
-        }
+        continue;
+      }
         result.add(dep);
         visit(dep);
       }
@@ -1783,6 +2109,44 @@ export class MigrationToolService {
         return "mstBranchUserLink";
       case "counterUserLinks":
         return "mstCounterUserLink";
+      case "party":
+        return "party_profiles";
+      case "productIssuerLink":
+        return "product_card_issuers";
+      case "mstRate":
+        return "currency_rates";
+      case "marginMaster":
+        return "product_currency_rates";
+      case "tickerRate":
+        return "currency_rates";
+      case "rateDeferredSkip":
+        return "(deferred)";
+      case "purpose":
+        return "purposes";
+      case "purposeDeferredSkip":
+        return "(deferred)";
+      case "gstRate":
+        return "advanced_settings";
+      case "gstInfo":
+        return "party_profiles";
+      case "tcsPerMaster":
+        return "purpose_slabs";
+      case "taxDeferredSkip":
+        return "(deferred)";
+      case "advSettings":
+        return "advanced_settings";
+      case "passwordPolicy":
+        return "advanced_settings";
+      case "mailConfig":
+        return "mail_configurations";
+      case "documentProfile":
+        return "document_profiles";
+      case "monthlyLock":
+        return "monthly_lock_windows";
+      case "dayEndPolicy":
+        return "advanced_settings";
+      case "settingsDeferredSkip":
+        return "(deferred)";
       default:
         return task;
     }
@@ -1823,6 +2187,44 @@ export class MigrationToolService {
       case "role":
       case "userRoleLinks":
         return "mstuser";
+      case "party":
+        return "mstCodes";
+      case "productIssuerLink":
+        return "mProductIssuerLink";
+      case "mstRate":
+        return "mstRates";
+      case "marginMaster":
+        return "MarginMaster";
+      case "tickerRate":
+        return "tickerliverate";
+      case "rateDeferredSkip":
+        return "StockCurrencyRate";
+      case "purpose":
+        return "mstPurpose";
+      case "purposeDeferredSkip":
+        return "PurposeLimit";
+      case "gstRate":
+        return "mstTax";
+      case "gstInfo":
+        return "GSTInfo";
+      case "tcsPerMaster":
+        return "TCSPERMASTER";
+      case "taxDeferredSkip":
+        return "TCSApplyFor";
+      case "advSettings":
+        return "advsettings";
+      case "passwordPolicy":
+        return "mstPasswordPolicy";
+      case "mailConfig":
+        return "MailConfig";
+      case "documentProfile":
+        return "ScanDocMaster";
+      case "monthlyLock":
+        return "monthlock";
+      case "dayEndPolicy":
+        return "tb_EODQuestion";
+      case "settingsDeferredSkip":
+        return "DOCCHECK";
       default:
         return "";
     }
@@ -1939,7 +2341,7 @@ export class MigrationToolService {
     context: MigrationContext,
     params: {
       sourceTable: string;
-      sourceRowIdentifier: string;
+      sourceRowIdentifier?: string;
       fieldName: string;
       errorMessage: string;
       technicalNote?: string;
@@ -1947,7 +2349,7 @@ export class MigrationToolService {
   ) {
     context.errors.push({
       sourceTable: params.sourceTable,
-      sourceRowIdentifier: params.sourceRowIdentifier,
+      sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
       fieldName: params.fieldName,
       errorMessage: params.errorMessage,
       technicalNote: params.technicalNote ?? "",
@@ -1963,14 +2365,14 @@ export class MigrationToolService {
     context: MigrationContext,
     params: {
       sourceTable: string;
-      sourceRowIdentifier: string;
+      sourceRowIdentifier?: string;
       reason: string;
       fallbackAction: string;
     },
   ) {
     context.skippedRows.push({
       sourceTable: params.sourceTable,
-      sourceRowIdentifier: params.sourceRowIdentifier,
+      sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
       reason: params.reason,
       fallbackAction: params.fallbackAction,
     });
@@ -2018,7 +2420,7 @@ export class MigrationToolService {
     context: MigrationContext,
     params: {
       sourceTable: string;
-      sourceRowIdentifier: string;
+      sourceRowIdentifier?: string;
     },
   ): ResolvedAuditFields {
     const deletedFlag = toBoolean(row.bIsDeleted ?? row.bIsdeleted);
@@ -2044,7 +2446,7 @@ export class MigrationToolService {
     const deletedBy = deletedBySource
       ? this.resolveAuditUserId(context, deletedBySource, {
           sourceTable: params.sourceTable,
-          sourceRowIdentifier: params.sourceRowIdentifier,
+          sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
           fieldName: "nDeletedBy",
         })
       : (context.bootstrapAdminUserId ?? context.actorUserId);
@@ -2423,7 +2825,7 @@ export class MigrationToolService {
     sourceValue: any,
     params: {
       sourceTable: string;
-      sourceRowIdentifier: string;
+      sourceRowIdentifier?: string;
       fieldName: string;
     },
   ): string {
@@ -2942,7 +3344,7 @@ export class MigrationToolService {
       }
 
       return this.targetStateRepository.findOne({
-        where: [
+      where: [
           { code: value },
           { name: value },
           { gstStateCode: padGstStateCode(value) ?? value },
@@ -3166,7 +3568,7 @@ export class MigrationToolService {
         row.nCreatedBy ?? row.nCreatedBY,
         {
           sourceTable: params.sourceTable,
-          sourceRowIdentifier: params.sourceRowIdentifier,
+          sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
           fieldName: "nCreatedBy",
         },
       ),
@@ -3175,7 +3577,7 @@ export class MigrationToolService {
         row.nLastUpdateBy ?? row.nLastupdatedBy,
         {
           sourceTable: params.sourceTable,
-          sourceRowIdentifier: params.sourceRowIdentifier,
+          sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
           fieldName: "nLastUpdateBy",
         },
       ),
@@ -3207,7 +3609,7 @@ export class MigrationToolService {
     ) {
       this.addSkippedRow(context, {
         sourceTable: params.sourceTable,
-        sourceRowIdentifier: params.sourceRowIdentifier,
+        sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
         reason: "Currency country reference missing",
         fallbackAction: "Currency row skipped",
       });
@@ -3258,7 +3660,7 @@ export class MigrationToolService {
     if (this.isTaskIncluded(context, "country")) {
       this.addSkippedRow(context, {
         sourceTable: params.sourceTable,
-        sourceRowIdentifier: params.sourceRowIdentifier,
+        sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
         reason: `Could not resolve legacy country id ${legacyKey} from combined country migration`,
         fallbackAction: "Currency row skipped",
       });
@@ -3276,8 +3678,8 @@ export class MigrationToolService {
     if (cachedTargetId) {
       const cachedCountry = isPersistedUuid(cachedTargetId)
         ? await this.targetCountryRepository.findOne({
-            where: { id: cachedTargetId },
-            relations: { countryGroup: true },
+        where: { id: cachedTargetId },
+        relations: { countryGroup: true },
           })
         : null;
       if (cachedCountry) {
@@ -3301,7 +3703,7 @@ export class MigrationToolService {
     if (!sourceRow) {
       this.addSkippedRow(context, {
         sourceTable: params.sourceTable,
-        sourceRowIdentifier: params.sourceRowIdentifier,
+        sourceRowIdentifier: params.sourceRowIdentifier ?? "?",
         reason: `Could not resolve legacy country id ${legacyKey} from available source tables`,
         fallbackAction: "Currency row skipped",
       });
@@ -5276,6 +5678,177 @@ export class MigrationToolService {
     };
   }
 
+  private async readSourceRowsFromCandidates(
+    pool: mssql.ConnectionPool,
+    candidates: readonly string[],
+  ): Promise<{ tableName: string; rows: SourceRow[] }> {
+    let lastError: unknown = null;
+    for (const tableName of candidates) {
+      try {
+        const rows = await this.readSourceRows(pool, tableName);
+        return { tableName, rows };
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(
+          `Source table ${tableName} not readable: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    throw new BadRequestException(
+      `Could not read any of [${candidates.join(", ")}]: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`,
+    );
+  }
+
+  private async ensureCategoryOptionByCode(
+    context: MigrationContext,
+    params: {
+      code: CategoryOptionCodeEnum;
+      value: string;
+      sourceTable: string;
+      sourceColumn: string;
+      sourceRowIdentifier?: string;
+    },
+  ): Promise<string | null> {
+    const existing = await this.targetSelectOptionRepository.findOne({
+      where: { code: params.code, value: params.value },
+    });
+    if (existing) {
+      return existing.id;
+    }
+
+    if (context.mode !== "real") {
+      const mockId = `mock-opt-${params.code}-${params.value}`;
+      this.addFieldStatus(context, {
+        sourceTable: params.sourceTable,
+        sourceColumn: params.sourceColumn,
+        sourceValue: params.value,
+        targetColumn: `category_options.${params.code}`,
+        targetValue: mockId,
+        status: "transformed",
+        note: "Mock run would create category option",
+      });
+      return mockId;
+    }
+
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    const saved = await this.targetSelectOptionRepository.save(
+      this.targetSelectOptionRepository.create({
+        code: params.code,
+        value: params.value,
+        label: params.value,
+        sortOrder: 0,
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    this.addIdMap(context, {
+      oldTable: "category_options",
+      oldId: `${params.code}:${params.value}`,
+      newTable: "category_options",
+      newUuid: saved.id,
+      lookupKey: `${params.code}:${params.value}`,
+    });
+    return saved.id;
+  }
+
+  private async resolvePartyBranchId(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+    mapped: MappedPartyProfile,
+  ): Promise<string | null> {
+    if (mapped.legacyBranchId) {
+      const byId = await this.resolveBranchByOldId(
+        pool,
+        context,
+        mapped.legacyBranchId,
+      );
+      if (byId) {
+        return byId;
+      }
+      this.addWarning(context, {
+        sourceTable: "mstCodes",
+        sourceColumn: "nBranchID",
+        note: `Branch oldId=${mapped.legacyBranchId} missing in MSSQL; trying HO fallback`,
+      });
+    }
+
+    if (mapped.legacyBranchCode) {
+      const code = mapped.legacyBranchCode.trim().toUpperCase();
+      const existing = await this.targetBranchRepository.findOne({
+        where: { code },
+      });
+      if (existing) {
+        return existing.id;
+      }
+    }
+
+    const ho = await this.targetBranchRepository.findOne({
+      where: { isHeadOffice: true },
+    });
+    if (ho) {
+      this.addWarning(context, {
+        sourceTable: "mstCodes",
+        sourceColumn: "nBranchID",
+        note: `Using HO branch ${ho.code} for party ${mapped.code}`,
+      });
+      return ho.id;
+    }
+
+    return null;
+  }
+
+  private rememberParty(
+    context: MigrationContext,
+    oldId: string | number | null,
+    code: string,
+    id: string,
+  ) {
+    if (oldId != null && oldId !== "") {
+      context.partyMap.set(String(oldId), id);
+    }
+    context.partyCodeMap.set(code.toUpperCase(), id);
+  }
+
+  private async resolveCurrencyIdByCode(
+    code: string | null | undefined,
+  ): Promise<string | null> {
+    const currencyCode = toNullableString(code)?.toUpperCase() ?? null;
+    if (!currencyCode) {
+      return null;
+    }
+    const existing = await this.targetCurrencyRepository.findOne({
+      where: { currencyCode },
+    });
+    return existing?.id ?? null;
+  }
+
+  private async resolveProductIdByCode(
+    code: string | null | undefined,
+  ): Promise<string | null> {
+    const productCode = toNullableString(code)?.toUpperCase() ?? null;
+    if (!productCode) {
+      return null;
+    }
+    const mapped = this.productCodeMap.get(productCode);
+    if (mapped) {
+      return mapped;
+    }
+    const existing = await this.targetProductRepository.findOne({
+      where: { productCode },
+    });
+    if (existing) {
+      this.productCodeMap.set(productCode, existing.id);
+      return existing.id;
+    }
+    return null;
+  }
+
+
   private async processCountries(
     pool: mssql.ConnectionPool,
     context: MigrationContext,
@@ -7022,6 +7595,1891 @@ export class MigrationToolService {
     });
   }
 
+  private async processMstRates(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "mstRate")) {
+      return;
+    }
+
+    this.logger.log(
+      `[mstRates] rates/margins migration started mode=${context.mode}`,
+    );
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_RATE_TABLE_CANDIDATES.mstRates,
+    );
+    this.ensureSourceRows(context, "mstRate", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    const mappedRows = rows.map((row) => mapLegacyMstRateRow(row));
+
+    for (let index = 0; index < rows.length; index += 1) {
+      context.summary.rowsScanned += 1;
+      const mapped = mappedRows[index];
+      for (const field of mapped.unmapped) {
+        this.addFieldStatus(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          status: "unmapped",
+          note: field.reason,
+        });
+        this.addUnmappedColumn(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          reason: field.reason,
+        });
+      }
+    }
+
+    const { selected, skipped: baseSkipped } =
+      selectCurrencyBaseRateRows(mappedRows);
+
+    for (const item of baseSkipped) {
+      skipped += 1;
+      this.addSkippedRow(context, {
+        sourceTable: tableName,
+        sourceRowIdentifier:
+          item.row.oldId ??
+          `${item.row.currencyCode ?? "?"}:${item.row.productCode ?? "?"}`,
+        reason: item.reason,
+        fallbackAction:
+          "Skipped as currency_rates base; product min/max may still apply",
+      });
+    }
+
+    for (const row of selected) {
+      const sourceKey =
+        row.oldId ?? `${row.currencyCode ?? "?"}:${row.productCode ?? "?"}`;
+      try {
+        const currencyId = await this.resolveCurrencyIdByCode(row.currencyCode);
+        if (!currencyId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: `Currency ${row.currencyCode} not resolved for currency_rates base`,
+            fallbackAction: "Skipped MANUAL currency_rates insert",
+          });
+          continue;
+        }
+
+        const buy = row.buy!;
+        const sell = row.sell!;
+        const buyNum = Number(buy);
+        const sellNum = Number(sell);
+        const baseRate =
+          !Number.isNaN(buyNum) && !Number.isNaN(sellNum)
+            ? String((buyNum + sellNum) / 2)
+            : buy;
+        const notes = `Migrated from mstRates nRateID=${row.oldId ?? "?"} product=${row.productCode ?? "?"}`;
+
+        if (context.mode === "real" && !currencyId.startsWith("mock-")) {
+          const saved = await this.targetCurrencyRateRepository.save(
+            this.targetCurrencyRateRepository.create({
+              currencyId,
+              currency: { id: currencyId } as Currency,
+              provider: CurrencyRateProvider.MANUAL,
+              baseBuyRate: buy,
+              baseSaleRate: sell,
+              baseRate,
+              isActive: true,
+              notes,
+              enteredBy: actorId,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: saved.id,
+            status: "inserted",
+            note: `Created MANUAL currency_rates for ${row.currencyCode}`,
+          });
+        } else {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-currency-rate-${sourceKey}`,
+            status: "mocked",
+            note: `Would create MANUAL currency_rates for ${row.currencyCode}`,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          fieldName: "mstRate",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const aggregates = aggregateMstRatesForProductCurrency(mappedRows);
+    for (const agg of aggregates) {
+      const sourceKey = `${agg.productCode}|${agg.currencyCode}`;
+      try {
+        const currencyId = await this.resolveCurrencyIdByCode(agg.currencyCode);
+        const productId = await this.resolveProductIdByCode(agg.productCode);
+        if (!currencyId || !productId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: !currencyId
+              ? `Currency ${agg.currencyCode} not resolved for product_currency_rates`
+              : `Product ${agg.productCode} not resolved for product_currency_rates`,
+            fallbackAction: "Skipped product rate min/max upsert",
+          });
+          continue;
+        }
+
+        if (currencyId.startsWith("mock-") || productId.startsWith("mock-")) {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-pcr-rates-${sourceKey}`,
+            status: "mocked",
+            note: "Would upsert product_currency_rates min/max from mstRates",
+          });
+          continue;
+        }
+
+        const existing =
+          await this.targetProductCurrencyRateRepository.findOne({
+            where: { productId, currencyId },
+          });
+
+        if (existing) {
+          if (context.mode === "real") {
+            existing.buyMinRate = agg.buyMinRate;
+            existing.buyMaxRate = agg.buyMaxRate;
+            existing.saleMinRate = agg.saleMinRate;
+            existing.saleMaxRate = agg.saleMaxRate;
+            existing.updatedBy = actorId;
+            await this.targetProductCurrencyRateRepository.save(existing);
+          }
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: existing.id,
+            status: context.mode === "real" ? "updated" : "mocked",
+            note: "Upserted product_currency_rates min/max (margins kept)",
+          });
+          continue;
+        }
+
+        if (context.mode === "real") {
+          const saved = await this.targetProductCurrencyRateRepository.save(
+            this.targetProductCurrencyRateRepository.create({
+              productId,
+              currencyId,
+              product: { id: productId } as Product,
+              currency: { id: currencyId } as Currency,
+              buyMarginType: null,
+              buyMarginValue: null,
+              buyMinRate: agg.buyMinRate,
+              buyMaxRate: agg.buyMaxRate,
+              saleMarginType: null,
+              saleMarginValue: null,
+              saleMinRate: agg.saleMinRate,
+              saleMaxRate: agg.saleMaxRate,
+              isActive: true,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: saved.id,
+            status: "inserted",
+            note: "Created product_currency_rates with mstRates min/max",
+          });
+        } else {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-pcr-rates-${sourceKey}`,
+            status: "mocked",
+            note: "Would create product_currency_rates with mstRates min/max",
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          fieldName: "mstRate",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "currency_rates + product_currency_rates",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "MANUAL base from blank IssCode/CN/latest; product min/max aggregated",
+    });
+    this.logger.log(
+      `[mstRates] finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+
+  private async processMarginMaster(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "marginMaster")) {
+      return;
+    }
+
+    this.logger.log(
+      `[MarginMaster] margin migration started mode=${context.mode}`,
+    );
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_RATE_TABLE_CANDIDATES.marginMaster,
+    );
+    this.ensureSourceRows(context, "marginMaster", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    const mappedRows = rows.map((row) => mapLegacyMarginMasterRow(row));
+
+    const sampleLimit = Math.min(mappedRows.length, 5);
+    for (let index = 0; index < sampleLimit; index += 1) {
+      for (const field of mappedRows[index].unmapped) {
+        this.addFieldStatus(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          status: "unmapped",
+          note: field.reason,
+        });
+        this.addUnmappedColumn(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          reason: field.reason,
+        });
+      }
+    }
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+    }
+
+    const aggregates = aggregateMarginMasterForProductCurrency(mappedRows);
+    for (const agg of aggregates) {
+      const sourceKey = `${agg.productCode}|${agg.currencyCode}`;
+      try {
+        const currencyId = await this.resolveCurrencyIdByCode(agg.currencyCode);
+        const productId = await this.resolveProductIdByCode(agg.productCode);
+        if (!currencyId || !productId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: !currencyId
+              ? `Currency ${agg.currencyCode} not resolved for margins`
+              : `Product ${agg.productCode} not resolved for margins`,
+            fallbackAction: "Skipped product_currency_rates margin upsert",
+          });
+          continue;
+        }
+
+        if (currencyId.startsWith("mock-") || productId.startsWith("mock-")) {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-pcr-margin-${sourceKey}`,
+            status: "mocked",
+            note: "Would upsert product_currency_rates margins from MarginMaster",
+          });
+          continue;
+        }
+
+        const existing =
+          await this.targetProductCurrencyRateRepository.findOne({
+            where: { productId, currencyId },
+          });
+
+        if (existing) {
+          if (context.mode === "real") {
+            existing.buyMarginValue = agg.buyMarginValue;
+            existing.saleMarginValue = agg.saleMarginValue;
+            existing.buyMarginType = agg.buyMarginType;
+            existing.saleMarginType = agg.saleMarginType;
+            existing.updatedBy = actorId;
+            await this.targetProductCurrencyRateRepository.save(existing);
+          }
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: existing.id,
+            status: context.mode === "real" ? "updated" : "mocked",
+            note: "Upserted product_currency_rates margins (PAISA)",
+          });
+          continue;
+        }
+
+        if (context.mode === "real") {
+          const saved = await this.targetProductCurrencyRateRepository.save(
+            this.targetProductCurrencyRateRepository.create({
+              productId,
+              currencyId,
+              product: { id: productId } as Product,
+              currency: { id: currencyId } as Currency,
+              buyMarginType: agg.buyMarginType,
+              buyMarginValue: agg.buyMarginValue,
+              buyMinRate: null,
+              buyMaxRate: null,
+              saleMarginType: agg.saleMarginType,
+              saleMarginValue: agg.saleMarginValue,
+              saleMinRate: null,
+              saleMaxRate: null,
+              isActive: true,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: saved.id,
+            status: "inserted",
+            note: "Created product_currency_rates with MarginMaster margins",
+          });
+        } else {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-pcr-margin-${sourceKey}`,
+            status: "mocked",
+            note: "Would create product_currency_rates with MarginMaster margins",
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          fieldName: "marginMaster",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "product_currency_rates",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "buyMargin=min sellMargin=max type PAISA; branch/issuer ignored",
+    });
+    this.logger.log(
+      `[MarginMaster] finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+
+  private async processTickerRates(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "tickerRate")) {
+      return;
+    }
+
+    this.logger.log(
+      `[tickerRate] ticker live rate migration started mode=${context.mode}`,
+    );
+    const ticker = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_RATE_TABLE_CANDIDATES.tickerLiveRate,
+    );
+    const tmp = await this.readSourceTableIfExists(
+      pool,
+      LEGACY_RATE_TABLE_CANDIDATES.tmpLiveRate,
+    );
+
+    if (!ticker && !tmp) {
+      this.addWarning(context, {
+        sourceTable: "tickerliverate",
+        note: "Neither tickerliverate nor tmpliverate was readable; no TICKER currency_rates migrated",
+      });
+      context.tableResults.push({
+        sourceTable: "tickerliverate/tmpliverate",
+        targetTable: "currency_rates",
+        scanned: 0,
+        inserted: 0,
+        skipped: 0,
+        failed: 0,
+        note: "Source tables missing",
+      });
+      return;
+    }
+
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    const totalScanned = (ticker?.rows.length ?? 0) + (tmp?.rows.length ?? 0);
+
+    const processMapped = async (
+      sourceTable: string,
+      mapped: ReturnType<typeof mapLegacyTickerLiveRate>,
+    ) => {
+      context.summary.rowsScanned += 1;
+      const sourceKey = mapped.sourceKey;
+      try {
+        for (const field of mapped.unmapped) {
+          this.addFieldStatus(context, {
+            sourceTable,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            status: "unmapped",
+            note: field.reason,
+          });
+          this.addUnmappedColumn(context, {
+            sourceTable,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            reason: field.reason,
+          });
+        }
+
+        if (mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable,
+            reason: mapped.skipReason,
+            fallbackAction: "Skipped TICKER currency_rates insert",
+          });
+          return;
+        }
+
+        const currencyId = await this.resolveCurrencyIdByCode(
+          mapped.currencyCode,
+        );
+        if (!currencyId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable,
+            reason: `Currency ${mapped.currencyCode} not resolved for TICKER rate`,
+            fallbackAction: "Skipped TICKER currency_rates insert",
+          });
+          return;
+        }
+
+        if (context.mode === "real" && !currencyId.startsWith("mock-")) {
+          const saved = await this.targetCurrencyRateRepository.save(
+            this.targetCurrencyRateRepository.create({
+              currencyId,
+              currency: { id: currencyId } as Currency,
+              provider: CurrencyRateProvider.TICKER,
+              baseBuyRate: mapped.baseBuyRate!,
+              baseSaleRate: mapped.baseSaleRate!,
+              baseRate: (() => {
+                const buy = Number(mapped.baseBuyRate);
+                const sell = Number(mapped.baseSaleRate);
+                if (!Number.isNaN(buy) && !Number.isNaN(sell)) {
+                  return String((buy + sell) / 2);
+                }
+                return mapped.baseBuyRate;
+              })(),
+              isActive: true,
+              notes: `Migrated from ${mapped.sourceTable} key=${sourceKey}`,
+              enteredBy: actorId,
+              createdBy: actorId,
+              updatedBy: actorId,
+            }),
+          );
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable,
+            sourcePrimaryKey: sourceKey,
+            targetId: saved.id,
+            status: "inserted",
+            note: `Created TICKER currency_rates for ${mapped.currencyCode}`,
+          });
+        } else {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-ticker-rate-${sourceKey}`,
+            status: "mocked",
+            note: `Would create TICKER currency_rates for ${mapped.currencyCode}`,
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable,
+          fieldName: "tickerRate",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    if (ticker) {
+      for (const row of ticker.rows) {
+        await processMapped(ticker.tableName, mapLegacyTickerLiveRate(row));
+      }
+    }
+    if (tmp) {
+      for (const row of tmp.rows) {
+        await processMapped(tmp.tableName, mapLegacyTmpLiveRate(row));
+      }
+    }
+
+    context.tableResults.push({
+      sourceTable: [ticker?.tableName, tmp?.tableName]
+        .filter(Boolean)
+        .join("+"),
+      targetTable: "currency_rates",
+      scanned: totalScanned,
+      inserted,
+      skipped,
+      failed,
+      note: "Provider TICKER from tickerliverate / tmpliverate",
+    });
+    this.logger.log(
+      `[tickerRate] finished scanned=${totalScanned} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+
+  private async processRateDeferredSkips(
+    _pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "rateDeferredSkip")) {
+      return;
+    }
+
+    this.logger.log(
+      `[rateDeferredSkip] logging deferred rate/margin tables mode=${context.mode}`,
+    );
+    const selectedLower = new Set(
+      context.selectedTables.map((table) => table.toLowerCase()),
+    );
+
+    for (const entry of RATE_MIGRATION_SKIPPED_TABLES) {
+      if (!selectedLower.has(entry.table.toLowerCase())) {
+        continue;
+      }
+      this.addSkippedRow(context, {
+        sourceTable: entry.table,
+        reason: entry.reason,
+        fallbackAction: "Deferred; not migrated this wave",
+      });
+      this.addWarning(context, {
+        sourceTable: entry.table,
+        note: entry.reason,
+      });
+      context.tableResults.push({
+        sourceTable: entry.table,
+        targetTable: "(deferred)",
+        scanned: 0,
+        inserted: 0,
+        skipped: 1,
+        failed: 0,
+        note: entry.reason,
+      });
+    }
+  }
+
+
+  private resolvePurposeIdByLegacyCode(
+    context: MigrationContext,
+    legacyPurposeCode: string,
+  ): string | null {
+    const key = `legacy-purpose-code:${legacyPurposeCode.trim().toUpperCase()}`;
+    const hit = context.idMap.find(
+      (row) =>
+        row.lookupKey === key &&
+        typeof row.newUuid === "string" &&
+        Boolean(row.newUuid),
+    );
+    return typeof hit?.newUuid === "string" ? hit.newUuid : null;
+  }
+
+  private rememberLegacyPurposeCodes(
+    context: MigrationContext,
+    purposeId: string,
+    legacyPurposeCodes: string[],
+    sourceTable: string,
+  ) {
+    for (const legacy of legacyPurposeCodes) {
+      const code = legacy.trim().toUpperCase();
+      if (!code) continue;
+      this.addIdMap(context, {
+        oldTable: sourceTable,
+        oldId: code,
+        newTable: "purposes",
+        newUuid: purposeId,
+        lookupKey: `legacy-purpose-code:${code}`,
+      });
+    }
+  }
+
+  private async processPurposes(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "purpose")) {
+      return;
+    }
+
+    this.logger.log(
+      `[mstPurpose] purpose migration started mode=${context.mode}`,
+    );
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_PURPOSE_TABLE_CANDIDATES.mstPurpose,
+    );
+    this.ensureSourceRows(context, "purpose", rows);
+
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    const mappedRows = rows.map((row) => mapLegacyMstPurposeRow(row));
+    context.summary.rowsScanned += rows.length;
+
+    for (const mapped of mappedRows) {
+      for (const field of mapped.unmapped) {
+        this.addFieldStatus(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          status: "unmapped",
+          note: field.reason,
+        });
+        this.addUnmappedColumn(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          reason: field.reason,
+        });
+      }
+    }
+
+    const collapsed = collapseMstPurposesByDescription(mappedRows);
+
+    for (const purpose of collapsed) {
+      for (const field of purpose.unmapped) {
+        if (
+          field.reason.includes("collision") ||
+          field.reason.includes("defaulted")
+        ) {
+          this.addFieldStatus(context, {
+            sourceTable: tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            status: "transformed",
+            note: field.reason,
+          });
+          this.addTransformation(context, {
+            sourceTable: tableName,
+            sourceField: field.sourceColumn,
+            ruleName: "purpose-code-or-scope-default",
+            originalValue: field.sourceValue,
+            transformedValue: purpose.code,
+            result: "transformed",
+          });
+        }
+      }
+
+      const sourceKey =
+        purpose.legacyIds.join(",") ||
+        purpose.descriptionKey ||
+        purpose.code;
+
+      try {
+        if (!purpose.sell && !purpose.purchase) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: sourceKey,
+            reason: "Purpose has neither sell nor purchase after collapse",
+            fallbackAction: "Skipped purposes insert",
+          });
+          continue;
+        }
+        if (!purpose.corporate && !purpose.individual) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: sourceKey,
+            reason: "Purpose has neither corporate nor individual after collapse",
+            fallbackAction: "Skipped purposes insert",
+          });
+          continue;
+        }
+
+        const notes = [
+          `Migrated from mstPurpose ids=${purpose.legacyIds.join("|") || "?"}`,
+          purpose.legacyPurposeCodes.length
+            ? `oldPurposeCodes=${purpose.legacyPurposeCodes.join("|")}`
+            : null,
+          purpose.codeSource === "disambiguated"
+            ? `codeDisambiguated=${purpose.code}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("; ");
+
+        const existing = await this.targetPurposeRepository.findOne({
+          where: { code: purpose.code },
+          withDeleted: true,
+        });
+
+        if (context.mode === "real") {
+          if (existing) {
+            existing.description = purpose.description;
+            existing.sell = purpose.sell;
+            existing.purchase = purpose.purchase;
+            existing.corporate = purpose.corporate;
+            existing.individual = purpose.individual;
+            existing.updatedBy = actorId;
+            if (purpose.isDeleted && !existing.deletedAt) {
+              existing.deletedAt = new Date();
+              existing.deletedBy = actorId;
+            }
+            if (!purpose.isDeleted && existing.deletedAt) {
+              existing.deletedAt = null;
+              existing.deletedBy = null;
+            }
+            await this.targetPurposeRepository.save(existing);
+            inserted += 1;
+            context.summary.rowsInserted += 1;
+            this.addRowResult(context, {
+              sourceTable: tableName,
+              sourcePrimaryKey: sourceKey,
+              targetId: existing.id,
+              status: "reused",
+              note: `Updated purposes ${purpose.code} (${purpose.description})`,
+            });
+            this.addIdMap(context, {
+              oldTable: tableName,
+              oldId: sourceKey,
+              newTable: "purposes",
+              newUuid: existing.id,
+              lookupKey: `purpose-code:${purpose.code}`,
+            });
+            this.rememberLegacyPurposeCodes(context, existing.id, purpose.legacyPurposeCodes, tableName);
+          } else {
+            const saved = await this.targetPurposeRepository.save(
+              this.targetPurposeRepository.create({
+                code: purpose.code,
+                description: purpose.description,
+                threshold: "0",
+                rate: "0",
+                rateType: PurposeRateType.PERCENT,
+                sell: purpose.sell,
+                purchase: purpose.purchase,
+                corporate: purpose.corporate,
+                individual: purpose.individual,
+                createdBy: actorId,
+                updatedBy: actorId,
+                deletedAt: purpose.isDeleted ? new Date() : null,
+                deletedBy: purpose.isDeleted ? actorId : null,
+              }),
+            );
+            inserted += 1;
+            context.summary.rowsInserted += 1;
+            this.addRowResult(context, {
+              sourceTable: tableName,
+              sourcePrimaryKey: sourceKey,
+              targetId: saved.id,
+              status: "inserted",
+              note: `Created purposes ${purpose.code} from description initials (${notes})`,
+            });
+            this.addIdMap(context, {
+              oldTable: tableName,
+              oldId: sourceKey,
+              newTable: "purposes",
+              newUuid: saved.id,
+              lookupKey: `purpose-code:${purpose.code}`,
+            });
+            this.rememberLegacyPurposeCodes(context, saved.id, purpose.legacyPurposeCodes, tableName);
+          }
+        } else {
+          const mockId = `mock-purpose-${purpose.code}`;
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: mockId,
+            status: "mocked",
+            note: `Would upsert purposes ${purpose.code} sell=${purpose.sell} purchase=${purpose.purchase} corp=${purpose.corporate} indiv=${purpose.individual}`,
+          });
+          this.addIdMap(context, {
+            oldTable: tableName,
+            oldId: sourceKey,
+            newTable: "purposes",
+            newUuid: mockId,
+            lookupKey: `purpose-code:${purpose.code}`,
+          });
+            this.rememberLegacyPurposeCodes(context, mockId, purpose.legacyPurposeCodes, tableName);
+        }
+
+        this.addColumnMapping(context, {
+          sourceTable: tableName,
+          sourceColumn: "Description",
+          sourceValue: purpose.description,
+          targetColumn: "code",
+          targetValue: purpose.code,
+          result: purpose.codeSource === "initials" ? "transformed" : "created",
+        });
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: sourceKey,
+          fieldName: "purpose",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "purposes",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "Collapsed by Description; 2-letter code from initials; flags OR-merged from vTrnType/TrnSubType",
+    });
+    this.logger.log(
+      `[mstPurpose] finished scanned=${rows.length} collapsed=${collapsed.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+
+  private async processPurposeDeferredSkips(
+    _pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "purposeDeferredSkip")) {
+      return;
+    }
+
+    this.logger.log(
+      `[purposeDeferredSkip] logging deferred purpose tables mode=${context.mode}`,
+    );
+    const selectedLower = new Set(
+      context.selectedTables.map((table) => table.toLowerCase()),
+    );
+
+    for (const entry of PURPOSE_MIGRATION_SKIPPED_TABLES) {
+      if (!selectedLower.has(entry.table.toLowerCase())) {
+        continue;
+      }
+      this.addSkippedRow(context, {
+        sourceTable: entry.table,
+        sourceRowIdentifier: entry.table,
+        reason: entry.reason,
+        fallbackAction: "Deferred / ask-client; not migrated this wave",
+      });
+      this.addWarning(context, {
+        sourceTable: entry.table,
+        note: entry.reason,
+      });
+      context.tableResults.push({
+        sourceTable: entry.table,
+        targetTable: "(deferred)",
+        scanned: 0,
+        inserted: 0,
+        skipped: 1,
+        failed: 0,
+        note: entry.reason,
+      });
+    }
+  }
+
+
+  private async processMstTaxGstRate(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "gstRate")) {
+      return;
+    }
+
+    this.logger.log(`[mstTax] GST_RATE migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_TAX_TABLE_CANDIDATES.mstTax,
+    );
+    this.ensureSourceRows(context, "gstRate", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    context.summary.rowsScanned += rows.length;
+
+    const mappedRows = rows.map((row) => mapLegacyMstTaxRow(row));
+    const candidates = mappedRows.filter((row) => row.isGstRateCandidate && !row.skipReason);
+    for (const mapped of mappedRows) {
+      for (const field of mapped.unmapped) {
+        this.addUnmappedColumn(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          reason: field.reason,
+        });
+      }
+      if (!mapped.isGstRateCandidate || mapped.skipReason) {
+        skipped += 1;
+        this.addSkippedRow(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: mapped.oldId ?? mapped.code ?? "?",
+          reason: mapped.skipReason ?? "Not a GST_RATE candidate",
+          fallbackAction: "Skipped mstTax row for GST_RATE",
+        });
+      }
+    }
+
+    if (candidates.length === 0) {
+      this.addWarning(context, {
+        sourceTable: tableName,
+        note: "No gst18% row found to set GST_RATE",
+      });
+    } else {
+      const chosen = candidates[0];
+      if (candidates.length > 1) {
+        this.addWarning(context, {
+          sourceTable: tableName,
+          note: `Multiple gst18% candidates; using nTaxID=${chosen.oldId ?? "?"} VALUE→${chosen.ratePercent}`,
+        });
+      }
+      try {
+        const ratePercent = chosen.ratePercent!;
+        if (context.mode === "real") {
+          let category = await this.targetAdvancedSettingRepository.findOne({
+            where: { code: "TAX_CONFIGURATION", nodeType: NodeType.Category },
+          });
+          if (!category) {
+            category = await this.targetAdvancedSettingRepository.save(
+              this.targetAdvancedSettingRepository.create({
+                code: "TAX_CONFIGURATION",
+                label: "TAX CONFIGURATION",
+                description: "Migrated tax configuration",
+                nodeType: NodeType.Category,
+                sortOrder: 0,
+                isActive: true,
+                createdBy: actorId,
+                updatedBy: actorId,
+              }),
+            );
+          }
+          let setting = await this.targetAdvancedSettingRepository.findOne({
+            where: { code: "GST_RATE", nodeType: NodeType.Setting },
+          });
+          if (setting) {
+            setting.valueType = ValueType.Decimal;
+            setting.valueDecimal = ratePercent;
+            setting.valueText = null;
+            setting.parentId = category.id;
+            setting.updatedBy = actorId;
+            setting.isActive = true;
+            await this.targetAdvancedSettingRepository.save(setting);
+          } else {
+            setting = await this.targetAdvancedSettingRepository.save(
+              this.targetAdvancedSettingRepository.create({
+                code: "GST_RATE",
+                label: "GST RATE (%)",
+                description: chosen.description ?? "Migrated from mstTax gst18%",
+                nodeType: NodeType.Setting,
+                valueType: ValueType.Decimal,
+                valueDecimal: ratePercent,
+                parentId: category.id,
+                sortOrder: 0,
+                isActive: true,
+                createdBy: actorId,
+                updatedBy: actorId,
+              }),
+            );
+          }
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: chosen.oldId ?? chosen.code ?? "gst18%",
+            targetId: setting.id,
+            status: "inserted",
+            note: `Set GST_RATE=${ratePercent} from mstTax ${chosen.code}`,
+          });
+          this.addIdMap(context, {
+            oldTable: tableName,
+            oldId: chosen.oldId ?? "gst18%",
+            newTable: "advanced_settings",
+            newUuid: setting.id,
+            lookupKey: "setting:GST_RATE",
+          });
+        } else {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.addRowResult(context, {
+            sourceTable: tableName,
+            sourcePrimaryKey: chosen.oldId ?? chosen.code ?? "gst18%",
+            targetId: `mock-gst-rate-${ratePercent}`,
+            status: "mocked",
+            note: `Would set GST_RATE=${ratePercent}`,
+          });
+        }
+        this.addTransformation(context, {
+          sourceTable: tableName,
+          sourceField: "VALUE",
+          ruleName: "mstTax-fraction-to-gst-rate-percent",
+          originalValue: chosen.rawValue,
+          transformedValue: chosen.ratePercent,
+          result: "transformed",
+        });
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: chosen.oldId ?? "gst18%",
+          fieldName: "GST_RATE",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "advanced_settings",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "gst18% → GST_RATE percent; other mstTax codes skipped",
+    });
+  }
+
+  private async processGstInfo(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "gstInfo")) {
+      return;
+    }
+
+    this.logger.log(`[GSTInfo] party gstNo migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_TAX_TABLE_CANDIDATES.gstInfo,
+    );
+    this.ensureSourceRows(context, "gstInfo", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    context.summary.rowsScanned += rows.length;
+
+    for (const row of rows) {
+      const mapped = mapLegacyGstInfoRow(row);
+      const sourceKey = mapped.oldId ?? mapped.partyCode ?? "?";
+      for (const field of mapped.unmapped) {
+        this.addUnmappedColumn(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          reason: field.reason,
+        });
+      }
+      try {
+        if (mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: sourceKey,
+            reason: mapped.skipReason,
+            fallbackAction: "Skipped GSTInfo row",
+          });
+          continue;
+        }
+
+        let partyId =
+          (mapped.legacyPartyId
+            ? context.partyMap.get(mapped.legacyPartyId)
+            : undefined) ??
+          (mapped.partyCode
+            ? context.partyCodeMap.get(mapped.partyCode.toUpperCase())
+            : undefined) ??
+          null;
+
+        if (!partyId && mapped.partyCode) {
+          const existing = await this.targetPartyProfileRepository.findOne({
+            where: { code: mapped.partyCode.toUpperCase() },
+          });
+          partyId = existing?.id ?? null;
+          if (partyId) {
+            this.rememberParty(
+              context,
+              mapped.legacyPartyId,
+              mapped.partyCode,
+              partyId,
+            );
+          }
+        }
+
+        if (!partyId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: sourceKey,
+            reason: `Party not resolved for ncodesid=${mapped.legacyPartyId ?? "?"} vCode=${mapped.partyCode ?? "?"}`,
+            fallbackAction: "Skipped until party migrated",
+          });
+          continue;
+        }
+
+        if (context.mode === "real" && !partyId.startsWith("mock-")) {
+          await this.targetPartyProfileRepository.update(partyId, {
+            gstNo: mapped.gstNo!,
+            updatedBy: actorId,
+          });
+        }
+        inserted += 1;
+        context.summary.rowsInserted += 1;
+        this.addRowResult(context, {
+          sourceTable: tableName,
+          sourcePrimaryKey: sourceKey,
+          targetId: partyId,
+          status: context.mode === "real" ? "inserted" : "mocked",
+          note: `Set party gstNo from ${mapped.gstPickSource}=${mapped.gstNo}`,
+        });
+        this.addTransformation(context, {
+          sourceTable: tableName,
+          sourceField: mapped.gstPickSource ?? "GSTIN",
+          ruleName: "gstinfo-igst-cgst-sgst-to-gstNo",
+          originalValue: mapped.gstNo,
+          transformedValue: mapped.gstNo,
+          result: "transformed",
+        });
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: sourceKey,
+          fieldName: "gstNo",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "party_profiles",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "IGSTNO→CGSTNO→SGSTNO into party_profiles.gstNo",
+    });
+  }
+
+  private async processTcsPerMaster(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "tcsPerMaster")) {
+      return;
+    }
+
+    this.logger.log(
+      `[TCSPERMASTER] purpose_slabs migration started mode=${context.mode}`,
+    );
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_TAX_TABLE_CANDIDATES.tcsPerMaster,
+    );
+    this.ensureSourceRows(context, "tcsPerMaster", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    context.summary.rowsScanned += rows.length;
+
+    const mappedRows = rows.map((row) => mapLegacyTcsPerMasterRow(row));
+    for (const mapped of mappedRows) {
+      for (const field of mapped.unmapped) {
+        this.addUnmappedColumn(context, {
+          sourceTable: tableName,
+          sourceColumn: field.sourceColumn,
+          sourceValue: field.sourceValue,
+          reason: field.reason,
+        });
+      }
+    }
+
+    const { selected, skipped: selectSkipped } =
+      selectTcsPerMasterRowsForSlabs(mappedRows);
+    for (const item of selectSkipped) {
+      skipped += 1;
+      this.addSkippedRow(context, {
+        sourceTable: tableName,
+        sourceRowIdentifier: item.row.oldId ?? item.row.legacyPurposeCode ?? "?",
+        reason: item.reason,
+        fallbackAction: "Skipped TCSPERMASTER row for purpose_slabs",
+      });
+    }
+
+    const byPurpose = new Map<string, typeof selected>();
+    for (const row of selected) {
+      const purposeId = this.resolvePurposeIdByLegacyCode(
+        context,
+        row.legacyPurposeCode!,
+      );
+      if (!purposeId) {
+        skipped += 1;
+        this.addSkippedRow(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: row.oldId ?? row.legacyPurposeCode ?? "?",
+          reason: `No migrated purpose for old PURPOSECODE=${row.legacyPurposeCode}`,
+          fallbackAction: "Run mstPurpose first; unmatched codes logged",
+        });
+        continue;
+      }
+      if (purposeId.startsWith("mock-") && context.mode === "real") {
+        skipped += 1;
+        continue;
+      }
+      const list = byPurpose.get(purposeId) ?? [];
+      list.push(row);
+      byPurpose.set(purposeId, list);
+    }
+
+    for (const [purposeId, purposeRows] of byPurpose) {
+      purposeRows.sort(
+        (a, b) => Number(a.fromAmount ?? 0) - Number(b.fromAmount ?? 0),
+      );
+      try {
+        if (context.mode === "real") {
+          await this.targetPurposeSlabRepository.delete({ purposeId });
+          let sortOrder = 0;
+          for (const row of purposeRows) {
+            const saved = await this.targetPurposeSlabRepository.save(
+              this.targetPurposeSlabRepository.create({
+                purposeId,
+                sortOrder,
+                fromAmount: row.fromAmount!,
+                toAmount: row.toAmount,
+                rate: row.ratePercent!,
+                rateType: PurposeRateType.PERCENT,
+                createdBy: actorId,
+                updatedBy: actorId,
+              }),
+            );
+            inserted += 1;
+            context.summary.rowsInserted += 1;
+            this.addRowResult(context, {
+              sourceTable: tableName,
+              sourcePrimaryKey: row.oldId ?? `${row.legacyPurposeCode}:${row.fromAmount}`,
+              targetId: saved.id,
+              status: "inserted",
+              note: `purpose_slabs for legacy ${row.legacyPurposeCode} ${row.fromAmount}-${row.toAmount} @ ${row.ratePercent}%`,
+            });
+            sortOrder += 1;
+          }
+        } else {
+          for (const row of purposeRows) {
+            inserted += 1;
+            context.summary.rowsInserted += 1;
+            this.addRowResult(context, {
+              sourceTable: tableName,
+              sourcePrimaryKey: row.oldId ?? `${row.legacyPurposeCode}:${row.fromAmount}`,
+              targetId: `mock-slab-${row.legacyPurposeCode}-${row.fromAmount}`,
+              status: "mocked",
+              note: `Would upsert purpose_slabs for ${row.legacyPurposeCode}`,
+            });
+          }
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: purposeId,
+          fieldName: "purpose_slabs",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "purpose_slabs",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "Latest FROMDATE window; match purposes by legacy PurposeCode",
+    });
+  }
+
+  private async processTaxDeferredSkips(
+    _pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "taxDeferredSkip")) {
+      return;
+    }
+
+    this.logger.log(
+      `[taxDeferredSkip] logging deferred tax/TCS/GST tables mode=${context.mode}`,
+    );
+    const selectedLower = new Set(
+      context.selectedTables.map((table) => table.toLowerCase()),
+    );
+
+    for (const entry of TAX_MIGRATION_SKIPPED_TABLES) {
+      // mstTax is also used for GST_RATE — only log HFEE note when mstTax selected and gstRate also handled separately
+      if (entry.table.toLowerCase() === "msttax") {
+        continue;
+      }
+      if (!selectedLower.has(entry.table.toLowerCase())) {
+        continue;
+      }
+      this.addSkippedRow(context, {
+        sourceTable: entry.table,
+        sourceRowIdentifier: entry.table,
+        reason: entry.reason,
+        fallbackAction: "Deferred / log-only / txn-later as documented",
+      });
+      this.addWarning(context, {
+        sourceTable: entry.table,
+        note: entry.reason,
+      });
+      context.tableResults.push({
+        sourceTable: entry.table,
+        targetTable: "(deferred)",
+        scanned: 0,
+        inserted: 0,
+        skipped: 1,
+        failed: 0,
+        note: entry.reason,
+      });
+    }
+  }
+
+  private async processPartyProfiles(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "party")) {
+      return;
+    }
+
+    this.logger.log(`[mstCodes] party migration started mode=${context.mode}`);
+    await this.ensureLegacyPlaceLookups(pool, context);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_PARTY_TABLE_CANDIDATES.mstCodes,
+    );
+    this.ensureSourceRows(context, "party", rows);
+    const ordered = sortPartyRowsForMigration(rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    type PendingLink = {
+      partyId: string;
+      mapped: MappedPartyProfile;
+    };
+    const pendingLinks: PendingLink[] = [];
+
+    for (const row of ordered) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyPartyProfile(row);
+      const sourceKey = String(mapped.oldId ?? mapped.code);
+
+      try {
+        if (!mapped.clientType || mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: mapped.skipReason ?? "Unsupported party type",
+            fallbackAction: "Skipped party row",
+          });
+          continue;
+        }
+
+        for (const field of mapped.unmapped) {
+          this.addFieldStatus(context, {
+            sourceTable: tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            status: "unmapped",
+            note: field.reason,
+          });
+        }
+
+        const branchId = await this.resolvePartyBranchId(pool, context, mapped);
+        const categoryIds: Partial<
+          Record<
+            | "kycRiskCategory"
+            | "entityType"
+            | "businessNature"
+            | "group"
+            | "tdsGroup",
+            string | null
+          >
+        > = {};
+
+        for (const ref of mapped.categoryRefs) {
+          const optionId = await this.ensureCategoryOptionByCode(context, {
+            code: ref.code,
+            value: ref.value,
+            sourceTable: tableName,
+            sourceColumn: ref.sourceColumn,
+          });
+          if (ref.code === CategoryOptionCodeEnum.KycRiskCategory) {
+            categoryIds.kycRiskCategory = optionId;
+          } else if (ref.code === CategoryOptionCodeEnum.EntityType) {
+            categoryIds.entityType = optionId;
+          } else if (ref.code === CategoryOptionCodeEnum.BusinessNature) {
+            categoryIds.businessNature = optionId;
+          } else if (ref.code === CategoryOptionCodeEnum.Group) {
+            categoryIds.group = optionId;
+          } else if (ref.code === CategoryOptionCodeEnum.TdsGroup) {
+            categoryIds.tdsGroup = optionId;
+          }
+        }
+
+        const audit = this.resolveAuditFields(row, context, {
+          sourceTable: tableName,
+        });
+        const createdBy = this.resolveAuditUserId(
+          context,
+          row.nCreatedBy,
+          {
+            sourceTable: tableName,
+            fieldName: "nCreatedBy",
+          },
+        );
+        const updatedBy = this.resolveAuditUserId(
+          context,
+          row.nUpdateBy,
+          {
+            sourceTable: tableName,
+            fieldName: "nUpdateBy",
+          },
+        );
+
+        const payload = {
+          code: mapped.code,
+          name: mapped.name,
+          type: mapped.clientType,
+          status: WorkflowStatus.APPROVE,
+          active: mapped.active,
+          isActive: mapped.isActive,
+          address1: mapped.address1,
+          address2: mapped.address2,
+          address3: mapped.address3,
+          city: this.resolveRecordCityText(row, context, {
+            sourceTable: tableName,
+            fallback: "",
+            targetColumn: "city",
+          }),
+          pinCode: mapped.pinCode,
+          phoneNo: mapped.phoneNo,
+          email: mapped.email,
+          webSite: mapped.webSite,
+          contactName: mapped.contactName,
+          designation: mapped.designation,
+          remarks: mapped.remarks,
+          dateOfIntro: mapped.dateOfIntro ?? new Date(),
+          establishmentDate: mapped.establishmentDate,
+          blockDateFrom: mapped.blockDateFrom,
+          creditLimit: mapped.creditLimit,
+          creditDays: mapped.creditDays,
+          temporaryCreditLimit: mapped.temporaryCreditLimit,
+          temporaryCreditDays: mapped.temporaryCreditDays,
+          chqTrxnLimit: mapped.chqTrxnLimit,
+          defaultHandlingCharges: mapped.defaultHandlingCharges,
+          panNo: mapped.panNo,
+          accountHolderName: mapped.accountHolderName,
+          bankName: mapped.bankName,
+          accountNumber: mapped.accountNumber,
+          ifscCode: mapped.ifscCode,
+          bankBranchName: mapped.bankBranchName,
+          ffmcRegNo: mapped.ffmcRegNo,
+          ffmcRegDate: mapped.ffmcRegDate,
+          kycApprovalNumber: mapped.kycApprovalNumber,
+          isIndividual: mapped.isIndividual,
+          isTdsDeducted: mapped.isTdsDeducted,
+          tds: mapped.tds,
+          purchase: mapped.purchase,
+          sale: mapped.sale,
+          printAddress: mapped.printAddress,
+          eefcClient: mapped.eefcClient,
+          igstOnly: mapped.igstOnly,
+          applyTax: mapped.applyTax,
+          cardNumberLength: mapped.cardNumberLength,
+          allowCardNumberMasking: mapped.allowCardNumberMasking,
+          branchId,
+          branch: branchId ? ({ id: branchId } as Branch) : null,
+          kycRiskCategory: categoryIds.kycRiskCategory
+            ? ({ id: categoryIds.kycRiskCategory } as SelectOption)
+            : null,
+          entityType: categoryIds.entityType
+            ? ({ id: categoryIds.entityType } as SelectOption)
+            : null,
+          businessNature: categoryIds.businessNature
+            ? ({ id: categoryIds.businessNature } as SelectOption)
+            : null,
+          group: categoryIds.group
+            ? ({ id: categoryIds.group } as SelectOption)
+            : null,
+          tdsGroup: categoryIds.tdsGroup
+            ? ({ id: categoryIds.tdsGroup } as SelectOption)
+            : null,
+          createdBy,
+          updatedBy,
+          deletedAt: audit.deletedAt,
+          deletedBy: audit.deletedBy,
+          statusUpdatedAt: toNullableDate(row.dVerifiedDate),
+        };
+
+        let partyId: string;
+        const existing = await this.targetPartyProfileRepository.findOne({
+          where: { code: mapped.code },
+        });
+
+        if (existing) {
+          partyId = existing.id;
+          if (context.mode === "real") {
+            Object.assign(existing, {
+              ...payload,
+              id: existing.id,
+              createdBy: existing.createdBy,
+            });
+            if (audit.wasDeleted) {
+              existing.deletedAt = audit.deletedAt;
+              existing.deletedBy = audit.deletedBy;
+            }
+            await this.targetPartyProfileRepository.save(existing);
+          }
+          this.rememberParty(context, mapped.oldId, mapped.code, partyId);
+          context.rowResults.push({
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: partyId,
+            status: context.mode === "real" ? "reused" : "mocked",
+            note: `Reused party ${mapped.code}`,
+          });
+        } else if (context.mode === "real") {
+          const entity = this.targetPartyProfileRepository.create({
+            ...payload,
+          });
+          const saved = (await this.targetPartyProfileRepository.save(
+            entity,
+          )) as PartyProfile;
+          partyId = saved.id;
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.rememberParty(context, mapped.oldId, mapped.code, partyId);
+          this.addIdMap(context, {
+            oldTable: tableName,
+            oldId: mapped.oldId,
+            newTable: "party_profiles",
+            newUuid: partyId,
+            lookupKey: mapped.code,
+          });
+          context.rowResults.push({
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: partyId,
+            status: "inserted",
+            note: `Created party ${mapped.code} type=${mapped.clientType}`,
+          });
+        } else {
+          partyId = `mock-party-${mapped.code}`;
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          this.rememberParty(context, mapped.oldId, mapped.code, partyId);
+          context.rowResults.push({
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: partyId,
+            status: "mocked",
+            note: `Would create party ${mapped.code}`,
+          });
+        }
+
+        pendingLinks.push({ partyId, mapped });
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          fieldName: "mstCodes",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // Second pass: defaultAgent / marketingExecutive party FKs
+    for (const { partyId, mapped } of pendingLinks) {
+      let defaultAgentId: string | null = null;
+      let marketingExecutiveId: string | null = null;
+
+      if (mapped.legacyDefaultAgentCode) {
+        defaultAgentId =
+          context.partyCodeMap.get(mapped.legacyDefaultAgentCode) ?? null;
+        if (!defaultAgentId && context.mode === "real") {
+          const agent = await this.targetPartyProfileRepository.findOne({
+            where: { code: mapped.legacyDefaultAgentCode },
+          });
+          defaultAgentId = agent?.id ?? null;
+        }
+        if (!defaultAgentId) {
+          this.addWarning(context, {
+            sourceTable: tableName,
+            sourceColumn: "vDefaultAgent",
+            note: `Could not resolve default agent code ${mapped.legacyDefaultAgentCode} for ${mapped.code}`,
+          });
+        }
+      }
+
+      if (mapped.legacyMarketingExecutiveId) {
+        marketingExecutiveId =
+          context.partyMap.get(mapped.legacyMarketingExecutiveId) ?? null;
+        if (!marketingExecutiveId && context.mode === "real") {
+          // Parent-first: try load ME from source by id if not yet mapped
+          const meRow = rows.find(
+            (candidate) =>
+              String(candidate.nCodesID ?? "") ===
+              mapped.legacyMarketingExecutiveId,
+          );
+          if (meRow) {
+            const meMapped = mapLegacyPartyProfile(meRow);
+            if (meMapped.clientType && meMapped.code) {
+              marketingExecutiveId =
+                context.partyCodeMap.get(meMapped.code) ?? null;
+              if (!marketingExecutiveId) {
+                const existingMe =
+                  await this.targetPartyProfileRepository.findOne({
+                    where: { code: meMapped.code },
+                  });
+                marketingExecutiveId = existingMe?.id ?? null;
+              }
+            }
+          }
+        }
+        if (!marketingExecutiveId) {
+          this.addWarning(context, {
+            sourceTable: tableName,
+            sourceColumn: "nMrktExecutive",
+            note: `Could not resolve marketing executive id ${mapped.legacyMarketingExecutiveId} for ${mapped.code}`,
+          });
+        }
+      }
+
+      if (
+        context.mode === "real" &&
+        (defaultAgentId || marketingExecutiveId) &&
+        !String(partyId).startsWith("mock-")
+      ) {
+        await this.targetPartyProfileRepository.update(partyId, {
+          defaultAgentId: defaultAgentId,
+          marketingExecutiveId: marketingExecutiveId,
+        } as any);
+      }
+    }
+
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "party_profiles",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "High-confidence mstCodes → party_profiles; status=APPROVE",
+    });
+    this.logger.log(
+      `[mstCodes] finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+
+  private async processProductIssuerLinks(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "productIssuerLink")) {
+      return;
+    }
+
+    this.logger.log(
+      `[mProductIssuerLink] migration started mode=${context.mode}`,
+    );
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_PARTY_TABLE_CANDIDATES.productIssuerLink,
+    );
+    this.ensureSourceRows(context, "productIssuerLink", rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyProductIssuerLink(row);
+      const sourceKey = `${mapped.productCode}:${mapped.legacyIssuerId}`;
+      try {
+        if (mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: mapped.skipReason,
+            fallbackAction: "Skipped issuer link",
+          });
+          continue;
+        }
+
+        let partyId = context.partyMap.get(mapped.legacyIssuerId) ?? null;
+        if (!partyId) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: `Issuer nIssuerID=${mapped.legacyIssuerId} not resolved to party_profiles (run mstCodes/party first)`,
+            fallbackAction: "Skipped issuer link",
+          });
+          continue;
+        }
+
+        const product = await this.targetProductRepository.findOne({
+          where: { productCode: mapped.productCode },
+        });
+        if (!product) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            reason: `Product code ${mapped.productCode} not found in PostgreSQL products`,
+            fallbackAction: "Skipped issuer link",
+          });
+          continue;
+        }
+
+        if (context.mode === "real") {
+          const existing = await this.targetProductCardIssuerRepository.findOne(
+            {
+              where: {
+                productId: product.id,
+                partyProfileId: partyId,
+              },
+            },
+          );
+          if (existing) {
+            context.rowResults.push({
+              sourceTable: tableName,
+              sourcePrimaryKey: sourceKey,
+              targetId: existing.id,
+              status: "reused",
+              note: "Reused product_card_issuers link",
+            });
+          } else {
+            const saved = await this.targetProductCardIssuerRepository.save(
+              this.targetProductCardIssuerRepository.create({
+                productId: product.id,
+                partyProfileId: partyId,
+                createdBy: actorId,
+                updatedBy: actorId,
+              }),
+            );
+            inserted += 1;
+            context.summary.rowsInserted += 1;
+            context.rowResults.push({
+              sourceTable: tableName,
+              sourcePrimaryKey: sourceKey,
+              targetId: saved.id,
+              status: "inserted",
+              note: "Created product_card_issuers link",
+            });
+          }
+        } else {
+          inserted += 1;
+          context.summary.rowsInserted += 1;
+          context.rowResults.push({
+            sourceTable: tableName,
+            sourcePrimaryKey: sourceKey,
+            targetId: `mock-issuer-link-${sourceKey}`,
+            status: "mocked",
+            note: "Would create product_card_issuers link",
+          });
+        }
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          fieldName: "mProductIssuerLink",
+          errorMessage:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "product_card_issuers",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "Requires migrated TC parties and products.productCode",
+    });
+    this.logger.log(
+      `[mProductIssuerLink] finished scanned=${rows.length} inserted=${inserted} skipped=${skipped} failed=${failed}`,
+    );
+  }
+
+
   private async processCompanies(
     pool: mssql.ConnectionPool,
     context: MigrationContext,
@@ -7374,13 +9832,13 @@ export class MigrationToolService {
     await this.upsertBranchCounterLink(context, {
       sourceTable,
       sourceRowIdentifier: String(row.nCBLId ?? row.id ?? row.ID ?? ""),
-      branchId,
-      counterId,
-      sourceValue: {
-        nBranchID: branchOldId,
-        nCounterID: counterOldId,
-      },
-    });
+            branchId,
+            counterId,
+          sourceValue: {
+            nBranchID: branchOldId,
+            nCounterID: counterOldId,
+          },
+        });
 
     return { branchId, counterId };
   }
@@ -7870,6 +10328,14 @@ export class MigrationToolService {
             "account",
             "product",
             "currencyProductLink",
+            "mstRate",
+            "marginMaster",
+            "tickerRate",
+            "rateDeferredSkip",
+            "purpose",
+            "purposeDeferredSkip",
+            "gstRate",
+            "tcsPerMaster",
             "branch",
             "counter",
             "user",
@@ -7878,6 +10344,17 @@ export class MigrationToolService {
             "branchUserLinks",
             "counterUserLinks",
             "userRoleLinks",
+            "party",
+            "gstInfo",
+            "taxDeferredSkip",
+            "productIssuerLink",
+            "documentProfile",
+            "advSettings",
+            "passwordPolicy",
+            "mailConfig",
+            "dayEndPolicy",
+            "monthlyLock",
+            "settingsDeferredSkip",
           ];
 
           for (const task of taskOrder) {
@@ -7916,6 +10393,24 @@ export class MigrationToolService {
               case "currencyProductLink":
                 await this.processCurrencyProductLinks(pools.master, context);
                 break;
+              case "mstRate":
+                await this.processMstRates(pools.master, context);
+                break;
+              case "marginMaster":
+                await this.processMarginMaster(pools.master, context);
+                break;
+              case "tickerRate":
+                await this.processTickerRates(pools.master, context);
+                break;
+              case "rateDeferredSkip":
+                await this.processRateDeferredSkips(pools.master, context);
+                break;
+              case "purpose":
+                await this.processPurposes(pools.master, context);
+                break;
+              case "purposeDeferredSkip":
+                await this.processPurposeDeferredSkips(pools.master, context);
+                break;
               case "branch":
                 await this.ensureLegacyPlaceLookups(pools.master, context);
                 await this.processBranches(sourcePool, context);
@@ -7937,6 +10432,46 @@ export class MigrationToolService {
                 await this.processCounterUserLinks(sourcePool, context);
                 break;
               case "userRoleLinks":
+                break;
+              case "party":
+                await this.ensureLegacyPlaceLookups(pools.master, context);
+                await this.processPartyProfiles(pools.master, context);
+                break;
+              case "productIssuerLink":
+                await this.processProductIssuerLinks(pools.master, context);
+                break;
+              case "advSettings":
+                await this.processAdvSettings(pools.master, context);
+                break;
+              case "passwordPolicy":
+                await this.processPasswordPolicy(pools.master, context);
+                break;
+              case "mailConfig":
+                await this.processMailConfig(pools.master, context);
+                break;
+              case "documentProfile":
+                await this.processDocumentProfiles(pools.master, context);
+                break;
+              case "monthlyLock":
+                await this.processMonthlyLocks(pools.master, context);
+                break;
+              case "dayEndPolicy":
+                await this.processDayEndPolicy(pools.master, context);
+                break;
+              case "settingsDeferredSkip":
+                await this.processSettingsDeferredSkips(pools.master, context);
+                break;
+              case "gstInfo":
+                await this.processGstInfo(pools.master, context);
+                break;
+              case "tcsPerMaster":
+                await this.processTcsPerMaster(pools.master, context);
+                break;
+              case "gstRate":
+                await this.processMstTaxGstRate(pools.master, context);
+                break;
+              case "taxDeferredSkip":
+                await this.processTaxDeferredSkips(pools.master, context);
                 break;
             }
           }
@@ -7961,6 +10496,1019 @@ export class MigrationToolService {
     } finally {
       this.logger.log(`Migration context cleared for mode=${mode}`);
       this.activeContext = null;
+    }
+  }
+
+
+  private async ensureAdvancedSettingCategory(
+    context: MigrationContext,
+    code: string,
+    label: string,
+  ): Promise<AdvancedSetting> {
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    let category = await this.targetAdvancedSettingRepository.findOne({
+      where: { code, nodeType: NodeType.Category },
+    });
+    if (category) {
+      return category;
+    }
+    if (context.mode !== "real") {
+      return {
+        id: `mock-setting-cat-${code}`,
+        code,
+        label,
+        nodeType: NodeType.Category,
+      } as AdvancedSetting;
+    }
+    category = await this.targetAdvancedSettingRepository.save(
+      this.targetAdvancedSettingRepository.create({
+        code,
+        label,
+        description: `Migrated category ${code}`,
+        nodeType: NodeType.Category,
+        sortOrder: 0,
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    return category;
+  }
+
+  private async upsertAdvancedSettingChild(
+    context: MigrationContext,
+    params: {
+      parent: AdvancedSetting;
+      code: string;
+      label: string;
+      valueType: ValueType;
+      valueBoolean?: boolean | null;
+      valueNumber?: number | null;
+      valueDecimal?: number | null;
+      valueDate?: Date | null;
+      valueText?: string | null;
+      description?: string | null;
+    },
+  ): Promise<{ id: string; created: boolean }> {
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    let setting = await this.targetAdvancedSettingRepository.findOne({
+      where: { code: params.code, nodeType: NodeType.Setting },
+    });
+    if (context.mode !== "real") {
+      return {
+        id: setting?.id ?? `mock-setting-${params.code}`,
+        created: !setting,
+      };
+    }
+    if (setting) {
+      setting.label = params.label;
+      setting.parentId = params.parent.id;
+      setting.valueType = params.valueType;
+      setting.valueBoolean = params.valueBoolean ?? null;
+      setting.valueNumber = params.valueNumber ?? null;
+      setting.valueDecimal = params.valueDecimal ?? null;
+      setting.valueDate = params.valueDate ?? null;
+      setting.valueText = params.valueText ?? null;
+      setting.description = params.description ?? setting.description;
+      setting.isActive = true;
+      setting.updatedBy = actorId;
+      await this.targetAdvancedSettingRepository.save(setting);
+      return { id: setting.id, created: false };
+    }
+    setting = await this.targetAdvancedSettingRepository.save(
+      this.targetAdvancedSettingRepository.create({
+        code: params.code,
+        label: params.label,
+        description: params.description ?? null,
+        nodeType: NodeType.Setting,
+        valueType: params.valueType,
+        valueBoolean: params.valueBoolean ?? null,
+        valueNumber: params.valueNumber ?? null,
+        valueDecimal: params.valueDecimal ?? null,
+        valueDate: params.valueDate ?? null,
+        valueText: params.valueText ?? null,
+        parentId: params.parent.id,
+        sortOrder: 0,
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    return { id: setting.id, created: true };
+  }
+
+  /** Lookup-only entity resolve for advsettings values (W7-9); miss → text. */
+  private resolveAdvSettingEntityUuid(
+    raw: string,
+  ): { uuid: string; master: string } | null {
+    const code = raw.trim();
+    const upper = code.toUpperCase();
+    const accountId = this.accountCodeMap.get(code) ?? this.accountCodeMap.get(upper);
+    if (accountId && !accountId.startsWith("mock-")) {
+      return { uuid: accountId, master: "account_profiles" };
+    }
+    const productId =
+      this.productCodeMap.get(code) ?? this.productCodeMap.get(upper);
+    if (productId && !productId.startsWith("mock-")) {
+      return { uuid: productId, master: "products" };
+    }
+    const currencyId =
+      this.currencyMap.get(code) ?? this.currencyMap.get(upper);
+    if (currencyId && !currencyId.startsWith("mock-")) {
+      return { uuid: currencyId, master: "currencies" };
+    }
+    const branchId = this.branchMap.get(code) ?? this.branchMap.get(upper);
+    if (branchId && !branchId.startsWith("mock-")) {
+      return { uuid: branchId, master: "branches" };
+    }
+    const partyId =
+      this.partyCodeMap.get(code) ?? this.partyCodeMap.get(upper);
+    if (partyId && !partyId.startsWith("mock-")) {
+      return { uuid: partyId, master: "party_profiles" };
+    }
+    const userId = this.userMap.get(code) ?? this.userMap.get(upper);
+    if (userId && !userId.startsWith("mock-")) {
+      return { uuid: userId, master: "users" };
+    }
+    return null;
+  }
+
+  private async processAdvSettings(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "advSettings")) {
+      return;
+    }
+    this.logger.log(`[advsettings] migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_SETTINGS_TABLE_CANDIDATES.advsettings,
+    );
+    this.ensureSourceRows(context, "advSettings", rows);
+    const { kept, skippedDuplicates } = collapseAdvSettingsByDataCode(rows);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const dup of skippedDuplicates) {
+      skipped += 1;
+      this.addSkippedRow(context, {
+        sourceTable: tableName,
+        sourceRowIdentifier: `${dup.dataCode}#${dup.sourceId}`,
+        reason: `${dup.reason}; lostValue=${dup.lostValue ?? ""}`,
+        fallbackAction: "First DATACODE wins",
+      });
+    }
+
+    const categoryCache = new Map<string, AdvancedSetting>();
+
+    for (const row of kept) {
+      context.summary.rowsScanned += 1;
+      try {
+        if (isPasswordPolicyChildCode(row.dataCode)) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: row.dataCode,
+            reason:
+              "Reserved PASSWORD_* code — owned by mstPasswordPolicy (W7-12)",
+            fallbackAction: "Skipped advsettings write to PASSWORD_*",
+          });
+          continue;
+        }
+
+        let category = categoryCache.get(row.categoryCode);
+        if (!category) {
+          category = await this.ensureAdvancedSettingCategory(
+            context,
+            row.categoryCode,
+            row.categoryRaw ?? row.categoryCode,
+          );
+          categoryCache.set(row.categoryCode, category);
+        }
+
+        let valueType = ValueType.Text;
+        let valueBoolean: boolean | null = null;
+        let valueNumber: number | null = null;
+        let valueDecimal: number | null = null;
+        let valueDate: Date | null = null;
+        let valueText: string | null = row.inferred.valueText;
+
+        const inferred = row.inferred;
+        if (inferred.valueType === "boolean") {
+          valueType = ValueType.Boolean;
+          valueBoolean = inferred.valueBoolean;
+        } else if (inferred.valueType === "number") {
+          valueType = ValueType.Number;
+          valueNumber = inferred.valueNumber;
+        } else if (inferred.valueType === "decimal") {
+          valueType = ValueType.Decimal;
+          valueDecimal = inferred.valueDecimal;
+        } else if (inferred.valueType === "date") {
+          valueType = ValueType.Date;
+          valueDate = inferred.valueDate;
+        } else if (inferred.looksLikeEntityRef && inferred.valueText) {
+          const resolved = this.resolveAdvSettingEntityUuid(inferred.valueText);
+          if (resolved) {
+            valueType = ValueType.Select;
+            valueText = resolved.uuid;
+            this.addWarning(context, {
+              sourceTable: tableName,
+              note: `${row.dataCode} value ${inferred.valueText} → ${resolved.master} ${resolved.uuid}`,
+            });
+          } else {
+            valueType = ValueType.Text;
+            valueText = inferred.valueText;
+            this.addWarning(context, {
+              sourceTable: tableName,
+              note: `${row.dataCode} entity-like value ${inferred.valueText} not resolved — stored as text`,
+            });
+          }
+        }
+
+        const result = await this.upsertAdvancedSettingChild(context, {
+          parent: category,
+          code: row.dataCode,
+          label: row.label,
+          valueType,
+          valueBoolean,
+          valueNumber,
+          valueDecimal,
+          valueDate,
+          valueText,
+          description: `Migrated from advsettings ID=${row.sourceId} nBranchID=${row.nBranchId ?? ""}`,
+        });
+        inserted += 1;
+        context.summary.rowsInserted += 1;
+        this.addIdMap(context, {
+          oldTable: tableName,
+          oldId: row.sourceId,
+          newTable: "advanced_settings",
+          newUuid: result.id,
+          lookupKey: `setting:${row.dataCode}`,
+        });
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: row.dataCode,
+          fieldName: "advsettings",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "advanced_settings",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "All nBranchID kept; first DATACODE wins; entity resolve → select UUID else text",
+    });
+  }
+
+  private async processPasswordPolicy(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "passwordPolicy")) {
+      return;
+    }
+    this.logger.log(`[mstPasswordPolicy] migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_SETTINGS_TABLE_CANDIDATES.mstPasswordPolicy,
+    );
+    this.ensureSourceRows(context, "passwordPolicy", rows);
+    if (rows.length === 0) {
+      context.tableResults.push({
+        sourceTable: tableName,
+        targetTable: "advanced_settings",
+        scanned: 0,
+        inserted: 0,
+        skipped: 0,
+        failed: 0,
+        note: "No mstPasswordPolicy rows",
+      });
+      return;
+    }
+
+    const mapped = mapPasswordPolicyRow(rows[0]);
+    context.summary.rowsScanned += 1;
+    for (const field of mapped.unmapped) {
+      this.addFieldStatus(context, {
+        sourceTable: tableName,
+        sourceColumn: field.sourceColumn,
+        sourceValue: field.sourceValue,
+        status: "unmapped",
+        note: field.reason,
+      });
+    }
+
+    const category = await this.ensureAdvancedSettingCategory(
+      context,
+      PASSWORD_POLICY_CATEGORY_CODE,
+      "PASSWORD POLICY",
+    );
+
+    const children: Array<{
+      code: string;
+      label: string;
+      value: number;
+    }> = [
+      {
+        code: PasswordPolicyCodeEnum.MinLength,
+        label: "PASSWORD MIN LENGTH",
+        value: mapped.minLength,
+      },
+      {
+        code: PasswordPolicyCodeEnum.MaxLength,
+        label: "PASSWORD MAX LENGTH",
+        value: mapped.maxLength,
+      },
+      {
+        code: PasswordPolicyCodeEnum.MinAlphaCount,
+        label: "PASSWORD MIN ALPHA CHAR COUNT",
+        value: mapped.minAlphaCount,
+      },
+      {
+        code: PasswordPolicyCodeEnum.MinNumericCount,
+        label: "PASSWORD MIN NUMERIC CHAR COUNT",
+        value: mapped.minNumericCount,
+      },
+      {
+        code: PasswordPolicyCodeEnum.MinSpecialCharCount,
+        label: "PASSWORD MIN SPECIAL CHAR COUNT",
+        value: mapped.minSpecialCharCount,
+      },
+    ];
+
+    let inserted = 0;
+    for (const child of children) {
+      await this.upsertAdvancedSettingChild(context, {
+        parent: category,
+        code: child.code,
+        label: child.label,
+        valueType: ValueType.Number,
+        valueNumber: child.value,
+        description: `Migrated from mstPasswordPolicy (max default ${PASSWORD_POLICY_MAX_LENGTH_DEFAULT})`,
+      });
+      inserted += 1;
+      context.summary.rowsInserted += 1;
+    }
+
+    this.addWarning(context, {
+      sourceTable: tableName,
+      note: "mstPasswordPolicy wins over advsettings PWD* for PASSWORD_* (CQ-wave7)",
+    });
+
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "advanced_settings",
+      scanned: rows.length,
+      inserted,
+      skipped: 0,
+      failed: 0,
+      note: "PASSWORD_POLICY children; maxLength default 128; nExpDate logged",
+    });
+  }
+
+  private async processMailConfig(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "mailConfig")) {
+      return;
+    }
+    this.logger.log(`[MailConfig] migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_SETTINGS_TABLE_CANDIDATES.mailConfig,
+    );
+    this.ensureSourceRows(context, "mailConfig", rows);
+    const secret =
+      process.env.SESSION_SECRET?.trim() || "migration-mail-dummy-secret";
+    const encryption = new EncryptionUtil(secret);
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapMailConfigRow(row);
+      try {
+        if (mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: mapped.oldId ?? mapped.username,
+            reason: mapped.skipReason,
+            fallbackAction: "Skipped MailConfig row",
+          });
+          continue;
+        }
+        for (const field of mapped.unmapped) {
+          this.addFieldStatus(context, {
+            sourceTable: tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            status: "unmapped",
+            note: field.reason,
+          });
+        }
+        if (mapped.sourcePasswordPresent) {
+          this.addWarning(context, {
+            sourceTable: tableName,
+            note: `MailConfig ${mapped.username}: source password NOT migrated; dummy set for reset`,
+          });
+        }
+        const encrypted = encryption.encrypt(MAIL_PASSWORD_DUMMY_PLAINTEXT);
+        if (context.mode === "real") {
+          const existing = await this.targetMailConfigRepository.findOne({
+            where: { username: mapped.username },
+          });
+          if (existing) {
+            existing.host = mapped.host;
+            existing.port = mapped.port;
+            existing.password = encrypted;
+            existing.senderEmail = mapped.senderEmail ?? undefined;
+            await this.targetMailConfigRepository.save(existing);
+          } else {
+            await this.targetMailConfigRepository.save(
+              this.targetMailConfigRepository.create({
+                username: mapped.username,
+                host: mapped.host,
+                port: mapped.port,
+                password: encrypted,
+                senderEmail: mapped.senderEmail ?? undefined,
+              }),
+            );
+          }
+        }
+        inserted += 1;
+        context.summary.rowsInserted += 1;
+        this.addIdMap(context, {
+          oldTable: tableName,
+          oldId: mapped.oldId ?? mapped.username,
+          newTable: "mail_configurations",
+          newUuid: mapped.username,
+          lookupKey: `mail:${mapped.username}`,
+        });
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: mapped.username,
+          fieldName: "MailConfig",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "mail_configurations",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "Dummy encrypted password MIGRATE_RESET; never copy source SMTP secrets",
+    });
+  }
+
+  private async processDocumentProfiles(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "documentProfile")) {
+      return;
+    }
+    this.logger.log(`[ScanDocMaster] migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_DOCUMENT_TABLE_CANDIDATES.scanDocMaster,
+    );
+    this.ensureSourceRows(context, "documentProfile", rows);
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+    const usedCodes = new Set<string>();
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapLegacyScanDocMasterRow(row);
+      try {
+        if (mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: mapped.oldId ?? mapped.documentCode,
+            reason: mapped.skipReason,
+            fallbackAction: "Skipped ScanDocMaster row",
+          });
+          continue;
+        }
+        for (const field of mapped.unmapped) {
+          this.addFieldStatus(context, {
+            sourceTable: tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            status: "unmapped",
+            note: field.reason,
+          });
+        }
+
+        const finalCode = disambiguateDocumentCode(
+          mapped.documentCode,
+          mapped.oldId,
+          usedCodes,
+        );
+        if (finalCode !== mapped.documentCode) {
+          this.addWarning(context, {
+            sourceTable: tableName,
+            note: `documentCode clash ${mapped.documentCode} → ${finalCode}`,
+          });
+        }
+        usedCodes.add(finalCode);
+
+        const typeCategory =
+          mapped.specificationType === "MASTER"
+            ? CategoryOptionCodeEnum.MasterDocument
+            : CategoryOptionCodeEnum.TransactionDocument;
+        const typeOption = await this.ensureCategoryOption(
+          context,
+          typeCategory,
+          mapped.specificationType!,
+          mapped.specificationType!,
+        );
+        const groupOption = mapped.kycGroup
+          ? await this.ensureCategoryOption(
+              context,
+              CategoryOptionCodeEnum.DocumentGroup,
+              mapped.kycGroup,
+              mapped.kycGroup,
+            )
+          : null;
+        const entityOption = mapped.scanType
+          ? await this.ensureCategoryOption(
+              context,
+              CategoryOptionCodeEnum.EntityType,
+              mapped.scanType,
+              mapped.scanType,
+            )
+          : null;
+        const fyOption = mapped.kycYear
+          ? await this.ensureCategoryOption(
+              context,
+              CategoryOptionCodeEnum.FinancialYear,
+              mapped.kycYear,
+              mapped.kycYear,
+            )
+          : null;
+
+        if (!typeOption) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: finalCode,
+            reason: "Could not ensure type category option",
+            fallbackAction: "Skipped",
+          });
+          continue;
+        }
+        if (!groupOption || !entityOption) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: finalCode,
+            reason: "Missing KYCGroup or vScanType for required FKs",
+            fallbackAction: "Skipped",
+          });
+          continue;
+        }
+
+        if (context.mode === "real") {
+          let existing = await this.targetDocumentProfileRepository.findOne({
+            where: { documentCode: finalCode },
+            withDeleted: true,
+          });
+          if (existing) {
+            existing.documentDescription = mapped.documentDescription;
+            existing.documentType = mapped.documentType;
+            existing.isRequired = mapped.isRequired;
+            existing.maxSizeMb = mapped.maxSizeMb;
+            existing.specificationType =
+              mapped.specificationType as DocumentSpecificationType;
+            existing.type = typeOption;
+            existing.groupSelection = groupOption;
+            existing.entitySelection = entityOption;
+            existing.financialYearSelection = fyOption;
+            existing.active = mapped.active;
+            existing.sortOrder = mapped.sortOrder;
+            existing.updatedBy = actorId;
+            if (mapped.isDeleted) {
+              existing.deletedAt = existing.deletedAt ?? new Date();
+              existing.deletedBy = actorId;
+            } else {
+              existing.deletedAt = null;
+              existing.deletedBy = null;
+            }
+            await this.targetDocumentProfileRepository.save(existing);
+            this.addIdMap(context, {
+              oldTable: tableName,
+              oldId: mapped.oldId ?? finalCode,
+              newTable: "document_profiles",
+              newUuid: existing.id,
+              lookupKey: `document:${finalCode}`,
+            });
+          } else {
+            const created = this.targetDocumentProfileRepository.create({
+              documentCode: finalCode,
+              documentDescription: mapped.documentDescription,
+              documentType: mapped.documentType,
+              isRequired: mapped.isRequired,
+              maxSizeMb: mapped.maxSizeMb,
+              specificationType:
+                mapped.specificationType as DocumentSpecificationType,
+              type: typeOption,
+              groupSelection: groupOption,
+              entitySelection: entityOption,
+              financialYearSelection: fyOption,
+              active: mapped.active,
+              sortOrder: mapped.sortOrder,
+              createdBy: actorId,
+              updatedBy: actorId,
+              deletedAt: mapped.isDeleted ? new Date() : null,
+              deletedBy: mapped.isDeleted ? actorId : null,
+            } as DocumentProfile);
+            const saved = await this.targetDocumentProfileRepository.save(
+              created,
+            );
+            this.addIdMap(context, {
+              oldTable: tableName,
+              oldId: mapped.oldId ?? finalCode,
+              newTable: "document_profiles",
+              newUuid: saved.id,
+              lookupKey: `document:${finalCode}`,
+            });
+          }
+        } else {
+          this.addIdMap(context, {
+            oldTable: tableName,
+            oldId: mapped.oldId ?? finalCode,
+            newTable: "document_profiles",
+            newUuid: `mock-doc-${finalCode}`,
+            lookupKey: `document:${finalCode}`,
+          });
+        }
+        inserted += 1;
+        context.summary.rowsInserted += 1;
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: mapped.oldId ?? mapped.documentCode,
+          fieldName: "ScanDocMaster",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "document_profiles",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "M/T→MASTER/TRANSACTION; maxSizeMb=5; clash {code}-{nUniqCode}",
+    });
+  }
+
+  private async processMonthlyLocks(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "monthlyLock")) {
+      return;
+    }
+    this.logger.log(`[monthlock] migration started mode=${context.mode}`);
+    const locksSource = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_LOCK_TABLE_CANDIDATES.monthlock,
+    );
+    const linksSource = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_LOCK_TABLE_CANDIDATES.mLockBrnUserLink,
+    );
+    this.ensureSourceRows(context, "monthlyLock", locksSource.rows);
+
+    const mappedLocks = locksSource.rows.map((row) =>
+      mapLegacyMonthLockRow(row),
+    );
+    const { selected, skipped: skippedLocks } =
+      pickFirstMonthLockPerBranch(mappedLocks);
+    const lockByBranch = new Map(
+      selected.map((lock) => [lock.branchCode!.toUpperCase(), lock]),
+    );
+
+    for (const skip of skippedLocks) {
+      this.addSkippedRow(context, {
+        sourceTable: locksSource.tableName,
+        sourceRowIdentifier: String(skip.oldId),
+        reason: "Not first monthlock for branch — first wins",
+        fallbackAction: "Skipped extra monthlock",
+      });
+    }
+
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+    const actorId = context.bootstrapAdminUserId ?? context.actorUserId;
+
+    for (const linkRow of linksSource.rows) {
+      context.summary.rowsScanned += 1;
+      const link = mapLegacyMonthLockUserLink(linkRow);
+      try {
+        if (link.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: linksSource.tableName,
+            sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+            reason: link.skipReason,
+            fallbackAction: "Skipped link",
+          });
+          continue;
+        }
+        const branchKey = (link.branchCode ?? "").toUpperCase();
+        const lock = lockByBranch.get(branchKey);
+        if (!lock) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: linksSource.tableName,
+            sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+            reason: `No first monthlock for branch ${branchKey}`,
+            fallbackAction: "Skipped link",
+          });
+          continue;
+        }
+        for (const field of lock.unmapped) {
+          this.addFieldStatus(context, {
+            sourceTable: locksSource.tableName,
+            sourceColumn: field.sourceColumn,
+            sourceValue: field.sourceValue,
+            status: "unmapped",
+            note: field.reason,
+          });
+        }
+
+        const branchId =
+          (link.branchCode
+            ? this.branchMap.get(link.branchCode) ??
+              this.branchMap.get(link.branchCode.toUpperCase())
+            : null) ??
+          (link.branchOldId != null
+            ? this.branchMap.get(String(link.branchOldId))
+            : null);
+        const userId =
+          link.userOldId != null
+            ? this.userMap.get(String(link.userOldId))
+            : null;
+
+        if (!branchId || !userId || branchId.startsWith("mock-") || userId.startsWith("mock-")) {
+          if (context.mode === "real") {
+            skipped += 1;
+            this.addSkippedRow(context, {
+              sourceTable: linksSource.tableName,
+              sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+              reason: "Branch or user UUID not resolved",
+              fallbackAction: "Skipped — run branch/user first",
+            });
+            continue;
+          }
+        }
+
+        const resolvedBranchId = branchId ?? `mock-branch-${branchKey}`;
+        const resolvedUserId = userId ?? `mock-user-${link.userOldId}`;
+        const softDeleted = lock.isDeleted || link.isDeleted;
+
+        if (context.mode === "real") {
+          let existing = await this.targetMonthlyLockWindowRepository.findOne({
+            where: {
+              branchId: resolvedBranchId,
+              userId: resolvedUserId,
+            },
+            withDeleted: true,
+            order: { createdAt: "DESC" },
+          });
+          if (existing) {
+            existing.fromDate = lock.fromDate!;
+            existing.toDate = lock.toDate!;
+            existing.isActive = link.isActive && !softDeleted;
+            existing.updatedBy = actorId;
+            if (softDeleted) {
+              existing.deletedAt = existing.deletedAt ?? new Date();
+              existing.deletedBy = actorId;
+              existing.isActive = false;
+            } else {
+              existing.deletedAt = null;
+              existing.deletedBy = null;
+              existing.revokedAt = null;
+              existing.revokedBy = null;
+            }
+            await this.targetMonthlyLockWindowRepository.save(existing);
+            this.addIdMap(context, {
+              oldTable: linksSource.tableName,
+              oldId: link.oldId ?? `${branchKey}:${link.userOldId}`,
+              newTable: "monthly_lock_windows",
+              newUuid: existing.id,
+              lookupKey: `monthly-lock:${resolvedBranchId}:${resolvedUserId}`,
+            });
+          } else {
+            const created = this.targetMonthlyLockWindowRepository.create({
+              branchId: resolvedBranchId,
+              userId: resolvedUserId,
+              fromDate: lock.fromDate!,
+              toDate: lock.toDate!,
+              isActive: link.isActive && !softDeleted,
+              createdBy: actorId,
+              updatedBy: actorId,
+              deletedAt: softDeleted ? new Date() : null,
+              deletedBy: softDeleted ? actorId : null,
+              revokedAt: null,
+              revokedBy: null,
+            } as MonthlyLockWindow);
+            const saved =
+              await this.targetMonthlyLockWindowRepository.save(created);
+            this.addIdMap(context, {
+              oldTable: linksSource.tableName,
+              oldId: link.oldId ?? `${branchKey}:${link.userOldId}`,
+              newTable: "monthly_lock_windows",
+              newUuid: saved.id,
+              lookupKey: `monthly-lock:${resolvedBranchId}:${resolvedUserId}`,
+            });
+          }
+        } else {
+          this.addIdMap(context, {
+            oldTable: linksSource.tableName,
+            oldId: link.oldId ?? `${branchKey}:${link.userOldId}`,
+            newTable: "monthly_lock_windows",
+            newUuid: `mock-mlock-${branchKey}-${link.userOldId}`,
+            lookupKey: `monthly-lock:${resolvedBranchId}:${resolvedUserId}`,
+          });
+        }
+        inserted += 1;
+        context.summary.rowsInserted += 1;
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: linksSource.tableName,
+          sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+          fieldName: "MLockBrnUserLink",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped + skippedLocks.length;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: locksSource.tableName,
+      targetTable: "monthly_lock_windows",
+      scanned: locksSource.rows.length + linksSource.rows.length,
+      inserted,
+      skipped: skipped + skippedLocks.length,
+      failed,
+      note: "DB2; first lock/branch; soft-deleted kept; OPEN* CQ-wave7",
+    });
+  }
+
+  private async processDayEndPolicy(
+    pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "dayEndPolicy")) {
+      return;
+    }
+    this.logger.log(`[tb_EODQuestion] migration started mode=${context.mode}`);
+    const { tableName, rows } = await this.readSourceRowsFromCandidates(
+      pool,
+      LEGACY_SETTINGS_TABLE_CANDIDATES.tbEodQuestion,
+    );
+    this.ensureSourceRows(context, "dayEndPolicy", rows);
+    const category = await this.ensureAdvancedSettingCategory(
+      context,
+      DAY_END_POLICY_CATEGORY_CODE,
+      "DAY END POLICY",
+    );
+    let inserted = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const row of rows) {
+      context.summary.rowsScanned += 1;
+      const mapped = mapEodQuestionRow(row);
+      try {
+        if (mapped.skipReason) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: mapped.oldId ?? "?",
+            reason: mapped.skipReason,
+            fallbackAction: "Skipped EOD question",
+          });
+          continue;
+        }
+        await this.upsertAdvancedSettingChild(context, {
+          parent: category,
+          code: mapped.code,
+          label: mapped.label,
+          valueType: ValueType.Boolean,
+          valueBoolean: false,
+          description: "Migrated from tb_EODQuestion",
+        });
+        // isActive on setting node
+        if (context.mode === "real") {
+          const setting = await this.targetAdvancedSettingRepository.findOne({
+            where: { code: mapped.code, nodeType: NodeType.Setting },
+          });
+          if (setting) {
+            setting.isActive = mapped.isActive;
+            await this.targetAdvancedSettingRepository.save(setting);
+          }
+        }
+        inserted += 1;
+        context.summary.rowsInserted += 1;
+      } catch (error) {
+        failed += 1;
+        this.addError(context, {
+          sourceTable: tableName,
+          sourceRowIdentifier: mapped.oldId ?? mapped.code,
+          fieldName: "tb_EODQuestion",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    context.summary.rowsSkipped += skipped;
+    context.summary.rowsFailed += failed;
+    context.tableResults.push({
+      sourceTable: tableName,
+      targetTable: "advanced_settings",
+      scanned: rows.length,
+      inserted,
+      skipped,
+      failed,
+      note: "DAY_END_POLICY children for BOD/EOD checklist",
+    });
+  }
+
+  private async processSettingsDeferredSkips(
+    _pool: mssql.ConnectionPool,
+    context: MigrationContext,
+  ): Promise<void> {
+    if (!this.isTaskIncluded(context, "settingsDeferredSkip")) {
+      return;
+    }
+    this.logger.log(
+      `[settingsDeferredSkip] logging deferred Wave 7 tables mode=${context.mode}`,
+    );
+    const selectedLower = new Set(
+      context.selectedTables.map((table) => table.toLowerCase()),
+    );
+    for (const entry of SETTINGS_MIGRATION_SKIPPED_TABLES) {
+      if (!selectedLower.has(entry.table.toLowerCase())) {
+        continue;
+      }
+      this.addSkippedRow(context, {
+        sourceTable: entry.table,
+        sourceRowIdentifier: entry.table,
+        reason: entry.reason,
+        fallbackAction: "Deferred / CQ / txn-later / skip as documented",
+      });
+      this.addWarning(context, {
+        sourceTable: entry.table,
+        note: entry.reason,
+      });
+      context.tableResults.push({
+        sourceTable: entry.table,
+        targetTable: "(deferred)",
+        scanned: 0,
+        inserted: 0,
+        skipped: 1,
+        failed: 0,
+        note: entry.reason,
+      });
     }
   }
 

@@ -1,0 +1,42 @@
+import type { SourceRow } from "../migration-tool.document";
+
+export const SAMPLE_SCAN_DOC_MASTER: SourceRow[] = [
+  {
+    nUniqCode: 1,
+    vScanFor: "T",
+    vScanType: "PS",
+    vDocumentCode: "PS",
+    vDocumentDesc: "PASSPORT FOR PS",
+    bIsActive: 1,
+    bIsRequired: 0,
+    nPriority: 1,
+    bIsDeleted: 0,
+    KYCGroup: "AGREEMENT",
+    KYCYear: "24-25",
+  },
+  {
+    nUniqCode: 4,
+    vScanFor: "M",
+    vScanType: "CC",
+    vDocumentCode: "AC",
+    vDocumentDesc: "AGREEMENT COPY",
+    bIsActive: 1,
+    bIsRequired: 0,
+    nPriority: 1,
+    bIsDeleted: 0,
+    KYCGroup: "NONKYC",
+    KYCYear: "24-25",
+  },
+  {
+    nUniqCode: 99,
+    vScanFor: "T",
+    vScanType: "PS",
+    vDocumentCode: "PS",
+    vDocumentDesc: "PASSPORT DUP MODULE",
+    bIsActive: 1,
+    bIsRequired: 1,
+    nPriority: 2,
+    bIsDeleted: 0,
+    KYCGroup: "PAN",
+  },
+];
