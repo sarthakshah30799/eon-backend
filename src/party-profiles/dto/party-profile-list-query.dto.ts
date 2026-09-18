@@ -77,6 +77,11 @@ export class PartyProfileListQueryDto extends PaginationQueryDto {
   @IsOptional()
   type?: ClientType[];
 
+  @ApiPropertyOptional({ description: "Filter by a single branch id" })
+  @IsString()
+  @IsOptional()
+  branchId?: string;
+
   @ApiPropertyOptional({
     description: "Filter by one or more branch ids",
     isArray: true,
