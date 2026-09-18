@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   IsArray,
   IsDateString,
+  IsIn,
   IsInt,
   IsNumberString,
   IsOptional,
@@ -12,6 +13,8 @@ import {
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { PaginationQueryDto } from "../../common/pagination";
+import { StringArrayQuery } from "../../common/transformers/parse-boolean-query";
+import { CardTransferStatus } from "../card-stock.enums";
 
 export class CardTransferItemDto {
   @ApiProperty({ example: 1 })
@@ -82,10 +85,16 @@ export class CardTransferActionDto {
 }
 
 export class CardTransferListQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ enum: ["HELD", "ACCEPTED", "REJECTED", "CANCELLED"] })
+  @ApiPropertyOptional({
+    enum: CardTransferStatus,
+    isArray: true,
+    description: "Filter by one or more transfer statuses",
+  })
+  @StringArrayQuery()
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsArray()
+  @IsIn(Object.values(CardTransferStatus), { each: true })
+  status?: CardTransferStatus[];
 
   @ApiPropertyOptional()
   @IsOptional()

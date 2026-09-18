@@ -97,3 +97,5 @@ export const CardTransferStatus = {
 
 export type CardTransferStatus =
   (typeof CardTransferStatus)[keyof typeof CardTransferStatus];
+
+export const CARD_STOCK_FIXED_DENOMINATION = "1";

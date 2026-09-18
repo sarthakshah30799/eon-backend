@@ -262,11 +262,22 @@ export class CardTransferService {
       .leftJoinAndSelect("item.selectedCards", "selection")
       .leftJoinAndSelect("selection.card", "card")
       .orderBy("request.createdAt", "DESC");
-    if (params?.status)
-      qb.andWhere("request.status = :status", { status: params.status });
+    if (params?.status?.length)
+      qb.andWhere("request.status IN (:...statuses)", {
+        statuses: params.status,
+      });
     if (params?.search)
       qb.andWhere(
-        "(request.transactionNumber ILIKE :search OR request.sourceBranchId::text ILIKE :search OR request.destinationBranchId::text ILIKE :search)",
+        `(request.transactionNumber ILIKE :search
+          OR CAST(request.sourceBranchId AS TEXT) ILIKE :search
+          OR CAST(request.destinationBranchId AS TEXT) ILIKE :search
+          OR COALESCE("request"."source_branch_snapshot"->>'name', '') ILIKE :search
+          OR COALESCE("request"."source_branch_snapshot"->>'code', '') ILIKE :search
+          OR COALESCE("request"."source_branch_snapshot"->>'label', '') ILIKE :search
+          OR COALESCE("request"."destination_branch_snapshot"->>'name', '') ILIKE :search
+          OR COALESCE("request"."destination_branch_snapshot"->>'code', '') ILIKE :search
+          OR COALESCE("request"."destination_branch_snapshot"->>'label', '') ILIKE :search
+          OR COALESCE(request.remarks, '') ILIKE :search)`,
         { search: `%${params.search.trim()}%` },
       );
     if (!this.isHoAccess(session)) {
