@@ -7,36 +7,13 @@ export const LEGACY_LOCK_TABLE_CANDIDATES = {
     "mlockbrnuserlink",
     "MLOCKBRNUSERLINK",
   ],
+  mlRecord: ["MLRECORD", "MLRecord", "mlrecord"],
 } as const;
 
 export type UnmappedLockField = {
   sourceColumn: string;
   sourceValue: string | number | boolean | null;
   reason: string;
-};
-
-export type MappedMonthLock = {
-  oldId: number;
-  branchCode: string | null;
-  fromDate: string | null;
-  toDate: string | null;
-  isDeleted: boolean;
-  openAccount: number | null;
-  openTrading: number | null;
-  cashTxn: number | null;
-  unmapped: UnmappedLockField[];
-  skipReason: string | null;
-};
-
-export type MappedMonthLockUserLink = {
-  oldId: number | null;
-  branchCode: string | null;
-  branchOldId: number | null;
-  userOldId: number | null;
-  userName: string | null;
-  isActive: boolean;
-  isDeleted: boolean;
-  skipReason: string | null;
 };
 
 const toNullableString = (value: any): string | null => {
@@ -51,130 +28,189 @@ const toNullableNumber = (value: any): number | null => {
   return Number.isNaN(n) ? null : n;
 };
 
-const toBooleanFlag = (value: any): boolean => {
+const toBoolean = (value: any): boolean => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
   if (typeof value === "string") {
-    const n = value.trim().toLowerCase();
-    return n === "1" || n === "true" || n === "y" || n === "yes";
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized === "1" ||
+      normalized === "true" ||
+      normalized === "y" ||
+      normalized === "yes"
+    );
   }
   return false;
 };
 
-const toDateOnly = (value: any): string | null => {
+const toDateOnlyString = (value: any): string | null => {
   if (value === null || value === undefined || value === "") return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const y = value.getFullYear();
-    const m = `${value.getMonth() + 1}`.padStart(2, "0");
-    const d = `${value.getDate()}`.padStart(2, "0");
-    return `${y}-${m}-${d}`;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
   }
   const text = String(value).trim();
   const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
   if (match) return match[1];
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) return null;
-  const y = parsed.getFullYear();
-  const m = `${parsed.getMonth() + 1}`.padStart(2, "0");
-  const d = `${parsed.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const d = new Date(text);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
 };
 
-export const mapLegacyMonthLockRow = (row: SourceRow): MappedMonthLock => {
-  const oldId = toNullableNumber(row.nMonthLockID ?? row.NMonthLockID) ?? 0;
-  const branchCode = toNullableString(row.vs_coname ?? row.VS_CONAME);
-  const fromDate = toDateOnly(row.fromdate ?? row.FromDate ?? row.FROMDATE);
-  const toDate = toDateOnly(row.todate ?? row.ToDate ?? row.TODATE);
-  const openAccount = toNullableNumber(row.OPENACCOUNT ?? row.OpenAccount);
-  const openTrading = toNullableNumber(row.OPENTRADING ?? row.OpenTrading);
-  const cashTxn = toNullableNumber(row.CASHTXN ?? row.CashTxn);
+export type MappedMonthLockRow = {
+  oldId: string | null;
+  branchCode: string | null;
+  fromDate: string | null;
+  toDate: string | null;
+  isDeleted: boolean;
+  skipReason: string | null;
+  unmapped: UnmappedLockField[];
+};
 
-  const unmapped: UnmappedLockField[] = [
-    {
-      sourceColumn: "OPENACCOUNT",
-      sourceValue: openAccount,
-      reason: "No OPENACCOUNT on monthly_lock_windows — CQ-wave7",
-    },
-    {
-      sourceColumn: "OPENTRADING",
-      sourceValue: openTrading,
-      reason: "No OPENTRADING on monthly_lock_windows — CQ-wave7",
-    },
-    {
-      sourceColumn: "CASHTXN",
-      sourceValue: cashTxn,
-      reason: "No CASHTXN on monthly_lock_windows — CQ-wave7",
-    },
-  ];
+export const mapMonthLockRow = (row: SourceRow): MappedMonthLockRow => {
+  const unmapped: UnmappedLockField[] = [];
+  const oldId =
+    row.nMonthLockID != null && row.nMonthLockID !== ""
+      ? String(row.nMonthLockID)
+      : null;
+  const branchCode = toNullableString(
+    row.vs_coname ?? row.VS_CONAME ?? row.branchCode,
+  )?.toUpperCase() ?? null;
+  const fromDate = toDateOnlyString(row.fromdate ?? row.FromDate ?? row.fromDate);
+  const toDate = toDateOnlyString(row.todate ?? row.ToDate ?? row.toDate);
+  const isDeleted = toBoolean(row.bIsDeleted ?? row.BIsDeleted);
+
+  for (const col of ["OPENACCOUNT", "OPENTRADING", "CASHTXN"] as const) {
+    const value = row[col];
+    if (value != null && value !== "") {
+      unmapped.push({
+        sourceColumn: col,
+        sourceValue: value,
+        reason: "No new-app equivalent; CQ-wave7",
+      });
+    }
+  }
 
   let skipReason: string | null = null;
-  if (!oldId) skipReason = "Missing nMonthLockID";
-  else if (!branchCode) skipReason = "Missing vs_coname branch code";
-  else if (!fromDate || !toDate) skipReason = "Missing fromdate/todate";
+  if (!branchCode) {
+    skipReason = "Missing vs_coname branch code";
+  } else if (!fromDate || !toDate) {
+    skipReason = "Missing fromdate or todate";
+  }
 
   return {
     oldId,
     branchCode,
     fromDate,
     toDate,
-    isDeleted: toBooleanFlag(row.bIsDeleted ?? row.BIsDeleted),
-    openAccount,
-    openTrading,
-    cashTxn,
-    unmapped,
+    isDeleted,
     skipReason,
+    unmapped,
   };
 };
 
-/** First lock per branch by lowest nMonthLockID (W7-2). */
+/**
+ * One lock window per branch — lowest nMonthLockID wins.
+ * Soft-deleted rows are still candidates (kept as soft-deleted).
+ * Link table has no nMonthLockID; join user links by branch to these dates.
+ */
 export const pickFirstMonthLockPerBranch = (
-  mapped: MappedMonthLock[],
-): { selected: MappedMonthLock[]; skipped: MappedMonthLock[] } => {
-  const byBranch = new Map<string, MappedMonthLock[]>();
-  for (const row of mapped) {
-    if (row.skipReason || !row.branchCode) continue;
-    const key = row.branchCode.toUpperCase();
-    const list = byBranch.get(key) ?? [];
-    list.push(row);
-    byBranch.set(key, list);
+  rows: MappedMonthLockRow[],
+): {
+  selected: MappedMonthLockRow[];
+  skipped: Array<{ row: MappedMonthLockRow; reason: string }>;
+} => {
+  const skipped: Array<{ row: MappedMonthLockRow; reason: string }> = [];
+  const usable = rows.filter((row) => {
+    if (row.skipReason) {
+      skipped.push({ row, reason: row.skipReason });
+      return false;
+    }
+    return true;
+  });
+
+  const sorted = [...usable].sort((a, b) => {
+    const aId = Number(a.oldId ?? Number.POSITIVE_INFINITY);
+    const bId = Number(b.oldId ?? Number.POSITIVE_INFINITY);
+    return aId - bId;
+  });
+
+  const byBranch = new Map<string, MappedMonthLockRow>();
+  for (const row of sorted) {
+    const key = row.branchCode!;
+    const existing = byBranch.get(key);
+    if (!existing) {
+      byBranch.set(key, row);
+      continue;
+    }
+    skipped.push({
+      row,
+      reason: `Later monthlock for branch ${key}; kept lowest nMonthLockID ${existing.oldId}`,
+    });
   }
 
-  const selected: MappedMonthLock[] = [];
-  const skipped: MappedMonthLock[] = [];
-  for (const list of byBranch.values()) {
-    const sorted = [...list].sort((a, b) => a.oldId - b.oldId);
-    selected.push(sorted[0]);
-    skipped.push(...sorted.slice(1));
-  }
-  return { selected, skipped };
+  return { selected: [...byBranch.values()], skipped };
 };
 
-export const mapLegacyMonthLockUserLink = (
+export type MappedMLockBrnUserLinkRow = {
+  oldId: string | null;
+  branchId: string | null;
+  branchCode: string | null;
+  userId: string | null;
+  isActive: boolean;
+  isDeleted: boolean;
+  skipReason: string | null;
+  unmapped: UnmappedLockField[];
+  note: string;
+};
+
+/**
+ * Branch/user eligibility for month lock.
+ * No monthlock FK on source — join by branchCode to first lock dates only.
+ */
+export const mapMLockBrnUserLinkRow = (
   row: SourceRow,
-): MappedMonthLockUserLink => {
-  const oldId = toNullableNumber(
-    row.nMLockBrnUserID ?? row.NMLockBrnUserID,
-  );
-  const branchCode = toNullableString(row.vBrnCode ?? row.VBrnCode);
-  const branchOldId = toNullableNumber(row.nBrnID ?? row.NBrnID);
-  const userOldId = toNullableNumber(row.nUID ?? row.NUID);
+): MappedMLockBrnUserLinkRow => {
+  const unmapped: UnmappedLockField[] = [];
+  const oldId =
+    row.nMLockBrnUserID != null && row.nMLockBrnUserID !== ""
+      ? String(row.nMLockBrnUserID)
+      : null;
+  const branchId =
+    row.nBrnID != null && row.nBrnID !== "" ? String(row.nBrnID) : null;
+  const branchCode = toNullableString(
+    row.vBrnCode ?? row.VBrnCode,
+  )?.toUpperCase() ?? null;
+  const userId =
+    row.nUID != null && row.nUID !== "" ? String(row.nUID) : null;
+  const isActive = toBoolean(row.isActive ?? row.IsActive);
+  const isDeleted = toBoolean(row.bIsDeleted ?? row.BIsDeleted);
+
   const userName = toNullableString(row.vUName ?? row.VUName);
+  if (userName) {
+    unmapped.push({
+      sourceColumn: "vUName",
+      sourceValue: userName,
+      reason: "Display name only; resolve user by nUID",
+    });
+  }
 
   let skipReason: string | null = null;
-  if (!branchCode && branchOldId === null) {
-    skipReason = "Missing branch on MLockBrnUserLink";
-  } else if (userOldId === null) {
+  if (!branchCode && !branchId) {
+    skipReason = "Missing vBrnCode and nBrnID";
+  } else if (!userId) {
     skipReason = "Missing nUID";
   }
 
   return {
     oldId,
+    branchId,
     branchCode,
-    branchOldId,
-    userOldId,
-    userName,
-    isActive: toBooleanFlag(row.isActive ?? row.IsActive),
-    isDeleted: toBooleanFlag(row.bIsDeleted ?? row.BIsDeleted),
+    userId,
+    isActive,
+    isDeleted,
     skipReason,
+    unmapped,
+    note: "No monthlock FK — join by branch only to first lock dates",
   };
 };

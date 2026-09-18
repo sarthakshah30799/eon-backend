@@ -110,21 +110,22 @@ import {
   PASSWORD_POLICY_MAX_LENGTH_DEFAULT,
   SETTINGS_MIGRATION_SKIPPED_TABLES,
   collapseAdvSettingsByDataCode,
+  inferAdvSettingValue,
   isPasswordPolicyChildCode,
   mapEodQuestionRow,
   mapMailConfigRow,
   mapPasswordPolicyRow,
-  type CollapsedAdvSetting,
+  normalizeSettingCategoryCode,
 } from "./migration-tool.settings";
 import {
   LEGACY_DOCUMENT_TABLE_CANDIDATES,
   disambiguateDocumentCode,
-  mapLegacyScanDocMasterRow,
+  mapScanDocMasterRow,
 } from "./migration-tool.document";
 import {
   LEGACY_LOCK_TABLE_CANDIDATES,
-  mapLegacyMonthLockRow,
-  mapLegacyMonthLockUserLink,
+  mapMonthLockRow,
+  mapMLockBrnUserLinkRow,
   pickFirstMonthLockPerBranch,
 } from "./migration-tool.lock";
 import {
@@ -10655,22 +10656,25 @@ export class MigrationToolService {
       skipped += 1;
       this.addSkippedRow(context, {
         sourceTable: tableName,
-        sourceRowIdentifier: `${dup.dataCode}#${dup.sourceId}`,
-        reason: `${dup.reason}; lostValue=${dup.lostValue ?? ""}`,
+        sourceRowIdentifier: `${dup.dataCode}#${dup.id}`,
+        reason: `${dup.reason}; lostValue=${dup.lostDataValue ?? ""}`,
         fallbackAction: "First DATACODE wins",
       });
     }
 
     const categoryCache = new Map<string, AdvancedSetting>();
 
-    for (const row of kept) {
+    for (const item of kept) {
       context.summary.rowsScanned += 1;
+      const sourceRow = item.row;
+      const dataCode = item.dataCode;
+      const sourceId = item.id;
       try {
-        if (isPasswordPolicyChildCode(row.dataCode)) {
+        if (isPasswordPolicyChildCode(dataCode)) {
           skipped += 1;
           this.addSkippedRow(context, {
             sourceTable: tableName,
-            sourceRowIdentifier: row.dataCode,
+            sourceRowIdentifier: dataCode,
             reason:
               "Reserved PASSWORD_* code — owned by mstPasswordPolicy (W7-12)",
             fallbackAction: "Skipped advsettings write to PASSWORD_*",
@@ -10678,14 +10682,34 @@ export class MigrationToolService {
           continue;
         }
 
-        let category = categoryCache.get(row.categoryCode);
+        const categoryRaw =
+          sourceRow.SETTINGCATEGORY ??
+          sourceRow.SettingCategory ??
+          sourceRow.settingcategory ??
+          null;
+        const categoryCode =
+          normalizeSettingCategoryCode(categoryRaw) ?? "GENERAL_OPTIONS";
+        const label =
+          String(
+            sourceRow.DATADISPLAY ??
+              sourceRow.DataDisplay ??
+              sourceRow.datadisplay ??
+              dataCode,
+          ).trim() || dataCode;
+        const dataValueRaw =
+          sourceRow.DATAVALUE ?? sourceRow.DataValue ?? sourceRow.datavalue;
+        const nBranchId =
+          sourceRow.nBranchID ?? sourceRow.NBRANCHID ?? sourceRow.nbranchid;
+        const inferred = inferAdvSettingValue(dataValueRaw);
+
+        let category = categoryCache.get(categoryCode);
         if (!category) {
           category = await this.ensureAdvancedSettingCategory(
             context,
-            row.categoryCode,
-            row.categoryRaw ?? row.categoryCode,
+            categoryCode,
+            categoryRaw ? String(categoryRaw) : categoryCode,
           );
-          categoryCache.set(row.categoryCode, category);
+          categoryCache.set(categoryCode, category);
         }
 
         let valueType = ValueType.Text;
@@ -10693,21 +10717,20 @@ export class MigrationToolService {
         let valueNumber: number | null = null;
         let valueDecimal: number | null = null;
         let valueDate: Date | null = null;
-        let valueText: string | null = row.inferred.valueText;
+        let valueText: string | null = inferred.valueText ?? null;
 
-        const inferred = row.inferred;
         if (inferred.valueType === "boolean") {
           valueType = ValueType.Boolean;
-          valueBoolean = inferred.valueBoolean;
+          valueBoolean = inferred.valueBoolean ?? null;
         } else if (inferred.valueType === "number") {
           valueType = ValueType.Number;
-          valueNumber = inferred.valueNumber;
+          valueNumber = inferred.valueNumber ?? null;
         } else if (inferred.valueType === "decimal") {
           valueType = ValueType.Decimal;
-          valueDecimal = inferred.valueDecimal;
+          valueDecimal = inferred.valueDecimal ?? null;
         } else if (inferred.valueType === "date") {
           valueType = ValueType.Date;
-          valueDate = inferred.valueDate;
+          valueDate = inferred.valueDate ?? null;
         } else if (inferred.looksLikeEntityRef && inferred.valueText) {
           const resolved = this.resolveAdvSettingEntityUuid(inferred.valueText);
           if (resolved) {
@@ -10715,44 +10738,44 @@ export class MigrationToolService {
             valueText = resolved.uuid;
             this.addWarning(context, {
               sourceTable: tableName,
-              note: `${row.dataCode} value ${inferred.valueText} → ${resolved.master} ${resolved.uuid}`,
+              note: `${dataCode} value ${inferred.valueText} → ${resolved.master} ${resolved.uuid}`,
             });
           } else {
             valueType = ValueType.Text;
             valueText = inferred.valueText;
             this.addWarning(context, {
               sourceTable: tableName,
-              note: `${row.dataCode} entity-like value ${inferred.valueText} not resolved — stored as text`,
+              note: `${dataCode} entity-like value ${inferred.valueText} not resolved — stored as text`,
             });
           }
         }
 
         const result = await this.upsertAdvancedSettingChild(context, {
           parent: category,
-          code: row.dataCode,
-          label: row.label,
+          code: dataCode,
+          label,
           valueType,
           valueBoolean,
           valueNumber,
           valueDecimal,
           valueDate,
           valueText,
-          description: `Migrated from advsettings ID=${row.sourceId} nBranchID=${row.nBranchId ?? ""}`,
+          description: `Migrated from advsettings ID=${sourceId} nBranchID=${nBranchId ?? ""}`,
         });
         inserted += 1;
         context.summary.rowsInserted += 1;
         this.addIdMap(context, {
           oldTable: tableName,
-          oldId: row.sourceId,
+          oldId: sourceId,
           newTable: "advanced_settings",
           newUuid: result.id,
-          lookupKey: `setting:${row.dataCode}`,
+          lookupKey: `setting:${dataCode}`,
         });
       } catch (error) {
         failed += 1;
         this.addError(context, {
           sourceTable: tableName,
-          sourceRowIdentifier: row.dataCode,
+          sourceRowIdentifier: dataCode,
           fieldName: "advsettings",
           errorMessage: error instanceof Error ? error.message : String(error),
         });
@@ -10824,7 +10847,7 @@ export class MigrationToolService {
       {
         code: PasswordPolicyCodeEnum.MinLength,
         label: "PASSWORD MIN LENGTH",
-        value: mapped.minLength,
+        value: mapped.minLength ?? 8,
       },
       {
         code: PasswordPolicyCodeEnum.MaxLength,
@@ -10834,17 +10857,17 @@ export class MigrationToolService {
       {
         code: PasswordPolicyCodeEnum.MinAlphaCount,
         label: "PASSWORD MIN ALPHA CHAR COUNT",
-        value: mapped.minAlphaCount,
+        value: mapped.minAlpha ?? 0,
       },
       {
         code: PasswordPolicyCodeEnum.MinNumericCount,
         label: "PASSWORD MIN NUMERIC CHAR COUNT",
-        value: mapped.minNumericCount,
+        value: mapped.minNumeric ?? 0,
       },
       {
         code: PasswordPolicyCodeEnum.MinSpecialCharCount,
         label: "PASSWORD MIN SPECIAL CHAR COUNT",
-        value: mapped.minSpecialCharCount,
+        value: mapped.minSpecial ?? 0,
       },
     ];
 
@@ -10902,16 +10925,19 @@ export class MigrationToolService {
       context.summary.rowsScanned += 1;
       const mapped = mapMailConfigRow(row);
       try {
-        if (mapped.skipReason) {
+        if (mapped.skipReason || !mapped.username || !mapped.host || mapped.port == null) {
           skipped += 1;
           this.addSkippedRow(context, {
             sourceTable: tableName,
-            sourceRowIdentifier: mapped.oldId ?? mapped.username,
-            reason: mapped.skipReason,
+            sourceRowIdentifier: mapped.oldId ?? mapped.username ?? "?",
+            reason: mapped.skipReason ?? "Missing username/host/port",
             fallbackAction: "Skipped MailConfig row",
           });
           continue;
         }
+        const mailUsername = mapped.username;
+        const mailHost = mapped.host;
+        const mailPort = mapped.port;
         for (const field of mapped.unmapped) {
           this.addFieldStatus(context, {
             sourceTable: tableName,
@@ -10921,29 +10947,31 @@ export class MigrationToolService {
             note: field.reason,
           });
         }
-        if (mapped.sourcePasswordPresent) {
+        if (
+          mapped.unmapped.some((field) => field.sourceColumn === "vSmtpPassword")
+        ) {
           this.addWarning(context, {
             sourceTable: tableName,
-            note: `MailConfig ${mapped.username}: source password NOT migrated; dummy set for reset`,
+            note: `MailConfig ${mailUsername}: source password NOT migrated; dummy set for reset`,
           });
         }
         const encrypted = encryption.encrypt(MAIL_PASSWORD_DUMMY_PLAINTEXT);
         if (context.mode === "real") {
           const existing = await this.targetMailConfigRepository.findOne({
-            where: { username: mapped.username },
+            where: { username: mailUsername },
           });
           if (existing) {
-            existing.host = mapped.host;
-            existing.port = mapped.port;
+            existing.host = mailHost;
+            existing.port = mailPort;
             existing.password = encrypted;
             existing.senderEmail = mapped.senderEmail ?? undefined;
             await this.targetMailConfigRepository.save(existing);
           } else {
             await this.targetMailConfigRepository.save(
               this.targetMailConfigRepository.create({
-                username: mapped.username,
-                host: mapped.host,
-                port: mapped.port,
+                username: mailUsername,
+                host: mailHost,
+                port: mailPort,
                 password: encrypted,
                 senderEmail: mapped.senderEmail ?? undefined,
               }),
@@ -10956,14 +10984,14 @@ export class MigrationToolService {
           oldTable: tableName,
           oldId: mapped.oldId ?? mapped.username,
           newTable: "mail_configurations",
-          newUuid: mapped.username,
-          lookupKey: `mail:${mapped.username}`,
+          newUuid: mailUsername,
+          lookupKey: `mail:${mailUsername}`,
         });
       } catch (error) {
         failed += 1;
         this.addError(context, {
           sourceTable: tableName,
-          sourceRowIdentifier: mapped.username,
+          sourceRowIdentifier: mapped.username ?? mapped.oldId ?? "?",
           fieldName: "MailConfig",
           errorMessage: error instanceof Error ? error.message : String(error),
         });
@@ -11004,7 +11032,7 @@ export class MigrationToolService {
 
     for (const row of rows) {
       context.summary.rowsScanned += 1;
-      const mapped = mapLegacyScanDocMasterRow(row);
+      const mapped = mapScanDocMasterRow(row);
       try {
         if (mapped.skipReason) {
           skipped += 1;
@@ -11026,9 +11054,19 @@ export class MigrationToolService {
           });
         }
 
+        if (!mapped.documentCode) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: mapped.oldId ?? "?",
+            reason: "Missing vDocumentCode",
+            fallbackAction: "Skipped ScanDocMaster row",
+          });
+          continue;
+        }
         const finalCode = disambiguateDocumentCode(
           mapped.documentCode,
-          mapped.oldId,
+          mapped.uniqCode ?? mapped.oldId ?? "X",
           usedCodes,
         );
         if (finalCode !== mapped.documentCode) {
@@ -11049,28 +11087,28 @@ export class MigrationToolService {
           mapped.specificationType!,
           mapped.specificationType!,
         );
-        const groupOption = mapped.kycGroup
+        const groupOption = mapped.groupCode
           ? await this.ensureCategoryOption(
               context,
               CategoryOptionCodeEnum.DocumentGroup,
-              mapped.kycGroup,
-              mapped.kycGroup,
+              mapped.groupCode,
+              mapped.groupCode,
             )
           : null;
-        const entityOption = mapped.scanType
+        const entityOption = mapped.entityCode
           ? await this.ensureCategoryOption(
               context,
               CategoryOptionCodeEnum.EntityType,
-              mapped.scanType,
-              mapped.scanType,
+              mapped.entityCode,
+              mapped.entityCode,
             )
           : null;
-        const fyOption = mapped.kycYear
+        const fyOption = mapped.financialYearCode
           ? await this.ensureCategoryOption(
               context,
               CategoryOptionCodeEnum.FinancialYear,
-              mapped.kycYear,
-              mapped.kycYear,
+              mapped.financialYearCode,
+              mapped.financialYearCode,
             )
           : null;
 
@@ -11101,7 +11139,7 @@ export class MigrationToolService {
             withDeleted: true,
           });
           if (existing) {
-            existing.documentDescription = mapped.documentDescription;
+            existing.documentDescription = mapped.description;
             existing.documentType = mapped.documentType;
             existing.isRequired = mapped.isRequired;
             existing.maxSizeMb = mapped.maxSizeMb;
@@ -11132,7 +11170,7 @@ export class MigrationToolService {
           } else {
             const created = this.targetDocumentProfileRepository.create({
               documentCode: finalCode,
-              documentDescription: mapped.documentDescription,
+              documentDescription: mapped.description,
               documentType: mapped.documentType,
               isRequired: mapped.isRequired,
               maxSizeMb: mapped.maxSizeMb,
@@ -11214,7 +11252,7 @@ export class MigrationToolService {
     this.ensureSourceRows(context, "monthlyLock", locksSource.rows);
 
     const mappedLocks = locksSource.rows.map((row) =>
-      mapLegacyMonthLockRow(row),
+      mapMonthLockRow(row),
     );
     const { selected, skipped: skippedLocks } =
       pickFirstMonthLockPerBranch(mappedLocks);
@@ -11225,8 +11263,8 @@ export class MigrationToolService {
     for (const skip of skippedLocks) {
       this.addSkippedRow(context, {
         sourceTable: locksSource.tableName,
-        sourceRowIdentifier: String(skip.oldId),
-        reason: "Not first monthlock for branch — first wins",
+        sourceRowIdentifier: String(skip.row.oldId ?? "?"),
+        reason: skip.reason,
         fallbackAction: "Skipped extra monthlock",
       });
     }
@@ -11238,13 +11276,13 @@ export class MigrationToolService {
 
     for (const linkRow of linksSource.rows) {
       context.summary.rowsScanned += 1;
-      const link = mapLegacyMonthLockUserLink(linkRow);
+      const link = mapMLockBrnUserLinkRow(linkRow);
       try {
         if (link.skipReason) {
           skipped += 1;
           this.addSkippedRow(context, {
             sourceTable: linksSource.tableName,
-            sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+            sourceRowIdentifier: String(link.oldId ?? link.userId),
             reason: link.skipReason,
             fallbackAction: "Skipped link",
           });
@@ -11256,7 +11294,7 @@ export class MigrationToolService {
           skipped += 1;
           this.addSkippedRow(context, {
             sourceTable: linksSource.tableName,
-            sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+            sourceRowIdentifier: String(link.oldId ?? link.userId),
             reason: `No first monthlock for branch ${branchKey}`,
             fallbackAction: "Skipped link",
           });
@@ -11277,12 +11315,12 @@ export class MigrationToolService {
             ? this.branchMap.get(link.branchCode) ??
               this.branchMap.get(link.branchCode.toUpperCase())
             : null) ??
-          (link.branchOldId != null
-            ? this.branchMap.get(String(link.branchOldId))
+          (link.branchId != null
+            ? this.branchMap.get(String(link.branchId))
             : null);
         const userId =
-          link.userOldId != null
-            ? this.userMap.get(String(link.userOldId))
+          link.userId != null
+            ? this.userMap.get(String(link.userId))
             : null;
 
         if (!branchId || !userId || branchId.startsWith("mock-") || userId.startsWith("mock-")) {
@@ -11290,7 +11328,7 @@ export class MigrationToolService {
             skipped += 1;
             this.addSkippedRow(context, {
               sourceTable: linksSource.tableName,
-              sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+              sourceRowIdentifier: String(link.oldId ?? link.userId),
               reason: "Branch or user UUID not resolved",
               fallbackAction: "Skipped — run branch/user first",
             });
@@ -11299,7 +11337,7 @@ export class MigrationToolService {
         }
 
         const resolvedBranchId = branchId ?? `mock-branch-${branchKey}`;
-        const resolvedUserId = userId ?? `mock-user-${link.userOldId}`;
+        const resolvedUserId = userId ?? `mock-user-${link.userId}`;
         const softDeleted = lock.isDeleted || link.isDeleted;
 
         if (context.mode === "real") {
@@ -11329,7 +11367,7 @@ export class MigrationToolService {
             await this.targetMonthlyLockWindowRepository.save(existing);
             this.addIdMap(context, {
               oldTable: linksSource.tableName,
-              oldId: link.oldId ?? `${branchKey}:${link.userOldId}`,
+              oldId: link.oldId ?? `${branchKey}:${link.userId}`,
               newTable: "monthly_lock_windows",
               newUuid: existing.id,
               lookupKey: `monthly-lock:${resolvedBranchId}:${resolvedUserId}`,
@@ -11352,7 +11390,7 @@ export class MigrationToolService {
               await this.targetMonthlyLockWindowRepository.save(created);
             this.addIdMap(context, {
               oldTable: linksSource.tableName,
-              oldId: link.oldId ?? `${branchKey}:${link.userOldId}`,
+              oldId: link.oldId ?? `${branchKey}:${link.userId}`,
               newTable: "monthly_lock_windows",
               newUuid: saved.id,
               lookupKey: `monthly-lock:${resolvedBranchId}:${resolvedUserId}`,
@@ -11361,9 +11399,9 @@ export class MigrationToolService {
         } else {
           this.addIdMap(context, {
             oldTable: linksSource.tableName,
-            oldId: link.oldId ?? `${branchKey}:${link.userOldId}`,
+            oldId: link.oldId ?? `${branchKey}:${link.userId}`,
             newTable: "monthly_lock_windows",
-            newUuid: `mock-mlock-${branchKey}-${link.userOldId}`,
+            newUuid: `mock-mlock-${branchKey}-${link.userId}`,
             lookupKey: `monthly-lock:${resolvedBranchId}:${resolvedUserId}`,
           });
         }
@@ -11373,7 +11411,7 @@ export class MigrationToolService {
         failed += 1;
         this.addError(context, {
           sourceTable: linksSource.tableName,
-          sourceRowIdentifier: String(link.oldId ?? link.userOldId),
+          sourceRowIdentifier: String(link.oldId ?? link.userId),
           fieldName: "MLockBrnUserLink",
           errorMessage: error instanceof Error ? error.message : String(error),
         });
@@ -11429,6 +11467,16 @@ export class MigrationToolService {
           });
           continue;
         }
+        if (!mapped.code || !mapped.label) {
+          skipped += 1;
+          this.addSkippedRow(context, {
+            sourceTable: tableName,
+            sourceRowIdentifier: mapped.oldId ?? "?",
+            reason: "Missing EOD code or label",
+            fallbackAction: "Skipped EOD question",
+          });
+          continue;
+        }
         await this.upsertAdvancedSettingChild(context, {
           parent: category,
           code: mapped.code,
@@ -11437,13 +11485,12 @@ export class MigrationToolService {
           valueBoolean: false,
           description: "Migrated from tb_EODQuestion",
         });
-        // isActive on setting node
         if (context.mode === "real") {
           const setting = await this.targetAdvancedSettingRepository.findOne({
             where: { code: mapped.code, nodeType: NodeType.Setting },
           });
           if (setting) {
-            setting.isActive = mapped.isActive;
+            setting.isActive = mapped.active;
             await this.targetAdvancedSettingRepository.save(setting);
           }
         }
