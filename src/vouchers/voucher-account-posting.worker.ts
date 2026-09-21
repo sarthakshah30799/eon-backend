@@ -342,10 +342,14 @@ export class VoucherAccountPostingWorker
       const isBillLine = Boolean(transactionId);
       const profileId = isBillLine
         ? (voucher.partyProfileId ?? null)
-        : (item.subledgerPartyProfileId ?? null);
+        : (item.subledgerPartyProfileId ?? item.subledgerBranchId ?? null);
       const profileSnapshot = isBillLine
         ? (voucher.partyProfileSnapshot ?? null)
-        : (item.subledgerPartyProfileSnapshot ?? null);
+        : item.subledgerPartyProfileId
+          ? (item.subledgerPartyProfileSnapshot ?? null)
+          : item.subledgerBranchId
+            ? (item.subledgerBranchSnapshot ?? null)
+            : null;
 
       drafts.push({
         voucherId: voucher.id,

@@ -52,6 +52,7 @@ BEGIN
 
   -- Accounting
   (195, 'Advice of Debit/Credit', '/advice-debit-credit',            'Accounting', NULL, FALSE, 'book-open', 'unique'),
+  (197, 'Credit Request Fund',    '/credit-request-fund',            'Accounting', NULL, FALSE, 'banknote',  'unique'),
   (200, 'Journal Vouchers',       '/journal-vouchers',               'Accounting', NULL, FALSE, 'book-open', 'unique'),
   (205, 'Deposit / Withdrawals',  '/deposit-withdrawals',            'Accounting', NULL, FALSE, 'arrow-left-right', 'unique'),
   (210, 'Payments',               '/payments',                       'Accounting', NULL, FALSE, 'credit-card','unique'),
