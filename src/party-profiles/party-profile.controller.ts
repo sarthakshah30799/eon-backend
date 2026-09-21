@@ -64,13 +64,12 @@ export class PartyProfileController {
   })
   async findAll(
     @Query() query: PartyProfileListQueryDto,
-    @Query("branchId") branchId: string | undefined,
     @Session() session: any,
   ): Promise<PaginatedResponseDto<PartyProfileResponseDto>> {
     return this.partyProfileService.findAll(
       query,
       session.userId,
-      branchId?.trim() || undefined,
+      query.branchId?.trim() || undefined,
     );
   }
 
