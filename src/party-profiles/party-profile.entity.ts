@@ -9,10 +9,10 @@ import {
 import { BaseEntity } from "../base/base.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { State } from "../state/state.entity";
-import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
+import { PartyProfileBranch } from "./entities/party-profile-branch.entity";
 import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
 
 export enum ClientType {
@@ -249,16 +249,8 @@ export class PartyProfile extends BaseEntity {
   @Column({ type: "uuid", nullable: true })
   stateId: string;
 
-  @Index("IDX_party_profiles_branch_id")
-  @ManyToOne(() => Branch, { nullable: true, onDelete: "SET NULL" })
-  @JoinColumn({
-    name: "branch_id",
-    foreignKeyConstraintName: "FK_party_profiles_branch_id",
-  })
-  branch: Branch;
-
-  @Column({ type: "uuid", nullable: true })
-  branchId: string;
+  @OneToMany(() => PartyProfileBranch, (branchLink) => branchLink.partyProfile)
+  branchLinks: PartyProfileBranch[];
 
   @ManyToOne(() => SelectOption, { nullable: true, onDelete: "SET NULL" })
   @JoinColumn({

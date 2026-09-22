@@ -217,19 +217,19 @@ export class CreditRequestFundService {
     branchId: string,
     session: VoucherSession,
   ) {
-    const privileged = this.isPrivileged(session);
+    void session;
     const result = await this.partyProfileService.findAll(
       {
         offset: 0,
         limit: 10,
         search: party.code,
         type: [party.type],
-        ...(privileged ? {} : { branchIds: [branchId] }),
+        branchIds: [branchId],
         activeOnly: true,
         status: WorkflowStatus.APPROVE,
       },
       actorId,
-      privileged ? undefined : branchId,
+      branchId,
     );
     if (!result.data.some((item) => item.id === party.id))
       throw new ForbiddenException(

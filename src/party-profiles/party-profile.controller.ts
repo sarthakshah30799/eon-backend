@@ -103,18 +103,7 @@ export class PartyProfileController {
     @Body() dto: CreatePartyProfileDto,
     @Session() session: any,
   ): Promise<PartyProfileResponseDto> {
-    const canSeeAllBranches = Boolean(
-      session?.isAdmin || session?.isHo || session?.isHoStaff,
-    );
-    const effectiveBranchId = canSeeAllBranches
-      ? dto.branchId?.trim() || session.activeBranchId
-      : session.activeBranchId;
-
-    return this.partyProfileService.create(
-      dto,
-      session.userId,
-      effectiveBranchId,
-    );
+    return this.partyProfileService.create(dto, session.userId);
   }
 
   @Patch(":id/credit-policy")

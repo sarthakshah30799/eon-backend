@@ -4,6 +4,7 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
+  ArrayMinSize,
   IsArray,
   IsNotEmpty,
   IsNumber,
@@ -303,11 +304,15 @@ export class CreatePartyProfileDto {
   @IsOptional()
   stateId?: string;
 
-  @ApiPropertyOptional({ description: "Branch ID (UUID)" })
-  @EmptyStringToUndefined()
-  @IsUUID()
-  @IsOptional()
-  branchId?: string;
+  @ApiProperty({
+    description: "Assigned branch IDs (UUID)",
+    type: [String],
+    minItems: 1,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID("4", { each: true })
+  branchIds: string[];
 
   @ApiPropertyOptional({ description: "Location" })
   @EmptyStringToUndefined()

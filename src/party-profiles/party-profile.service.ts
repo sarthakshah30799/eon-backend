@@ -30,6 +30,7 @@ import {
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
 import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
+import { PartyProfileBranch } from "./entities/party-profile-branch.entity";
 import {
   PartyProfileCommissionTypeEnum,
   type PartyProfileCommissionType,
@@ -125,6 +126,8 @@ export class PartyProfileService {
     private readonly productRepository: Repository<Product>,
     @InjectRepository(PartyProfileCommissionRule)
     private readonly partyProfileCommissionRuleRepository: Repository<PartyProfileCommissionRule>,
+    @InjectRepository(PartyProfileBranch)
+    private readonly partyProfileBranchRepository: Repository<PartyProfileBranch>,
   ) {}
 
   private async assertReferencedPartyProfile(
@@ -191,6 +194,20 @@ export class PartyProfileService {
     );
   }
 
+  private getAssignedBranchIds(client: PartyProfile): string[] {
+    if (!Array.isArray(client.branchLinks) || client.branchLinks.length === 0) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        client.branchLinks
+          .map((link) => link.branchId)
+          .filter((branchId): branchId is string => Boolean(branchId)),
+      ),
+    ];
+  }
+
   private isPartyProfileVisibleToUser(
     client: PartyProfile,
     user: User | null | undefined,
@@ -208,7 +225,75 @@ export class PartyProfileService {
       return false;
     }
 
-    return client.branchId === activeBranchId;
+    return this.getAssignedBranchIds(client).includes(activeBranchId);
+  }
+
+  private async resolveActiveBranches(branchIds: string[]): Promise<Branch[]> {
+    const uniqueBranchIds = [
+      ...new Set(
+        (branchIds ?? [])
+          .map((branchId) => branchId?.trim())
+          .filter((branchId): branchId is string => Boolean(branchId)),
+      ),
+    ];
+
+    if (uniqueBranchIds.length === 0) {
+      throw new BadRequestException("At least one branch is required");
+    }
+
+    const branches = await this.branchRepository.find({
+      where: { id: In(uniqueBranchIds), isActive: true },
+    });
+
+    if (branches.length !== uniqueBranchIds.length) {
+      throw new BadRequestException(
+        "One or more selected branches are invalid or inactive",
+      );
+    }
+
+    return branches;
+  }
+
+  private async replacePartyProfileBranches(
+    partyProfileId: string,
+    branches: Branch[],
+    userId: string,
+  ): Promise<void> {
+    await this.partyProfileBranchRepository.delete({ partyProfileId });
+    if (!branches.length) {
+      return;
+    }
+
+    await this.partyProfileBranchRepository.save(
+      branches.map((branch) =>
+        this.partyProfileBranchRepository.create({
+          partyProfileId,
+          branchId: branch.id,
+          createdBy: userId,
+          updatedBy: userId,
+        }),
+      ),
+    );
+  }
+
+  private applyAssignedBranchFilter(
+    qb: ReturnType<Repository<PartyProfile>["createQueryBuilder"]>,
+    branchIds: string[],
+  ) {
+    if (!branchIds.length) {
+      return;
+    }
+
+    qb.andWhere(
+      `EXISTS (
+        SELECT 1
+        FROM party_profile_branches ppb
+        WHERE ppb.party_profile_id = pp.id
+          AND ppb.deleted_at IS NULL
+          AND ppb.branch_id IN (:...assignedBranchIds)
+      )`,
+      { assignedBranchIds: branchIds },
+    );
   }
 
   private normalizePartyProfilePath(type?: string) {
@@ -550,7 +635,6 @@ export class PartyProfileService {
   async create(
     dto: CreatePartyProfileDto,
     userId: string,
-    activeBranchId?: string | null,
   ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
     const normalized = normalizeDto(dto);
@@ -579,16 +663,7 @@ export class PartyProfileService {
       );
     }
 
-    if (!activeBranchId) {
-      throw new BadRequestException("Active branch is required");
-    }
-
-    const branch = await this.branchRepository.findOne({
-      where: { id: activeBranchId },
-    });
-    if (!branch) {
-      throw new NotFoundException(`Branch with id ${activeBranchId} not found`);
-    }
+    const branches = await this.resolveActiveBranches(dto.branchIds);
 
     if (dto.gstStateId) {
       const state = await this.stateRepository.findOne({
@@ -622,6 +697,9 @@ export class PartyProfileService {
       commissionRules: _commissionRules,
       ...rest
     } = normalized;
+    const { branchIds: _branchIds, ...profileFields } = rest as typeof rest & {
+      branchIds?: string[];
+    };
 
     await this.assertReferencedPartyProfile(defaultAgent, "Default agent");
     await this.assertReferencedPartyProfile(
@@ -632,7 +710,7 @@ export class PartyProfileService {
     const isCardIssuer =
       (normalized.type ?? dto.type) === ClientType.CARD_ISSUER_PROFILE;
     const client = this.partyProfileRepository.create({
-      ...rest,
+      ...profileFields,
       cardNumberLength: isCardIssuer
         ? (normalized.cardNumberLength ?? 16)
         : null,
@@ -671,10 +749,10 @@ export class PartyProfileService {
       status: WorkflowStatus.PENDING,
       statusUpdatedById: null,
       statusUpdatedAt: null,
-      branch: branch ? ({ id: branch.id } as any) : null,
     });
 
     const saved = await this.partyProfileRepository.save(client);
+    await this.replacePartyProfileBranches(saved.id, branches, userId);
     await this.syncCommissionRules(saved, commissionRules, userId);
     return this.findById(saved.id);
   }
@@ -895,17 +973,21 @@ export class PartyProfileService {
       );
     }
 
-    const client = await this.partyProfileRepository.findOne({ where: { id } });
+    const client = await this.partyProfileRepository.findOne({
+      where: { id },
+      relations: ["branchLinks"],
+    });
     if (!client) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
     if (!user?.isAdmin) {
       const branchIds = this.getReviewerBranchIds(user);
+      const assignedBranchIds = this.getAssignedBranchIds(client);
       if (
         !branchIds.length ||
-        !client.branchId ||
-        !branchIds.includes(client.branchId)
+        !assignedBranchIds.length ||
+        !assignedBranchIds.some((branchId) => branchIds.includes(branchId))
       ) {
         throw new ForbiddenException(
           "You are not allowed to review this party profile",
@@ -951,7 +1033,8 @@ export class PartyProfileService {
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
       .leftJoinAndSelect("pp.state", "state")
-      .leftJoinAndSelect("pp.branch", "branch")
+      .leftJoinAndSelect("pp.branchLinks", "branchLinks")
+      .leftJoinAndSelect("branchLinks.branch", "branch")
       .leftJoinAndSelect("pp.statusUpdatedBy", "statusUpdatedBy")
       .leftJoinAndSelect("pp.location", "locationOption")
       .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
@@ -969,7 +1052,7 @@ export class PartyProfileService {
         return [];
       }
 
-      qb.andWhere("pp.branchId IN (:...branchIds)", { branchIds });
+      this.applyAssignedBranchFilter(qb, branchIds);
     }
 
     qb.orderBy("pp.createdAt", "ASC");
@@ -998,7 +1081,8 @@ export class PartyProfileService {
       relations: [
         "gstState",
         "state",
-        "branch",
+        "branchLinks",
+        "branchLinks.branch",
         "statusUpdatedBy",
         "location",
         "kycRiskCategory",
@@ -1071,6 +1155,7 @@ export class PartyProfileService {
     const user = await this.getCurrentUser(userId);
     const client = await this.partyProfileRepository.findOne({
       where: { id },
+      relations: ["branchLinks"],
     });
 
     if (!client) {
@@ -1208,7 +1293,8 @@ export class PartyProfileService {
       .createQueryBuilder("pp")
       .leftJoinAndSelect("pp.gstState", "gstState")
       .leftJoinAndSelect("pp.state", "state")
-      .leftJoinAndSelect("pp.branch", "branch")
+      .leftJoinAndSelect("pp.branchLinks", "branchLinks")
+      .leftJoinAndSelect("branchLinks.branch", "branch")
       .leftJoinAndSelect("pp.location", "locationOption")
       .leftJoinAndSelect("pp.kycRiskCategory", "kycRiskCategoryOption")
       .leftJoinAndSelect("pp.defaultAgent", "defaultAgentProfile")
@@ -1253,9 +1339,7 @@ export class PartyProfileService {
     ].filter((id, index, ids) => Boolean(id) && ids.indexOf(id) === index);
 
     if (requestedBranchIds.length > 0) {
-      qb.andWhere("pp.branchId IN (:...branchIds)", {
-        branchIds: requestedBranchIds,
-      });
+      this.applyAssignedBranchFilter(qb, requestedBranchIds);
     }
 
     if (query.sale !== undefined) {
