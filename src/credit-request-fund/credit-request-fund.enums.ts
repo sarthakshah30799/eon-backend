@@ -1,0 +1,8 @@
+export enum CreditRequestFundStatus {
+  PENDING = "PENDING",
+  APPROVE = "APPROVE",
+  REJECT = "REJECT",
+  CANCELLED = "CANCELLED",
+}
+
+export const CREDIT_REQUEST_FUND_NUMBER_SERIES = "CREDIT_REQUEST_FUND";

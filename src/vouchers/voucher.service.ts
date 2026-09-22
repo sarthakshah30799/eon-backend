@@ -2360,6 +2360,7 @@ export class VoucherService implements OnModuleInit {
         transactionDate: query.transactionDate.slice(0, 10),
       })
       .andWhere("voucher.accountMode = :mode", { mode: expectedMode })
+      .andWhere("voucher.advanceControlAccountId IS NOT NULL")
       .setParameter("excludeId", query.excludeTransactionId ?? null)
       .groupBy("voucher.id")
       .having(
@@ -2649,5 +2650,269 @@ export class VoucherService implements OnModuleInit {
       row.updatedBy = actorId;
       await repo.save(row);
     }
+  }
+
+  async getAdvanceControlAccount() {
+    return this.resolveAdvanceAccount();
+  }
+
+  async getBranchControlAccount() {
+    return this.resolveBranchControlAccount();
+  }
+
+  /**
+   * Internal Receipt/Payment create for Credit Request Fund approval.
+   * Leaves advanceControlAccountId null so vouchers are not usable as advances.
+   * Supports party or branch item subledger. Does not change manual voucher validation.
+   */
+  async createSystemVoucher(
+    input: {
+      voucherType: VoucherType.RECEIPT | VoucherType.PAYMENT;
+      transactionDate: string;
+      branchId: string;
+      counterId: string;
+      accountTypeOptionId: string;
+      accountMode: VoucherAccountMode;
+      headerAccountId: string;
+      entityTypeOptionId: string;
+      partyProfileId: string;
+      panNumber?: string | null;
+      panName?: string | null;
+      panDob?: string | null;
+      paymentMethod?: TransactionPaymentMethod | null;
+      chequeNumber?: string | null;
+      chequeDate?: string | null;
+      chequeBranch?: string | null;
+      drawnOn?: string | null;
+      remarkOptionId?: string | null;
+      narration: string;
+      idempotencyKey: string;
+      itemAccountId: string;
+      itemDirection: VoucherEntryDirection;
+      itemAmount: string;
+      subledgerPartyProfileId?: string | null;
+      subledgerBranchId?: string | null;
+    },
+    session: VoucherSession,
+    manager?: EntityManager,
+  ): Promise<AccountingVoucher> {
+    const actorId = this.getActor(session);
+    const hash = createHash("sha256")
+      .update(JSON.stringify(input))
+      .digest("hex");
+
+    const run = async (tx: EntityManager) => {
+      const existing = await tx.getRepository(AccountingVoucher).findOne({
+        where: { idempotencyKey: input.idempotencyKey },
+        relations: ["items"],
+      });
+      if (existing) {
+        if (existing.payloadHash !== hash)
+          throw new ConflictException(
+            "Idempotency key already used with a different payload",
+          );
+        return existing;
+      }
+
+      const workplace = await this.resolveWorkplace(
+        { branchId: input.branchId, counterId: input.counterId },
+        {
+          ...session,
+          isAdmin: true,
+          isHo: true,
+          activeBranchId: input.branchId,
+          activeCounterId: input.counterId,
+        },
+      );
+      await this.dayPolicy.assertTransactionDateAllowed(
+        workplace.branch.id,
+        actorId,
+        input.transactionDate,
+        workplace.counter.id,
+      );
+
+      const [
+        branchSnapshot,
+        counterSnapshot,
+        accountType,
+        entityType,
+        party,
+        headerAccount,
+        itemAccount,
+        itemType,
+        remark,
+        subledgerParty,
+        subledgerBranch,
+      ] = await Promise.all([
+        this.snapshot(this.branchRepository, workplace.branch.id),
+        this.snapshot(this.counterRepository, workplace.counter.id),
+        this.option(input.accountTypeOptionId, "VOUCHER_ACCOUNT_TYPE"),
+        this.option(input.entityTypeOptionId, "ENTITYTYPE"),
+        this.party(input.partyProfileId),
+        this.account(input.headerAccountId, undefined, "header"),
+        this.account(input.itemAccountId, undefined, "header"),
+        this.optionByValue("VOUCHER_ITEM_TYPE", VoucherItemTypeValue.ACCOUNT),
+        input.remarkOptionId
+          ? this.option(input.remarkOptionId, "VOUCHER_REMARK")
+          : Promise.resolve(null),
+        input.subledgerPartyProfileId
+          ? this.party(input.subledgerPartyProfileId)
+          : Promise.resolve(null),
+        input.subledgerBranchId
+          ? this.branchRepository.findOne({
+              where: { id: input.subledgerBranchId },
+            })
+          : Promise.resolve(null),
+      ]);
+
+      if (input.subledgerBranchId && !subledgerBranch)
+        throw new NotFoundException("Sub ledger branch not found");
+      if (input.subledgerPartyProfileId && input.subledgerBranchId)
+        throw new BadRequestException(
+          "Item cannot have both party and branch subledger",
+        );
+      if (!input.subledgerPartyProfileId && !input.subledgerBranchId)
+        throw new BadRequestException(
+          "System voucher item requires a party or branch subledger",
+        );
+
+      const accountMode = input.accountMode;
+      if (normalizeUpper(accountType.value) !== accountMode)
+        throw new BadRequestException(
+          "System voucher A/C Type does not match account mode",
+        );
+
+      const pan = resolveVoucherPan(party, entityType, {
+        panNumber: input.panNumber ?? undefined,
+        panName: input.panName ?? undefined,
+        panDob: input.panDob ?? undefined,
+      });
+
+      const itemDto: CreateVoucherItemDto = {
+        itemTypeOptionId: itemType.id,
+        accountId: itemAccount.id,
+        direction: input.itemDirection,
+        amount: input.itemAmount,
+        subledgerPartyProfileId: subledgerParty?.id ?? null,
+      };
+      const totals = this.calculate(input.voucherType, [itemDto]);
+
+      const voucherRepo = tx.getRepository(AccountingVoucher);
+      const itemRepo = tx.getRepository(AccountingVoucherItem);
+      const number = await this.additionalSettings.reserveTransactionNumber(
+        VOUCHER_NUMBER_SERIES[input.voucherType],
+        workplace.branch.code,
+        new Date(input.transactionDate),
+      );
+
+      const voucher = await voucherRepo.save(
+        voucherRepo.create({
+          voucherType: input.voucherType,
+          number,
+          idempotencyKey: input.idempotencyKey,
+          payloadHash: hash,
+          transactionDate: input.transactionDate.slice(0, 10),
+          branchId: workplace.branch.id,
+          branchSnapshot,
+          counterId: workplace.counter.id,
+          counterSnapshot,
+          accountTypeOptionId: accountType.id,
+          accountTypeSnapshot: await this.snapshot(
+            this.optionRepository,
+            accountType.id,
+          ),
+          accountMode,
+          headerAccountId: headerAccount.id,
+          headerAccountSnapshot: await this.snapshot(
+            this.accountRepository,
+            headerAccount.id,
+          ),
+          entityTypeOptionId: entityType.id,
+          entityTypeSnapshot: await this.snapshot(
+            this.optionRepository,
+            entityType.id,
+          ),
+          partyProfileId: party.id,
+          partyProfileSnapshot: await this.snapshot(
+            this.partyRepository,
+            party.id,
+          ),
+          panNumber: pan.panNumber,
+          panName: pan.panName,
+          panDob: pan.panDob,
+          paymentMethod: input.paymentMethod ?? null,
+          chequeNumber: normalize(input.chequeNumber) || null,
+          normalizedChequeNumber: normalizeUpper(input.chequeNumber) || null,
+          chequeDate: toDateOnly(input.chequeDate),
+          chequeBranch: normalize(input.chequeBranch) || null,
+          drawnOn: normalize(input.drawnOn) || null,
+          remarkOptionId: remark?.id ?? null,
+          remarkSnapshot: remark
+            ? await this.snapshot(this.optionRepository, remark.id)
+            : null,
+          narration: normalize(input.narration),
+          ...totals,
+          advanceControlAccountId: null,
+          advanceControlAccountSnapshot: null,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+
+      await itemRepo.save(
+        itemRepo.create({
+          voucherId: voucher.id,
+          voucher,
+          lineNo: 1,
+          itemTypeOptionId: itemType.id,
+          itemTypeSnapshot: await this.snapshot(
+            this.optionRepository,
+            itemType.id,
+          ),
+          subledgerPartyProfileId: subledgerParty?.id ?? null,
+          subledgerPartyProfileSnapshot: subledgerParty
+            ? await this.snapshot(this.partyRepository, subledgerParty.id)
+            : null,
+          subledgerBranchId: subledgerBranch?.id ?? null,
+          subledgerBranchSnapshot: subledgerBranch
+            ? await this.snapshot(this.branchRepository, subledgerBranch.id)
+            : null,
+          accountId: itemAccount.id,
+          accountSnapshot: await this.snapshot(
+            this.accountRepository,
+            itemAccount.id,
+          ),
+          direction: input.itemDirection,
+          amount: money(cents(input.itemAmount)),
+          settledTransactionId: null,
+          settledTransactionSnapshot: null,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+
+      return voucherRepo.findOneOrFail({
+        where: { id: voucher.id },
+        relations: ["items"],
+      });
+    };
+
+    if (manager) return run(manager);
+    return this.database2.transaction(run);
+  }
+
+  private async optionByValue(code: string, value: string) {
+    const option = await this.optionRepository.findOne({
+      where: {
+        code: normalizeUpper(code) as any,
+        value: normalizeUpper(value),
+        isActive: true,
+      },
+    });
+    if (!option)
+      throw new BadRequestException(
+        `Missing active ${code} option with value ${value}`,
+      );
+    return option;
   }
 }

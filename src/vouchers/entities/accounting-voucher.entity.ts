@@ -35,7 +35,7 @@ import { VoucherEvent } from "./voucher-event.entity";
 ])
 @Index(
   "UQ_accounting_vouchers_cheque",
-  ["voucherType", "headerAccountId", "normalizedChequeNumber"],
+  ["voucherType", "branchId", "headerAccountId", "normalizedChequeNumber"],
   { unique: true, where: `"normalized_cheque_number" IS NOT NULL` },
 )
 @Check(
