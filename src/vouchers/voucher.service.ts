@@ -372,23 +372,21 @@ export class VoucherService implements OnModuleInit {
     branchId: string,
     session: VoucherSession,
   ) {
-    // Admin/HO/HO staff may use parties across branches (same as party list UI).
-    // Branch users must only use parties homed at the workplace branch.
-    const privileged = Boolean(
-      session.isAdmin || session.isHo || session.isHoStaff,
-    );
+    // Party must be assigned to the selected workplace branch for all users,
+    // including Admin/HO/HO staff (list + save follow branch selection).
+    void session;
     const result = await this.partyProfileService.findAll(
       {
         offset: 0,
         limit: 10,
         search: party.code,
         type: [party.type],
-        ...(privileged ? {} : { branchIds: [branchId] }),
+        branchIds: [branchId],
         activeOnly: true,
         status: WorkflowStatus.APPROVE,
       },
       actorId,
-      privileged ? undefined : branchId,
+      branchId,
     );
     if (!result.data.some((item) => item.id === party.id))
       throw new ForbiddenException(

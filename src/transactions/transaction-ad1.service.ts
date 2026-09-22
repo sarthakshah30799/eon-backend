@@ -218,7 +218,16 @@ export class TransactionAd1Service {
       .andWhere("pp.active = true");
 
     if (params.branchId) {
-      query.andWhere("pp.branchId = :branchId", { branchId: params.branchId });
+      query.andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM party_profile_branches ppb
+          WHERE ppb.party_profile_id = pp.id
+            AND ppb.deleted_at IS NULL
+            AND ppb.branch_id = :branchId
+        )`,
+        { branchId: params.branchId },
+      );
     }
 
     if (params.search?.trim()) {

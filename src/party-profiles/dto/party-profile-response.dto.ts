@@ -194,11 +194,17 @@ export class PartyProfileResponseDto {
   @ApiPropertyOptional({ description: "State Name" })
   stateName?: string;
 
-  @ApiPropertyOptional({ description: "Branch ID" })
-  branchId?: string;
+  @ApiPropertyOptional({
+    description: "Assigned branch IDs",
+    type: [String],
+  })
+  branchIds?: string[];
 
-  @ApiPropertyOptional({ description: "Branch", type: BranchResponseDto })
-  branch?: BranchResponseDto | null;
+  @ApiPropertyOptional({
+    description: "Assigned branches",
+    type: [BranchResponseDto],
+  })
+  branches?: BranchResponseDto[];
 
   @ApiPropertyOptional({
     description: "Location",
@@ -354,10 +360,18 @@ export class PartyProfileResponseDto {
     dto.stateId = entity.stateId;
     dto.stateName = entity.state?.name;
 
-    dto.branchId = entity.branchId;
-    dto.branch = entity.branch
-      ? BranchResponseDto.fromEntity(entity.branch)
-      : null;
+    dto.branchIds = Array.isArray(entity.branchLinks)
+      ? entity.branchLinks
+          .map((link) => link.branchId)
+          .filter((branchId): branchId is string => Boolean(branchId))
+      : [];
+    dto.branches = Array.isArray(entity.branchLinks)
+      ? entity.branchLinks
+          .map((link) =>
+            link.branch ? BranchResponseDto.fromEntity(link.branch) : null,
+          )
+          .filter((branch): branch is BranchResponseDto => Boolean(branch))
+      : [];
     dto.location = entity.location
       ? SelectOptionResponseDto.fromEntity(entity.location)
       : null;

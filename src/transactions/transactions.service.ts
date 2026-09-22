@@ -414,7 +414,16 @@ export class TransactionsService {
       .andWhere("pp.active = :active", { active: true });
 
     if (branchId) {
-      qb.andWhere("pp.branchId = :branchId", { branchId });
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM party_profile_branches ppb
+          WHERE ppb.party_profile_id = pp.id
+            AND ppb.deleted_at IS NULL
+            AND ppb.branch_id = :branchId
+        )`,
+        { branchId },
+      );
     }
 
     if (search) {

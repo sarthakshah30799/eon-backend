@@ -9,6 +9,7 @@ import { SelectOption } from "../category-options/category-option.entity";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
 import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
+import { PartyProfileBranch } from "./entities/party-profile-branch.entity";
 import { PartyProfileController } from "./party-profile.controller";
 import { PartyProfileService } from "./party-profile.service";
 import { UserModule } from "../users/user.module";
@@ -27,6 +28,7 @@ import { ProductCardIssuer } from "../products/entities/product-card-issuer.enti
       Currency,
       Product,
       PartyProfileCommissionRule,
+      PartyProfileBranch,
       ProductCardIssuer,
     ]),
     UserModule,
