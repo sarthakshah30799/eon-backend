@@ -10,6 +10,7 @@ import { ManualBook } from "../manual-bill-books/entities/manual-book.entity";
 import { TransferRequest } from "../transfers/entities/transfer-request.entity";
 import { CardTransferRequest } from "../card-stock/entities/card-transfer-request.entity";
 import { AccountingVoucher } from "../vouchers/entities";
+import { CreditRequestFund } from "../credit-request-fund/entities";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AccountingVoucher } from "../vouchers/entities";
         TransferRequest,
         CardTransferRequest,
         AccountingVoucher,
+        CreditRequestFund,
       ],
       "database2",
     ),

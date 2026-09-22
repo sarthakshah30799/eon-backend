@@ -17,6 +17,8 @@ import {
   VoucherAdviceStatus,
   VoucherType,
 } from "../vouchers/voucher.enums";
+import { CreditRequestFund } from "../credit-request-fund/entities";
+import { CreditRequestFundStatus } from "../credit-request-fund/credit-request-fund.enums";
 import {
   DashboardStatsDto,
   VolumeByCurrencyDto,
@@ -44,6 +46,8 @@ export class DashboardService {
     private readonly cardTransferRequestRepository: Repository<CardTransferRequest>,
     @InjectRepository(AccountingVoucher, "database2")
     private readonly voucherRepository: Repository<AccountingVoucher>,
+    @InjectRepository(CreditRequestFund, "database2")
+    private readonly creditRequestFundRepository: Repository<CreditRequestFund>,
   ) {}
 
   private dateRange(key: string): { from: Date; to: Date } {
@@ -166,6 +170,8 @@ export class DashboardService {
       branchId,
       isAdminOrHo,
     );
+    const pendingCreditRequestFunds =
+      await this.getPendingCreditRequestFundCount(branchId, isAdminOrHo);
 
     const flaggedTxns = await this.transactionRepository
       .createQueryBuilder("t")
@@ -186,7 +192,8 @@ export class DashboardService {
         pendingManualBooks +
         pendingTransfers +
         pendingCardTransfers +
-        pendingAdvice,
+        pendingAdvice +
+        pendingCreditRequestFunds,
       pendingPartyProfileReviews: pendingPP,
       pendingTransactions: pendingTxns,
       pendingChequeBooks,
@@ -664,6 +671,56 @@ export class DashboardService {
       });
     }
 
+    // Pending CRF is visible to Admin/HO (all) and to the deposit
+    // (destination) branch only — not the requesting branch.
+    const crfQB = this.creditRequestFundRepository
+      .createQueryBuilder("crf")
+      .where("crf.status = :status", {
+        status: CreditRequestFundStatus.PENDING,
+      })
+      .orderBy("crf.createdAt", "DESC")
+      .take(limit);
+    if (!isAdminOrHo) {
+      if (!branchId) {
+        return results
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          )
+          .slice(0, limit);
+      }
+      crfQB.andWhere("crf.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      });
+    }
+    const creditRequestFunds = await crfQB.getMany();
+    for (const crf of creditRequestFunds) {
+      const requesting =
+        (crf.branchSnapshot as Record<string, string> | null)?.label ??
+        (crf.branchSnapshot as Record<string, string> | null)?.name ??
+        crf.branchId;
+      const destination =
+        (crf.destinationBranchSnapshot as Record<string, string> | null)
+          ?.label ??
+        (crf.destinationBranchSnapshot as Record<string, string> | null)
+          ?.name ??
+        crf.destinationBranchId;
+      const party =
+        (crf.partyProfileSnapshot as Record<string, string> | null)?.name ??
+        (crf.partyProfileSnapshot as Record<string, string> | null)?.label ??
+        "";
+      results.push({
+        id: crf.id,
+        entityType: "credit-request-fund",
+        code: crf.number,
+        name: party
+          ? `${party} · ${requesting} -> ${destination}`
+          : `${requesting} -> ${destination}`,
+        type: "CREDIT_REQUEST_FUND",
+        createdAt: crf.createdAt.toISOString(),
+      });
+    }
+
     results.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -730,6 +787,24 @@ export class DashboardService {
     if (!isAdminOrHo) {
       if (!branchId) return 0;
       qb.andWhere("voucher.destinationBranchId = :destinationBranchId", {
+        destinationBranchId: branchId,
+      });
+    }
+    return qb.getCount();
+  }
+
+  private async getPendingCreditRequestFundCount(
+    branchId?: string,
+    isAdminOrHo?: boolean,
+  ): Promise<number> {
+    const qb = this.creditRequestFundRepository
+      .createQueryBuilder("crf")
+      .where("crf.status = :status", {
+        status: CreditRequestFundStatus.PENDING,
+      });
+    if (!isAdminOrHo) {
+      if (!branchId) return 0;
+      qb.andWhere("crf.destinationBranchId = :destinationBranchId", {
         destinationBranchId: branchId,
       });
     }
