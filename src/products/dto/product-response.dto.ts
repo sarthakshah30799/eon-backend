@@ -15,7 +15,7 @@ export class ProductResponseDto {
     description: "Currently linked card issuer party-profile IDs",
     type: [String],
   })
-  cardIssuerProfileIds: string[];
+  issuerProfileIds: string[];
 
   // Accounting Configuration
   @ApiProperty({ description: "A/C of Issuer", required: false })
@@ -186,7 +186,7 @@ export class ProductResponseDto {
     dto.id = entity.id;
     dto.productCode = entity.productCode;
     dto.productDescription = entity.productDescription;
-    dto.cardIssuerProfileIds = (entity.cardIssuerLinks ?? []).map(
+    dto.issuerProfileIds = (entity.issuerLinks ?? []).map(
       (link) => link.partyProfileId,
     );
 

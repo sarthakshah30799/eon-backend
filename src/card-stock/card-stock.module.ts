@@ -8,7 +8,7 @@ import { Branch } from "../branches/branch.entity";
 import { Currency } from "../currencies/currency.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { Product } from "../products/product.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { User } from "../users/user.entity";
 import { UserModule } from "../users/user.module";
 import { CompanyModule } from "../company/company.module";
@@ -50,7 +50,7 @@ import { TransactionLog } from "../transactions/entities/transaction-log.entity"
       Currency,
       PartyProfile,
       Product,
-      ProductCardIssuer,
+      ProductIssuer,
       User,
       UserRole,
     ]),

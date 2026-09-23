@@ -21,7 +21,7 @@ export class CreateProductDto {
   @IsArray()
   @ArrayUnique()
   @IsUUID("4", { each: true })
-  cardIssuerProfileIds?: string[];
+  issuerProfileIds?: string[];
 
   @ApiProperty({
     description: "Unique product code",

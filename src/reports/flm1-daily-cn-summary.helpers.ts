@@ -588,6 +588,7 @@ export const loadFlm1SourceRows = async (
     "tx.is_latest = true",
     `tx.status = '${TransactionStatus.APPROVED}'`,
     "item.card_id IS NULL",
+    "item.deal_cover_id IS NULL",
     "tx.slug IS NOT NULL",
     `UPPER(tx.slug) NOT IN (${excludedList})`,
   ];

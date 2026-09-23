@@ -84,6 +84,19 @@ export class TransactionItem extends BaseEntity {
   @Column({ type: "jsonb", name: "card_snapshot", nullable: true })
   cardSnapshot: TransactionReferenceSnapshotValue;
 
+  @Column({ type: "uuid", name: "deal_cover_id", nullable: true })
+  dealCoverId: string | null;
+
+  @Column({
+    type: "jsonb",
+    name: "deal_cover_snapshot",
+    nullable: true,
+  })
+  dealCoverSnapshot: TransactionReferenceSnapshotValue;
+
+  @Column({ type: "uuid", name: "tt_remittance_detail_id", nullable: true })
+  ttRemittanceDetailId: string | null;
+
   @Column({ type: "boolean", name: "is_reload", default: false })
   isReload: boolean;
 

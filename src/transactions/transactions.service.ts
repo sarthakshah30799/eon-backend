@@ -38,7 +38,7 @@ import { TransactionPassengerOtherDocument } from "./entities/transaction-passen
 import { PassengerOtherIdProofType } from "../passengers/passenger.entity";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { StorageService } from "../storage/storage.service";
 import { Purpose } from "../purpose/purpose.entity";
@@ -99,6 +99,11 @@ import {
   isCardProductCode,
   isMultiCurrencyCardProduct,
 } from "../card-stock/card-product.util";
+import { isTtProductCode } from "../tt-deal/tt-product.util";
+import { DealCoverService } from "../tt-deal/deal-cover.service";
+import { TtSettlementService } from "../tt-deal/tt-settlement.service";
+import { DealCover } from "../tt-deal/entities/deal-cover.entity";
+import { TtRemittanceDetail } from "../tt-deal/entities/tt-remittance-detail.entity";
 import { VoucherService } from "../vouchers/voucher.service";
 import { AdvanceApplicationPayloadDto } from "../vouchers/dto/voucher.dto";
 import { TransactionSettlementSource } from "../vouchers/voucher.enums";
@@ -235,6 +240,42 @@ type TransactionItemPayload = {
   cardSnapshot?: Record<string, unknown> | null;
   isReload?: boolean;
   passengerId?: string | null;
+  dealCoverId?: string | null;
+  dealCoverSnapshot?: Record<string, unknown> | null;
+};
+
+type TransactionTtRemittancePayload = {
+  remitterName: string;
+  remitterAddress?: string | null;
+  remitterCity?: string | null;
+  remitterCountryId?: string | null;
+  remitterCountrySnapshot?: Record<string, unknown> | null;
+  remitterEntityType?: string | null;
+  beneficiaryName: string;
+  beneficiaryAddress?: string | null;
+  beneficiaryCountryId?: string | null;
+  beneficiaryCountrySnapshot?: Record<string, unknown> | null;
+  bankName: string;
+  bankAddress?: string | null;
+  accountNumber?: string | null;
+  iban?: string | null;
+  swiftCode?: string | null;
+  bsbCode?: string | null;
+  sortCode?: string | null;
+  routingNumber?: string | null;
+  transitNumber?: string | null;
+  educationDetails?: string | null;
+  fbBearerOptionId?: string | null;
+  fbBearerOptionSnapshot?: Record<string, unknown> | null;
+  intermediaryBankName?: string | null;
+  intermediaryBankAddress?: string | null;
+  intermediaryBankCodes?: string | null;
+  relationship?: string | null;
+  sponsorshipName?: string | null;
+  sponsorshipPan?: string | null;
+  dateOfIncorporation?: string | null;
+  miceAmount?: string | number | null;
+  miceReference?: string | null;
 };
 
 type TransactionDocumentPayload = {
@@ -314,6 +355,7 @@ type TransactionDraftPayload = {
   documents?: TransactionDocumentPayload[];
   additionalCharges?: TransactionAdditionalChargePayload[];
   payments?: TransactionPaymentPayload[];
+  ttRemittance?: TransactionTtRemittancePayload | null;
 };
 
 type TransactionTcsPreviewRequestPayload = {
@@ -361,8 +403,8 @@ export class TransactionsService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
-    @InjectRepository(ProductCardIssuer)
-    private readonly productCardIssuerRepository: Repository<ProductCardIssuer>,
+    @InjectRepository(ProductIssuer)
+    private readonly productIssuerRepository: Repository<ProductIssuer>,
     @InjectRepository(DocumentProfile)
     private readonly documentProfileRepository: Repository<DocumentProfile>,
     @InjectRepository(AccountProfile)
@@ -396,6 +438,8 @@ export class TransactionsService {
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly countryService: CountryService,
     private readonly cardStockSaleLifecycleService: CardStockSaleLifecycleService,
+    private readonly dealCoverService: DealCoverService,
+    private readonly ttSettlementService: TtSettlementService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
@@ -456,6 +500,111 @@ export class TransactionsService {
   private toNumber(value: unknown): number {
     const parsedValue = Number(value);
     return Number.isFinite(parsedValue) ? parsedValue : 0;
+  }
+
+  private assertTtRemittanceComplete(
+    remittance: TransactionTtRemittancePayload | null | undefined,
+  ): TransactionTtRemittancePayload {
+    if (!remittance) {
+      throw new BadRequestException(
+        "TT remittance details are required when the transaction includes TT items",
+      );
+    }
+    const remitterName = normalizeNullableString(remittance.remitterName);
+    const beneficiaryName = normalizeNullableString(remittance.beneficiaryName);
+    const bankName = normalizeNullableString(remittance.bankName);
+    if (!remitterName || !beneficiaryName || !bankName) {
+      throw new BadRequestException(
+        "TT remittance requires remitter name, beneficiary name, and bank name",
+      );
+    }
+    const accountNumber = normalizeNullableString(remittance.accountNumber);
+    const iban = normalizeNullableString(remittance.iban);
+    if (!accountNumber && !iban) {
+      throw new BadRequestException(
+        "TT remittance requires an account number or IBAN",
+      );
+    }
+    if (!normalizeNullableString(remittance.swiftCode)) {
+      throw new BadRequestException("TT remittance requires a SWIFT code");
+    }
+    if (!normalizeNullableString(remittance.fbBearerOptionId)) {
+      throw new BadRequestException(
+        "TT remittance requires an FB charge bearer",
+      );
+    }
+    return remittance;
+  }
+
+  private buildDealCoverSnapshot(
+    deal: DealCover,
+  ): TransactionReferenceSnapshotValue {
+    return {
+      id: deal.id,
+      code: deal.dealNo ?? deal.id,
+      name: deal.dealNo ?? deal.id,
+      label: deal.dealNo ?? deal.id,
+      dealNo: deal.dealNo,
+      feAmount: deal.feAmount,
+      dealRate: deal.dealRate,
+      bookingRate: deal.bookingRate,
+      currencyId: deal.currencyId,
+      productId: deal.productId,
+      issuerPartyProfileId: deal.issuerPartyProfileId,
+      passengerPan: deal.passengerPan,
+      passengerPassport: deal.passengerPassport,
+    } as TransactionReferenceSnapshotValue;
+  }
+
+  private assertPassengerMatchesTtDeal(
+    deal: DealCover,
+    passenger: TransactionPassengerPayload | null,
+    itemIndex: number,
+  ) {
+    const dealPan = normalizePassengerIdentity(deal.passengerPan);
+    const dealPassport = normalizePassengerIdentity(deal.passengerPassport);
+    const passengerPan = normalizePassengerIdentity(passenger?.panNumber);
+    const passengerPassport = normalizePassengerIdentity(
+      passenger?.passportNumber,
+    );
+
+    if (dealPan && dealPan !== passengerPan) {
+      throw new BadRequestException(
+        `TT item ${itemIndex + 1} passenger PAN must match the selected deal`,
+      );
+    }
+    if (dealPassport && dealPassport !== passengerPassport) {
+      throw new BadRequestException(
+        `TT item ${itemIndex + 1} passenger passport must match the selected deal`,
+      );
+    }
+  }
+
+  private async finalizeApprovedTtItems(
+    manager: import("typeorm").EntityManager,
+    transaction: Transaction,
+    items: TransactionItem[],
+    actorId: string,
+  ) {
+    const ttItems = items.filter((item) => Boolean(item.dealCoverId));
+    if (!ttItems.length) return;
+
+    const asOfDate = transaction.transactionDate ?? new Date();
+    for (const item of ttItems) {
+      await this.dealCoverService.consumeDealForApprovedItem(
+        manager,
+        String(item.dealCoverId),
+        transaction.id,
+        item.id,
+        asOfDate,
+      );
+    }
+    await this.ttSettlementService.createForApprovedTtItems(
+      manager,
+      transaction,
+      ttItems,
+      actorId,
+    );
   }
 
   private resolveTransactionPartyProfileType(
@@ -1417,6 +1566,26 @@ export class TransactionsService {
     const hasRequestedCardItems = requestedItemRows.some((item) =>
       Boolean(item.cardId),
     );
+    const requestedProductIds = [
+      ...new Set(
+        requestedItemRows
+          .map((item) => String(item.productId ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const requestedProducts = requestedProductIds.length
+      ? await this.productRepository.find({
+          where: { id: In(requestedProductIds) },
+        })
+      : [];
+    const ttProductIds = new Set(
+      requestedProducts
+        .filter((product) => isTtProductCode(product.productCode))
+        .map((product) => product.id),
+    );
+    const hasRequestedTtItems = requestedItemRows.some((item) =>
+      ttProductIds.has(String(item.productId)),
+    );
     const transactionStatus = isFakeCurrency
       ? TransactionStatus.APPROVED
       : shouldRequireApproval
@@ -1424,9 +1593,12 @@ export class TransactionsService {
         : TransactionStatus.APPROVED;
     const shouldAutoFinalizeCardSale =
       transactionStatus === TransactionStatus.APPROVED && hasRequestedCardItems;
-    const persistedTransactionStatus = shouldAutoFinalizeCardSale
-      ? TransactionStatus.DRAFT
-      : transactionStatus;
+    const shouldAutoFinalizeTtItems =
+      transactionStatus === TransactionStatus.APPROVED && hasRequestedTtItems;
+    const persistedTransactionStatus =
+      shouldAutoFinalizeCardSale || shouldAutoFinalizeTtItems
+        ? TransactionStatus.DRAFT
+        : transactionStatus;
     const now = new Date();
     const policyContext = await this.dayEndStartProcessService.getPolicyContext(
       {
@@ -1581,7 +1753,8 @@ export class TransactionsService {
 
     const passengerPayload = transactionPayload.passenger ?? null;
     const passengerTravelPayload =
-      transactionPayload.transactionType === TransactionType.SALE
+      transactionPayload.transactionType === TransactionType.SALE ||
+      hasRequestedTtItems
         ? (transactionPayload.passengerTravel ?? null)
         : null;
     let passengerId: string | null = null;
@@ -1833,6 +2006,15 @@ export class TransactionsService {
           "Travel country is required for CARD reload",
         );
       }
+    }
+
+    if (hasRequestedTtItems) {
+      if (!String(passengerTravelPayload?.travellingCountryId ?? "").trim()) {
+        throw new BadRequestException(
+          "Travel country is required when the transaction includes TT items",
+        );
+      }
+      this.assertTtRemittanceComplete(transactionPayload.ttRemittance);
     }
 
     const transactionToSave: DeepPartial<Transaction> = {
@@ -2101,13 +2283,128 @@ export class TransactionsService {
 
       const itemRows = requestedItemRows;
       const cardSaleItems: TransactionItem[] = [];
+      const ttSaleItems: TransactionItem[] = [];
       const selectedCardCurrencyKeys = new Set<string>();
+      const selectedTtDealIds = new Set<string>();
+      const dealCoverRepository = manager.getRepository(DealCover);
+      const remittanceRepository = manager.getRepository(TtRemittanceDetail);
+
+      let sharedTtRemittanceId: string | null = null;
+      if (hasRequestedTtItems) {
+        const remittancePayload = this.assertTtRemittanceComplete(
+          transactionPayload.ttRemittance,
+        );
+        const remitterCountryId = normalizeNullableString(
+          remittancePayload.remitterCountryId,
+        );
+        const beneficiaryCountryId = normalizeNullableString(
+          remittancePayload.beneficiaryCountryId,
+        );
+        const fbBearerOptionId = normalizeNullableString(
+          remittancePayload.fbBearerOptionId,
+        );
+        const remitterCountrySnapshot = remitterCountryId
+          ? ((await loadEntitySnapshot(
+              this.countryRepository,
+              remitterCountryId,
+            )) as TransactionReferenceSnapshotValue)
+          : ((remittancePayload.remitterCountrySnapshot as TransactionReferenceSnapshotValue) ??
+            null);
+        const beneficiaryCountrySnapshot = beneficiaryCountryId
+          ? ((await loadEntitySnapshot(
+              this.countryRepository,
+              beneficiaryCountryId,
+            )) as TransactionReferenceSnapshotValue)
+          : ((remittancePayload.beneficiaryCountrySnapshot as TransactionReferenceSnapshotValue) ??
+            null);
+        const fbBearerOptionSnapshot = fbBearerOptionId
+          ? ((await loadEntitySnapshot(
+              this.selectOptionRepository,
+              fbBearerOptionId,
+            )) as TransactionReferenceSnapshotValue)
+          : ((remittancePayload.fbBearerOptionSnapshot as TransactionReferenceSnapshotValue) ??
+            null);
+
+        const savedRemittance = await remittanceRepository.save(
+          remittanceRepository.create({
+            transactionId: transaction.id,
+            remitterName: String(remittancePayload.remitterName).trim(),
+            remitterAddress:
+              normalizeNullableString(remittancePayload.remitterAddress) ?? null,
+            remitterCity:
+              normalizeNullableString(remittancePayload.remitterCity) ?? null,
+            remitterCountryId,
+            remitterCountrySnapshot,
+            remitterEntityType:
+              normalizeNullableString(remittancePayload.remitterEntityType) ??
+              null,
+            beneficiaryName: String(remittancePayload.beneficiaryName).trim(),
+            beneficiaryAddress:
+              normalizeNullableString(remittancePayload.beneficiaryAddress) ??
+              null,
+            beneficiaryCountryId,
+            beneficiaryCountrySnapshot,
+            bankName: String(remittancePayload.bankName).trim(),
+            bankAddress:
+              normalizeNullableString(remittancePayload.bankAddress) ?? null,
+            accountNumber:
+              normalizeNullableString(remittancePayload.accountNumber) ?? null,
+            iban: normalizeNullableString(remittancePayload.iban) ?? null,
+            swiftCode:
+              normalizeNullableString(remittancePayload.swiftCode) ?? null,
+            bsbCode: normalizeNullableString(remittancePayload.bsbCode) ?? null,
+            sortCode:
+              normalizeNullableString(remittancePayload.sortCode) ?? null,
+            routingNumber:
+              normalizeNullableString(remittancePayload.routingNumber) ?? null,
+            transitNumber:
+              normalizeNullableString(remittancePayload.transitNumber) ?? null,
+            educationDetails:
+              normalizeNullableString(remittancePayload.educationDetails) ??
+              null,
+            fbBearerOptionId,
+            fbBearerOptionSnapshot,
+            intermediaryBankName:
+              normalizeNullableString(remittancePayload.intermediaryBankName) ??
+              null,
+            intermediaryBankAddress:
+              normalizeNullableString(
+                remittancePayload.intermediaryBankAddress,
+              ) ?? null,
+            intermediaryBankCodes:
+              normalizeNullableString(remittancePayload.intermediaryBankCodes) ??
+              null,
+            relationship:
+              normalizeNullableString(remittancePayload.relationship) ?? null,
+            sponsorshipName:
+              normalizeNullableString(remittancePayload.sponsorshipName) ?? null,
+            sponsorshipPan:
+              normalizeNullableString(remittancePayload.sponsorshipPan) ?? null,
+            dateOfIncorporation:
+              normalizeNullableString(remittancePayload.dateOfIncorporation) ??
+              null,
+            miceAmount:
+              remittancePayload.miceAmount === undefined ||
+              remittancePayload.miceAmount === null ||
+              remittancePayload.miceAmount === ""
+                ? null
+                : String(remittancePayload.miceAmount),
+            miceReference:
+              normalizeNullableString(remittancePayload.miceReference) ?? null,
+            createdBy: performedById,
+            updatedBy: performedById,
+          }),
+        );
+        sharedTtRemittanceId = savedRemittance.id;
+      }
+
       for (let index = 0; index < itemRows.length; index += 1) {
         const row = itemRows[index];
         const currency = await resolveCurrency(String(row.currencyId));
         const product = await resolveProduct(String(row.productId));
         const productEntity = await resolveProductEntity(String(row.productId));
         const isCardItem = isCardProductCode(productEntity.productCode);
+        const isTtItem = isTtProductCode(productEntity.productCode);
         const isMultiCurrencyCard = isMultiCurrencyCardProduct(
           productEntity.productCode,
         );
@@ -2233,7 +2530,7 @@ export class TransactionsService {
               `CARD item ${index + 1} currency does not match the selected CARD`,
             );
           }
-          const issuerLink = await this.productCardIssuerRepository.findOne({
+          const issuerLink = await this.productIssuerRepository.findOne({
             where: {
               productId: String(product.id),
               partyProfileId: String(row.issuerPartyProfileId),
@@ -2243,6 +2540,73 @@ export class TransactionsService {
             throw new BadRequestException(
               `Issuer is not linked to CARD product for item ${index + 1}`,
             );
+        }
+
+        let resolvedTtDeal: DealCover | null = null;
+        if (isTtItem) {
+          if (!row.dealCoverId) {
+            throw new BadRequestException(
+              `TT item ${index + 1} requires a deal cover selection`,
+            );
+          }
+          const dealCoverId = String(row.dealCoverId);
+          if (selectedTtDealIds.has(dealCoverId)) {
+            throw new BadRequestException(
+              `TT deal ${dealCoverId} cannot be selected more than once in one transaction`,
+            );
+          }
+          selectedTtDealIds.add(dealCoverId);
+          resolvedTtDeal = await dealCoverRepository.findOne({
+            where: { id: dealCoverId },
+          });
+          if (!resolvedTtDeal) {
+            throw new BadRequestException(
+              `TT deal cover ${dealCoverId} was not found for item ${index + 1}`,
+            );
+          }
+          await this.dealCoverService.assertDealSelectableForPunch(
+            resolvedTtDeal,
+            resolvedTransactionDate,
+          );
+          const dealFe = Number(resolvedTtDeal.feAmount);
+          const punchedFe = Number(row.quantity);
+          if (
+            !Number.isFinite(dealFe) ||
+            !Number.isFinite(punchedFe) ||
+            punchedFe !== dealFe
+          ) {
+            throw new BadRequestException(
+              `TT item ${index + 1} FE amount must equal the deal FE amount exactly`,
+            );
+          }
+          if (String(row.productId) !== String(resolvedTtDeal.productId)) {
+            throw new BadRequestException(
+              `TT item ${index + 1} product must match the selected deal`,
+            );
+          }
+          if (String(row.currencyId) !== String(resolvedTtDeal.currencyId)) {
+            throw new BadRequestException(
+              `TT item ${index + 1} currency must match the selected deal`,
+            );
+          }
+          if (
+            String(row.issuerPartyProfileId ?? "") !==
+            String(resolvedTtDeal.issuerPartyProfileId)
+          ) {
+            throw new BadRequestException(
+              `TT item ${index + 1} issuer must match the selected deal`,
+            );
+          }
+          this.assertPassengerMatchesTtDeal(
+            resolvedTtDeal,
+            passengerPayload,
+            index,
+          );
+          if (!sharedTtRemittanceId) {
+            throw new BadRequestException(
+              "TT remittance details are required when the transaction includes TT items",
+            );
+          }
         }
         const cardSellAccountId = isCardItem
           ? await this.additionalSettingService.getSettingTextValue(
@@ -2299,10 +2663,20 @@ export class TransactionsService {
           pricingRuleSnapshot: row.pricingRuleSnapshot ?? null,
           commissionSnapshot: row.commissionSnapshot ?? null,
           cardId: row.cardId ?? null,
-          issuerPartyProfileId: row.issuerPartyProfileId ?? null,
-          issuerPartyProfileSnapshot: row.issuerPartyProfileSnapshot ?? null,
+          issuerPartyProfileId: isTtItem
+            ? String(resolvedTtDeal!.issuerPartyProfileId)
+            : (row.issuerPartyProfileId ?? null),
+          issuerPartyProfileSnapshot: isTtItem
+            ? ((resolvedTtDeal!.issuerPartyProfileSnapshot as TransactionReferenceSnapshotValue) ??
+              null)
+            : (row.issuerPartyProfileSnapshot ?? null),
           cardSnapshot: row.cardSnapshot ?? null,
           isReload: Boolean(row.isReload),
+          dealCoverId: resolvedTtDeal?.id ?? null,
+          dealCoverSnapshot: resolvedTtDeal
+            ? this.buildDealCoverSnapshot(resolvedTtDeal)
+            : null,
+          ttRemittanceDetailId: isTtItem ? sharedTtRemittanceId : null,
           remarks: row.remarks ?? null,
           createdBy: performedById,
           updatedBy: performedById,
@@ -2316,6 +2690,9 @@ export class TransactionsService {
           transaction.transactionType === TransactionType.SALE
         ) {
           cardSaleItems.push(savedItem);
+        }
+        if (savedItem.dealCoverId) {
+          ttSaleItems.push(savedItem);
         }
       }
 
@@ -2704,7 +3081,10 @@ export class TransactionsService {
         );
       }
 
-      if (shouldAutoFinalizeCardSale && cardSaleItems.length) {
+      if (
+        (shouldAutoFinalizeCardSale && cardSaleItems.length) ||
+        (shouldAutoFinalizeTtItems && ttSaleItems.length)
+      ) {
         const locked = await transactionRepo
           .createQueryBuilder("transaction")
           .where("transaction.id = :id", { id: transaction.id })
@@ -2712,7 +3092,7 @@ export class TransactionsService {
           .getOne();
         if (!locked || locked.status !== TransactionStatus.DRAFT) {
           throw new BadRequestException(
-            "CARD sale is no longer available for automatic approval",
+            "Transaction is no longer available for automatic approval",
           );
         }
         locked.status = TransactionStatus.APPROVED;
@@ -2728,12 +3108,22 @@ export class TransactionsService {
         const approvedItems = await manager
           .getRepository(TransactionItem)
           .find({ where: { transactionId: approved.id } });
-        await this.cardStockSaleLifecycleService.finalizeApprovedSale(
-          manager,
-          approved,
-          approvedItems.filter((item) => Boolean(item.cardId)),
-          performedById,
-        );
+        if (shouldAutoFinalizeCardSale) {
+          await this.cardStockSaleLifecycleService.finalizeApprovedSale(
+            manager,
+            approved,
+            approvedItems.filter((item) => Boolean(item.cardId)),
+            performedById,
+          );
+        }
+        if (shouldAutoFinalizeTtItems) {
+          await this.finalizeApprovedTtItems(
+            manager,
+            approved,
+            approvedItems,
+            performedById,
+          );
+        }
         Object.assign(transaction, approved);
       }
 
@@ -2896,6 +3286,12 @@ export class TransactionsService {
           cardItems,
           performedById,
         );
+      await this.finalizeApprovedTtItems(
+        manager,
+        approved,
+        approvedItems,
+        performedById,
+      );
       await logRepo.save(
         logRepo.create({
           transactionId: approved.id,
@@ -2956,6 +3352,22 @@ export class TransactionsService {
     await this.hydratePartyProfileSnapshot(transaction);
     await this.hydrateAgentProfileSnapshot(transaction);
     await this.hydrateCounterSnapshot(transaction);
+
+    const remittanceId = transaction.items?.find((item) =>
+      Boolean(item.ttRemittanceDetailId),
+    )?.ttRemittanceDetailId;
+    if (remittanceId) {
+      const remittance = await this.database2
+        .getRepository(TtRemittanceDetail)
+        .findOne({ where: { id: remittanceId } });
+      if (remittance) {
+        (
+          transaction as Transaction & {
+            ttRemittance?: TtRemittanceDetail | null;
+          }
+        ).ttRemittance = remittance;
+      }
+    }
 
     return transaction;
   }

@@ -325,8 +325,14 @@ export class ProductProfitReportService {
         "CARD_VOID",
       ],
     });
+    // TODO(TT): include TT lines only after branch settlement + profit_amount
+    // (bind CARD + TT settlement in profit report; deferred with client note)
     qb.andWhere(`(
-      item.card_id IS NULL OR EXISTS (
+      (
+        item.card_id IS NULL
+        AND item.deal_cover_id IS NULL
+      )
+      OR EXISTS (
         SELECT 1 FROM card_stock_settlements card_settlement
         WHERE card_settlement.transaction_item_id = item.id
           AND card_settlement.branch_settlement_entry_id IS NOT NULL

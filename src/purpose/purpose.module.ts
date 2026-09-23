@@ -3,6 +3,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserModule } from "../users/user.module";
 import { Purpose } from "./purpose.entity";
 import { PurposeSlab } from "./purpose-slab.entity";
+import { PurposeSubpurpose } from "./purpose-subpurpose.entity";
 import { PurposeGroup } from "./purpose-group.entity";
 import { PurposeGroupPurpose } from "./purpose-group-purpose.entity";
 import { PurposeController } from "./purpose.controller";
@@ -15,6 +16,7 @@ import { PurposeGroupService } from "./purpose-group.service";
     TypeOrmModule.forFeature([
       Purpose,
       PurposeSlab,
+      PurposeSubpurpose,
       PurposeGroup,
       PurposeGroupPurpose,
     ]),

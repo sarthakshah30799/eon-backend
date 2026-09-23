@@ -8,6 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, DataSource, Repository } from "typeorm";
 import { Purpose } from "./purpose.entity";
 import { PurposeSlab } from "./purpose-slab.entity";
+import { PurposeSubpurpose } from "./purpose-subpurpose.entity";
 import { PurposeGroupPurpose } from "./purpose-group-purpose.entity";
 import { CreatePurposeDto } from "./dto/create-purpose.dto";
 import { UpdatePurposeDto } from "./dto/update-purpose.dto";
@@ -29,6 +30,8 @@ export class PurposeService {
     private readonly purposeRepository: Repository<Purpose>,
     @InjectRepository(PurposeSlab)
     private readonly purposeSlabRepository: Repository<PurposeSlab>,
+    @InjectRepository(PurposeSubpurpose)
+    private readonly purposeSubpurposeRepository: Repository<PurposeSubpurpose>,
     @InjectRepository(PurposeGroupPurpose)
     private readonly purposeGroupPurposeRepository: Repository<PurposeGroupPurpose>,
   ) {}
@@ -75,6 +78,31 @@ export class PurposeService {
     }
   }
 
+  private ensureSubpurposeRules(
+    subpurposes?: CreatePurposeDto["subpurposes"],
+  ): void {
+    if (!subpurposes || subpurposes.length === 0) {
+      return;
+    }
+
+    const seenCodes = new Set<string>();
+    for (const subpurpose of subpurposes) {
+      const code = this.normalizeCode(subpurpose.code);
+      if (!code) {
+        throw new BadRequestException("Subpurpose code is required");
+      }
+      if (seenCodes.has(code)) {
+        throw new BadRequestException(`Duplicate subpurpose code "${code}"`);
+      }
+      seenCodes.add(code);
+      if (!this.normalizeText(subpurpose.name)) {
+        throw new BadRequestException(
+          `Subpurpose name is required for code "${code}"`,
+        );
+      }
+    }
+  }
+
   private ensureScopeRules(
     scope: Pick<Purpose, "corporate" | "individual" | "sell" | "purchase">,
   ): void {
@@ -108,9 +136,13 @@ export class PurposeService {
     const qb = this.purposeRepository
       .createQueryBuilder("purpose")
       .leftJoinAndSelect("purpose.slabs", "slab")
+      .leftJoinAndSelect("purpose.subpurposes", "subpurpose")
       .where(`purpose.${field} = :value`, { value });
 
-    const purpose = await qb.orderBy("slab.sortOrder", "ASC").getOne();
+    const purpose = await qb
+      .orderBy("slab.sortOrder", "ASC")
+      .addOrderBy("subpurpose.code", "ASC")
+      .getOne();
 
     if (!purpose) {
       throw new NotFoundException(`Purpose with ${field} "${value}" not found`);
@@ -125,7 +157,8 @@ export class PurposeService {
     const pagination = normalizePagination(query);
     const qb = this.purposeRepository
       .createQueryBuilder("purpose")
-      .leftJoinAndSelect("purpose.slabs", "slab");
+      .leftJoinAndSelect("purpose.slabs", "slab")
+      .leftJoinAndSelect("purpose.subpurposes", "subpurpose");
 
     const search = this.normalizeText(query?.search);
     if (search) {
@@ -157,7 +190,9 @@ export class PurposeService {
       qb.andWhere("purpose.individual = true");
     }
 
-    qb.orderBy("purpose.code", "ASC").addOrderBy("slab.sortOrder", "ASC");
+    qb.orderBy("purpose.code", "ASC")
+      .addOrderBy("slab.sortOrder", "ASC")
+      .addOrderBy("subpurpose.code", "ASC");
     applyPagination(qb, pagination);
     const [purposes, total] = await qb.getManyAndCount();
 
@@ -188,6 +223,7 @@ export class PurposeService {
     const code = this.normalizeCode(dto.code);
     this.ensureCodeLength(code);
     this.ensureSlabRules(dto.slabs);
+    this.ensureSubpurposeRules(dto.subpurposes);
     const scope = {
       corporate: dto.corporate ?? false,
       individual: dto.individual ?? false,
@@ -200,6 +236,8 @@ export class PurposeService {
     const result = await this.dataSource.transaction(async (manager) => {
       const purposeRepository = manager.getRepository(Purpose);
       const purposeSlabRepository = manager.getRepository(PurposeSlab);
+      const purposeSubpurposeRepository =
+        manager.getRepository(PurposeSubpurpose);
 
       const purpose = purposeRepository.create({
         code,
@@ -237,11 +275,28 @@ export class PurposeService {
         await purposeSlabRepository.save(slabs);
       }
 
+      const subpurposes = (dto.subpurposes ?? []).map((subpurpose) =>
+        purposeSubpurposeRepository.create({
+          purposeId: savedPurpose.id,
+          code: this.normalizeCode(subpurpose.code),
+          name: this.normalizeText(subpurpose.name),
+          isActive: subpurpose.isActive ?? true,
+          createdBy: userId,
+          updatedBy: userId,
+        }),
+      );
+
+      if (subpurposes.length > 0) {
+        await purposeSubpurposeRepository.save(subpurposes);
+      }
+
       return purposeRepository
         .createQueryBuilder("purpose")
         .leftJoinAndSelect("purpose.slabs", "slab")
+        .leftJoinAndSelect("purpose.subpurposes", "subpurpose")
         .where("purpose.id = :id", { id: savedPurpose.id })
         .orderBy("slab.sortOrder", "ASC")
+        .addOrderBy("subpurpose.code", "ASC")
         .getOneOrFail();
     });
 
@@ -255,7 +310,7 @@ export class PurposeService {
   ): Promise<PurposeResponseDto> {
     const existing = await this.purposeRepository.findOne({
       where: { id },
-      relations: { slabs: true },
+      relations: { slabs: true, subpurposes: true },
     });
 
     if (!existing) {
@@ -266,6 +321,7 @@ export class PurposeService {
       dto.code !== undefined ? this.normalizeCode(dto.code) : existing.code;
     this.ensureCodeLength(code);
     this.ensureSlabRules(dto.slabs);
+    this.ensureSubpurposeRules(dto.subpurposes);
     if (code !== existing.code) {
       await this.ensureUniqueCode(code, existing.id);
     }
@@ -273,6 +329,8 @@ export class PurposeService {
     const result = await this.dataSource.transaction(async (manager) => {
       const purposeRepository = manager.getRepository(Purpose);
       const purposeSlabRepository = manager.getRepository(PurposeSlab);
+      const purposeSubpurposeRepository =
+        manager.getRepository(PurposeSubpurpose);
 
       existing.code = code;
       if (dto.description !== undefined) {
@@ -339,11 +397,40 @@ export class PurposeService {
         }
       }
 
+      if (dto.subpurposes !== undefined) {
+        const previousSubpurposes = await purposeSubpurposeRepository.find({
+          where: { purposeId: existing.id },
+        });
+        if (previousSubpurposes.length > 0) {
+          for (const subpurpose of previousSubpurposes) {
+            subpurpose.deletedBy = userId;
+          }
+          await purposeSubpurposeRepository.softRemove(previousSubpurposes);
+        }
+
+        const nextSubpurposes = dto.subpurposes.map((subpurpose) =>
+          purposeSubpurposeRepository.create({
+            purposeId: existing.id,
+            code: this.normalizeCode(subpurpose.code),
+            name: this.normalizeText(subpurpose.name),
+            isActive: subpurpose.isActive ?? true,
+            createdBy: userId,
+            updatedBy: userId,
+          }),
+        );
+
+        if (nextSubpurposes.length > 0) {
+          await purposeSubpurposeRepository.save(nextSubpurposes);
+        }
+      }
+
       const updated = await purposeRepository
         .createQueryBuilder("purpose")
         .leftJoinAndSelect("purpose.slabs", "slab")
+        .leftJoinAndSelect("purpose.subpurposes", "subpurpose")
         .where("purpose.id = :id", { id: existing.id })
         .orderBy("slab.sortOrder", "ASC")
+        .addOrderBy("subpurpose.code", "ASC")
         .getOneOrFail();
 
       return updated;
@@ -355,7 +442,7 @@ export class PurposeService {
   async delete(id: string, userId: string): Promise<{ message: string }> {
     const purpose = await this.purposeRepository.findOne({
       where: { id },
-      relations: { slabs: true },
+      relations: { slabs: true, subpurposes: true },
     });
 
     if (!purpose) {
@@ -374,10 +461,12 @@ export class PurposeService {
     await this.dataSource.transaction(async (manager) => {
       const purposeRepository = manager.getRepository(Purpose);
       const purposeSlabRepository = manager.getRepository(PurposeSlab);
+      const purposeSubpurposeRepository =
+        manager.getRepository(PurposeSubpurpose);
 
       const loaded = await purposeRepository.findOne({
         where: { id },
-        relations: { slabs: true },
+        relations: { slabs: true, subpurposes: true },
       });
       if (!loaded) {
         return;
@@ -394,6 +483,16 @@ export class PurposeService {
           slab.deletedBy = userId;
         }
         await purposeSlabRepository.softRemove(slabs);
+      }
+
+      const subpurposes = await purposeSubpurposeRepository.find({
+        where: { purposeId: id },
+      });
+      if (subpurposes.length > 0) {
+        for (const subpurpose of subpurposes) {
+          subpurpose.deletedBy = userId;
+        }
+        await purposeSubpurposeRepository.softRemove(subpurposes);
       }
     });
 

@@ -7,7 +7,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { EntityManager, In, Repository } from "typeorm";
 import { Branch } from "../branches/branch.entity";
 import { Product } from "../products/product.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import {
@@ -31,8 +31,8 @@ export class CardStockSaleLifecycleService {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
-    @InjectRepository(ProductCardIssuer)
-    private readonly productIssuerRepository: Repository<ProductCardIssuer>,
+    @InjectRepository(ProductIssuer)
+    private readonly productIssuerRepository: Repository<ProductIssuer>,
     private readonly cardStockTransactionService: CardStockTransactionService,
     private readonly settlementService: CardStockSettlementService,
   ) {}
