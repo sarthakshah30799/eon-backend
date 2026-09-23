@@ -13,7 +13,7 @@ import { PartyProfileController } from "./party-profile.controller";
 import { PartyProfileService } from "./party-profile.service";
 import { UserModule } from "../users/user.module";
 import { MailModule } from "../mail/mail.module";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 
 @Module({
   imports: [
@@ -27,7 +27,7 @@ import { ProductCardIssuer } from "../products/entities/product-card-issuer.enti
       Currency,
       Product,
       PartyProfileCommissionRule,
-      ProductCardIssuer,
+      ProductIssuer,
     ]),
     UserModule,
     MailModule,

@@ -384,7 +384,7 @@ export class TransactionBalanceCurrencyWorker
       );
       const currencyIds = normalizeCurrencyIds(
         transaction.items
-          ?.filter((item) => !item.cardId)
+          ?.filter((item) => !item.cardId && !item.dealCoverId)
           .map((item) => item.currencyId) ?? payload.currencyIds,
       );
 
@@ -511,6 +511,7 @@ export class TransactionBalanceCurrencyWorker
           AND t.counter_id = $5
           AND ti.currency_id = $6
           AND ti.card_id IS NULL
+          AND ti.deal_cover_id IS NULL
           AND t.created_at >= $7
         ORDER BY t.created_at ASC, t.id ASC, ti.line_no ASC
       `,

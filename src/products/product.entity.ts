@@ -9,7 +9,7 @@ import {
 import { BaseEntity } from "../base/base.entity";
 import { ProductCurrencyRate } from "../currency-rates/product-currency-rate.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
-import { ProductCardIssuer } from "./entities/product-card-issuer.entity";
+import { ProductIssuer } from "./entities/product-issuer.entity";
 
 @Entity("products")
 export class Product extends BaseEntity {
@@ -203,8 +203,8 @@ export class Product extends BaseEntity {
   currencyRates: ProductCurrencyRate[];
 
   @OneToMany(
-    () => ProductCardIssuer,
+    () => ProductIssuer,
     (cardIssuerLink) => cardIssuerLink.product,
   )
-  cardIssuerLinks: ProductCardIssuer[];
+  issuerLinks: ProductIssuer[];
 }

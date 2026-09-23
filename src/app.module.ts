@@ -43,6 +43,7 @@ import { PassengerModule } from "./passengers/passenger.module";
 import { PurposeModule } from "./purpose/purpose.module";
 import { TransfersModule } from "./transfers/transfers.module";
 import { CardStockModule } from "./card-stock/card-stock.module";
+import { TtDealModule } from "./tt-deal/tt-deal.module";
 import { VoucherModule } from "./vouchers/voucher.module";
 import { CreditRequestFundModule } from "./credit-request-fund/credit-request-fund.module";
 
@@ -83,6 +84,7 @@ import { CreditRequestFundModule } from "./credit-request-fund/credit-request-fu
     PurposeModule,
     TransfersModule,
     CardStockModule,
+    TtDealModule,
     VoucherModule,
     CreditRequestFundModule,
     MigrationToolModule,

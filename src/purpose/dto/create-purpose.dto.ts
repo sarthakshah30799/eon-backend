@@ -14,6 +14,7 @@ import {
 } from "class-validator";
 import { PurposeRateType } from "../purpose.enums";
 import { PurposeSlabDto } from "./purpose-slab.dto";
+import { PurposeSubpurposeDto } from "./purpose-subpurpose.dto";
 
 export class CreatePurposeDto {
   @ApiProperty({ description: "2-character purpose code", example: "B" })
@@ -83,4 +84,11 @@ export class CreatePurposeDto {
   @Type(() => PurposeSlabDto)
   @IsOptional()
   slabs?: PurposeSlabDto[];
+
+  @ApiPropertyOptional({ type: [PurposeSubpurposeDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PurposeSubpurposeDto)
+  @IsOptional()
+  subpurposes?: PurposeSubpurposeDto[];
 }

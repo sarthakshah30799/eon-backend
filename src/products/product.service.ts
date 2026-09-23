@@ -12,7 +12,7 @@ import { UpdateProductDto } from "./dto/update-product.dto";
 import { ProductListQueryDto } from "./dto/product-list-query.dto";
 import { ProductResponseDto } from "./dto/product-response.dto";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
-import { ProductCardIssuer } from "./entities/product-card-issuer.entity";
+import { ProductIssuer } from "./entities/product-issuer.entity";
 import {
   PartyProfile,
   ClientType,
@@ -55,8 +55,8 @@ export class ProductService {
     private readonly productRepository: Repository<Product>,
     @InjectRepository(AccountProfile)
     private readonly accountProfileRepository: Repository<AccountProfile>,
-    @InjectRepository(ProductCardIssuer)
-    private readonly productCardIssuerRepository: Repository<ProductCardIssuer>,
+    @InjectRepository(ProductIssuer)
+    private readonly productIssuerRepository: Repository<ProductIssuer>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
   ) {}
@@ -70,7 +70,7 @@ export class ProductService {
     for (const field of ACCOUNT_PROFILE_RELATION_FIELDS) {
       qb.leftJoinAndSelect(`product.${field}`, field);
     }
-    qb.leftJoinAndSelect("product.cardIssuerLinks", "cardIssuerLinks").orderBy(
+    qb.leftJoinAndSelect("product.issuerLinks", "issuerLinks").orderBy(
       "product.createdAt",
       "DESC",
     );
@@ -108,7 +108,7 @@ export class ProductService {
   async findById(id: string): Promise<ProductResponseDto> {
     const product = await this.productRepository.findOne({
       where: { id },
-      relations: [...ACCOUNT_PROFILE_RELATION_FIELDS, "cardIssuerLinks"],
+      relations: [...ACCOUNT_PROFILE_RELATION_FIELDS, "issuerLinks"],
     });
     if (!product) {
       throw new NotFoundException(`Product with id ${id} not found`);
@@ -133,7 +133,7 @@ export class ProductService {
     }
 
     await this.validateAccountProfileIds(dto);
-    const issuerIds = this.normalizeIds(dto.cardIssuerProfileIds);
+    const issuerIds = this.normalizeIds(dto.issuerProfileIds);
     await this.validateNewCardIssuerProfileIds(issuerIds);
 
     const product = this.productRepository.create({
@@ -151,7 +151,7 @@ export class ProductService {
       async (manager) => {
         const savedProduct = await manager.getRepository(Product).save(product);
         await this.addCardIssuerLinks(
-          manager.getRepository(ProductCardIssuer),
+          manager.getRepository(ProductIssuer),
           savedProduct.id,
           issuerIds,
           userId,
@@ -169,7 +169,7 @@ export class ProductService {
   ): Promise<ProductResponseDto> {
     const product = await this.productRepository.findOne({
       where: { id },
-      relations: ["cardIssuerLinks"],
+      relations: ["issuerLinks"],
     });
     if (!product) {
       throw new NotFoundException(`Product with id ${id} not found`);
@@ -177,12 +177,12 @@ export class ProductService {
 
     await this.validateAccountProfileIds(dto);
 
-    const addIds = this.normalizeIds(dto.cardIssuerProfileIds);
+    const addIds = this.normalizeIds(dto.issuerProfileIds);
     const removeIds = this.normalizeIds(dto.removedCardIssuerProfileIds);
     const removalSet = new Set(removeIds);
     const effectiveAddIds = addIds.filter((id) => !removalSet.has(id));
     const existingIds = new Set(
-      (product.cardIssuerLinks ?? []).map((link) => link.partyProfileId),
+      (product.issuerLinks ?? []).map((link) => link.partyProfileId),
     );
 
     const invalidRemovalIds = removeIds.filter((id) => !existingIds.has(id));
@@ -197,7 +197,7 @@ export class ProductService {
 
     const {
       productCode: _productCode,
-      cardIssuerProfileIds: _issuerIds,
+      issuerProfileIds: _issuerIds,
       removedCardIssuerProfileIds: _removedIds,
       ...otherFields
     } = dto;
@@ -210,7 +210,7 @@ export class ProductService {
     await this.productRepository.manager.transaction(async (manager) => {
       await manager.getRepository(Product).save(product);
       await this.updateCardIssuerLinks(
-        manager.getRepository(ProductCardIssuer),
+        manager.getRepository(ProductIssuer),
         id,
         effectiveAddIds,
         removeIds,
@@ -331,7 +331,7 @@ export class ProductService {
   }
 
   private async addCardIssuerLinks(
-    repository: Repository<ProductCardIssuer>,
+    repository: Repository<ProductIssuer>,
     productId: string,
     issuerIds: string[],
     userId: string,
@@ -353,7 +353,7 @@ export class ProductService {
   }
 
   private async updateCardIssuerLinks(
-    repository: Repository<ProductCardIssuer>,
+    repository: Repository<ProductIssuer>,
     productId: string,
     addIds: string[],
     removeIds: string[],
