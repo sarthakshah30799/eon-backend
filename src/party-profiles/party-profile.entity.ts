@@ -28,6 +28,7 @@ export enum ClientType {
   MARKETING_EXECUTIVE = "MARKETING_EXECUTIVE",
   CARD_ISSUER_PROFILE = "CARD_ISSUER_PROFILE",
   MISC_PROFILE = "MISC_PROFILE",
+  EMPLOYEE_PROFILE = "EMPLOYEE_PROFILE",
 }
 
 @Entity("party_profiles")
@@ -302,4 +303,56 @@ export class PartyProfile extends BaseEntity {
     default: false,
   })
   allowCardNumberMasking: boolean;
+
+  // ── Employee-profile fields ───────────────────────────────────────────────
+  @Column({ type: "timestamptz", nullable: true })
+  dateOfJoining: Date | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  dateOfExit: Date | null;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  basicSalary: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  netSalary: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  dareness: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  houseRent: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  conveyance: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  specialAllowance: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  otherAllowance: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  allowanceTotal: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  pf: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  ppf: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  pTax: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  esic: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  incomeTax: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  otherDeduction: number;
+
+  @Column({ type: "numeric", precision: 15, scale: 2, default: 0 })
+  deductionTotal: number;
 }
