@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { PassengerAmlVerificationResponseDto } from "./dto/passenger-aml-verification-response.dto";
@@ -16,6 +16,8 @@ import { PassengerPassportLookupResponseDto } from "./dto/passenger-passport-loo
 import { LookupPassengerIdentityDto } from "./dto/lookup-passenger-identity.dto";
 
 const INVALID_VERIFICATION_TOKEN = /test/i;
+export const PASSENGER_PAN_PASSPORT_CONFLICT_MESSAGE =
+  "PAN and passport belong to different passenger records";
 
 const isBlank = (value?: string | null) => !String(value ?? "").trim();
 const normalizeIdentity = (value?: string | null) => {
@@ -37,6 +39,12 @@ const parseDate = (value?: string | null) => {
 
   const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toCalendarDate = (value?: string | null) => {
+  const normalized = String(value ?? "").trim();
+  const match = normalized.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? null;
 };
 
 const addMonths = (date: Date, months: number) => {
@@ -218,8 +226,13 @@ export class PassengerService {
       }
     }
 
-    const arrivalDate = parseDate(dto.arrivalDate);
-    if (transactionDate && arrivalDate && arrivalDate > transactionDate) {
+    const arrivalCalendarDate = toCalendarDate(dto.arrivalDate);
+    const transactionCalendarDate = toCalendarDate(dto.transactionDate);
+    if (
+      transactionCalendarDate &&
+      arrivalCalendarDate &&
+      arrivalCalendarDate > transactionCalendarDate
+    ) {
       return this.buildFailure(
         "Arrival date cannot be after the transaction date",
       );
@@ -293,26 +306,46 @@ export class PassengerService {
   async lookupByIdentity(dto: LookupPassengerIdentityDto) {
     const panNumber = normalizeIdentity(dto.panNumber);
     const passportNumber = normalizeIdentity(dto.passportNumber);
-    if (!panNumber && !passportNumber)
+    if (!panNumber && !passportNumber) {
       return {
         found: false,
         message: "PAN or passport number is required",
         passenger: null,
       };
-    const passenger = await this.passengerRepository.findOne({
-      where: [
-        ...(panNumber ? [{ panNumber }] : []),
-        ...(passportNumber ? [{ passportNumber }] : []),
-      ] as never,
-      relations: {
-        country: true,
-        state: true,
-        gstState: true,
-        residentStatus: true,
-        location: true,
-      },
-      order: { updatedAt: "DESC", createdAt: "DESC" },
-    });
+    }
+
+    const passengerRelations = {
+      country: true,
+      state: true,
+      gstState: true,
+      residentStatus: true,
+      location: true,
+    } as const;
+
+    const [passengerByPan, passengerByPassport] = await Promise.all([
+      panNumber
+        ? this.passengerRepository.findOne({
+            where: { panNumber },
+            relations: passengerRelations,
+          })
+        : Promise.resolve(null),
+      passportNumber
+        ? this.passengerRepository.findOne({
+            where: { passportNumber },
+            relations: passengerRelations,
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (
+      passengerByPan &&
+      passengerByPassport &&
+      passengerByPan.id !== passengerByPassport.id
+    ) {
+      throw new BadRequestException(PASSENGER_PAN_PASSPORT_CONFLICT_MESSAGE);
+    }
+
+    const passenger = passengerByPan ?? passengerByPassport ?? null;
     return passenger
       ? {
           found: true,

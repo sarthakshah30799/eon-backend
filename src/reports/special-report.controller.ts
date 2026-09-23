@@ -11,7 +11,7 @@ import {
   SpecialReportFormat,
   SpecialReportQueryDto,
 } from "./dto/special-report-query.dto";
-import { SpecialReportService } from "./special-report.service";
+import { SpecialReportService } from "../special-reports/special-report.service";
 
 @ApiTags("reports")
 @ApiCookieAuth("sessionId")
@@ -19,6 +19,13 @@ import { SpecialReportService } from "./special-report.service";
 @Controller("reports")
 export class SpecialReportController {
   constructor(private readonly reportService: SpecialReportService) {}
+
+  @Get("special-report/types")
+  @ApiOperation({ summary: "List active special report types" })
+  @ApiResponse({ status: 200, description: "Special report type options" })
+  async listSpecialReportTypes() {
+    return this.reportService.listTypes();
+  }
 
   @Get("special-report")
   @ApiOperation({ summary: "Get special report data" })

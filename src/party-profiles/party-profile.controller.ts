@@ -32,6 +32,7 @@ import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
 import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { UpgradePartyProfileCreditPolicyDto } from "./dto/upgrade-party-profile-credit-policy.dto";
+import { UpdatePartyProfileBranchesDto } from "./dto/update-party-profile-branches.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { PartyProfileService } from "./party-profile.service";
@@ -120,6 +121,18 @@ export class PartyProfileController {
       dto,
       session.userId,
     );
+  }
+
+  @Patch(":id/branches")
+  @ApiOperation({ summary: "Update party profile assigned branches" })
+  @ApiParam({ name: "id", description: "Party profile UUID" })
+  @ApiResponse({ status: 200, type: PartyProfileResponseDto })
+  async updateBranches(
+    @Param("id") id: string,
+    @Body() dto: UpdatePartyProfileBranchesDto,
+    @Session() session: any,
+  ): Promise<PartyProfileResponseDto> {
+    return this.partyProfileService.updateBranches(id, dto, session.userId);
   }
 
   @Put(":id")

@@ -16,8 +16,9 @@ import { SalePurchaseReportController } from "./sale-purchase-report.controller"
 import { SalePurchaseReportService } from "./sale-purchase-report.service";
 import { ProductProfitReportController } from "./product-profit-report.controller";
 import { ProductProfitReportService } from "./product-profit-report.service";
+import { SpecialReport } from "../special-reports/entities/special-report.entity";
+import { SpecialReportService } from "../special-reports/special-report.service";
 import { SpecialReportController } from "./special-report.controller";
-import { SpecialReportService } from "./special-report.service";
 import { CurrencyBalanceReportController } from "./currency-balance-report.controller";
 import { CurrencyBalanceReportService } from "./currency-balance-report.service";
 import { BankReportController } from "./bank-report.controller";
@@ -69,6 +70,7 @@ import { UserRole } from "../user-roles/user-role.entity";
         TransactionBalanceCurrency,
         AccountingVoucher,
         AccountingVoucherItem,
+        SpecialReport,
       ],
       "database2",
     ),
