@@ -59,7 +59,7 @@ type SettlementQueryRow = {
   branchDocumentNumber: string | null;
 };
 
-const MASKED_CARD_SQL = `CASE WHEN length(clear_number)<=8 THEN left(clear_number,4)||repeat('X',greatest(length(clear_number)-4,0)) ELSE left(clear_number,4)||repeat('X',length(clear_number)-8)||right(clear_number,4) END`;
+const MASKED_CARD_SQL = `CASE WHEN clear_number IS NULL THEN NULL WHEN length(clear_number)<=8 THEN left(clear_number,4)||repeat('X',greatest(length(clear_number)-4,0)) ELSE left(clear_number,4)||repeat('X',length(clear_number)-8)||right(clear_number,4) END`;
 
 const BRANCH_SETTLE_DATE_SQL = `COALESCE(bd.transaction_date, s.branch_settlement_date)`;
 
@@ -273,8 +273,7 @@ const loadSettlementRows = async (
 ): Promise<SettlementQueryRow[]> => {
   const conditions = [
     "s.deleted_at IS NULL",
-    "c.deleted_at IS NULL",
-    "s.card_id IS NOT NULL",
+    `(s.type = 'TT' OR (s.type = 'CARD' AND c.deleted_at IS NULL AND s.card_id IS NOT NULL))`,
     `s.status <> '${CardStockSettlementStatus.CANCELLED}'`,
   ];
   const params: unknown[] = [];
@@ -289,22 +288,35 @@ const loadSettlementRows = async (
       params.push(filters.endDateExclusive);
       conditions.push(`s.sale_date < $${params.length}`);
       conditions.push(
-        `(s.branch_settlement_entry_id IS NULL OR ${BRANCH_SETTLE_DATE_SQL} >= $${params.length})`,
+        `(
+          (s.type = 'CARD' AND (s.branch_settlement_entry_id IS NULL OR ${BRANCH_SETTLE_DATE_SQL} >= $${params.length}))
+          OR (s.type = 'TT' AND s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE'))
+        )`,
       );
     } else {
-      conditions.push("s.branch_settlement_entry_id IS NULL");
+      conditions.push(`(
+        (s.type = 'CARD' AND s.branch_settlement_entry_id IS NULL)
+        OR (s.type = 'TT' AND s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE'))
+      )`);
     }
   } else {
-    conditions.push("s.branch_settlement_entry_id IS NOT NULL");
+    conditions.push(`(
+      (s.type = 'CARD' AND s.branch_settlement_entry_id IS NOT NULL)
+      OR (s.type = 'TT' AND s.status IN ('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED'))
+    )`);
 
     if (filters.startDate) {
       params.push(filters.startDate);
-      conditions.push(`${BRANCH_SETTLE_DATE_SQL} >= $${params.length}`);
+      conditions.push(
+        `COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date, s.sale_date) >= $${params.length}`,
+      );
     }
 
     if (filters.endDateExclusive) {
       params.push(filters.endDateExclusive);
-      conditions.push(`${BRANCH_SETTLE_DATE_SQL} < $${params.length}`);
+      conditions.push(
+        `COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date, s.sale_date) < $${params.length}`,
+      );
     }
   }
 
@@ -327,6 +339,8 @@ const loadSettlementRows = async (
   return database2.query(
     `SELECT
         s.id,
+        s.type,
+        s.series,
         s.branch_id AS "branchId",
         s.sale_date AS "saleDate",
         s.denomination,
@@ -338,7 +352,10 @@ const loadSettlementRows = async (
         s.product_snapshot AS "productSnapshot",
         s.currency_snapshot AS "currencySnapshot",
         s.passenger_snapshot AS "passengerSnapshot",
-        ${MASKED_CARD_SQL} AS "maskedCardNumber",
+        CASE
+          WHEN s.type = 'TT' THEN s.series
+          ELSE ${MASKED_CARD_SQL}
+        END AS "maskedCardNumber",
         t.number AS "invoiceNumber",
         t.party_profile_snapshot AS "partyProfileSnapshot",
         COALESCE(bal.sell_rate, ti.rate) AS "rate",
@@ -351,13 +368,14 @@ const loadSettlementRows = async (
             2
           )
         ) AS "profitAmount",
-        ${BRANCH_SETTLE_DATE_SQL} AS "branchDocumentDate",
+        COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date) AS "branchDocumentDate",
         bd.transaction_number AS "branchDocumentNumber"
       FROM card_stock_settlements s
-      JOIN card_stock_cards c ON c.id = s.card_id
-      CROSS JOIN LATERAL (
+      LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
+      LEFT JOIN LATERAL (
         SELECT public.decrypt_card_number(c.card_number) clear_number
-      ) decoded
+        WHERE c.id IS NOT NULL
+      ) decoded ON true
       LEFT JOIN LATERAL (
         SELECT balance.sell_rate, balance.sell_amount, balance.settle_rate, balance.settle_amount
         FROM card_stock_balance balance
@@ -365,6 +383,7 @@ const loadSettlementRows = async (
           AND balance.branch_id = s.branch_id
           AND balance.series = s.series
           AND balance.deleted_at IS NULL
+          AND s.type = 'CARD'
         ORDER BY balance.created_at DESC
         LIMIT 1
       ) bal ON TRUE

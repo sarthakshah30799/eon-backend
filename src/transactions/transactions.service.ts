@@ -101,7 +101,7 @@ import {
 } from "../card-stock/card-product.util";
 import { isTtProductCode } from "../tt-deal/tt-product.util";
 import { DealCoverService } from "../tt-deal/deal-cover.service";
-import { TtSettlementService } from "../tt-deal/tt-settlement.service";
+import { CardStockSettlementService } from "../card-stock/card-stock-settlement.service";
 import { DealCover } from "../tt-deal/entities/deal-cover.entity";
 import { TtRemittanceDetail } from "../tt-deal/entities/tt-remittance-detail.entity";
 import { VoucherService } from "../vouchers/voucher.service";
@@ -439,7 +439,7 @@ export class TransactionsService {
     private readonly countryService: CountryService,
     private readonly cardStockSaleLifecycleService: CardStockSaleLifecycleService,
     private readonly dealCoverService: DealCoverService,
-    private readonly ttSettlementService: TtSettlementService,
+    private readonly cardStockSettlementService: CardStockSettlementService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
@@ -599,7 +599,7 @@ export class TransactionsService {
         asOfDate,
       );
     }
-    await this.ttSettlementService.createForApprovedTtItems(
+    await this.cardStockSettlementService.createForApprovedTtItems(
       manager,
       transaction,
       ttItems,
@@ -2324,6 +2324,20 @@ export class TransactionsService {
             )) as TransactionReferenceSnapshotValue)
           : ((remittancePayload.fbBearerOptionSnapshot as TransactionReferenceSnapshotValue) ??
             null);
+        if (fbBearerOptionId) {
+          const fbBearerOption = await this.selectOptionRepository.findOne({
+            where: {
+              id: fbBearerOptionId,
+              code: "FB_CHARGE_BEARER",
+              isActive: true,
+            },
+          });
+          if (!fbBearerOption) {
+            throw new BadRequestException(
+              "TT remittance FB charge bearer must be an active FB_CHARGE_BEARER option",
+            );
+          }
+        }
 
         const savedRemittance = await remittanceRepository.save(
           remittanceRepository.create({
@@ -2568,6 +2582,14 @@ export class TransactionsService {
             resolvedTtDeal,
             resolvedTransactionDate,
           );
+          if (
+            String(resolvedTtDeal.branchId) !==
+            String(transactionPayload.branchId ?? "")
+          ) {
+            throw new BadRequestException(
+              `TT item ${index + 1} deal branch must match the transaction branch`,
+            );
+          }
           const dealFe = Number(resolvedTtDeal.feAmount);
           const punchedFe = Number(row.quantity);
           if (

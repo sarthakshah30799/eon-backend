@@ -5,33 +5,59 @@ import {
   CardStockSettlementMode,
   CardStockSettlementSaleKind,
   CardStockSettlementStatus,
+  CardStockSettlementType,
 } from "../card-stock.enums";
 import { CardStockCard } from "./card-stock-card.entity";
 import { CardStockSettlementDocument } from "./card-stock-settlement-document.entity";
 import { CardStockTransactionEntry } from "./card-stock-transaction-entry.entity";
 import { Transaction } from "../../transactions/entities/transaction.entity";
 import { TransactionItem } from "../../transactions/entities/transaction-item.entity";
+import { DealCover } from "../../tt-deal/entities/deal-cover.entity";
 
 @Index("IDX_card_stock_settlements_status", ["status"])
 @Index("IDX_card_stock_settlements_branch", ["branchId"])
 @Index("IDX_card_stock_settlements_issuer", ["issuerPartyProfileId"])
 @Index("IDX_card_stock_settlements_sale_date", ["saleDate"])
+@Index("IDX_card_stock_settlements_type", ["type"])
+@Index("IDX_card_stock_settlements_deal_cover", ["dealCoverId"])
 @Index("UQ_card_stock_settlements_card_item", ["cardId", "transactionItemId"], {
   unique: true,
+  where: '"card_id" IS NOT NULL AND "deleted_at" IS NULL',
 })
+@Index(
+  "UQ_card_stock_settlements_deal_item",
+  ["dealCoverId", "transactionItemId"],
+  {
+    unique: true,
+    where: '"deal_cover_id" IS NOT NULL AND "deleted_at" IS NULL',
+  },
+)
 @Index("IDX_card_stock_settlements_branch_document", ["branchDocumentId"])
 @Index("IDX_card_stock_settlements_issuer_document", ["issuerDocumentId"])
 @Entity("card_stock_settlements")
 export class CardStockSettlement extends BaseEntity {
-  @Column({ type: "uuid", name: "card_id" })
-  cardId: string;
+  @Column({ type: "citext", name: "type", default: CardStockSettlementType.CARD })
+  type: CardStockSettlementType;
 
-  @ManyToOne(() => CardStockCard, { onDelete: "RESTRICT" })
+  @Column({ type: "uuid", name: "card_id", nullable: true })
+  cardId: string | null;
+
+  @ManyToOne(() => CardStockCard, { onDelete: "RESTRICT", nullable: true })
   @JoinColumn({
     name: "card_id",
     foreignKeyConstraintName: "FK_card_stock_settlements_card",
   })
-  card: CardStockCard;
+  card: CardStockCard | null;
+
+  @Column({ type: "uuid", name: "deal_cover_id", nullable: true })
+  dealCoverId: string | null;
+
+  @ManyToOne(() => DealCover, { onDelete: "RESTRICT", nullable: true })
+  @JoinColumn({
+    name: "deal_cover_id",
+    foreignKeyConstraintName: "FK_card_stock_settlements_deal_cover",
+  })
+  dealCover: DealCover | null;
 
   @Column({ type: "uuid", name: "transaction_id" })
   transactionId: string;
@@ -100,6 +126,15 @@ export class CardStockSettlement extends BaseEntity {
 
   @Column({ type: "numeric", precision: 18, scale: 7, name: "buy_rate" })
   buyRate: string;
+
+  @Column({
+    type: "numeric",
+    precision: 18,
+    scale: 7,
+    name: "booking_rate",
+    nullable: true,
+  })
+  bookingRate: string | null;
 
   @Column({ type: "jsonb", name: "buy_rate_snapshot" })
   buyRateSnapshot: Record<string, unknown>;

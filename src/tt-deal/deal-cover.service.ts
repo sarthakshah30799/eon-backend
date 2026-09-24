@@ -649,6 +649,11 @@ export class DealCoverService {
         dateTo: toUtcNextDate(query.dateTo),
       });
     }
+    if (query.forPunch) {
+      qb.andWhere("cover.consumedTransactionItemId IS NULL");
+      qb.andWhere("cover.consumedTransactionId IS NULL");
+      qb.andWhere("cover.cancelledAt IS NULL");
+    }
     const search = this.clean(query.search);
     if (search) {
       const like = `%${search}%`;
@@ -673,6 +678,28 @@ export class DealCoverService {
       "cover.createdAt",
       "DESC",
     );
+    if (query.forPunch) {
+      const rows = await qb.getMany();
+      const asOf = query.asOfDate ?? new Date();
+      const selectable: DealCover[] = [];
+      for (const row of rows) {
+        try {
+          await this.assertDealWithinMaturityWindow(row, asOf);
+          selectable.push(row);
+        } catch {
+          // past maturity — hide from punch picker
+        }
+      }
+      const page = selectable.slice(
+        pagination.offset,
+        pagination.offset + pagination.limit,
+      );
+      return buildPaginatedResponse(
+        page.map(DealCoverResponseDto.fromEntity),
+        selectable.length,
+        pagination,
+      );
+    }
     applyPagination(qb, pagination);
     const [rows, total] = await qb.getManyAndCount();
     return buildPaginatedResponse(

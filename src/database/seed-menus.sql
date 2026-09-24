@@ -65,12 +65,9 @@ BEGIN
   (310, 'Card Transfer',          '/card-transfer',                  'CARD', NULL, FALSE, 'arrow-left-right','unique'),
   (320, 'Receipt Stock',          '/card-stock',                     'CARD', NULL, FALSE, 'archive',     'unique'),
 
-  -- Deal Cover
+  -- Deal Cover (TT settlement uses shared /card-settlement)
   (330, 'Deal Cover Rate',        '/deal-cover-rate',                'Deal Cover', NULL, FALSE, 'banknote', 'unique'),
   (340, 'Deal Cover Acknowledgement', '/deal-cover-acknowledgement', 'Deal Cover', NULL, FALSE, 'check-circle', 'unique'),
-
-  -- TT
-  (350, 'TT Settlement',          '/tt-settlement',                  'TT', NULL, FALSE, 'landmark', 'unique'),
 
   -- Operations
   (400, 'Before/End Of Day',      '/day-end-start-process',          'Operations', NULL, FALSE, 'calendar-clock','unique'),

@@ -13,16 +13,9 @@ import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { Product } from "../products/product.entity";
 import { PurposeSubpurpose } from "../purpose/purpose-subpurpose.entity";
 import { Purpose } from "../purpose/purpose.entity";
-import {
-  DealCover,
-  TtRemittanceDetail,
-  TtSettlement,
-  TtSettlementDocument,
-} from "./entities";
+import { DealCover, TtRemittanceDetail } from "./entities";
 import { DealCoverController } from "./deal-cover.controller";
 import { DealCoverService } from "./deal-cover.service";
-import { TtSettlementController } from "./tt-settlement.controller";
-import { TtSettlementService } from "./tt-settlement.service";
 
 @Module({
   imports: [
@@ -41,18 +34,10 @@ import { TtSettlementService } from "./tt-settlement.service";
       SelectOption,
       Currency,
     ]),
-    TypeOrmModule.forFeature(
-      [
-        DealCover,
-        TtRemittanceDetail,
-        TtSettlement,
-        TtSettlementDocument,
-      ],
-      "database2",
-    ),
+    TypeOrmModule.forFeature([DealCover, TtRemittanceDetail], "database2"),
   ],
-  controllers: [DealCoverController, TtSettlementController],
-  providers: [DealCoverService, TtSettlementService],
-  exports: [DealCoverService, TtSettlementService],
+  controllers: [DealCoverController],
+  providers: [DealCoverService],
+  exports: [DealCoverService],
 })
 export class TtDealModule {}

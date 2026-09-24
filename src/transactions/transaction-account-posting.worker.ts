@@ -44,6 +44,10 @@ const CARD_LOAD_CONTROL_ACCOUNT = "CARD_LOAD_CONTROL_ACCOUNT";
 const CARD_CONTROL_ACCOUNT = "CARD_CONTROL_ACCOUNT";
 const CARD_PURCHASE_CONTROL_ACCOUNT = "CARD_PURCHASE_CONTROL_ACCOUNT";
 const CARD_PROFIT_CONTROL_ACCOUNT = "CARD_PROFIT_CONTROL_ACCOUNT";
+const TT_SELL_CONTROL_ACCOUNT = "TT_SELL_CONTROL_ACCOUNT";
+const TT_CLOSING_CONTROL_ACCOUNT = "TT_CLOSING_CONTROL_ACCOUNT";
+const TT_CONTROL_ACCOUNT = "TT_CONTROL_ACCOUNT";
+const TT_PROFIT_CONTROL_ACCOUNT = "TT_PROFIT_CONTROL_ACCOUNT";
 const CARD_TECHNICAL_SLUGS = [
   "CARD_STOCK",
   "CARD_TRANSFER_OUT",
@@ -314,6 +318,38 @@ export class TransactionAccountPostingWorker
         }
       }
 
+      if (
+        transaction.transactionType === TransactionType.SALE &&
+        transaction.items.some((item) => Boolean(item.dealCoverId))
+      ) {
+        const readiness: Array<{ incomplete_count: string }> =
+          await this.database2.query(
+            `
+          SELECT count(*)::text AS incomplete_count
+          FROM transaction_items item
+          WHERE item.transaction_id=$1 AND item.deal_cover_id IS NOT NULL AND (
+            NOT EXISTS (
+              SELECT 1 FROM card_stock_settlements settlement
+              WHERE settlement.transaction_item_id=item.id
+                AND settlement.type='TT'
+                AND settlement.status IN ('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED')
+            )
+            OR item.profit_amount IS NULL
+          )`,
+            [transaction.id],
+          );
+        if (Number(readiness[0]?.incomplete_count ?? 0) > 0) {
+          await this.finishEvent(event.id, {
+            status: TransactionEventStatus.PROCESSED,
+            processedAt: new Date(),
+            lockedAt: null,
+            lockedById: null,
+            errorMessage: null,
+          });
+          return;
+        }
+      }
+
       await this.rebuildTransaction(transaction);
 
       await this.finishEvent(event.id, {
@@ -401,6 +437,9 @@ export class TransactionAccountPostingWorker
       CARD_CONTROL_ACCOUNT,
       CARD_PURCHASE_CONTROL_ACCOUNT,
       CARD_PROFIT_CONTROL_ACCOUNT,
+      TT_CLOSING_CONTROL_ACCOUNT,
+      TT_CONTROL_ACCOUNT,
+      TT_PROFIT_CONTROL_ACCOUNT,
       "BRANCH_CONTROL_ACCOUNT",
     ] as const;
     const accountIds = new Map<string, string>();
@@ -435,6 +474,8 @@ export class TransactionAccountPostingWorker
 
     const rows: Array<{
       settlementId: string;
+      settlementType: string;
+      settlementBuyRate: string;
       saleItemId: string;
       hoBranchId: string;
       quantity: string;
@@ -445,6 +486,8 @@ export class TransactionAccountPostingWorker
     }> = await this.database2.query(
       `
       SELECT settlement.id AS "settlementId",
+             settlement.type AS "settlementType",
+             settlement.buy_rate AS "settlementBuyRate",
              sale_item.id AS "saleItemId",
              settlement.ho_branch_id AS "hoBranchId",
              sale_item.quantity,
@@ -501,16 +544,23 @@ export class TransactionAccountPostingWorker
     };
 
     for (const row of rows) {
+      const isTt = row.settlementType === "TT";
       const quantity = Number(row.quantity);
-      const rate = Number(row.rate);
-      const per = Number(row.per ?? 1) || 1;
+      const rate = isTt
+        ? Number(row.settlementBuyRate)
+        : Number(row.rate);
+      const per = isTt ? 1 : Number(row.per ?? 1) || 1;
       const saleAmount = Number(
-        roundMoney((quantity * rate) / per + Number(row.roundOff ?? 0)),
+        roundMoney(
+          isTt
+            ? quantity * rate
+            : (quantity * rate) / per + Number(row.roundOff ?? 0),
+        ),
       );
       const profitAmount = Number(row.profitAmount);
       if (!Number.isFinite(profitAmount))
         throw new BadRequestException(
-          `Stored CARD profit is missing for sale item ${row.saleItemId}`,
+          `Stored ${isTt ? "TT" : "CARD"} profit is missing for sale item ${row.saleItemId}`,
         );
       const branchAmount = saleAmount + profitAmount;
 
@@ -521,46 +571,81 @@ export class TransactionAccountPostingWorker
           ? TransactionPostingDirection.CREDIT
           : TransactionPostingDirection.DEBIT,
         Math.abs(branchAmount),
-        "CARD branch settlement payable",
+        isTt
+          ? "TT branch settlement payable"
+          : "CARD branch settlement payable",
         row.hoBranchId,
       );
-      add(
-        row,
-        CARD_CONTROL_ACCOUNT,
-        TransactionPostingDirection.DEBIT,
-        saleAmount,
-        "CARD settlement control",
-      );
-      add(
-        row,
-        CARD_LOAD_CONTROL_ACCOUNT,
-        TransactionPostingDirection.CREDIT,
-        saleAmount,
-        "CARD load settlement",
-      );
-      add(
-        row,
-        CARD_PURCHASE_CONTROL_ACCOUNT,
-        TransactionPostingDirection.DEBIT,
-        saleAmount,
-        "CARD purchase settlement",
-      );
-      if (profitAmount > 0)
+      if (isTt) {
         add(
           row,
-          CARD_PROFIT_CONTROL_ACCOUNT,
+          TT_CONTROL_ACCOUNT,
           TransactionPostingDirection.DEBIT,
-          profitAmount,
-          "CARD settlement profit",
+          saleAmount,
+          "TT settlement control",
         );
-      if (profitAmount < 0)
         add(
           row,
-          CARD_PROFIT_CONTROL_ACCOUNT,
+          TT_CLOSING_CONTROL_ACCOUNT,
           TransactionPostingDirection.CREDIT,
-          Math.abs(profitAmount),
-          "CARD settlement loss",
+          saleAmount,
+          "TT closing settlement",
         );
+        if (profitAmount > 0)
+          add(
+            row,
+            TT_PROFIT_CONTROL_ACCOUNT,
+            TransactionPostingDirection.DEBIT,
+            profitAmount,
+            "TT settlement profit",
+          );
+        if (profitAmount < 0)
+          add(
+            row,
+            TT_PROFIT_CONTROL_ACCOUNT,
+            TransactionPostingDirection.CREDIT,
+            Math.abs(profitAmount),
+            "TT settlement loss",
+          );
+      } else {
+        add(
+          row,
+          CARD_CONTROL_ACCOUNT,
+          TransactionPostingDirection.DEBIT,
+          saleAmount,
+          "CARD settlement control",
+        );
+        add(
+          row,
+          CARD_LOAD_CONTROL_ACCOUNT,
+          TransactionPostingDirection.CREDIT,
+          saleAmount,
+          "CARD load settlement",
+        );
+        add(
+          row,
+          CARD_PURCHASE_CONTROL_ACCOUNT,
+          TransactionPostingDirection.DEBIT,
+          saleAmount,
+          "CARD purchase settlement",
+        );
+        if (profitAmount > 0)
+          add(
+            row,
+            CARD_PROFIT_CONTROL_ACCOUNT,
+            TransactionPostingDirection.DEBIT,
+            profitAmount,
+            "CARD settlement profit",
+          );
+        if (profitAmount < 0)
+          add(
+            row,
+            CARD_PROFIT_CONTROL_ACCOUNT,
+            TransactionPostingDirection.CREDIT,
+            Math.abs(profitAmount),
+            "CARD settlement loss",
+          );
+      }
     }
 
     await this.database2.transaction(async (manager) => {
@@ -810,12 +895,22 @@ export class TransactionAccountPostingWorker
       isFinalStandardTransaction &&
       transaction.transactionType === TransactionType.SALE &&
       sortedItems.some((item) => Boolean(item.cardId));
+    const hasTtSaleItems =
+      isFinalStandardTransaction &&
+      transaction.transactionType === TransactionType.SALE &&
+      sortedItems.some((item) => Boolean(item.dealCoverId));
     let cardSellAccountId: string | null = null;
     let cardLoadAccountId: string | null = null;
     let cardControlAccountId: string | null = null;
     let cardSellAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let cardLoadAccountSnapshot: TransactionReferenceSnapshotValue = null;
     let cardControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let ttSellAccountId: string | null = null;
+    let ttClosingAccountId: string | null = null;
+    let ttControlAccountId: string | null = null;
+    let ttSellAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let ttClosingAccountSnapshot: TransactionReferenceSnapshotValue = null;
+    let ttControlAccountSnapshot: TransactionReferenceSnapshotValue = null;
 
     if (hasCardSaleItems) {
       cardSellAccountId =
@@ -835,13 +930,39 @@ export class TransactionAccountPostingWorker
         );
       if (!cardSellAccountId || !cardLoadAccountId || !cardControlAccountId) {
         throw new BadRequestException(
-          "Missing CARD sell, load, or control account additional setting",
+          "Missing CARD sell, closing, or control account additional setting",
         );
       }
       cardSellAccountSnapshot = await resolveAccountSnapshot(cardSellAccountId);
       cardLoadAccountSnapshot = await resolveAccountSnapshot(cardLoadAccountId);
       cardControlAccountSnapshot =
         await resolveAccountSnapshot(cardControlAccountId);
+    }
+
+    if (hasTtSaleItems) {
+      ttSellAccountId =
+        await this.additionalSettingService.getSettingTextValue(
+          CARD_ACCOUNTING_CATEGORY,
+          TT_SELL_CONTROL_ACCOUNT,
+        );
+      ttClosingAccountId =
+        await this.additionalSettingService.getSettingTextValue(
+          CARD_ACCOUNTING_CATEGORY,
+          TT_CLOSING_CONTROL_ACCOUNT,
+        );
+      ttControlAccountId =
+        await this.additionalSettingService.getSettingTextValue(
+          CARD_ACCOUNTING_CATEGORY,
+          TT_CONTROL_ACCOUNT,
+        );
+      if (!ttSellAccountId || !ttClosingAccountId || !ttControlAccountId) {
+        throw new BadRequestException(
+          "Missing TT sell, closing, or control account additional setting",
+        );
+      }
+      ttSellAccountSnapshot = await resolveAccountSnapshot(ttSellAccountId);
+      ttClosingAccountSnapshot = await resolveAccountSnapshot(ttClosingAccountId);
+      ttControlAccountSnapshot = await resolveAccountSnapshot(ttControlAccountId);
     }
 
     const itemUpdates: TransactionItem[] = [];
@@ -1200,7 +1321,7 @@ export class TransactionAccountPostingWorker
               profileId: null,
               direction: TransactionPostingDirection.DEBIT,
               amount: roundMoney(cardSaleAmount),
-              remarks: `CARD load control item ${item.lineNo}`,
+              remarks: `CARD closing control item ${item.lineNo}`,
             },
             true,
           );
@@ -1217,6 +1338,69 @@ export class TransactionAccountPostingWorker
               direction: TransactionPostingDirection.CREDIT,
               amount: roundMoney(cardSaleAmount),
               remarks: `CARD balancing control item ${item.lineNo}`,
+            },
+            true,
+          );
+        } else if (item.dealCoverId) {
+          if (
+            !ttSellAccountId ||
+            !ttClosingAccountId ||
+            !ttControlAccountId ||
+            item.profitAmount === null
+          ) {
+            throw new BadRequestException(
+              `TT accounting values are incomplete for item ${item.id}`,
+            );
+          }
+          const ttSaleAmount = Number(
+            roundMoney(itemTotalAmount + roundOffAmount),
+          );
+          item.profit = null;
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ITEM_SALE,
+              sourceId: item.id,
+              accountId: ttSellAccountId,
+              accountSnapshot: ttSellAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.CREDIT,
+              amount: roundMoney(ttSaleAmount),
+              remarks: `TT sell control item ${item.lineNo}`,
+            },
+            true,
+          );
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ITEM,
+              sourceId: item.id,
+              accountId: ttClosingAccountId,
+              accountSnapshot: ttClosingAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.DEBIT,
+              amount: roundMoney(ttSaleAmount),
+              remarks: `TT closing control item ${item.lineNo}`,
+            },
+            true,
+          );
+          addPosting(
+            {
+              transactionId: transaction.id,
+              createdBy: postingActorId,
+              updatedBy: postingActorId,
+              sourceType: TransactionPostingSourceType.ITEM,
+              sourceId: item.id,
+              accountId: ttControlAccountId,
+              accountSnapshot: ttControlAccountSnapshot,
+              profileId: null,
+              direction: TransactionPostingDirection.CREDIT,
+              amount: roundMoney(ttSaleAmount),
+              remarks: `TT balancing control item ${item.lineNo}`,
             },
             true,
           );

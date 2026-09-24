@@ -92,5 +92,48 @@ export class CardStockSettlementWorker
         );
       }
     }
+
+    const ttRows: Array<{ transaction_id: string }> = await this.database2
+      .query(`
+      SELECT t.id AS transaction_id
+      FROM transactions t
+      JOIN transaction_items i ON i.transaction_id=t.id AND i.deal_cover_id IS NOT NULL
+      WHERE t.status='APPROVED'
+        AND NOT EXISTS (
+          SELECT 1 FROM card_stock_settlements s
+          WHERE s.transaction_item_id=i.id AND s.type='TT' AND s.deleted_at IS NULL
+        )
+      GROUP BY t.id, t.created_at ORDER BY t.created_at LIMIT 50`);
+    for (const row of ttRows) {
+      try {
+        await this.database2.transaction(async (manager) => {
+          const transaction = await manager
+            .getRepository(Transaction)
+            .createQueryBuilder("transaction")
+            .where("transaction.id=:id AND transaction.status=:status", {
+              id: row.transaction_id,
+              status: TransactionStatus.APPROVED,
+            })
+            .setLock("pessimistic_write")
+            .getOne();
+          if (!transaction) return;
+          const items = await manager
+            .getRepository(TransactionItem)
+            .find({ where: { transactionId: transaction.id } });
+          const ttItems = items.filter((item) => Boolean(item.dealCoverId));
+          await this.settlementService.createForApprovedTtItems(
+            manager,
+            transaction,
+            ttItems,
+            transaction.approvedById ?? transaction.updatedBy,
+          );
+        });
+      } catch (error) {
+        this.logger.error(
+          `Failed to reconcile TT sale ${row.transaction_id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
   }
 }

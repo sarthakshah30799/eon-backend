@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsArray,
   IsDateString,
@@ -178,6 +178,18 @@ export class DealCoverListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsDateString()
   dateTo?: string;
+
+  @ApiPropertyOptional({
+    description: "When true, only unconsumed deals within maturity as of asOfDate",
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true" || value === "1")
+  forPunch?: boolean;
+
+  @ApiPropertyOptional({ example: "2026-09-23" })
+  @IsOptional()
+  @IsDateString()
+  asOfDate?: string;
 }
 
 export class DealCoverAckListQueryDto extends DealCoverListQueryDto {}

@@ -69,6 +69,14 @@ export const CardStockSettlementSaleKind = {
 export type CardStockSettlementSaleKind =
   (typeof CardStockSettlementSaleKind)[keyof typeof CardStockSettlementSaleKind];
 
+export const CardStockSettlementType = {
+  CARD: "CARD",
+  TT: "TT",
+} as const;
+
+export type CardStockSettlementType =
+  (typeof CardStockSettlementType)[keyof typeof CardStockSettlementType];
+
 export const CardStockSettlementDocumentKind = {
   BRANCH_HO: "BRANCH_HO",
   HO_ISSUER: "HO_ISSUER",
