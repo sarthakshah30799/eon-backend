@@ -4,6 +4,10 @@ import { Counter } from "../counters/counter.entity";
 import { Menu } from "../menu/menu.entity";
 import { Permission } from "../permissions/permission.entity";
 
+/**
+ * Allowlist of menu+permission codes granted to a counter.
+ * Effective user access is role grants ∩ these rows; empty set means no access.
+ */
 @Entity("counter_menu_restrictions")
 @Unique(["counter", "menu", "permission"])
 export class CounterMenuRestriction extends BaseEntity {

@@ -3,6 +3,7 @@ const PARTY_PROFILE_ROUTE_TYPE_MAP: Record<string, string> = {
   FOREX_CORRESPONDENT: "forex-correspondent",
   CARD_ISSUER_PROFILE: "card-issuer-profile",
   MISC_PROFILE: "misc-supplier-profile",
+  EMPLOYEE_PROFILE: "employee-profile",
 };
 
 const normalizeDelimitedValue = (value: string) =>

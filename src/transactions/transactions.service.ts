@@ -1805,9 +1805,14 @@ export class TransactionsService {
         );
       }
 
+      const passengerArrivalCalendarDate = String(
+        passengerPayload.arrivalDate ?? "",
+      )
+        .trim()
+        .slice(0, 10);
       if (
-        passengerArrivalDate &&
-        passengerArrivalDate > passengerTransactionDate
+        /^\d{4}-\d{2}-\d{2}$/.test(passengerArrivalCalendarDate) &&
+        passengerArrivalCalendarDate > resolvedTransactionDate
       ) {
         throw new BadRequestException(
           "Arrival date cannot be after the transaction date",
@@ -1962,12 +1967,17 @@ export class TransactionsService {
         }
 
         if (passengerTravelPayload.departureDate) {
-          const departureDate = parseDateValue(
-            passengerTravelPayload.departureDate,
-          );
-          if (departureDate && departureDate < passengerTransactionDate) {
+          const departureCalendarDate = String(
+            passengerTravelPayload.departureDate ?? "",
+          )
+            .trim()
+            .slice(0, 10);
+          if (
+            /^\d{4}-\d{2}-\d{2}$/.test(departureCalendarDate) &&
+            departureCalendarDate < resolvedTransactionDate
+          ) {
             throw new BadRequestException(
-              "Departure date cannot be before the transaction date",
+              "Departure date must be on or after the transaction date",
             );
           }
         }

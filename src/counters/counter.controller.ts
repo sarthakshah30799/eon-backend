@@ -45,6 +45,34 @@ export class CounterController {
     return this.counterService.findAll(query);
   }
 
+  @Get(":id/permissions")
+  @ApiOperation({ summary: "Get permissions matrix for a counter" })
+  @ApiParam({ name: "id", description: "Counter UUID" })
+  @ApiResponse({ status: 200, description: "Permissions matrix" })
+  @ApiResponse({ status: 404, description: "Counter not found" })
+  async getPermissions(
+    @Param("id") id: string,
+  ): Promise<Record<string, Record<string, boolean>>> {
+    return this.counterService.getCounterPermissions(id);
+  }
+
+  @Post(":id/permissions")
+  @ApiOperation({ summary: "Update permissions matrix for a counter" })
+  @ApiParam({ name: "id", description: "Counter UUID" })
+  @ApiResponse({ status: 200, description: "Success message" })
+  @ApiResponse({ status: 404, description: "Counter not found" })
+  async updatePermissions(
+    @Param("id") id: string,
+    @Body() body: Record<string, Record<string, boolean>>,
+    @Session() session: any,
+  ): Promise<{ message: string }> {
+    return this.counterService.updateCounterPermissions(
+      id,
+      body,
+      session.userId,
+    );
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Get counter by ID" })
   @ApiParam({ name: "id", description: "Counter UUID" })

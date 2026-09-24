@@ -19,7 +19,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         autoLoadEntities: true,
         entities: [
           __dirname +
-            "/../!(manual-bill-books|chequebooks|transactions|transfers|card-stock|tt-deal|credit-request-fund|vouchers|monthly-locks|day-end-start-process|stock-revaluation|transaction-data-locks)/**/*.entity{.ts,.js}",
+            "/../!(manual-bill-books|chequebooks|transactions|transfers|card-stock|tt-deal|credit-request-fund|vouchers|monthly-locks|day-end-start-process|stock-revaluation|transaction-data-locks|special-reports)/**/*.entity{.ts,.js}",
         ],
         migrations: [__dirname + "/../migrations/*{.ts,.js}"],
         synchronize: false, // Ensure you handle schema changes properly
@@ -58,6 +58,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
           __dirname + "/../monthly-locks/**/*.entity{.ts,.js}",
           __dirname + "/../transaction-data-locks/**/*.entity{.ts,.js}",
           __dirname + "/../day-end-start-process/**/*.entity{.ts,.js}",
+          __dirname + "/../special-reports/**/*.entity{.ts,.js}",
         ],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,

@@ -17,7 +17,6 @@ export class PurposeGroup extends BaseEntity {
   @Column({
     type: "enum",
     enum: PurposeGroupProfileType,
-    enumName: "purpose_groups_profile_type_enum",
     name: "profile_type",
   })
   profileType: PurposeGroupProfileType;

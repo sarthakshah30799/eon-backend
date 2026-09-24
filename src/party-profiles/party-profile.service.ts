@@ -18,6 +18,7 @@ import { CreatePartyProfileDto } from "./dto/create-party-profile.dto";
 import { UpdatePartyProfileDto } from "./dto/update-party-profile.dto";
 import { ReviewPartyProfileDto } from "./dto/review-party-profile.dto";
 import { UpgradePartyProfileCreditPolicyDto } from "./dto/upgrade-party-profile-credit-policy.dto";
+import { UpdatePartyProfileBranchesDto } from "./dto/update-party-profile-branches.dto";
 import { PartyProfileResponseDto } from "./dto/party-profile-response.dto";
 import { PartyProfileListQueryDto } from "./dto/party-profile-list-query.dto";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
@@ -94,6 +95,92 @@ function stripCreditPolicyFields<T extends Record<string, any>>(value: T): T {
     delete next[field];
   }
   return next;
+}
+
+const EMPLOYEE_PAYROLL_AMOUNT_FIELDS = [
+  "basicSalary",
+  "dareness",
+  "houseRent",
+  "conveyance",
+  "specialAllowance",
+  "otherAllowance",
+  "allowanceTotal",
+  "pf",
+  "ppf",
+  "pTax",
+  "esic",
+  "incomeTax",
+  "otherDeduction",
+  "deductionTotal",
+  "netSalary",
+] as const;
+
+const EMPLOYEE_PAYROLL_DATE_FIELDS = ["dateOfJoining", "dateOfExit"] as const;
+
+function toMoneyNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function computeEmployeePayrollFields(source: Record<string, unknown>) {
+  const basicSalary = toMoneyNumber(source.basicSalary);
+  const dareness = toMoneyNumber(source.dareness);
+  const houseRent = toMoneyNumber(source.houseRent);
+  const conveyance = toMoneyNumber(source.conveyance);
+  const specialAllowance = toMoneyNumber(source.specialAllowance);
+  const otherAllowance = toMoneyNumber(source.otherAllowance);
+  const pf = toMoneyNumber(source.pf);
+  const ppf = toMoneyNumber(source.ppf);
+  const pTax = toMoneyNumber(source.pTax);
+  const esic = toMoneyNumber(source.esic);
+  const incomeTax = toMoneyNumber(source.incomeTax);
+  const otherDeduction = toMoneyNumber(source.otherDeduction);
+  const allowanceTotal =
+    dareness + houseRent + conveyance + specialAllowance + otherAllowance;
+  const deductionTotal =
+    pf + ppf + pTax + esic + incomeTax + otherDeduction;
+  const netSalary = basicSalary + allowanceTotal - deductionTotal;
+
+  return {
+    basicSalary,
+    dareness,
+    houseRent,
+    conveyance,
+    specialAllowance,
+    otherAllowance,
+    allowanceTotal,
+    pf,
+    ppf,
+    pTax,
+    esic,
+    incomeTax,
+    otherDeduction,
+    deductionTotal,
+    netSalary,
+  };
+}
+
+function stripEmployeePayrollFields<T extends Record<string, any>>(value: T): T {
+  const next = { ...value };
+  for (const field of EMPLOYEE_PAYROLL_AMOUNT_FIELDS) {
+    delete next[field];
+  }
+  for (const field of EMPLOYEE_PAYROLL_DATE_FIELDS) {
+    delete next[field];
+  }
+  return next;
+}
+
+function resolveOptionalDate(
+  value: string | null | undefined,
+): Date | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!value) {
+    return null;
+  }
+  return new Date(value);
 }
 
 type PartyProfileCommissionRuleInput = {
@@ -259,7 +346,14 @@ export class PartyProfileService {
     branches: Branch[],
     userId: string,
   ): Promise<void> {
-    await this.partyProfileBranchRepository.delete({ partyProfileId });
+    // Hard-delete including soft-deleted rows so unique (party, branch) can be re-inserted.
+    await this.partyProfileBranchRepository
+      .createQueryBuilder()
+      .delete()
+      .from(PartyProfileBranch)
+      .where("party_profile_id = :partyProfileId", { partyProfileId })
+      .execute();
+
     if (!branches.length) {
       return;
     }
@@ -611,6 +705,7 @@ export class PartyProfileService {
       { value: ClientType.MARKETING_EXECUTIVE, label: "MARKETING EXECUTIVE" },
       { value: ClientType.CARD_ISSUER_PROFILE, label: "CARD ISSUER PROFILE" },
       { value: ClientType.MISC_PROFILE, label: "MISC SUPPLIER PROFILE" },
+      { value: ClientType.EMPLOYEE_PROFILE, label: "EMPLOYEE PROFILE" },
     ];
 
     if (!userId) {
@@ -709,8 +804,17 @@ export class PartyProfileService {
 
     const isCardIssuer =
       (normalized.type ?? dto.type) === ClientType.CARD_ISSUER_PROFILE;
+    const isEmployeeProfile =
+      (normalized.type ?? dto.type) === ClientType.EMPLOYEE_PROFILE;
+    const employeePayroll = isEmployeeProfile
+      ? computeEmployeePayrollFields(normalized as Record<string, unknown>)
+      : null;
+    const profileFieldsForCreate = isEmployeeProfile
+      ? profileFields
+      : stripEmployeePayrollFields(profileFields);
     const client = this.partyProfileRepository.create({
-      ...profileFields,
+      ...profileFieldsForCreate,
+      ...(employeePayroll ?? {}),
       cardNumberLength: isCardIssuer
         ? (normalized.cardNumberLength ?? 16)
         : null,
@@ -743,6 +847,12 @@ export class PartyProfileService {
       panDob: normalized.panDob ? new Date(normalized.panDob) : null,
       ffmcRegDate: normalized.ffmcRegDate
         ? new Date(normalized.ffmcRegDate)
+        : null,
+      dateOfJoining: isEmployeeProfile
+        ? (resolveOptionalDate(normalized.dateOfJoining) ?? null)
+        : null,
+      dateOfExit: isEmployeeProfile
+        ? (resolveOptionalDate(normalized.dateOfExit) ?? null)
         : null,
       createdBy: userId,
       updatedBy: userId,
@@ -831,6 +941,43 @@ export class PartyProfileService {
     } else if (updates.cardNumberLength == null) {
       updates.cardNumberLength = client.cardNumberLength ?? 16;
     }
+    if (nextType === ClientType.EMPLOYEE_PROFILE) {
+      const payrollSource = {
+        basicSalary:
+          updates.basicSalary !== undefined
+            ? updates.basicSalary
+            : client.basicSalary,
+        dareness:
+          updates.dareness !== undefined ? updates.dareness : client.dareness,
+        houseRent:
+          updates.houseRent !== undefined ? updates.houseRent : client.houseRent,
+        conveyance:
+          updates.conveyance !== undefined
+            ? updates.conveyance
+            : client.conveyance,
+        specialAllowance:
+          updates.specialAllowance !== undefined
+            ? updates.specialAllowance
+            : client.specialAllowance,
+        otherAllowance:
+          updates.otherAllowance !== undefined
+            ? updates.otherAllowance
+            : client.otherAllowance,
+        pf: updates.pf !== undefined ? updates.pf : client.pf,
+        ppf: updates.ppf !== undefined ? updates.ppf : client.ppf,
+        pTax: updates.pTax !== undefined ? updates.pTax : client.pTax,
+        esic: updates.esic !== undefined ? updates.esic : client.esic,
+        incomeTax:
+          updates.incomeTax !== undefined ? updates.incomeTax : client.incomeTax,
+        otherDeduction:
+          updates.otherDeduction !== undefined
+            ? updates.otherDeduction
+            : client.otherDeduction,
+      };
+      Object.assign(updates, computeEmployeePayrollFields(payrollSource));
+    } else {
+      Object.assign(updates, stripEmployeePayrollFields(updates));
+    }
     Object.assign(client, {
       ...updates,
       dateOfIntro: normalized.dateOfIntro
@@ -860,6 +1007,18 @@ export class PartyProfileService {
             ? new Date(normalized.ffmcRegDate)
             : null
           : client.ffmcRegDate,
+      dateOfJoining:
+        nextType === ClientType.EMPLOYEE_PROFILE
+          ? normalized.dateOfJoining !== undefined
+            ? (resolveOptionalDate(normalized.dateOfJoining) ?? null)
+            : client.dateOfJoining
+          : client.dateOfJoining,
+      dateOfExit:
+        nextType === ClientType.EMPLOYEE_PROFILE
+          ? normalized.dateOfExit !== undefined
+            ? (resolveOptionalDate(normalized.dateOfExit) ?? null)
+            : client.dateOfExit
+          : client.dateOfExit,
     });
     if (location !== undefined) {
       client.location = location ? ({ id: location } as any) : null;
@@ -945,18 +1104,30 @@ export class PartyProfileService {
     Object.assign(client, updates);
     client.updatedBy = userId;
 
-    const requesterIsAdmin = user?.isAdmin === true;
-    if (!requesterIsAdmin) {
-      client.active = false;
-      client.status = WorkflowStatus.PENDING;
-      client.statusUpdatedById = null;
-      client.statusUpdatedAt = null;
+    await this.partyProfileRepository.save(client);
+
+    return this.findById(id);
+  }
+
+  async updateBranches(
+    id: string,
+    dto: UpdatePartyProfileBranchesDto,
+    userId: string,
+  ): Promise<PartyProfileResponseDto> {
+    const user = await this.getCurrentUser(userId);
+    const client = await this.partyProfileRepository.findOne({ where: { id } });
+    if (!client) {
+      throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
+    this.assertPartyProfileAccess(user, client.type, "modify");
+    this.assertPartyProfileEditableByUser(client, user);
+
+    const branches = await this.resolveActiveBranches(dto.branchIds);
+    await this.replacePartyProfileBranches(id, branches, userId);
+
+    client.updatedBy = userId;
     await this.partyProfileRepository.save(client);
-    if (!requesterIsAdmin) {
-      await this.notifyPartyProfileReviewers(client, user);
-    }
 
     return this.findById(id);
   }

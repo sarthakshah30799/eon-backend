@@ -277,6 +277,11 @@ export class CreatePartyProfileDto {
   @IsOptional()
   igstOnly?: boolean;
 
+  @ApiPropertyOptional({ description: "GST Exempt flag", default: false })
+  @IsBoolean()
+  @IsOptional()
+  gstExempt?: boolean;
+
   @ApiPropertyOptional({ description: "GST Number" })
   @IsString()
   @IsOptional()
@@ -388,6 +393,118 @@ export class CreatePartyProfileDto {
   @IsNumber()
   @IsOptional()
   divisionFactor?: number;
+
+  @ApiPropertyOptional({ description: "Employee date of joining" })
+  @IsString()
+  @IsOptional()
+  dateOfJoining?: string;
+
+  @ApiPropertyOptional({ description: "Employee date of exit" })
+  @IsString()
+  @IsOptional()
+  dateOfExit?: string;
+
+  @ApiPropertyOptional({ description: "Basic salary", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  basicSalary?: number;
+
+  @ApiPropertyOptional({
+    description: "Net salary (computed: basic + allowance total - deduction total)",
+    example: 0,
+    default: 0,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  netSalary?: number;
+
+  @ApiPropertyOptional({ description: "Dareness allowance", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  dareness?: number;
+
+  @ApiPropertyOptional({ description: "House rent allowance", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  houseRent?: number;
+
+  @ApiPropertyOptional({ description: "Conveyance allowance", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  conveyance?: number;
+
+  @ApiPropertyOptional({ description: "Special allowance", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  specialAllowance?: number;
+
+  @ApiPropertyOptional({ description: "Other allowance", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  otherAllowance?: number;
+
+  @ApiPropertyOptional({
+    description: "Allowance total (computed)",
+    example: 0,
+    default: 0,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  allowanceTotal?: number;
+
+  @ApiPropertyOptional({ description: "P.F. deduction", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  pf?: number;
+
+  @ApiPropertyOptional({ description: "P.P.F. deduction", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  ppf?: number;
+
+  @ApiPropertyOptional({ description: "P. Tax deduction", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  pTax?: number;
+
+  @ApiPropertyOptional({ description: "E.S.I.C deduction", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  esic?: number;
+
+  @ApiPropertyOptional({ description: "Income tax deduction", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  incomeTax?: number;
+
+  @ApiPropertyOptional({ description: "Other deduction", example: 0, default: 0 })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  otherDeduction?: number;
+
+  @ApiPropertyOptional({
+    description: "Deduction total (computed)",
+    example: 0,
+    default: 0,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  deductionTotal?: number;
 
   @ApiPropertyOptional({
     description: "Commission Rules",
