@@ -179,6 +179,9 @@ export class PartyProfileResponseDto {
   @ApiProperty({ description: "IGST Only flag" })
   igstOnly: boolean;
 
+  @ApiProperty({ description: "GST No Exempt flag" })
+  gstNoExempt: boolean;
+
   @ApiPropertyOptional({ description: "GST Number" })
   gstNo?: string;
 
@@ -405,6 +408,7 @@ export class PartyProfileResponseDto {
       : [];
     dto.applyTax = entity.applyTax;
     dto.igstOnly = entity.igstOnly;
+    dto.gstNoExempt = entity.gstNoExempt;
     dto.gstNo = entity.gstNo;
     dto.gstStateId = entity.gstStateId;
     dto.gstStateName = entity.gstState?.name;
