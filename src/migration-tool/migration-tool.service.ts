@@ -870,6 +870,7 @@ const PARTY_PROFILE_MENU_TYPES: Array<{ routeType: string; label: string }> = [
   { routeType: "marketing-executive", label: "Marketing Executive" },
   { routeType: "card-issuer-profile", label: "Card Issuer" },
   { routeType: "misc-supplier-profile", label: "Misc Supplier" },
+  { routeType: "employee-profile", label: "Employee" },
 ];
 
 const buildPartyProfileMenuSeeds = (): MenuSeedDefinition[] =>

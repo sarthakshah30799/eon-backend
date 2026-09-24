@@ -9,10 +9,6 @@ import {
 } from "class-validator";
 import { ReportSortBy } from "./report-sort.dto";
 
-export enum SpecialReportTemplateEnum {
-  ACCOUNT_POSTING = "ACCOUNT_POSTING",
-}
-
 export enum SpecialReportFormat {
   CSV = "csv",
   XLSX = "xlsx",
@@ -39,13 +35,11 @@ export class SpecialReportQueryDto {
   branchIds!: string[];
 
   @ApiPropertyOptional({
-    description: "Special report template",
-    enum: SpecialReportTemplateEnum,
-    default: SpecialReportTemplateEnum.ACCOUNT_POSTING,
+    description: "Special report type (type from special_reports)",
   })
-  @IsEnum(SpecialReportTemplateEnum)
+  @IsString()
   @IsOptional()
-  template?: SpecialReportTemplateEnum;
+  template?: string;
 
   @ApiPropertyOptional({
     description: "Filter by transaction numbers",

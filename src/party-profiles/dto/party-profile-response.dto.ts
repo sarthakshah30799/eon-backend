@@ -179,6 +179,9 @@ export class PartyProfileResponseDto {
   @ApiProperty({ description: "IGST Only flag" })
   igstOnly: boolean;
 
+  @ApiProperty({ description: "GST Exempt flag" })
+  gstExempt: boolean;
+
   @ApiPropertyOptional({ description: "GST Number" })
   gstNo?: string;
 
@@ -248,6 +251,57 @@ export class PartyProfileResponseDto {
     description: "Whether masked CARD numbers are accepted for this issuer",
   })
   allowCardNumberMasking?: boolean;
+
+  @ApiPropertyOptional({ description: "Employee date of joining" })
+  dateOfJoining?: Date | null;
+
+  @ApiPropertyOptional({ description: "Employee date of exit" })
+  dateOfExit?: Date | null;
+
+  @ApiPropertyOptional({ description: "Basic salary" })
+  basicSalary?: number;
+
+  @ApiPropertyOptional({ description: "Net salary" })
+  netSalary?: number;
+
+  @ApiPropertyOptional({ description: "Dareness allowance" })
+  dareness?: number;
+
+  @ApiPropertyOptional({ description: "House rent allowance" })
+  houseRent?: number;
+
+  @ApiPropertyOptional({ description: "Conveyance allowance" })
+  conveyance?: number;
+
+  @ApiPropertyOptional({ description: "Special allowance" })
+  specialAllowance?: number;
+
+  @ApiPropertyOptional({ description: "Other allowance" })
+  otherAllowance?: number;
+
+  @ApiPropertyOptional({ description: "Allowance total" })
+  allowanceTotal?: number;
+
+  @ApiPropertyOptional({ description: "P.F. deduction" })
+  pf?: number;
+
+  @ApiPropertyOptional({ description: "P.P.F. deduction" })
+  ppf?: number;
+
+  @ApiPropertyOptional({ description: "P. Tax deduction" })
+  pTax?: number;
+
+  @ApiPropertyOptional({ description: "E.S.I.C deduction" })
+  esic?: number;
+
+  @ApiPropertyOptional({ description: "Income tax deduction" })
+  incomeTax?: number;
+
+  @ApiPropertyOptional({ description: "Other deduction" })
+  otherDeduction?: number;
+
+  @ApiPropertyOptional({ description: "Deduction total" })
+  deductionTotal?: number;
 
   @ApiProperty({ description: "Party profile type", enum: ClientType })
   type: ClientType;
@@ -354,6 +408,7 @@ export class PartyProfileResponseDto {
       : [];
     dto.applyTax = entity.applyTax;
     dto.igstOnly = entity.igstOnly;
+    dto.gstExempt = entity.gstExempt;
     dto.gstNo = entity.gstNo;
     dto.gstStateId = entity.gstStateId;
     dto.gstStateName = entity.gstState?.name;
@@ -385,6 +440,23 @@ export class PartyProfileResponseDto {
     dto.ffmcRegDate = entity.ffmcRegDate;
     dto.cardNumberLength = entity.cardNumberLength ?? null;
     dto.allowCardNumberMasking = Boolean(entity.allowCardNumberMasking);
+    dto.dateOfJoining = entity.dateOfJoining ?? null;
+    dto.dateOfExit = entity.dateOfExit ?? null;
+    dto.basicSalary = Number(entity.basicSalary ?? 0);
+    dto.netSalary = Number(entity.netSalary ?? 0);
+    dto.dareness = Number(entity.dareness ?? 0);
+    dto.houseRent = Number(entity.houseRent ?? 0);
+    dto.conveyance = Number(entity.conveyance ?? 0);
+    dto.specialAllowance = Number(entity.specialAllowance ?? 0);
+    dto.otherAllowance = Number(entity.otherAllowance ?? 0);
+    dto.allowanceTotal = Number(entity.allowanceTotal ?? 0);
+    dto.pf = Number(entity.pf ?? 0);
+    dto.ppf = Number(entity.ppf ?? 0);
+    dto.pTax = Number(entity.pTax ?? 0);
+    dto.esic = Number(entity.esic ?? 0);
+    dto.incomeTax = Number(entity.incomeTax ?? 0);
+    dto.otherDeduction = Number(entity.otherDeduction ?? 0);
+    dto.deductionTotal = Number(entity.deductionTotal ?? 0);
     dto.divisionFactor =
       entity.divisionFactor !== null && entity.divisionFactor !== undefined
         ? Number(entity.divisionFactor)

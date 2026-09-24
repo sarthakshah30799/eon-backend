@@ -1,11 +1,14 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { Counter } from "./counter.entity";
 import { CreateCounterDto } from "./dto/create-counter.dto";
 import { CounterListQueryDto } from "./dto/counter-list-query.dto";
 import { UpdateCounterDto } from "./dto/update-counter.dto";
 import { CounterResponseDto } from "./dto/counter-response.dto";
+import { CounterMenuRestriction } from "../counter-menu-restrictions/counter-menu-restriction.entity";
+import { Permission } from "../permissions/permission.entity";
+import { Menu } from "../menu/menu.entity";
 import {
   applyPagination,
   buildPaginatedResponse,
@@ -15,11 +18,27 @@ import {
 
 import { uppercaseFields } from "../utils/uppercase.util";
 
+const EMPTY_PERMISSION_ROW: Record<string, boolean> = {
+  add: false,
+  modify: false,
+  delete: false,
+  view: false,
+  export: false,
+  authorized: false,
+  rejected: false,
+};
+
 @Injectable()
 export class CounterService {
   constructor(
     @InjectRepository(Counter)
     private readonly counterRepository: Repository<Counter>,
+    @InjectRepository(CounterMenuRestriction)
+    private readonly counterMenuRestrictionRepository: Repository<CounterMenuRestriction>,
+    @InjectRepository(Permission)
+    private readonly permissionRepository: Repository<Permission>,
+    @InjectRepository(Menu)
+    private readonly menuRepository: Repository<Menu>,
   ) {}
 
   async findAll(
@@ -105,5 +124,84 @@ export class CounterService {
     }
     await this.counterRepository.remove(counter);
     return { message: `Counter with id ${id} deleted successfully` };
+  }
+
+  async getCounterPermissions(
+    counterId: string,
+  ): Promise<Record<string, Record<string, boolean>>> {
+    await this.findById(counterId);
+
+    const relations = await this.counterMenuRestrictionRepository.find({
+      where: { counter: { id: counterId } as CounterMenuRestriction["counter"] },
+      relations: ["menu", "permission"],
+      relationLoadStrategy: "query",
+    });
+
+    const grid: Record<string, Record<string, boolean>> = {};
+    for (const item of relations) {
+      if (!item.menu || !item.permission) continue;
+      const menuId = item.menu.id;
+      const permCode = item.permission.code;
+      if (!grid[menuId]) {
+        grid[menuId] = { ...EMPTY_PERMISSION_ROW };
+      }
+      grid[menuId][permCode] = true;
+    }
+
+    return grid;
+  }
+
+  async updateCounterPermissions(
+    counterId: string,
+    grid: Record<string, Record<string, boolean>>,
+    userId: string,
+  ): Promise<{ message: string }> {
+    await this.findById(counterId);
+
+    await this.counterMenuRestrictionRepository.delete({
+      counter: { id: counterId } as CounterMenuRestriction["counter"],
+    });
+
+    const allPermissions = await this.permissionRepository.find();
+    const permissionMap = new Map(allPermissions.map((p) => [p.code, p]));
+
+    const menuIds = Object.keys(grid);
+    const existingMenus =
+      menuIds.length > 0
+        ? await this.menuRepository.find({
+            where: { id: In(menuIds) },
+            select: { id: true },
+          })
+        : [];
+    const validMenuIds = new Set(existingMenus.map((menu) => menu.id));
+
+    const entitiesToSave: CounterMenuRestriction[] = [];
+
+    for (const [menuId, perms] of Object.entries(grid)) {
+      if (!validMenuIds.has(menuId)) {
+        continue;
+      }
+
+      for (const [permCode, isEnabled] of Object.entries(perms)) {
+        if (!isEnabled) continue;
+        const permission = permissionMap.get(permCode);
+        if (!permission) continue;
+
+        const row = this.counterMenuRestrictionRepository.create({
+          counter: { id: counterId } as Counter,
+          menu: { id: menuId } as Menu,
+          permission: { id: permission.id } as Permission,
+          createdBy: userId,
+          updatedBy: userId,
+        });
+        entitiesToSave.push(row);
+      }
+    }
+
+    if (entitiesToSave.length > 0) {
+      await this.counterMenuRestrictionRepository.save(entitiesToSave);
+    }
+
+    return { message: "Permissions updated successfully" };
   }
 }

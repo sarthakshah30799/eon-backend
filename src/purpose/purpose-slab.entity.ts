@@ -52,7 +52,6 @@ export class PurposeSlab extends BaseEntity {
   @Column({
     type: "enum",
     enum: PurposeRateType,
-    enumName: "purpose_slabs_rate_type_enum",
     name: "rate_type",
     default: PurposeRateType.PERCENT,
   })
