@@ -228,7 +228,7 @@ export class PartyProfile extends BaseEntity {
   igstOnly: boolean;
 
   @Column({ type: "boolean", default: false })
-  gstNoExempt: boolean;
+  gstExempt: boolean;
 
   @Column({ type: "citext", nullable: true })
   gstNo: string;

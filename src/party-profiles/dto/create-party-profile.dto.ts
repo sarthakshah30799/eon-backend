@@ -277,10 +277,10 @@ export class CreatePartyProfileDto {
   @IsOptional()
   igstOnly?: boolean;
 
-  @ApiPropertyOptional({ description: "GST No Exempt flag", default: false })
+  @ApiPropertyOptional({ description: "GST Exempt flag", default: false })
   @IsBoolean()
   @IsOptional()
-  gstNoExempt?: boolean;
+  gstExempt?: boolean;
 
   @ApiPropertyOptional({ description: "GST Number" })
   @IsString()
