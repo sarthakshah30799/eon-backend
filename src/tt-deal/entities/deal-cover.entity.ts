@@ -10,7 +10,8 @@ import { DealCoverStatus } from "../deal-cover.enums";
 @Index("IDX_deal_covers_currency", ["currencyId"])
 @Index("IDX_deal_covers_product", ["productId"])
 @Index("IDX_deal_covers_issuer", ["issuerPartyProfileId"])
-@Index("IDX_deal_covers_deal_no", ["dealNo"], { unique: true })
+@Index("IDX_deal_covers_transaction_number", ["transactionNumber"])
+@Index("IDX_deal_covers_deal_no", ["dealNo"])
 @Index("UQ_deal_covers_consumed_item", ["consumedTransactionItemId"], {
   unique: true,
 })
@@ -129,6 +130,9 @@ export class DealCover extends BaseEntity {
     default: DealCoverStatus.PENDING,
   })
   status: DealCoverStatus;
+
+  @Column({ type: "citext", name: "transaction_number" })
+  transactionNumber: string;
 
   @Column({ type: "citext", name: "deal_no", nullable: true })
   dealNo: string | null;

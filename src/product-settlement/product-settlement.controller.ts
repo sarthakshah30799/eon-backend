@@ -13,25 +13,25 @@ import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AuthenticatedSession } from "../auth/types/session-context";
 import {
-  CancelCardStockSettlementDocumentDto,
-  CardStockSettlementDocumentQueryDto,
-  CardStockUnsettledQueryDto,
-  CreateCardStockSettlementDocumentDto,
-  RejectCardStockSettlementDocumentDto,
-} from "./dto/card-stock-settlement.dto";
-import { CardStockSettlementService } from "./card-stock-settlement.service";
+  CancelProductSettlementDocumentDto,
+  ProductSettlementDocumentQueryDto,
+  ProductUnsettledQueryDto,
+  CreateProductSettlementDocumentDto,
+  RejectProductSettlementDocumentDto,
+} from "./dto/product-settlement.dto";
+import { ProductSettlementService } from "./product-settlement.service";
 
-@ApiTags("card-stock-settlements")
+@ApiTags("product-settlements")
 @ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
-@Controller("card-stock/settlements")
-export class CardStockSettlementController {
-  constructor(private readonly settlementService: CardStockSettlementService) {}
+@Controller("product-settlements")
+export class ProductSettlementController {
+  constructor(private readonly settlementService: ProductSettlementService) {}
 
   @Get()
   @ApiOperation({ summary: "List CARD settlement documents" })
   list(
-    @Query() query: CardStockSettlementDocumentQueryDto,
+    @Query() query: ProductSettlementDocumentQueryDto,
     @Session() session: AuthenticatedSession,
   ) {
     return this.settlementService.list(query, session);
@@ -40,7 +40,7 @@ export class CardStockSettlementController {
   @Get("unsettled")
   @ApiOperation({ summary: "List unsettled CARD items for settlement create" })
   listUnsettled(
-    @Query() query: CardStockUnsettledQueryDto,
+    @Query() query: ProductUnsettledQueryDto,
     @Session() session: AuthenticatedSession,
   ) {
     return this.settlementService.listUnsettled(query, session);
@@ -49,7 +49,7 @@ export class CardStockSettlementController {
   @Post()
   @ApiOperation({ summary: "Create a CARD settlement document" })
   create(
-    @Body() dto: CreateCardStockSettlementDocumentDto,
+    @Body() dto: CreateProductSettlementDocumentDto,
     @Session() session: AuthenticatedSession,
   ) {
     return this.settlementService.create(dto, session);
@@ -71,7 +71,7 @@ export class CardStockSettlementController {
   @ApiOperation({ summary: "Reject a pending branch CARD settlement" })
   reject(
     @Param("id") id: string,
-    @Body() dto: RejectCardStockSettlementDocumentDto,
+    @Body() dto: RejectProductSettlementDocumentDto,
     @Session() session: AuthenticatedSession,
   ) {
     return this.settlementService.reject(id, dto, session);
@@ -81,7 +81,7 @@ export class CardStockSettlementController {
   @ApiOperation({ summary: "Cancel an unposted branch CARD settlement" })
   cancel(
     @Param("id") id: string,
-    @Body() dto: CancelCardStockSettlementDocumentDto,
+    @Body() dto: CancelProductSettlementDocumentDto,
     @Session() session: AuthenticatedSession,
   ) {
     return this.settlementService.cancel(id, dto, session);

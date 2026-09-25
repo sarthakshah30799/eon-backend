@@ -10,21 +10,21 @@ import { BaseEntity } from "../../base/base.entity";
 import { Transaction } from "../../transactions/entities/transaction.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import {
-  CardStockSettlementDocumentKind,
-  CardStockSettlementDocumentStatus,
-} from "../card-stock.enums";
-import { CardStockSettlement } from "./card-stock-settlement.entity";
+  ProductSettlementDocumentKind,
+  ProductSettlementDocumentStatus,
+} from "../product-settlement.enums";
+import { ProductSettlement } from "./product-settlement.entity";
 
-@Index("IDX_card_stock_settlement_documents_number", ["transactionNumber"], {
+@Index("IDX_product_settlement_documents_number", ["transactionNumber"], {
   unique: true,
 })
-@Index("IDX_card_stock_settlement_documents_status", ["status"])
-@Index("IDX_card_stock_settlement_documents_kind", ["kind"])
-@Index("IDX_card_stock_settlement_documents_date", ["transactionDate"])
-@Index("IDX_card_stock_settlement_documents_issuer", ["issuerPartyProfileId"])
-@Index("IDX_card_stock_settlement_documents_branch", ["branchId"])
-@Entity("card_stock_settlement_documents")
-export class CardStockSettlementDocument extends BaseEntity {
+@Index("IDX_product_settlement_documents_status", ["status"])
+@Index("IDX_product_settlement_documents_kind", ["kind"])
+@Index("IDX_product_settlement_documents_date", ["transactionDate"])
+@Index("IDX_product_settlement_documents_issuer", ["issuerPartyProfileId"])
+@Index("IDX_product_settlement_documents_branch", ["branchId"])
+@Entity("product_settlement_documents")
+export class ProductSettlementDocument extends BaseEntity {
   @Column({ type: "citext", name: "transaction_number" })
   transactionNumber: string;
 
@@ -32,10 +32,10 @@ export class CardStockSettlementDocument extends BaseEntity {
   transactionDate: Date;
 
   @Column({ type: "citext" })
-  kind: CardStockSettlementDocumentKind;
+  kind: ProductSettlementDocumentKind;
 
   @Column({ type: "citext" })
-  status: CardStockSettlementDocumentStatus;
+  status: ProductSettlementDocumentStatus;
 
   @Column({ type: "uuid", name: "issuer_party_profile_id" })
   issuerPartyProfileId: string;
@@ -97,13 +97,13 @@ export class CardStockSettlementDocument extends BaseEntity {
   @ManyToOne(() => Transaction, { onDelete: "RESTRICT", nullable: true })
   @JoinColumn({
     name: "posting_transaction_id",
-    foreignKeyConstraintName: "FK_card_stock_settlement_documents_posting",
+    foreignKeyConstraintName: "FK_product_settlement_documents_posting",
   })
   postingTransaction: Transaction | null;
 
-  @OneToMany(() => CardStockSettlement, (item) => item.branchDocument)
-  branchItems: CardStockSettlement[];
+  @OneToMany(() => ProductSettlement, (item) => item.branchDocument)
+  branchItems: ProductSettlement[];
 
-  @OneToMany(() => CardStockSettlement, (item) => item.issuerDocument)
-  issuerItems: CardStockSettlement[];
+  @OneToMany(() => ProductSettlement, (item) => item.issuerDocument)
+  issuerItems: ProductSettlement[];
 }

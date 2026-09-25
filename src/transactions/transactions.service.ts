@@ -100,8 +100,9 @@ import {
   isMultiCurrencyCardProduct,
 } from "../card-stock/card-product.util";
 import { isTtProductCode } from "../tt-deal/tt-product.util";
+import { resolveSellControlAccountSettingCode } from "./product-account-settings.util";
 import { DealCoverService } from "../tt-deal/deal-cover.service";
-import { CardStockSettlementService } from "../card-stock/card-stock-settlement.service";
+import { ProductSettlementService } from "../product-settlement/product-settlement.service";
 import { DealCover } from "../tt-deal/entities/deal-cover.entity";
 import { TtRemittanceDetail } from "../tt-deal/entities/tt-remittance-detail.entity";
 import { VoucherService } from "../vouchers/voucher.service";
@@ -439,7 +440,7 @@ export class TransactionsService {
     private readonly countryService: CountryService,
     private readonly cardStockSaleLifecycleService: CardStockSaleLifecycleService,
     private readonly dealCoverService: DealCoverService,
-    private readonly cardStockSettlementService: CardStockSettlementService,
+    private readonly productSettlementService: ProductSettlementService,
     private readonly mailService: MailService,
     private readonly storageService: StorageService,
     private readonly purchaseRuleService: PurchaseRuleService,
@@ -599,7 +600,7 @@ export class TransactionsService {
         asOfDate,
       );
     }
-    await this.cardStockSettlementService.createForApprovedTtItems(
+    await this.productSettlementService.createForApprovedTtItems(
       manager,
       transaction,
       ttItems,
@@ -2640,32 +2641,33 @@ export class TransactionsService {
             );
           }
         }
-        const cardSellAccountId = isCardItem
+        const cardSellAccountId = isCardItem || isTtItem
           ? await this.additionalSettingService.getSettingTextValue(
               "TRANSACTION_ACCOUNTING",
-              "CARD_SELL_CONTROL_ACCOUNT",
+              resolveSellControlAccountSettingCode(productEntity.productCode),
             )
           : null;
-        const itemAccount = isCardItem
-          ? cardSellAccountId
-            ? await this.accountProfileRepository.findOne({
-                where: { id: cardSellAccountId, active: true },
-              })
-            : null
-          : isFakeCurrency
-            ? productEntity.fakeAccount
-            : resolveProductTransactionAccount(
-                productEntity,
-                transactionPayload.transactionType,
-                transactionPayload.tradeMode,
-                transactionPayload.transactionType === TransactionType.SALE
-                  ? "sale"
-                  : "purchase",
-              );
+        const itemAccount =
+          isCardItem || isTtItem
+            ? cardSellAccountId
+              ? await this.accountProfileRepository.findOne({
+                  where: { id: cardSellAccountId, active: true },
+                })
+              : null
+            : isFakeCurrency
+              ? productEntity.fakeAccount
+              : resolveProductTransactionAccount(
+                  productEntity,
+                  transactionPayload.transactionType,
+                  transactionPayload.tradeMode,
+                  transactionPayload.transactionType === TransactionType.SALE
+                    ? "sale"
+                    : "purchase",
+                );
 
         if (!itemAccount) {
           throw new NotFoundException(
-            `${isCardItem ? "CARD sell control account" : isFakeCurrency ? "Fake account" : "Product account"} is not configured for product ${row.productId}`,
+            `${isCardItem || isTtItem ? "Product sell control account" : isFakeCurrency ? "Fake account" : "Product account"} is not configured for product ${row.productId}`,
           );
         }
 

@@ -17,21 +17,21 @@ import {
 import { PaginationQueryDto } from "../../common/pagination";
 import { StringArrayQuery } from "../../common/transformers/parse-boolean-query";
 import {
-  CardStockSettlementDocumentKind,
-  CardStockSettlementDocumentStatus,
-} from "../card-stock.enums";
+  ProductSettlementDocumentKind,
+  ProductSettlementDocumentStatus,
+} from "../product-settlement.enums";
 
-export class CardStockSettlementDocumentQueryDto extends PaginationQueryDto {
+export class ProductSettlementDocumentQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    enum: CardStockSettlementDocumentStatus,
+    enum: ProductSettlementDocumentStatus,
     isArray: true,
     description: "Filter by one or more settlement statuses",
   })
   @StringArrayQuery()
   @IsOptional()
   @IsArray()
-  @IsIn(Object.values(CardStockSettlementDocumentStatus), { each: true })
-  status?: CardStockSettlementDocumentStatus[];
+  @IsIn(Object.values(ProductSettlementDocumentStatus), { each: true })
+  status?: ProductSettlementDocumentStatus[];
   @ApiPropertyOptional({
     description:
       "Search transaction number, issuer, currency, branch, or reference",
@@ -41,8 +41,8 @@ export class CardStockSettlementDocumentQueryDto extends PaginationQueryDto {
   search?: string;
   @ApiPropertyOptional()
   @IsOptional()
-  @IsEnum(CardStockSettlementDocumentKind)
-  kind?: CardStockSettlementDocumentKind;
+  @IsEnum(ProductSettlementDocumentKind)
+  kind?: ProductSettlementDocumentKind;
   @ApiPropertyOptional() @IsOptional() @IsUUID() issuerPartyProfileId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() currencyId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
@@ -50,25 +50,25 @@ export class CardStockSettlementDocumentQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
 }
 
-export class CardStockUnsettledQueryDto extends PaginationQueryDto {
+export class ProductUnsettledQueryDto extends PaginationQueryDto {
   @ApiProperty()
-  @IsEnum(CardStockSettlementDocumentKind)
-  kind: CardStockSettlementDocumentKind;
+  @IsEnum(ProductSettlementDocumentKind)
+  kind: ProductSettlementDocumentKind;
   @ApiProperty() @IsUUID() issuerPartyProfileId: string;
   @ApiProperty() @IsUUID() currencyId: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() hoBranchId?: string;
 }
 
-export class CreateCardStockSettlementItemDto {
+export class CreateProductSettlementItemDto {
   @ApiProperty() @IsUUID() id: string;
   @ApiProperty({ example: "84.0000000" }) @IsNumberString() rate: string;
 }
 
-export class CreateCardStockSettlementDocumentDto {
-  @ApiProperty({ enum: CardStockSettlementDocumentKind })
-  @IsEnum(CardStockSettlementDocumentKind)
-  kind: CardStockSettlementDocumentKind;
+export class CreateProductSettlementDocumentDto {
+  @ApiProperty({ enum: ProductSettlementDocumentKind })
+  @IsEnum(ProductSettlementDocumentKind)
+  kind: ProductSettlementDocumentKind;
   @ApiProperty() @IsUUID() issuerPartyProfileId: string;
   @ApiProperty() @IsUUID() currencyId: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
@@ -86,18 +86,18 @@ export class CreateCardStockSettlementDocumentDto {
   @IsString()
   @MaxLength(500)
   remarks?: string;
-  @ApiProperty({ type: [CreateCardStockSettlementItemDto] })
+  @ApiProperty({ type: [CreateProductSettlementItemDto] })
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => CreateCardStockSettlementItemDto)
-  items: CreateCardStockSettlementItemDto[];
+  @Type(() => CreateProductSettlementItemDto)
+  items: CreateProductSettlementItemDto[];
 }
 
-export class RejectCardStockSettlementDocumentDto {
+export class RejectProductSettlementDocumentDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(500) reason: string;
 }
 
-export class CancelCardStockSettlementDocumentDto {
+export class CancelProductSettlementDocumentDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(500) reason: string;
 }

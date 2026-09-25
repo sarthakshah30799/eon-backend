@@ -2,42 +2,46 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import {
-  CardStockSettlementMode,
-  CardStockSettlementSaleKind,
-  CardStockSettlementStatus,
-  CardStockSettlementType,
-} from "../card-stock.enums";
-import { CardStockCard } from "./card-stock-card.entity";
-import { CardStockSettlementDocument } from "./card-stock-settlement-document.entity";
-import { CardStockTransactionEntry } from "./card-stock-transaction-entry.entity";
+  ProductSettlementMode,
+  ProductSettlementSaleKind,
+  ProductSettlementStatus,
+  ProductSettlementType,
+} from "../product-settlement.enums";
+import { CardStockCard } from "../../card-stock/entities/card-stock-card.entity";
+import { ProductSettlementDocument } from "./product-settlement-document.entity";
+import { CardStockTransactionEntry } from "../../card-stock/entities/card-stock-transaction-entry.entity";
 import { Transaction } from "../../transactions/entities/transaction.entity";
 import { TransactionItem } from "../../transactions/entities/transaction-item.entity";
 import { DealCover } from "../../tt-deal/entities/deal-cover.entity";
 
-@Index("IDX_card_stock_settlements_status", ["status"])
-@Index("IDX_card_stock_settlements_branch", ["branchId"])
-@Index("IDX_card_stock_settlements_issuer", ["issuerPartyProfileId"])
-@Index("IDX_card_stock_settlements_sale_date", ["saleDate"])
-@Index("IDX_card_stock_settlements_type", ["type"])
-@Index("IDX_card_stock_settlements_deal_cover", ["dealCoverId"])
-@Index("UQ_card_stock_settlements_card_item", ["cardId", "transactionItemId"], {
+@Index("IDX_product_settlements_status", ["status"])
+@Index("IDX_product_settlements_branch", ["branchId"])
+@Index("IDX_product_settlements_issuer", ["issuerPartyProfileId"])
+@Index("IDX_product_settlements_sale_date", ["saleDate"])
+@Index("IDX_product_settlements_type", ["type"])
+@Index("IDX_product_settlements_product_code", ["productCode"])
+@Index("IDX_product_settlements_deal_cover", ["dealCoverId"])
+@Index("UQ_product_settlements_card_item", ["cardId", "transactionItemId"], {
   unique: true,
   where: '"card_id" IS NOT NULL AND "deleted_at" IS NULL',
 })
 @Index(
-  "UQ_card_stock_settlements_deal_item",
+  "UQ_product_settlements_deal_item",
   ["dealCoverId", "transactionItemId"],
   {
     unique: true,
     where: '"deal_cover_id" IS NOT NULL AND "deleted_at" IS NULL',
   },
 )
-@Index("IDX_card_stock_settlements_branch_document", ["branchDocumentId"])
-@Index("IDX_card_stock_settlements_issuer_document", ["issuerDocumentId"])
-@Entity("card_stock_settlements")
-export class CardStockSettlement extends BaseEntity {
-  @Column({ type: "citext", name: "type", default: CardStockSettlementType.CARD })
-  type: CardStockSettlementType;
+@Index("IDX_product_settlements_branch_document", ["branchDocumentId"])
+@Index("IDX_product_settlements_issuer_document", ["issuerDocumentId"])
+@Entity("product_settlements")
+export class ProductSettlement extends BaseEntity {
+  @Column({ type: "citext", name: "type", default: ProductSettlementType.CARD })
+  type: ProductSettlementType;
+
+  @Column({ type: "citext", name: "product_code" })
+  productCode: string;
 
   @Column({ type: "uuid", name: "card_id", nullable: true })
   cardId: string | null;
@@ -45,7 +49,7 @@ export class CardStockSettlement extends BaseEntity {
   @ManyToOne(() => CardStockCard, { onDelete: "RESTRICT", nullable: true })
   @JoinColumn({
     name: "card_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_card",
+    foreignKeyConstraintName: "FK_product_settlements_card",
   })
   card: CardStockCard | null;
 
@@ -55,7 +59,7 @@ export class CardStockSettlement extends BaseEntity {
   @ManyToOne(() => DealCover, { onDelete: "RESTRICT", nullable: true })
   @JoinColumn({
     name: "deal_cover_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_deal_cover",
+    foreignKeyConstraintName: "FK_product_settlements_deal_cover",
   })
   dealCover: DealCover | null;
 
@@ -65,7 +69,7 @@ export class CardStockSettlement extends BaseEntity {
   @ManyToOne(() => Transaction, { onDelete: "RESTRICT" })
   @JoinColumn({
     name: "transaction_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_transaction",
+    foreignKeyConstraintName: "FK_product_settlements_transaction",
   })
   transaction: Transaction;
 
@@ -75,7 +79,7 @@ export class CardStockSettlement extends BaseEntity {
   @ManyToOne(() => TransactionItem, { onDelete: "RESTRICT" })
   @JoinColumn({
     name: "transaction_item_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_transaction_item",
+    foreignKeyConstraintName: "FK_product_settlements_transaction_item",
   })
   transactionItem: TransactionItem;
 
@@ -169,46 +173,46 @@ export class CardStockSettlement extends BaseEntity {
   branchDocumentId: string | null;
 
   @ManyToOne(
-    () => CardStockSettlementDocument,
+    () => ProductSettlementDocument,
     (document) => document.branchItems,
     { onDelete: "RESTRICT", nullable: true },
   )
   @JoinColumn({
     name: "branch_document_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_branch_document",
+    foreignKeyConstraintName: "FK_product_settlements_branch_document",
   })
-  branchDocument: CardStockSettlementDocument | null;
+  branchDocument: ProductSettlementDocument | null;
 
   @Column({ type: "uuid", name: "issuer_document_id", nullable: true })
   issuerDocumentId: string | null;
 
   @ManyToOne(
-    () => CardStockSettlementDocument,
+    () => ProductSettlementDocument,
     (document) => document.issuerItems,
     { onDelete: "RESTRICT", nullable: true },
   )
   @JoinColumn({
     name: "issuer_document_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_issuer_document",
+    foreignKeyConstraintName: "FK_product_settlements_issuer_document",
   })
-  issuerDocument: CardStockSettlementDocument | null;
+  issuerDocument: ProductSettlementDocument | null;
 
   @Column({ type: "timestamptz", name: "sale_date" })
   saleDate: Date;
 
   @Column({
     type: "enum",
-    enum: CardStockSettlementMode,
+    enum: ProductSettlementMode,
     name: "settlement_mode",
   })
-  settlementMode: CardStockSettlementMode;
+  settlementMode: ProductSettlementMode;
 
   @Column({
     type: "citext",
     name: "sale_kind",
-    default: CardStockSettlementSaleKind.FRESH,
+    default: ProductSettlementSaleKind.FRESH,
   })
-  saleKind: CardStockSettlementSaleKind;
+  saleKind: ProductSettlementSaleKind;
 
   @Column({
     type: "timestamptz",
@@ -260,7 +264,7 @@ export class CardStockSettlement extends BaseEntity {
   })
   @JoinColumn({
     name: "branch_settlement_entry_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_branch_entry",
+    foreignKeyConstraintName: "FK_product_settlements_branch_entry",
   })
   branchSettlementEntry: CardStockTransactionEntry | null;
 
@@ -286,12 +290,12 @@ export class CardStockSettlement extends BaseEntity {
   })
   @JoinColumn({
     name: "issuer_settlement_entry_id",
-    foreignKeyConstraintName: "FK_card_stock_settlements_issuer_entry",
+    foreignKeyConstraintName: "FK_product_settlements_issuer_entry",
   })
   issuerSettlementEntry: CardStockTransactionEntry | null;
 
-  @Column({ type: "enum", enum: CardStockSettlementStatus, name: "status" })
-  status: CardStockSettlementStatus;
+  @Column({ type: "enum", enum: ProductSettlementStatus, name: "status" })
+  status: ProductSettlementStatus;
 
   @Column({ type: "timestamptz", name: "cancelled_at", nullable: true })
   cancelledAt: Date | null;

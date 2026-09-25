@@ -19,6 +19,7 @@ export const AppDataSource2 = new DataSource({
     __dirname + "/../transactions/**/*.entity{.ts,.js}",
     __dirname + "/../transfers/**/*.entity{.ts,.js}",
     __dirname + "/../card-stock/**/*.entity{.ts,.js}",
+    __dirname + "/../product-settlement/**/*.entity{.ts,.js}",
     __dirname + "/../tt-deal/**/*.entity{.ts,.js}",
     __dirname + "/../stock-revaluation/**/*.entity{.ts,.js}",
     __dirname + "/../vouchers/**/*.entity{.ts,.js}",

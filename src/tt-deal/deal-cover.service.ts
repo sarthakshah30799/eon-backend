@@ -26,6 +26,7 @@ import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
 import { Currency } from "../currencies/currency.entity";
 import { CurrencyRatesService } from "../currency-rates/currency-rates.service";
 import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
+import { MailService } from "../mail/mail.service";
 import { Passenger } from "../passengers/passenger.entity";
 import {
   ClientType,
@@ -35,6 +36,9 @@ import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { Product } from "../products/product.entity";
 import { PurposeSubpurpose } from "../purpose/purpose-subpurpose.entity";
 import { Purpose } from "../purpose/purpose.entity";
+import { TransactionTypeProfileEnum } from "../transactions/transactions.enums";
+import { User } from "../users/user.entity";
+import { UserRole } from "../user-roles/user-role.entity";
 import {
   ApproveDealCoverDto,
   CreateDealCoverDto,
@@ -77,9 +81,12 @@ export class DealCoverService {
     private readonly selectOptionRepository: Repository<SelectOption>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly additionalSettingService: AdditionalSettingService,
+    private readonly mailService: MailService,
   ) {}
 
   private isHo(session: AuthenticatedSession) {
@@ -582,9 +589,24 @@ export class DealCoverService {
 
   async create(dto: CreateDealCoverDto, session: AuthenticatedSession) {
     const fields = await this.buildValidatedFields(dto, session);
+    const branchCode = String(
+      (fields.branchSnapshot as { code?: string } | null)?.code ?? "",
+    ).trim();
+    if (!branchCode) {
+      throw new BadRequestException(
+        "Branch code is required to generate the deal cover transaction number",
+      );
+    }
+    const transactionNumber =
+      await this.additionalSettingService.reserveTransactionNumber(
+        TransactionTypeProfileEnum.DEAL_COVER,
+        branchCode,
+        fields.transactionDate,
+      );
     const saved = await this.coverRepository.save(
       this.coverRepository.create({
         ...fields,
+        transactionNumber,
         status: DealCoverStatus.PENDING,
         createdBy: session.userId!,
       }),
@@ -660,7 +682,8 @@ export class DealCoverService {
       qb.andWhere(
         new Brackets((searchQb) => {
           searchQb
-            .where("cover.dealNo ILIKE :like", { like })
+            .where("cover.transactionNumber ILIKE :like", { like })
+            .orWhere("cover.dealNo ILIKE :like", { like })
             .orWhere("cover.passengerName ILIKE :like", { like })
             .orWhere("cover.passengerPan ILIKE :like", { like })
             .orWhere("cover.passengerPassport ILIKE :like", { like })
@@ -925,12 +948,6 @@ export class DealCoverService {
       if (cover.status !== DealCoverStatus.PENDING) {
         throw new BadRequestException("Only PENDING deals can be approved");
       }
-      const duplicate = await repo.findOne({ where: { dealNo } });
-      if (duplicate && duplicate.id !== cover.id) {
-        throw new BadRequestException(
-          `Deal number "${dealNo}" is already in use`,
-        );
-      }
       cover.status = DealCoverStatus.APPROVED;
       cover.dealNo = dealNo;
       cover.bookingRate = bookingRate.toFixed(7);
@@ -942,6 +959,12 @@ export class DealCoverService {
       cover.updatedBy = session.userId;
       return repo.save(cover);
     });
+
+    await this.notifyBranchUsers(
+      saved.branchId,
+      `Deal cover ${saved.transactionNumber} approved`,
+      `Deal cover ${saved.transactionNumber} was approved. Deal number: ${saved.dealNo}.`,
+    );
 
     return DealCoverResponseDto.fromEntity(saved);
   }
@@ -980,6 +1003,44 @@ export class DealCoverService {
       return repo.save(cover);
     });
 
+    await this.notifyBranchUsers(
+      saved.branchId,
+      `Deal cover ${saved.transactionNumber} rejected`,
+      `Deal cover ${saved.transactionNumber} was rejected. Reason: ${reason}`,
+    );
+
     return DealCoverResponseDto.fromEntity(saved);
+  }
+
+  private async notifyBranchUsers(
+    branchId: string,
+    subject: string,
+    text: string,
+  ) {
+    try {
+      const userRoles = await this.userRoleRepository
+        .createQueryBuilder("userRole")
+        .leftJoinAndSelect("userRole.user", "user")
+        .leftJoin("userRole.branch", "branch")
+        .where("branch.id = :branchId", { branchId })
+        .getMany();
+      const recipients = Array.from(
+        new Map(
+          userRoles
+            .map((role) => role.user)
+            .filter((user): user is User => Boolean(user?.email))
+            .map((user) => [user.id, user]),
+        ).values(),
+      );
+      for (const recipient of recipients) {
+        await this.mailService.sendEmail({
+          to: recipient.email,
+          subject,
+          text,
+        });
+      }
+    } catch {
+      // Notification delivery must not roll back ack approve/reject.
+    }
   }
 }

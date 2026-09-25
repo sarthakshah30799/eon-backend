@@ -22,27 +22,28 @@ import {
   TransactionStatus,
   TransactionTypeProfileEnum,
 } from "../transactions/transactions.enums";
+import { CardStockReferenceType } from "../card-stock/card-stock.enums";
 import {
-  CardStockReferenceType,
-  CardStockSettlementDocumentKind,
-  CardStockSettlementDocumentStatus,
-  CardStockSettlementMode,
-  CardStockSettlementSaleKind,
-  CardStockSettlementStatus,
-  CardStockSettlementType,
-} from "./card-stock.enums";
-import { CardStockTransactionService } from "./card-stock-transaction.service";
+  ProductSettlementDocumentKind,
+  ProductSettlementDocumentStatus,
+  ProductSettlementMode,
+  ProductSettlementSaleKind,
+  ProductSettlementStatus,
+  ProductSettlementType,
+} from "./product-settlement.enums";
+import { CardStockTransactionService } from "../card-stock/card-stock-transaction.service";
 import {
-  CancelCardStockSettlementDocumentDto,
-  CardStockSettlementDocumentQueryDto,
-  CardStockUnsettledQueryDto,
-  CreateCardStockSettlementDocumentDto,
-  RejectCardStockSettlementDocumentDto,
-} from "./dto/card-stock-settlement.dto";
-import { CardStockCard } from "./entities/card-stock-card.entity";
-import { CardStockSettlement } from "./entities/card-stock-settlement.entity";
-import { CardStockSettlementDocument } from "./entities/card-stock-settlement-document.entity";
+  CancelProductSettlementDocumentDto,
+  ProductSettlementDocumentQueryDto,
+  ProductUnsettledQueryDto,
+  CreateProductSettlementDocumentDto,
+  RejectProductSettlementDocumentDto,
+} from "./dto/product-settlement.dto";
+import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
+import { ProductSettlement } from "./entities/product-settlement.entity";
+import { ProductSettlementDocument } from "./entities/product-settlement-document.entity";
 import { DealCover } from "../tt-deal/entities/deal-cover.entity";
+import { TransactionReferenceSnapshotValue } from "../transactions/types/transaction-snapshot.types";
 import {
   buildPaginatedResponse,
   normalizePagination,
@@ -51,14 +52,14 @@ import {
 const MASKED_CARD_SQL = `CASE WHEN decoded.clear_number IS NULL THEN NULL WHEN length(decoded.clear_number)<=8 THEN left(decoded.clear_number,4)||repeat('X',greatest(length(decoded.clear_number)-4,0)) ELSE left(decoded.clear_number,4)||repeat('X',length(decoded.clear_number)-8)||right(decoded.clear_number,4) END`;
 
 @Injectable()
-export class CardStockSettlementService {
-  private readonly logger = new Logger(CardStockSettlementService.name);
+export class ProductSettlementService {
+  private readonly logger = new Logger(ProductSettlementService.name);
   constructor(
     @InjectDataSource("database2") private readonly database2: DataSource,
-    @InjectRepository(CardStockSettlement, "database2")
-    private readonly settlementRepository: Repository<CardStockSettlement>,
-    @InjectRepository(CardStockSettlementDocument, "database2")
-    private readonly documentRepository: Repository<CardStockSettlementDocument>,
+    @InjectRepository(ProductSettlement, "database2")
+    private readonly settlementRepository: Repository<ProductSettlement>,
+    @InjectRepository(ProductSettlementDocument, "database2")
+    private readonly documentRepository: Repository<ProductSettlementDocument>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
     private readonly additionalSettingService: AdditionalSettingService,
@@ -167,12 +168,78 @@ export class CardStockSettlementService {
     return ho;
   }
 
-  private async reserveNumber(branch: Branch, date: Date) {
+  private resolveProductCode(
+    productSnapshot: TransactionReferenceSnapshotValue | null | undefined,
+    fallback?: string | null,
+  ): string {
+    const snapshot =
+      productSnapshot && typeof productSnapshot === "object"
+        ? (productSnapshot as Record<string, unknown>)
+        : null;
+    const raw =
+      snapshot?.productCode ??
+      snapshot?.code ??
+      snapshot?.product_code ??
+      fallback ??
+      "";
+    const code = String(raw).trim().toUpperCase();
+    if (!code) {
+      throw new BadRequestException(
+        "Settlement requires a product code on the product snapshot",
+      );
+    }
+    return code;
+  }
+
+  private settleOperationCode(productCode: string) {
+    const code = productCode.trim().toUpperCase();
+    if (code === "CM") return TransactionTypeProfileEnum.CM_SETTLE;
+    if (code === "TT") return TransactionTypeProfileEnum.TT_SETTLE;
+    return TransactionTypeProfileEnum.CARD_SETTLE;
+  }
+
+  private buildTtSeriesRef(
+    branchCode: string,
+    transactionDate: Date,
+    transactionNumber: string,
+    lineNo: number,
+  ): string {
+    const branch = String(branchCode ?? "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .padEnd(4, "0")
+      .slice(0, 4);
+    const year = String(transactionDate.getUTCFullYear()).slice(-2);
+    const txn = String(transactionNumber ?? "")
+      .replace(/\D/g, "")
+      .slice(-8)
+      .padStart(8, "0");
+    const series = String(Math.max(1, Number(lineNo) || 1))
+      .replace(/\D/g, "")
+      .slice(-2)
+      .padStart(2, "0");
+    return `${branch}${year}${txn}${series}`;
+  }
+
+  private async reserveNumber(
+    branch: Branch,
+    date: Date,
+    productCode: string,
+  ) {
     return this.additionalSettingService.reserveTransactionNumber(
-      TransactionTypeProfileEnum.CARD_SETTLE,
+      this.settleOperationCode(productCode),
       branch.code,
       date,
     );
+  }
+
+  private assertSameProductCode(rows: ProductSettlement[]) {
+    if (!rows.length) return;
+    if (rows.some((row) => row.productCode !== rows[0].productCode)) {
+      throw new BadRequestException(
+        "Settlement document cannot mix different product codes",
+      );
+    }
   }
 
   private sortIds(ids: string[]) {
@@ -183,7 +250,7 @@ export class CardStockSettlementService {
 
   private async lockRowsById(
     manager: EntityManager,
-    table: "transactions" | "transaction_items" | "card_stock_settlements",
+    table: "transactions" | "transaction_items" | "product_settlements",
     ids: string[],
   ) {
     for (const id of this.sortIds(ids)) {
@@ -201,7 +268,7 @@ export class CardStockSettlementService {
       transaction_id: string;
       transaction_item_id: string;
     }> = await manager.query(
-      `SELECT id, transaction_id, transaction_item_id FROM card_stock_settlements WHERE id = ANY($1::uuid[])`,
+      `SELECT id, transaction_id, transaction_item_id FROM product_settlements WHERE id = ANY($1::uuid[])`,
       [uniqueIds],
     );
     await this.lockRowsById(
@@ -216,11 +283,11 @@ export class CardStockSettlementService {
     );
     await this.lockRowsById(
       manager,
-      "card_stock_settlements",
+      "product_settlements",
       preview.map((row) => row.id),
     );
     const rows = await manager
-      .getRepository(CardStockSettlement)
+      .getRepository(ProductSettlement)
       .find({ where: { id: In(uniqueIds) } });
     return rows.sort((left, right) => left.id.localeCompare(right.id));
   }
@@ -228,29 +295,31 @@ export class CardStockSettlementService {
   private async createDocument(
     manager: EntityManager,
     input: {
-      kind: CardStockSettlementDocumentKind;
-      status: CardStockSettlementDocumentStatus;
+      kind: ProductSettlementDocumentKind;
+      status: ProductSettlementDocumentStatus;
       transactionDate: Date;
       numberBranch: Branch;
+      productCode: string;
       issuerPartyProfileId: string;
-      issuerPartyProfileSnapshot: CardStockSettlement["issuerPartyProfileSnapshot"];
+      issuerPartyProfileSnapshot: ProductSettlement["issuerPartyProfileSnapshot"];
       currencyId: string;
-      currencySnapshot: CardStockSettlement["currencySnapshot"];
+      currencySnapshot: ProductSettlement["currencySnapshot"];
       branchId: string;
-      branchSnapshot: CardStockSettlement["branchSnapshot"];
+      branchSnapshot: ProductSettlement["branchSnapshot"];
       hoBranchId: string;
-      hoBranchSnapshot: CardStockSettlement["hoBranchSnapshot"];
+      hoBranchSnapshot: ProductSettlement["hoBranchSnapshot"];
       reference: string | null;
       remarks: string | null;
       actorId: string;
     },
   ) {
-    const repo = manager.getRepository(CardStockSettlementDocument);
+    const repo = manager.getRepository(ProductSettlementDocument);
     return repo.save(
       repo.create({
         transactionNumber: await this.reserveNumber(
           input.numberBranch,
           input.transactionDate,
+          input.productCode,
         ),
         transactionDate: input.transactionDate,
         kind: input.kind,
@@ -287,9 +356,9 @@ export class CardStockSettlementService {
       "AUTO_SETTLE_CARD_WITH_HO",
       true,
     );
-    const repo = manager.getRepository(CardStockSettlement);
+    const repo = manager.getRepository(ProductSettlement);
     const cardRepo = manager.getRepository(CardStockCard);
-    const saleRows: CardStockSettlement[] = [];
+    const saleRows: ProductSettlement[] = [];
     for (const item of items) {
       if (!item.cardId) continue;
       let row = await repo.findOne({
@@ -310,8 +379,8 @@ export class CardStockSettlementService {
         );
         const freezeBranch = auto || sellingBranch.id === ho.id;
         const mode = freezeBranch
-          ? CardStockSettlementMode.AUTO
-          : CardStockSettlementMode.MANUAL;
+          ? ProductSettlementMode.AUTO
+          : ProductSettlementMode.MANUAL;
         const balance =
           (
             await manager.query(
@@ -339,9 +408,11 @@ export class CardStockSettlementService {
           transaction.transactionDate,
           `CARD item ${item.lineNo} is missing a sale date`,
         );
+        const productCode = this.resolveProductCode(item.productSnapshot);
         row = await repo.save(
           repo.create({
-            type: CardStockSettlementType.CARD,
+            type: ProductSettlementType.CARD,
+            productCode,
             cardId: card.id,
             dealCoverId: null,
             transactionId: transaction.id,
@@ -375,8 +446,8 @@ export class CardStockSettlementService {
             saleDate,
             settlementMode: mode,
             saleKind: item.isReload
-              ? CardStockSettlementSaleKind.RELOAD
-              : CardStockSettlementSaleKind.FRESH,
+              ? ProductSettlementSaleKind.RELOAD
+              : ProductSettlementSaleKind.FRESH,
             branchRequestedDate: freezeBranch ? saleDate : null,
             branchReference: null,
             branchRemarks: null,
@@ -384,8 +455,8 @@ export class CardStockSettlementService {
             branchRequestedById: freezeBranch ? actorId : null,
             status:
               freezeBranch && sellingBranch.id !== ho.id
-                ? CardStockSettlementStatus.PENDING_HO_ACCEPTANCE
-                : CardStockSettlementStatus.PENDING_BRANCH_SETTLEMENT,
+                ? ProductSettlementStatus.PENDING_HO_ACCEPTANCE
+                : ProductSettlementStatus.PENDING_BRANCH_SETTLEMENT,
             createdBy: actorId,
             updatedBy: actorId,
           }),
@@ -395,7 +466,7 @@ export class CardStockSettlementService {
     }
     const frozenRows = saleRows.filter(
       (row) =>
-        row.settlementMode === CardStockSettlementMode.AUTO &&
+        row.settlementMode === ProductSettlementMode.AUTO &&
         !row.branchDocumentId,
     );
     if (frozenRows.length)
@@ -419,9 +490,9 @@ export class CardStockSettlementService {
       "AUTO_SETTLE_TT_WITH_HO",
       true,
     );
-    const repo = manager.getRepository(CardStockSettlement);
+    const repo = manager.getRepository(ProductSettlement);
     const dealRepo = manager.getRepository(DealCover);
-    const saleRows: CardStockSettlement[] = [];
+    const saleRows: ProductSettlement[] = [];
     for (const item of items) {
       const dealCoverId = item.dealCoverId;
       if (!dealCoverId) continue;
@@ -457,8 +528,8 @@ export class CardStockSettlementService {
         const ho = await this.getSettlementHo(sellingBranch.id, sellingBranch);
         const freezeBranch = auto || sellingBranch.id === ho.id;
         const mode = freezeBranch
-          ? CardStockSettlementMode.AUTO
-          : CardStockSettlementMode.MANUAL;
+          ? ProductSettlementMode.AUTO
+          : ProductSettlementMode.MANUAL;
         const denomination = Number(item.quantity ?? deal.feAmount);
         const saleBuyRate = dealRate.toFixed(7);
         const saleDate = this.toTimestamp(
@@ -466,9 +537,17 @@ export class CardStockSettlementService {
           `TT item ${item.lineNo} is missing a sale date`,
         );
         const settlementAmount = (denomination * dealRate).toFixed(2);
+        const productCode = this.resolveProductCode(item.productSnapshot, "TT");
+        const series = this.buildTtSeriesRef(
+          sellingBranch.code,
+          saleDate,
+          transaction.number,
+          item.lineNo,
+        );
         row = await repo.save(
           repo.create({
-            type: CardStockSettlementType.TT,
+            type: ProductSettlementType.TT,
+            productCode,
             cardId: null,
             dealCoverId: deal.id,
             transactionId: transaction.id,
@@ -492,7 +571,7 @@ export class CardStockSettlementService {
             productSnapshot: item.productSnapshot,
             passengerId: transaction.passengerId,
             passengerSnapshot: transaction.passengerSnapshot,
-            series: String(deal.dealNo).trim(),
+            series,
             denomination: denomination.toFixed(2),
             saleBuyRate,
             buyRate: saleBuyRate,
@@ -506,7 +585,7 @@ export class CardStockSettlementService {
             settlementAmount,
             saleDate,
             settlementMode: mode,
-            saleKind: CardStockSettlementSaleKind.FRESH,
+            saleKind: ProductSettlementSaleKind.FRESH,
             branchRequestedDate: freezeBranch ? saleDate : null,
             branchReference: null,
             branchRemarks: null,
@@ -514,8 +593,8 @@ export class CardStockSettlementService {
             branchRequestedById: freezeBranch ? actorId : null,
             status:
               freezeBranch && sellingBranch.id !== ho.id
-                ? CardStockSettlementStatus.PENDING_HO_ACCEPTANCE
-                : CardStockSettlementStatus.PENDING_BRANCH_SETTLEMENT,
+                ? ProductSettlementStatus.PENDING_HO_ACCEPTANCE
+                : ProductSettlementStatus.PENDING_BRANCH_SETTLEMENT,
             createdBy: actorId,
             updatedBy: actorId,
           }),
@@ -532,7 +611,7 @@ export class CardStockSettlementService {
     }
     const frozenRows = saleRows.filter(
       (row) =>
-        row.settlementMode === CardStockSettlementMode.AUTO &&
+        row.settlementMode === ProductSettlementMode.AUTO &&
         !row.branchDocumentId,
     );
     if (frozenRows.length)
@@ -541,16 +620,17 @@ export class CardStockSettlementService {
 
   private async createFrozenBranchDocuments(
     manager: EntityManager,
-    rows: CardStockSettlement[],
+    rows: ProductSettlement[],
     actorId: string,
   ) {
-    const groups = new Map<string, CardStockSettlement[]>();
+    const groups = new Map<string, ProductSettlement[]>();
     for (const row of rows) {
-      const key = `${row.type}:${row.transactionId}:${row.issuerPartyProfileId}:${row.currencyId}`;
+      const key = `${row.productCode}:${row.type}:${row.transactionId}:${row.issuerPartyProfileId}:${row.currencyId}`;
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
-    const itemRepo = manager.getRepository(CardStockSettlement);
+    const itemRepo = manager.getRepository(ProductSettlement);
     for (const group of groups.values()) {
+      this.assertSameProductCode(group);
       const first = group[0];
       const ho = await this.getBranch(first.hoBranchId);
       const selling = await this.getBranch(first.branchId);
@@ -559,10 +639,11 @@ export class CardStockSettlementService {
         "CARD settlement date is invalid",
       );
       const document = await this.createDocument(manager, {
-        kind: CardStockSettlementDocumentKind.BRANCH_HO,
-        status: CardStockSettlementDocumentStatus.PENDING_HO_ACCEPTANCE,
+        kind: ProductSettlementDocumentKind.BRANCH_HO,
+        status: ProductSettlementDocumentStatus.PENDING_HO_ACCEPTANCE,
         transactionDate: date,
         numberBranch: selling,
+        productCode: first.productCode,
         issuerPartyProfileId: first.issuerPartyProfileId,
         issuerPartyProfileSnapshot: first.issuerPartyProfileSnapshot,
         currencyId: first.currencyId,
@@ -591,12 +672,12 @@ export class CardStockSettlementService {
     actorId: string,
     acceptedByHo: boolean,
   ) {
-    const documentRepo = manager.getRepository(CardStockSettlementDocument);
-    const itemRepo = manager.getRepository(CardStockSettlement);
+    const documentRepo = manager.getRepository(ProductSettlementDocument);
+    const itemRepo = manager.getRepository(ProductSettlement);
     const document = await documentRepo.findOne({ where: { id: documentId } });
     if (!document) throw new NotFoundException("CARD settlement not found");
     const itemIds: Array<{ id: string }> = await manager.query(
-      `SELECT id FROM card_stock_settlements WHERE deleted_at IS NULL AND branch_document_id = $1`,
+      `SELECT id FROM product_settlements WHERE deleted_at IS NULL AND branch_document_id = $1`,
       [document.id],
     );
     const items = await this.lockSettlementRows(
@@ -605,12 +686,13 @@ export class CardStockSettlementService {
     );
     if (!items.length)
       throw new BadRequestException("CARD settlement has no items");
+    this.assertSameProductCode(items);
     if (items.some((row) => row.type !== items[0].type)) {
       throw new BadRequestException(
         "Settlement document cannot mix CARD and TT items",
       );
     }
-    const isTt = items[0].type === CardStockSettlementType.TT;
+    const isTt = items[0].type === ProductSettlementType.TT;
     const branch = await this.getBranch(document.branchId);
     await this.dayEndStartProcessService.assertTransactionDateAllowed(
       branch.id,
@@ -619,7 +701,7 @@ export class CardStockSettlementService {
     );
     const posting = await this.cardStockTransactionService.create({
       manager,
-      operationCode: TransactionTypeProfileEnum.CARD_SETTLE,
+      operationCode: this.settleOperationCode(items[0].productCode),
       number: document.transactionNumber,
       branch,
       transactionDate: document.transactionDate,
@@ -663,18 +745,18 @@ export class CardStockSettlementService {
       { id: In(postedIds) },
       acceptedByHo
         ? {
-            status: CardStockSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+            status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
             hoAcceptedAt: new Date(),
             hoAcceptedById: actorId,
             updatedBy: actorId,
           }
         : {
-            status: CardStockSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+            status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
             updatedBy: actorId,
           },
     );
     await documentRepo.update(document.id, {
-      status: CardStockSettlementDocumentStatus.ACCEPTED,
+      status: ProductSettlementDocumentStatus.ACCEPTED,
       postingTransactionId: posting.id,
       acceptedAt: new Date(),
       acceptedById: actorId,
@@ -687,12 +769,12 @@ export class CardStockSettlementService {
     documentId: string,
     actorId: string,
   ) {
-    const documentRepo = manager.getRepository(CardStockSettlementDocument);
-    const itemRepo = manager.getRepository(CardStockSettlement);
+    const documentRepo = manager.getRepository(ProductSettlementDocument);
+    const itemRepo = manager.getRepository(ProductSettlement);
     const document = await documentRepo.findOne({ where: { id: documentId } });
     if (!document) throw new NotFoundException("CARD settlement not found");
     const itemIds: Array<{ id: string }> = await manager.query(
-      `SELECT id FROM card_stock_settlements WHERE deleted_at IS NULL AND issuer_document_id = $1`,
+      `SELECT id FROM product_settlements WHERE deleted_at IS NULL AND issuer_document_id = $1`,
       [document.id],
     );
     const items = await this.lockSettlementRows(
@@ -701,12 +783,13 @@ export class CardStockSettlementService {
     );
     if (!items.length)
       throw new BadRequestException("CARD settlement has no items");
+    this.assertSameProductCode(items);
     if (items.some((row) => row.type !== items[0].type)) {
       throw new BadRequestException(
         "Settlement document cannot mix CARD and TT items",
       );
     }
-    const isTt = items[0].type === CardStockSettlementType.TT;
+    const isTt = items[0].type === ProductSettlementType.TT;
     const ho = await this.getBranch(document.hoBranchId);
     await this.dayEndStartProcessService.assertTransactionDateAllowed(
       ho.id,
@@ -715,7 +798,7 @@ export class CardStockSettlementService {
     );
     const posting = await this.cardStockTransactionService.create({
       manager,
-      operationCode: TransactionTypeProfileEnum.CARD_SETTLE,
+      operationCode: this.settleOperationCode(items[0].productCode),
       number: document.transactionNumber,
       branch: ho,
       transactionDate: document.transactionDate,
@@ -746,7 +829,7 @@ export class CardStockSettlementService {
     await itemRepo.update(
       { id: In(items.map((row) => row.id)) },
       {
-        status: CardStockSettlementStatus.ISSUER_SETTLED,
+        status: ProductSettlementStatus.ISSUER_SETTLED,
         issuerSettlementDate: document.transactionDate,
         issuerReference: document.reference,
         issuerRemarks: document.remarks,
@@ -754,27 +837,27 @@ export class CardStockSettlementService {
       },
     );
     await documentRepo.update(document.id, {
-      status: CardStockSettlementDocumentStatus.ISSUER_SETTLED,
+      status: ProductSettlementDocumentStatus.ISSUER_SETTLED,
       postingTransactionId: posting.id,
       updatedBy: actorId,
     });
   }
 
   async create(
-    dto: CreateCardStockSettlementDocumentDto,
+    dto: CreateProductSettlementDocumentDto,
     session: AuthenticatedSession,
   ) {
     if (!session?.userId)
       throw new ForbiddenException("User session is required");
     const isHo = this.isHo(session);
-    if (dto.kind === CardStockSettlementDocumentKind.HO_ISSUER && !isHo)
+    if (dto.kind === ProductSettlementDocumentKind.HO_ISSUER && !isHo)
       throw new ForbiddenException(
         "Only Admin/HO users can settle with issuers",
       );
-    if (dto.kind === CardStockSettlementDocumentKind.BRANCH_HO && isHo)
+    if (dto.kind === ProductSettlementDocumentKind.BRANCH_HO && isHo)
       throw new ForbiddenException("HO creates issuer settlements only");
     const id = await this.database2.transaction(async (manager) => {
-      const itemRepo = manager.getRepository(CardStockSettlement);
+      const itemRepo = manager.getRepository(ProductSettlement);
       const uniqueIds = [...new Set(dto.items.map((item) => item.id))];
       if (uniqueIds.length !== dto.items.length)
         throw new BadRequestException(
@@ -783,6 +866,7 @@ export class CardStockSettlementService {
       const rows = await this.lockSettlementRows(manager, uniqueIds);
       if (rows.length !== uniqueIds.length)
         throw new BadRequestException("One or more CARD items were not found");
+      this.assertSameProductCode(rows);
       if (rows.some((row) => row.type !== rows[0].type)) {
         throw new BadRequestException(
           "Selected items cannot mix CARD and TT in one settlement document",
@@ -819,7 +903,7 @@ export class CardStockSettlementService {
         );
       const reference = this.clean(dto.reference);
       const remarks = this.clean(dto.remarks);
-      if (dto.kind === CardStockSettlementDocumentKind.BRANCH_HO) {
+      if (dto.kind === ProductSettlementDocumentKind.BRANCH_HO) {
         const branchId = session.activeBranchId;
         if (!branchId)
           throw new BadRequestException("Current branch is required");
@@ -828,8 +912,8 @@ export class CardStockSettlementService {
             (row) =>
               row.branchId !== branchId ||
               row.status !==
-                CardStockSettlementStatus.PENDING_BRANCH_SETTLEMENT ||
-              row.settlementMode !== CardStockSettlementMode.MANUAL ||
+                ProductSettlementStatus.PENDING_BRANCH_SETTLEMENT ||
+              row.settlementMode !== ProductSettlementMode.MANUAL ||
               row.branchDocumentId,
           )
         ) {
@@ -838,10 +922,11 @@ export class CardStockSettlementService {
           );
         }
         const document = await this.createDocument(manager, {
-          kind: CardStockSettlementDocumentKind.BRANCH_HO,
-          status: CardStockSettlementDocumentStatus.PENDING_HO_ACCEPTANCE,
+          kind: ProductSettlementDocumentKind.BRANCH_HO,
+          status: ProductSettlementDocumentStatus.PENDING_HO_ACCEPTANCE,
           transactionDate: date,
           numberBranch: await this.getBranch(first.branchId),
+          productCode: first.productCode,
           issuerPartyProfileId: first.issuerPartyProfileId,
           issuerPartyProfileSnapshot: first.issuerPartyProfileSnapshot,
           currencyId: first.currencyId,
@@ -864,7 +949,7 @@ export class CardStockSettlementService {
             branchRemarks: remarks,
             branchRequestedAt: new Date(),
             branchRequestedById: session.userId,
-            status: CardStockSettlementStatus.PENDING_HO_ACCEPTANCE,
+            status: ProductSettlementStatus.PENDING_HO_ACCEPTANCE,
             hoRejectedAt: null,
             hoRejectedById: null,
             hoRejectionReason: null,
@@ -878,9 +963,9 @@ export class CardStockSettlementService {
         rows.some(
           (row) =>
             row.status !==
-              CardStockSettlementStatus.PENDING_ISSUER_SETTLEMENT ||
+              ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT ||
             row.issuerDocumentId ||
-            (row.type === CardStockSettlementType.CARD &&
+            (row.type === ProductSettlementType.CARD &&
               !row.branchSettlementEntryId),
         )
       ) {
@@ -910,10 +995,11 @@ export class CardStockSettlementService {
         );
       }
       const document = await this.createDocument(manager, {
-        kind: CardStockSettlementDocumentKind.HO_ISSUER,
-        status: CardStockSettlementDocumentStatus.ISSUER_SETTLED,
+        kind: ProductSettlementDocumentKind.HO_ISSUER,
+        status: ProductSettlementDocumentStatus.ISSUER_SETTLED,
         transactionDate: date,
         numberBranch: ho,
+        productCode: first.productCode,
         issuerPartyProfileId: first.issuerPartyProfileId,
         issuerPartyProfileSnapshot: first.issuerPartyProfileSnapshot,
         currencyId: first.currencyId,
@@ -952,7 +1038,7 @@ export class CardStockSettlementService {
   }
 
   async listUnsettled(
-    query: CardStockUnsettledQueryDto,
+    query: ProductUnsettledQueryDto,
     session: AuthenticatedSession,
   ) {
     const pagination = normalizePagination(query);
@@ -964,7 +1050,7 @@ export class CardStockSettlementService {
       "s.currency_id = $2",
     ];
     const params: unknown[] = [query.issuerPartyProfileId, query.currencyId];
-    if (query.kind === CardStockSettlementDocumentKind.BRANCH_HO) {
+    if (query.kind === ProductSettlementDocumentKind.BRANCH_HO) {
       if (this.isHo(session))
         throw new ForbiddenException("HO creates issuer settlements only");
       if (!session.activeBranchId)
@@ -997,14 +1083,14 @@ export class CardStockSettlementService {
     const whereSql = conditions.join(" AND ");
     const countRows = await this.database2.query(
       `SELECT COUNT(*)::int AS total
-       FROM card_stock_settlements s
+       FROM product_settlements s
        WHERE ${whereSql}`,
       params,
     );
     const total = Number(countRows[0]?.total ?? 0);
     params.push(pagination.limit, pagination.offset);
     const data = await this.database2.query(
-      `SELECT s.id, s.type, s.series, s.denomination, s.sale_kind AS "saleKind",
+      `SELECT s.id, s.type, s.product_code AS "productCode", s.series, s.denomination, s.sale_kind AS "saleKind",
         s.sale_buy_rate AS "saleBuyRate", s.buy_rate AS "buyRate",
         s.booking_rate AS "bookingRate", s.settlement_amount AS "settlementAmount",
         s.branch_id AS "branchId", s.branch_snapshot AS "branchSnapshot",
@@ -1013,7 +1099,7 @@ export class CardStockSettlementService {
         s.currency_id AS "currencyId", s.currency_snapshot AS "currencySnapshot",
         s.product_id AS "productId", s.product_snapshot AS "productSnapshot",
         c.kit_number AS "kitNumber", ${MASKED_CARD_SQL} AS "maskedCardNumber"
-       FROM card_stock_settlements s
+       FROM product_settlements s
        LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
        LEFT JOIN LATERAL (
          SELECT public.decrypt_card_number(c.card_number) clear_number
@@ -1034,12 +1120,12 @@ export class CardStockSettlementService {
         d.ho_branch_id AS "hoBranchId", d.ho_branch_snapshot AS "hoBranchSnapshot",
         d.reference, d.remarks, d.rejection_reason AS "rejectionReason", d.cancellation_reason AS "cancellationReason",
         d.posting_transaction_id AS "postingTransactionId",
-        (SELECT COUNT(*)::int FROM card_stock_settlements item WHERE item.deleted_at IS NULL AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))) AS "itemCount"
-       FROM card_stock_settlement_documents d`;
+        (SELECT COUNT(*)::int FROM product_settlements item WHERE item.deleted_at IS NULL AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))) AS "itemCount"
+       FROM product_settlement_documents d`;
   }
 
   private documentListWhere(
-    query: CardStockSettlementDocumentQueryDto,
+    query: ProductSettlementDocumentQueryDto,
     session: AuthenticatedSession,
   ): { conditions: string[]; params: unknown[] } | { empty: true } {
     if (!session?.userId) return { empty: true };
@@ -1052,7 +1138,7 @@ export class CardStockSettlementService {
     if (!this.isHo(session)) {
       if (!session.activeBranchId) return { empty: true };
       add("d.branch_id = ?", session.activeBranchId);
-      add("d.kind = ?", CardStockSettlementDocumentKind.BRANCH_HO);
+      add("d.kind = ?", ProductSettlementDocumentKind.BRANCH_HO);
     }
     if (query.status?.length) {
       const placeholders = query.status.map((value) => {
@@ -1105,14 +1191,14 @@ export class CardStockSettlementService {
   }
 
   async list(
-    query: CardStockSettlementDocumentQueryDto,
+    query: ProductSettlementDocumentQueryDto,
     session: AuthenticatedSession,
   ) {
     const pagination = normalizePagination(query);
     const where = this.documentListWhere(query, session);
     if ("empty" in where) return buildPaginatedResponse([], 0, pagination);
     const countRows = await this.database2.query(
-      `SELECT COUNT(*)::int AS total FROM card_stock_settlement_documents d WHERE ${where.conditions.join(" AND ")}`,
+      `SELECT COUNT(*)::int AS total FROM product_settlement_documents d WHERE ${where.conditions.join(" AND ")}`,
       where.params,
     );
     const total = Number(countRows[0]?.total ?? 0);
@@ -1136,14 +1222,14 @@ export class CardStockSettlementService {
     const document = documents[0];
     if (!document) throw new NotFoundException("CARD settlement not found");
     const items = await this.database2.query(
-      `SELECT s.id, s.type, s.series, s.denomination, s.sale_kind AS "saleKind",
+      `SELECT s.id, s.type, s.product_code AS "productCode", s.series, s.denomination, s.sale_kind AS "saleKind",
         s.sale_buy_rate AS "saleBuyRate", s.buy_rate AS "buyRate",
         s.booking_rate AS "bookingRate", s.settlement_amount AS "settlementAmount",
         s.issuer_rate AS "issuerRate", s.issuer_settlement_amount AS "issuerSettlementAmount",
         s.status, s.branch_id AS "branchId", s.branch_snapshot AS "branchSnapshot",
         s.product_id AS "productId", s.product_snapshot AS "productSnapshot",
         c.kit_number AS "kitNumber", ${MASKED_CARD_SQL} AS "maskedCardNumber"
-       FROM card_stock_settlements s
+       FROM product_settlements s
        LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
        LEFT JOIN LATERAL (
          SELECT public.decrypt_card_number(c.card_number) clear_number
@@ -1159,7 +1245,7 @@ export class CardStockSettlementService {
   async accept(id: string, session: AuthenticatedSession) {
     this.assertHo(session);
     const documentId = await this.database2.transaction(async (manager) => {
-      const documentRepo = manager.getRepository(CardStockSettlementDocument);
+      const documentRepo = manager.getRepository(ProductSettlementDocument);
       const document = await documentRepo
         .createQueryBuilder("d")
         .where("d.id = :id", { id })
@@ -1167,9 +1253,9 @@ export class CardStockSettlementService {
         .getOne();
       if (!document) throw new NotFoundException("CARD settlement not found");
       if (
-        document.kind !== CardStockSettlementDocumentKind.BRANCH_HO ||
+        document.kind !== ProductSettlementDocumentKind.BRANCH_HO ||
         document.status !==
-          CardStockSettlementDocumentStatus.PENDING_HO_ACCEPTANCE ||
+          ProductSettlementDocumentStatus.PENDING_HO_ACCEPTANCE ||
         document.postingTransactionId
       ) {
         throw new BadRequestException(
@@ -1184,13 +1270,13 @@ export class CardStockSettlementService {
 
   async reject(
     id: string,
-    dto: RejectCardStockSettlementDocumentDto,
+    dto: RejectProductSettlementDocumentDto,
     session: AuthenticatedSession,
   ) {
     this.assertHo(session);
     await this.database2.transaction(async (manager) => {
-      const documentRepo = manager.getRepository(CardStockSettlementDocument);
-      const itemRepo = manager.getRepository(CardStockSettlement);
+      const documentRepo = manager.getRepository(ProductSettlementDocument);
+      const itemRepo = manager.getRepository(ProductSettlement);
       const document = await documentRepo
         .createQueryBuilder("d")
         .where("d.id = :id", { id })
@@ -1198,9 +1284,9 @@ export class CardStockSettlementService {
         .getOne();
       if (!document) throw new NotFoundException("CARD settlement not found");
       if (
-        document.kind !== CardStockSettlementDocumentKind.BRANCH_HO ||
+        document.kind !== ProductSettlementDocumentKind.BRANCH_HO ||
         document.status !==
-          CardStockSettlementDocumentStatus.PENDING_HO_ACCEPTANCE ||
+          ProductSettlementDocumentStatus.PENDING_HO_ACCEPTANCE ||
         document.postingTransactionId
       ) {
         throw new BadRequestException(
@@ -1208,7 +1294,7 @@ export class CardStockSettlementService {
         );
       }
       const itemIds: Array<{ id: string }> = await manager.query(
-        `SELECT id FROM card_stock_settlements WHERE deleted_at IS NULL AND branch_document_id = $1`,
+        `SELECT id FROM product_settlements WHERE deleted_at IS NULL AND branch_document_id = $1`,
         [document.id],
       );
       const items = await this.lockSettlementRows(
@@ -1228,8 +1314,8 @@ export class CardStockSettlementService {
           branchRemarks: null,
           branchRequestedAt: null,
           branchRequestedById: null,
-          settlementMode: CardStockSettlementMode.MANUAL,
-          status: CardStockSettlementStatus.PENDING_BRANCH_SETTLEMENT,
+          settlementMode: ProductSettlementMode.MANUAL,
+          status: ProductSettlementStatus.PENDING_BRANCH_SETTLEMENT,
           hoRejectedAt: new Date(),
           hoRejectedById: session.userId,
           hoRejectionReason: dto.reason.trim(),
@@ -1237,7 +1323,7 @@ export class CardStockSettlementService {
         });
       }
       await documentRepo.update(document.id, {
-        status: CardStockSettlementDocumentStatus.REJECTED,
+        status: ProductSettlementDocumentStatus.REJECTED,
         rejectionReason: dto.reason.trim(),
         rejectedAt: new Date(),
         rejectedById: session.userId,
@@ -1250,14 +1336,14 @@ export class CardStockSettlementService {
 
   async cancel(
     id: string,
-    dto: CancelCardStockSettlementDocumentDto,
+    dto: CancelProductSettlementDocumentDto,
     session: AuthenticatedSession,
   ) {
     if (!session?.userId)
       throw new ForbiddenException("User session is required");
     await this.database2.transaction(async (manager) => {
-      const documentRepo = manager.getRepository(CardStockSettlementDocument);
-      const itemRepo = manager.getRepository(CardStockSettlement);
+      const documentRepo = manager.getRepository(ProductSettlementDocument);
+      const itemRepo = manager.getRepository(ProductSettlement);
       const document = await documentRepo
         .createQueryBuilder("d")
         .where("d.id = :id", { id })
@@ -1267,8 +1353,8 @@ export class CardStockSettlementService {
       if (
         document.postingTransactionId ||
         document.status !==
-          CardStockSettlementDocumentStatus.PENDING_HO_ACCEPTANCE ||
-        document.kind !== CardStockSettlementDocumentKind.BRANCH_HO
+          ProductSettlementDocumentStatus.PENDING_HO_ACCEPTANCE ||
+        document.kind !== ProductSettlementDocumentKind.BRANCH_HO
       ) {
         throw new BadRequestException(
           "Only unposted branch settlements can be cancelled",
@@ -1279,7 +1365,7 @@ export class CardStockSettlementService {
           "Settlement must belong to the current branch",
         );
       const itemIds: Array<{ id: string }> = await manager.query(
-        `SELECT id FROM card_stock_settlements WHERE deleted_at IS NULL AND branch_document_id = $1`,
+        `SELECT id FROM product_settlements WHERE deleted_at IS NULL AND branch_document_id = $1`,
         [document.id],
       );
       const items = await this.lockSettlementRows(
@@ -1299,13 +1385,13 @@ export class CardStockSettlementService {
           branchRemarks: null,
           branchRequestedAt: null,
           branchRequestedById: null,
-          settlementMode: CardStockSettlementMode.MANUAL,
-          status: CardStockSettlementStatus.PENDING_BRANCH_SETTLEMENT,
+          settlementMode: ProductSettlementMode.MANUAL,
+          status: ProductSettlementStatus.PENDING_BRANCH_SETTLEMENT,
           updatedBy: session.userId,
         });
       }
       await documentRepo.update(document.id, {
-        status: CardStockSettlementDocumentStatus.CANCELLED,
+        status: ProductSettlementDocumentStatus.CANCELLED,
         cancellationReason: dto.reason.trim(),
         cancelledAt: new Date(),
         cancelledById: session.userId,

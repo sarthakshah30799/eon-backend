@@ -120,6 +120,8 @@ const EXCLUDED_SLUGS = new Set(
     TransactionTypeProfileEnum.CARD_STOCK_LOAD,
     TransactionTypeProfileEnum.CARD_SELL,
     TransactionTypeProfileEnum.CARD_SETTLE,
+    TransactionTypeProfileEnum.CM_SETTLE,
+    TransactionTypeProfileEnum.TT_SETTLE,
     TransactionTypeProfileEnum.CARD_RETURN,
     TransactionTypeProfileEnum.CARD_VOID,
     "COUNTER_TRANSFER_SELL",

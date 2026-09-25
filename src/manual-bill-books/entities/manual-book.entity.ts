@@ -31,7 +31,11 @@ export class ManualBook {
     name: "transaction_type",
     type: "enum",
     enum: Object.values(TransactionTypeProfileEnum).filter(
-      (value) => !value.startsWith("CARD_"),
+      (value) =>
+        !value.startsWith("CARD_") &&
+        value !== TransactionTypeProfileEnum.CM_SETTLE &&
+        value !== TransactionTypeProfileEnum.TT_SETTLE &&
+        value !== TransactionTypeProfileEnum.DEAL_COVER,
     ),
   })
   transactionType: TransactionTypeProfile;

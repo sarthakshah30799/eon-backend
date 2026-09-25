@@ -67,7 +67,7 @@ import type { Company } from "../../company/company.entity";
 )
 @Check(
   "CHK_transactions_party_profile_required_v2",
-  `UPPER("slug") IN ('FAKE_CURRENCY', 'CARD_STOCK', 'CARD_TRANSFER_OUT', 'CARD_TRANSFER_IN', 'CARD_STOCK_LOAD', 'CARD_SELL', 'CARD_SETTLE', 'CARD_RETURN', 'CARD_VOID') OR "party_profile_id" IS NOT NULL`,
+  `UPPER("slug") IN ('FAKE_CURRENCY', 'CARD_STOCK', 'CARD_TRANSFER_OUT', 'CARD_TRANSFER_IN', 'CARD_STOCK_LOAD', 'CARD_SELL', 'CARD_SETTLE', 'CM_SETTLE', 'TT_SETTLE', 'CARD_RETURN', 'CARD_VOID') OR "party_profile_id" IS NOT NULL`,
 )
 @Entity("transactions")
 export class Transaction extends BaseEntity {

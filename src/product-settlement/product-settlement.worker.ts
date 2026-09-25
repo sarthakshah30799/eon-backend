@@ -9,20 +9,20 @@ import { DataSource } from "typeorm";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionStatus } from "../transactions/transactions.enums";
-import { CardStockSaleLifecycleService } from "./card-stock-sale-lifecycle.service";
-import { CardStockSettlementService } from "./card-stock-settlement.service";
+import { CardStockSaleLifecycleService } from "../card-stock/card-stock-sale-lifecycle.service";
+import { ProductSettlementService } from "./product-settlement.service";
 
 @Injectable()
-export class CardStockSettlementWorker
+export class ProductSettlementWorker
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(CardStockSettlementWorker.name);
+  private readonly logger = new Logger(ProductSettlementWorker.name);
   private interval: NodeJS.Timeout | null = null;
   private running = false;
   constructor(
     @InjectDataSource("database2") private readonly database2: DataSource,
     private readonly saleLifecycleService: CardStockSaleLifecycleService,
-    private readonly settlementService: CardStockSettlementService,
+    private readonly settlementService: ProductSettlementService,
   ) {}
   onModuleInit() {
     void this.run();
@@ -56,8 +56,8 @@ export class CardStockSettlementWorker
         AND (
           NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='CARD_STOCK_LOAD')
           OR NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='SELL')
-          OR NOT EXISTS (SELECT 1 FROM card_stock_settlements s WHERE s.transaction_item_id=i.id)
-          OR EXISTS (SELECT 1 FROM card_stock_settlements s WHERE s.transaction_item_id=i.id AND s.branch_settlement_entry_id IS NOT NULL AND NOT EXISTS (
+          OR NOT EXISTS (SELECT 1 FROM product_settlements s WHERE s.transaction_item_id=i.id)
+          OR EXISTS (SELECT 1 FROM product_settlements s WHERE s.transaction_item_id=i.id AND s.branch_settlement_entry_id IS NOT NULL AND NOT EXISTS (
             SELECT 1 FROM card_stock_balance balance WHERE balance.card_id=i.card_id AND balance.branch_id=t.branch_id AND balance.series=s.series AND balance.settle_entry_id=s.branch_settlement_entry_id
           ))
         )
@@ -100,7 +100,7 @@ export class CardStockSettlementWorker
       JOIN transaction_items i ON i.transaction_id=t.id AND i.deal_cover_id IS NOT NULL
       WHERE t.status='APPROVED'
         AND NOT EXISTS (
-          SELECT 1 FROM card_stock_settlements s
+          SELECT 1 FROM product_settlements s
           WHERE s.transaction_item_id=i.id AND s.type='TT' AND s.deleted_at IS NULL
         )
       GROUP BY t.id, t.created_at ORDER BY t.created_at LIMIT 50`);

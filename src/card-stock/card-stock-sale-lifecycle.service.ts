@@ -21,7 +21,7 @@ import {
 } from "./card-stock.enums";
 import { isMultiCurrencyCardProduct } from "./card-product.util";
 import { CardStockTransactionService } from "./card-stock-transaction.service";
-import { CardStockSettlementService } from "./card-stock-settlement.service";
+import { ProductSettlementService } from "../product-settlement/product-settlement.service";
 import { CardStockCard } from "./entities/card-stock-card.entity";
 
 @Injectable()
@@ -34,7 +34,7 @@ export class CardStockSaleLifecycleService {
     @InjectRepository(ProductIssuer)
     private readonly productIssuerRepository: Repository<ProductIssuer>,
     private readonly cardStockTransactionService: CardStockTransactionService,
-    private readonly settlementService: CardStockSettlementService,
+    private readonly settlementService: ProductSettlementService,
   ) {}
 
   async finalizeApprovedSale(
@@ -65,7 +65,7 @@ export class CardStockSaleLifecycleService {
 
     const existingSettlementRows: Array<{ transaction_item_id: string }> =
       await manager.query(
-        `SELECT transaction_item_id FROM card_stock_settlements WHERE transaction_item_id = ANY($1::uuid[])`,
+        `SELECT transaction_item_id FROM product_settlements WHERE transaction_item_id = ANY($1::uuid[])`,
         [cardItems.map((item) => item.id)],
       );
     const settledItemIds = new Set(

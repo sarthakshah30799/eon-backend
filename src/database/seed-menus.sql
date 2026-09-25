@@ -61,11 +61,11 @@ BEGIN
   (220, 'Receipts',               '/receipts',                       'Accounting', NULL, FALSE, 'receipt',   'unique'),
 
   -- CARD
-  (300, 'Card Issuer Settlement', '/card-settlement',                'CARD', NULL, FALSE, 'credit-card', 'unique'),
+  (300, 'Product Settlement',     '/product-settlement',             'CARD', NULL, FALSE, 'credit-card', 'unique'),
   (310, 'Card Transfer',          '/card-transfer',                  'CARD', NULL, FALSE, 'arrow-left-right','unique'),
   (320, 'Receipt Stock',          '/card-stock',                     'CARD', NULL, FALSE, 'archive',     'unique'),
 
-  -- Deal Cover (TT settlement uses shared /card-settlement)
+  -- Deal Cover (TT settlement uses shared /product-settlement)
   (330, 'Deal Cover Rate',        '/deal-cover-rate',                'Deal Cover', NULL, FALSE, 'banknote', 'unique'),
   (340, 'Deal Cover Acknowledgement', '/deal-cover-acknowledgement', 'Deal Cover', NULL, FALSE, 'check-circle', 'unique'),
 

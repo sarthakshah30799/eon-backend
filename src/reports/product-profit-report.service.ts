@@ -321,6 +321,8 @@ export class ProductProfitReportService {
         "CARD_STOCK_LOAD",
         "CARD_SELL",
         "CARD_SETTLE",
+        "CM_SETTLE",
+        "TT_SETTLE",
         "CARD_RETURN",
         "CARD_VOID",
       ],
@@ -332,7 +334,7 @@ export class ProductProfitReportService {
         AND item.deal_cover_id IS NULL
       )
       OR EXISTS (
-        SELECT 1 FROM card_stock_settlements card_settlement
+        SELECT 1 FROM product_settlements card_settlement
         WHERE card_settlement.transaction_item_id = item.id
           AND item.profit_amount IS NOT NULL
           AND (

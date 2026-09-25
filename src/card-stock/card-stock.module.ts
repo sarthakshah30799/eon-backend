@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
@@ -22,19 +22,15 @@ import {
   CardTransferRequestItem,
   CardStockTransactionEntry,
   CardStockBalance,
-  CardStockSettlement,
-  CardStockSettlementDocument,
 } from "./entities";
 import { CardStockController } from "./card-stock.controller";
 import { CardStockService } from "./card-stock.service";
 import { CardTransferController } from "./card-transfer.controller";
 import { CardTransferService } from "./card-transfer.service";
 import { CardStockTransactionService } from "./card-stock-transaction.service";
-import { CardStockSettlementService } from "./card-stock-settlement.service";
-import { CardStockSettlementWorker } from "./card-stock-settlement.worker";
-import { CardStockSettlementController } from "./card-stock-settlement.controller";
 import { CardStockSaleLifecycleService } from "./card-stock-sale-lifecycle.service";
 import { CardStockPrintService } from "./card-stock-print.service";
+import { ProductSettlementModule } from "../product-settlement/product-settlement.module";
 import { TransactionLog } from "../transactions/entities/transaction-log.entity";
 
 @Module({
@@ -45,6 +41,7 @@ import { TransactionLog } from "../transactions/entities/transaction-log.entity"
     SpreadsheetUploadModule,
     UserModule,
     CompanyModule,
+    forwardRef(() => ProductSettlementModule),
     TypeOrmModule.forFeature([
       Branch,
       Currency,
@@ -64,31 +61,23 @@ import { TransactionLog } from "../transactions/entities/transaction-log.entity"
         CardTransferRequestCard,
         CardStockTransactionEntry,
         CardStockBalance,
-        CardStockSettlement,
-        CardStockSettlementDocument,
         TransactionLog,
       ],
       "database2",
     ),
   ],
-  controllers: [
-    CardStockController,
-    CardTransferController,
-    CardStockSettlementController,
-  ],
+  controllers: [CardStockController, CardTransferController],
   providers: [
     CardStockService,
     CardTransferService,
     CardStockTransactionService,
-    CardStockSettlementService,
     CardStockSaleLifecycleService,
-    CardStockSettlementWorker,
     CardStockPrintService,
   ],
   exports: [
     CardStockTransactionService,
-    CardStockSettlementService,
     CardStockSaleLifecycleService,
+    ProductSettlementModule,
   ],
 })
 export class CardStockModule {}

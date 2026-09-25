@@ -110,6 +110,9 @@ export class DealCoverResponseDto {
   @ApiProperty({ enum: DealCoverStatus })
   status: DealCoverStatus;
 
+  @ApiProperty()
+  transactionNumber: string;
+
   @ApiPropertyOptional({ nullable: true })
   dealNo: string | null;
 
@@ -192,6 +195,7 @@ export class DealCoverResponseDto {
     dto.narration = entity.narration;
     dto.maturityOptionId = entity.maturityOptionId;
     dto.status = entity.status;
+    dto.transactionNumber = entity.transactionNumber;
     dto.dealNo = entity.dealNo;
     dto.bookingRate = entity.bookingRate;
     dto.rejectionReason = entity.rejectionReason;

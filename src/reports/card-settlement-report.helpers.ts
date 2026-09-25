@@ -1,7 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import * as XLSX from "xlsx";
-import { CardStockSettlementStatus } from "../card-stock/card-stock.enums";
+import { ProductSettlementStatus } from "../product-settlement/product-settlement.enums";
 import { toUtcDateOnly, toUtcNextDate } from "../common/date/date.util";
 import { resolvePassengerDisplayNameFromSnapshot } from "../transactions/utils/passenger-display-name.util";
 import {
@@ -274,7 +274,7 @@ const loadSettlementRows = async (
   const conditions = [
     "s.deleted_at IS NULL",
     `(s.type = 'TT' OR (s.type = 'CARD' AND c.deleted_at IS NULL AND s.card_id IS NOT NULL))`,
-    `s.status <> '${CardStockSettlementStatus.CANCELLED}'`,
+    `s.status <> '${ProductSettlementStatus.CANCELLED}'`,
   ];
   const params: unknown[] = [];
 
@@ -290,7 +290,13 @@ const loadSettlementRows = async (
       conditions.push(
         `(
           (s.type = 'CARD' AND (s.branch_settlement_entry_id IS NULL OR ${BRANCH_SETTLE_DATE_SQL} >= $${params.length}))
-          OR (s.type = 'TT' AND s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE'))
+          OR (
+            s.type = 'TT'
+            AND (
+              s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE')
+              OR COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date) >= $${params.length}
+            )
+          )
         )`,
       );
     } else {
@@ -340,6 +346,7 @@ const loadSettlementRows = async (
     `SELECT
         s.id,
         s.type,
+        s.product_code AS "productCode",
         s.series,
         s.branch_id AS "branchId",
         s.sale_date AS "saleDate",
@@ -370,7 +377,7 @@ const loadSettlementRows = async (
         ) AS "profitAmount",
         COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date) AS "branchDocumentDate",
         bd.transaction_number AS "branchDocumentNumber"
-      FROM card_stock_settlements s
+      FROM product_settlements s
       LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
       LEFT JOIN LATERAL (
         SELECT public.decrypt_card_number(c.card_number) clear_number
@@ -389,7 +396,7 @@ const loadSettlementRows = async (
       ) bal ON TRUE
       LEFT JOIN transactions t ON t.id = s.transaction_id
       LEFT JOIN transaction_items ti ON ti.id = s.transaction_item_id
-      LEFT JOIN card_stock_settlement_documents bd ON bd.id = s.branch_document_id
+      LEFT JOIN product_settlement_documents bd ON bd.id = s.branch_document_id
       WHERE ${conditions.join(" AND ")}`,
     params,
   );
