@@ -64,6 +64,10 @@ export class UserService {
     private readonly passwordPolicyService: PasswordPolicyService,
   ) {}
 
+  /**
+   * Counter menu rows are an allowlist. Effective permissions =
+   * role grants ∩ counter allows. Empty allowlist → no screen access.
+   */
   private async applyCounterRestrictions(
     userDto: UserResponseDto,
     workplace?: WorkplaceSelection,
@@ -72,7 +76,7 @@ export class UserService {
       return userDto;
     }
 
-    const counterRestrictions =
+    const counterAllowances =
       await this.counterMenuRestrictionRepository.find({
         where: {
           counter: {
@@ -82,30 +86,35 @@ export class UserService {
         relations: ["menu", "permission"],
       });
 
-    if (counterRestrictions.length === 0) {
+    if (counterAllowances.length === 0) {
+      userDto.permissions = {};
       return userDto;
+    }
+
+    const allowByPath = new Map<string, Set<string>>();
+    for (const allowance of counterAllowances) {
+      const menuPath =
+        normalizeMenuPath(allowance.menu?.path) || allowance.menu?.name;
+      const permissionCode = allowance.permission?.code;
+      if (!menuPath || !permissionCode) {
+        continue;
+      }
+
+      const codes = allowByPath.get(menuPath) ?? new Set<string>();
+      codes.add(permissionCode);
+      allowByPath.set(menuPath, codes);
     }
 
     const nextPermissions: Record<string, string[]> = {};
     for (const [path, codes] of Object.entries(userDto.permissions)) {
-      nextPermissions[path] = [...codes];
-    }
-
-    for (const restriction of counterRestrictions) {
-      const menuPath =
-        normalizeMenuPath(restriction.menu?.path) || restriction.menu?.name;
-      const permissionCode = restriction.permission?.code;
-
-      if (!menuPath || !permissionCode || !nextPermissions[menuPath]) {
+      const allowedCodes = allowByPath.get(path);
+      if (!allowedCodes) {
         continue;
       }
 
-      nextPermissions[menuPath] = nextPermissions[menuPath].filter(
-        (code) => code !== permissionCode,
-      );
-
-      if (nextPermissions[menuPath].length === 0) {
-        delete nextPermissions[menuPath];
+      const intersection = codes.filter((code) => allowedCodes.has(code));
+      if (intersection.length > 0) {
+        nextPermissions[path] = intersection;
       }
     }
 
