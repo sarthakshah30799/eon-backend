@@ -5,7 +5,7 @@ import { ProductService } from "./product.service";
 import { ProductController } from "./product.controller";
 import { UserModule } from "../users/user.module";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
-import { ProductCardIssuer } from "./entities/product-card-issuer.entity";
+import { ProductIssuer } from "./entities/product-issuer.entity";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 
 @Module({
@@ -13,7 +13,7 @@ import { PartyProfile } from "../party-profiles/party-profile.entity";
     TypeOrmModule.forFeature([
       Product,
       AccountProfile,
-      ProductCardIssuer,
+      ProductIssuer,
       PartyProfile,
     ]),
     UserModule,

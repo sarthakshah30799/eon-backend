@@ -34,6 +34,8 @@ BEGIN
   (10,  'Admin',                  NULL,                              NULL, NULL,                              TRUE,  'shield',         'folder'),
   (20,  'Accounting',             NULL,                              NULL, NULL,                              FALSE, 'book',           'folder'),
   (30,  'CARD',                   NULL,                              NULL, NULL,                              FALSE, 'credit-card',    'folder'),
+  (34,  'Deal Cover',             NULL,                              NULL, NULL,                              FALSE, 'banknote',       'folder'),
+  (35,  'TT',                     NULL,                              NULL, NULL,                              FALSE, 'landmark',       'folder'),
   (40,  'Operations',             NULL,                              NULL, NULL,                              FALSE, 'calendar-clock', 'folder'),
   (50,  'Other Transacations',    NULL,                              NULL, NULL,                              FALSE, 'receipt',        'folder'),
   (60,  'Party Profiles',         NULL,                              NULL, NULL,                              FALSE, 'users',          'folder'),
@@ -59,9 +61,13 @@ BEGIN
   (220, 'Receipts',               '/receipts',                       'Accounting', NULL, FALSE, 'receipt',   'unique'),
 
   -- CARD
-  (300, 'Card Issuer Settlement', '/card-settlement',                'CARD', NULL, FALSE, 'credit-card', 'unique'),
+  (300, 'Product Settlement',     '/product-settlement',             'CARD', NULL, FALSE, 'credit-card', 'unique'),
   (310, 'Card Transfer',          '/card-transfer',                  'CARD', NULL, FALSE, 'arrow-left-right','unique'),
   (320, 'Receipt Stock',          '/card-stock',                     'CARD', NULL, FALSE, 'archive',     'unique'),
+
+  -- Deal Cover (TT settlement uses shared /product-settlement)
+  (330, 'Deal Cover Rate',        '/deal-cover-rate',                'Deal Cover', NULL, FALSE, 'banknote', 'unique'),
+  (340, 'Deal Cover Acknowledgement', '/deal-cover-acknowledgement', 'Deal Cover', NULL, FALSE, 'check-circle', 'unique'),
 
   -- Operations
   (400, 'Before/End Of Day',      '/day-end-start-process',          'Operations', NULL, FALSE, 'calendar-clock','unique'),

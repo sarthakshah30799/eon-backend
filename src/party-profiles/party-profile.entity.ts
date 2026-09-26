@@ -13,7 +13,7 @@ import { User } from "../users/user.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { PartyProfileCommissionRule } from "./entities/party-profile-commission-rule.entity";
 import { PartyProfileBranch } from "./entities/party-profile-branch.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 
 export enum ClientType {
   CORPORATE_CLIENT = "CORPORATE_CLIENT",
@@ -44,10 +44,10 @@ export class PartyProfile extends BaseEntity {
   name: string;
 
   @OneToMany(
-    () => ProductCardIssuer,
+    () => ProductIssuer,
     (cardIssuerLink) => cardIssuerLink.partyProfile,
   )
-  productCardIssuerLinks: ProductCardIssuer[];
+  productIssuerLinks: ProductIssuer[];
 
   @Column({ type: "boolean", default: false })
   isIndividual: boolean;

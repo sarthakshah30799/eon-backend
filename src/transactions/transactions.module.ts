@@ -22,8 +22,9 @@ import { MailModule } from "../mail/mail.module";
 import { StorageModule } from "../storage/storage.module";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { SelectOptionModule } from "../category-options/category-option.module";
 import { Purpose } from "../purpose/purpose.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
@@ -45,8 +46,10 @@ import { CountryModule } from "../country/country.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
 import { UserModule } from "../users/user.module";
 import { CardStockModule } from "../card-stock/card-stock.module";
+import { ProductSettlementModule } from "../product-settlement/product-settlement.module";
 import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 import { VoucherModule } from "../vouchers/voucher.module";
+import { TtDealModule } from "../tt-deal/tt-deal.module";
 
 @Module({
   imports: [
@@ -56,13 +59,16 @@ import { VoucherModule } from "../vouchers/voucher.module";
     DayEndStartProcessModule,
     UserModule,
     CardStockModule,
+    ProductSettlementModule,
+    TtDealModule,
     VoucherModule,
     MailModule,
     StorageModule,
+    SelectOptionModule,
     TypeOrmModule.forFeature([
       Currency,
       Product,
-      ProductCardIssuer,
+      ProductIssuer,
       SelectOption,
       Purpose,
       DocumentProfile,

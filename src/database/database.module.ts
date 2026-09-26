@@ -19,7 +19,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         autoLoadEntities: true,
         entities: [
           __dirname +
-            "/../!(manual-bill-books|chequebooks|transactions|transfers|card-stock|vouchers|credit-request-fund|monthly-locks|day-end-start-process|stock-revaluation|transaction-data-locks|special-reports)/**/*.entity{.ts,.js}",
+            "/../!(manual-bill-books|chequebooks|transactions|transfers|card-stock|product-settlement|tt-deal|credit-request-fund|vouchers|monthly-locks|day-end-start-process|stock-revaluation|transaction-data-locks|special-reports)/**/*.entity{.ts,.js}",
         ],
         migrations: [__dirname + "/../migrations/*{.ts,.js}"],
         synchronize: false, // Ensure you handle schema changes properly
@@ -51,6 +51,8 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
           __dirname + "/../transactions/**/*.entity{.ts,.js}",
           __dirname + "/../transfers/**/*.entity{.ts,.js}",
           __dirname + "/../card-stock/**/*.entity{.ts,.js}",
+          __dirname + "/../product-settlement/**/*.entity{.ts,.js}",
+          __dirname + "/../tt-deal/**/*.entity{.ts,.js}",
           __dirname + "/../vouchers/**/*.entity{.ts,.js}",
           __dirname + "/../credit-request-fund/**/*.entity{.ts,.js}",
           __dirname + "/../stock-revaluation/**/*.entity{.ts,.js}",

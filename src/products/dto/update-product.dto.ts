@@ -12,7 +12,7 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
   @IsArray()
   @ArrayUnique()
   @IsUUID("4", { each: true })
-  cardIssuerProfileIds?: string[];
+  issuerProfileIds?: string[];
 
   @ApiPropertyOptional({
     description: "Existing card issuer links to remove",

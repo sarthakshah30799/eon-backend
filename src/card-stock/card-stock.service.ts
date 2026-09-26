@@ -18,7 +18,7 @@ import {
 } from "../party-profiles/party-profile.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { Product } from "../products/product.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { TransactionTypeProfileEnum } from "../transactions/transactions.enums";
 import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
 import { CardStockCard } from "./entities/card-stock-card.entity";
@@ -67,8 +67,8 @@ export class CardStockService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
-    @InjectRepository(ProductCardIssuer)
-    private readonly productIssuerRepository: Repository<ProductCardIssuer>,
+    @InjectRepository(ProductIssuer)
+    private readonly productIssuerRepository: Repository<ProductIssuer>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
     private readonly additionalSettingService: AdditionalSettingService,

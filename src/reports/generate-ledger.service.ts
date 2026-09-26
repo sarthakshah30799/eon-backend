@@ -75,6 +75,8 @@ const TECHNICAL_SLUGS = [
   "CARD_STOCK_LOAD",
   "CARD_SELL",
   "CARD_SETTLE",
+  "CM_SETTLE",
+  "TT_SETTLE",
   "CARD_RETURN",
   "CARD_VOID",
 ];

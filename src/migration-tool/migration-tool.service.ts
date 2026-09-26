@@ -30,7 +30,7 @@ import { State } from "../state/state.entity";
 import {
   PartyProfile,
 } from "../party-profiles/party-profile.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { normalizeMenuPath } from "../menu/menu-path.util";
 import {
@@ -1605,8 +1605,8 @@ export class MigrationToolService {
     return this.targetDataSource.getRepository(PartyProfile);
   }
 
-  private get targetProductCardIssuerRepository() {
-    return this.targetDataSource.getRepository(ProductCardIssuer);
+  private get targetProductIssuerRepository() {
+    return this.targetDataSource.getRepository(ProductIssuer);
   }
 
   private get targetPurposeRepository() {
@@ -2114,7 +2114,7 @@ export class MigrationToolService {
       case "party":
         return "party_profiles";
       case "productIssuerLink":
-        return "product_card_issuers";
+        return "product_issuers";
       case "mstRate":
         return "currency_rates";
       case "marginMaster":
@@ -9410,7 +9410,7 @@ export class MigrationToolService {
         }
 
         if (context.mode === "real") {
-          const existing = await this.targetProductCardIssuerRepository.findOne(
+          const existing = await this.targetProductIssuerRepository.findOne(
             {
               where: {
                 productId: product.id,
@@ -9424,11 +9424,11 @@ export class MigrationToolService {
               sourcePrimaryKey: sourceKey,
               targetId: existing.id,
               status: "reused",
-              note: "Reused product_card_issuers link",
+              note: "Reused product_issuers link",
             });
           } else {
-            const saved = await this.targetProductCardIssuerRepository.save(
-              this.targetProductCardIssuerRepository.create({
+            const saved = await this.targetProductIssuerRepository.save(
+              this.targetProductIssuerRepository.create({
                 productId: product.id,
                 partyProfileId: partyId,
                 createdBy: actorId,
@@ -9442,7 +9442,7 @@ export class MigrationToolService {
               sourcePrimaryKey: sourceKey,
               targetId: saved.id,
               status: "inserted",
-              note: "Created product_card_issuers link",
+              note: "Created product_issuers link",
             });
           }
         } else {
@@ -9453,7 +9453,7 @@ export class MigrationToolService {
             sourcePrimaryKey: sourceKey,
             targetId: `mock-issuer-link-${sourceKey}`,
             status: "mocked",
-            note: "Would create product_card_issuers link",
+            note: "Would create product_issuers link",
           });
         }
       } catch (error) {
@@ -9469,7 +9469,7 @@ export class MigrationToolService {
 
     context.tableResults.push({
       sourceTable: tableName,
-      targetTable: "product_card_issuers",
+      targetTable: "product_issuers",
       scanned: rows.length,
       inserted,
       skipped,

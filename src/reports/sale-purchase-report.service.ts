@@ -332,6 +332,8 @@ export class SalePurchaseReportService {
         "CARD_STOCK_LOAD",
         "CARD_SELL",
         "CARD_SETTLE",
+        "CM_SETTLE",
+        "TT_SETTLE",
         "CARD_RETURN",
         "CARD_VOID",
       ],
@@ -408,9 +410,9 @@ export class SalePurchaseReportService {
     maxPayments: number;
     maxCharges: number;
   } {
-    const items = [...(transaction.items ?? [])].sort(
-      (left, right) => left.lineNo - right.lineNo,
-    );
+    const items = [...(transaction.items ?? [])]
+      .filter((item) => !item.cardId && !item.dealCoverId)
+      .sort((left, right) => left.lineNo - right.lineNo);
     const payments = [...(transaction.payments ?? [])].sort(
       (left, right) => left.lineNo - right.lineNo,
     );

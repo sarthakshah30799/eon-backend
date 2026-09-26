@@ -120,6 +120,8 @@ const EXCLUDED_SLUGS = new Set(
     TransactionTypeProfileEnum.CARD_STOCK_LOAD,
     TransactionTypeProfileEnum.CARD_SELL,
     TransactionTypeProfileEnum.CARD_SETTLE,
+    TransactionTypeProfileEnum.CM_SETTLE,
+    TransactionTypeProfileEnum.TT_SETTLE,
     TransactionTypeProfileEnum.CARD_RETURN,
     TransactionTypeProfileEnum.CARD_VOID,
     "COUNTER_TRANSFER_SELL",
@@ -588,6 +590,7 @@ export const loadFlm1SourceRows = async (
     "tx.is_latest = true",
     `tx.status = '${TransactionStatus.APPROVED}'`,
     "item.card_id IS NULL",
+    "item.deal_cover_id IS NULL",
     "tx.slug IS NOT NULL",
     `UPPER(tx.slug) NOT IN (${excludedList})`,
   ];

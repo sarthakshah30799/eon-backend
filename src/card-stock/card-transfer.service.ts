@@ -19,7 +19,7 @@ import {
   ClientType,
 } from "../party-profiles/party-profile.entity";
 import { Product } from "../products/product.entity";
-import { ProductCardIssuer } from "../products/entities/product-card-issuer.entity";
+import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { User } from "../users/user.entity";
 import { UserRole } from "../user-roles/user-role.entity";
 import { MailService } from "../mail/mail.service";
@@ -71,8 +71,8 @@ export class CardTransferService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
-    @InjectRepository(ProductCardIssuer)
-    private readonly productIssuerRepository: Repository<ProductCardIssuer>,
+    @InjectRepository(ProductIssuer)
+    private readonly productIssuerRepository: Repository<ProductIssuer>,
     @InjectRepository(PartyProfile)
     private readonly partyProfileRepository: Repository<PartyProfile>,
     @InjectRepository(UserRole)

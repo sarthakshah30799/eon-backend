@@ -177,8 +177,11 @@ const getItemAmount = (item: TransactionItem) => {
   return item.cardId ? amount + Number(item.roundOff ?? 0) : amount;
 };
 
+const isSettledProductLine = (item: TransactionItem) =>
+  Boolean(item.cardId || item.dealCoverId);
+
 const getItemCostAmount = (item: TransactionItem) => {
-  if (item.cardId && item.profitAmount !== null) {
+  if (isSettledProductLine(item) && item.profitAmount !== null) {
     return getItemAmount(item) - Number(item.profitAmount);
   }
   const quantity = Number(item.quantity ?? 0);
@@ -187,7 +190,7 @@ const getItemCostAmount = (item: TransactionItem) => {
 };
 
 const getItemGpAmount = (item: TransactionItem) => {
-  if (item.cardId) {
+  if (isSettledProductLine(item)) {
     return Number(item.profitAmount ?? 0);
   }
   const quantity = Number(item.quantity ?? 0);
@@ -321,16 +324,32 @@ export class ProductProfitReportService {
         "CARD_STOCK_LOAD",
         "CARD_SELL",
         "CARD_SETTLE",
+        "CM_SETTLE",
+        "TT_SETTLE",
         "CARD_RETURN",
         "CARD_VOID",
       ],
     });
+    // Include CARD/TT lines after branch settlement + profit_amount on shared settlements
     qb.andWhere(`(
-      item.card_id IS NULL OR EXISTS (
-        SELECT 1 FROM card_stock_settlements card_settlement
+      (
+        item.card_id IS NULL
+        AND item.deal_cover_id IS NULL
+      )
+      OR EXISTS (
+        SELECT 1 FROM product_settlements card_settlement
         WHERE card_settlement.transaction_item_id = item.id
-          AND card_settlement.branch_settlement_entry_id IS NOT NULL
           AND item.profit_amount IS NOT NULL
+          AND (
+            (
+              card_settlement.type = 'CARD'
+              AND card_settlement.branch_settlement_entry_id IS NOT NULL
+            )
+            OR (
+              card_settlement.type = 'TT'
+              AND card_settlement.status IN ('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED')
+            )
+          )
       )
     )`);
 
