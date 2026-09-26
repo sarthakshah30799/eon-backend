@@ -24,6 +24,7 @@ import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
 import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { SelectOptionModule } from "../category-options/category-option.module";
 import { Purpose } from "../purpose/purpose.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
@@ -63,6 +64,7 @@ import { TtDealModule } from "../tt-deal/tt-deal.module";
     VoucherModule,
     MailModule,
     StorageModule,
+    SelectOptionModule,
     TypeOrmModule.forFeature([
       Currency,
       Product,

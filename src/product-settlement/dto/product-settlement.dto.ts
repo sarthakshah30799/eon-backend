@@ -46,6 +46,12 @@ export class ProductSettlementDocumentQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() issuerPartyProfileId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() currencyId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
+  @ApiPropertyOptional({
+    description: "Filter by product code on linked settlement items (e.g. CC, CM, TT)",
+  })
+  @IsOptional()
+  @IsString()
+  productCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
 }

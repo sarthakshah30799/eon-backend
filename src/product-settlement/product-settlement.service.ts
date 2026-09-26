@@ -762,6 +762,29 @@ export class ProductSettlementService {
       acceptedById: actorId,
       updatedBy: actorId,
     });
+    // Re-fire hold/profit trigger so sale lines get profit_amount for product-profit.
+    await this.refreshSaleItemProfit(
+      manager,
+      postedItems.map((row) => row.transactionItemId),
+    );
+  }
+
+  private async refreshSaleItemProfit(
+    manager: EntityManager,
+    transactionItemIds: Array<string | null | undefined>,
+  ) {
+    const ids = [
+      ...new Set(
+        transactionItemIds.filter((id): id is string => Boolean(id?.trim())),
+      ),
+    ];
+    if (!ids.length) return;
+    await manager.query(
+      `UPDATE transaction_items
+          SET updated_at = CLOCK_TIMESTAMP()
+        WHERE id = ANY($1::uuid[])`,
+      [ids],
+    );
   }
 
   private async postIssuerDocument(
@@ -1120,7 +1143,16 @@ export class ProductSettlementService {
         d.ho_branch_id AS "hoBranchId", d.ho_branch_snapshot AS "hoBranchSnapshot",
         d.reference, d.remarks, d.rejection_reason AS "rejectionReason", d.cancellation_reason AS "cancellationReason",
         d.posting_transaction_id AS "postingTransactionId",
-        (SELECT COUNT(*)::int FROM product_settlements item WHERE item.deleted_at IS NULL AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))) AS "itemCount"
+        (SELECT COUNT(*)::int FROM product_settlements item WHERE item.deleted_at IS NULL AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))) AS "itemCount",
+        (SELECT COALESCE(string_agg(codes.code, ', ' ORDER BY codes.code), '')
+           FROM (
+             SELECT DISTINCT UPPER(TRIM(item.product_code::text)) AS code
+               FROM product_settlements item
+              WHERE item.deleted_at IS NULL
+                AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))
+                AND NULLIF(TRIM(item.product_code::text), '') IS NOT NULL
+           ) codes
+        ) AS "productCodes"
        FROM product_settlement_documents d`;
   }
 
@@ -1176,6 +1208,18 @@ export class ProductSettlementService {
     if (query.currencyId) add("d.currency_id = ?", query.currencyId);
     if (query.branchId && this.isHo(session))
       add("d.branch_id = ?", query.branchId);
+    const productCode = query.productCode?.trim();
+    if (productCode) {
+      params.push(productCode.toUpperCase());
+      const productParam = `$${params.length}`;
+      conditions.push(`EXISTS (
+        SELECT 1
+          FROM product_settlements item
+         WHERE item.deleted_at IS NULL
+           AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))
+           AND UPPER(TRIM(item.product_code::text)) = ${productParam}
+      )`);
+    }
     if (query.dateFrom)
       add(
         "d.transaction_date >= ?",

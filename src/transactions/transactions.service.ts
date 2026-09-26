@@ -60,6 +60,8 @@ import {
   PassengerNationalityType,
 } from "../passengers/passenger.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { CategoryOptionCodeEnum } from "../category-options/category-option-code.enum";
+import { SelectOptionService } from "../category-options/category-option.service";
 import { Country } from "../country/country.entity";
 import { State } from "../state/state.entity";
 import { CompanyService } from "../company/company.service";
@@ -434,6 +436,7 @@ export class TransactionsService {
     private readonly manualBookPageTrackingRepository: Repository<ManualBookPageTracking>,
     @InjectRepository(ChequeBookPageTracking, "database2")
     private readonly chequeBookPageTrackingRepository: Repository<ChequeBookPageTracking>,
+    private readonly selectOptionService: SelectOptionService,
     private readonly companyService: CompanyService,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
@@ -1210,6 +1213,24 @@ export class TransactionsService {
       });
     }
 
+    const trimmedProductCode = query?.productCode?.trim();
+    if (trimmedProductCode) {
+      qb.andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM transaction_items item
+          WHERE item.transaction_id = transaction.id
+            AND item.deleted_at IS NULL
+            AND UPPER(COALESCE(
+              NULLIF(TRIM(item.product_snapshot->>'productCode'), ''),
+              NULLIF(TRIM(item.product_snapshot->>'code'), ''),
+              ''
+            )) = UPPER(:productCode)
+        )`,
+        { productCode: trimmedProductCode },
+      );
+    }
+
     const trimmedSearch = query?.search?.trim();
     if (trimmedSearch) {
       qb.andWhere("transaction.number ILIKE :search", {
@@ -1220,6 +1241,45 @@ export class TransactionsService {
     qb.orderBy("transaction.createdAt", "DESC");
     applyPagination(qb, pagination);
     const [transactions, total] = await qb.getManyAndCount();
+
+    const transactionIds = transactions.map((transaction) => transaction.id);
+    const productCodesByTransactionId = new Map<string, string[]>();
+    if (transactionIds.length) {
+      const items = await this.transactionItemRepository
+        .createQueryBuilder("item")
+        .select(["item.id", "item.transactionId", "item.productSnapshot"])
+        .where("item.transactionId IN (:...transactionIds)", {
+          transactionIds,
+        })
+        .getMany();
+
+      for (const item of items) {
+        const snapshot = item.productSnapshot as
+          | Record<string, unknown>
+          | null
+          | undefined;
+        const code = String(
+          snapshot?.productCode ?? snapshot?.code ?? "",
+        )
+          .trim()
+          .toUpperCase();
+        if (!code) {
+          continue;
+        }
+        const existing = productCodesByTransactionId.get(item.transactionId) ?? [];
+        if (!existing.includes(code)) {
+          existing.push(code);
+          productCodesByTransactionId.set(item.transactionId, existing);
+        }
+      }
+    }
+
+    const withProductCodes = (transaction: Transaction) =>
+      ({
+        ...transaction,
+        productCodes: productCodesByTransactionId.get(transaction.id) ?? [],
+      }) as Transaction & { productCodes: string[] };
+
     const partyProfileIds = [
       ...new Set(
         transactions
@@ -1229,7 +1289,11 @@ export class TransactionsService {
     ];
 
     if (!partyProfileIds.length) {
-      return buildPaginatedResponse(transactions, total, pagination);
+      return buildPaginatedResponse(
+        transactions.map(withProductCodes) as Transaction[],
+        total,
+        pagination,
+      );
     }
 
     const partyProfiles = await Promise.all(
@@ -1245,19 +1309,20 @@ export class TransactionsService {
 
     return buildPaginatedResponse(
       transactions.map((transaction) => {
+        const enriched = withProductCodes(transaction);
         if (transaction.partyProfileSnapshot) {
-          return transaction;
+          return enriched;
         }
 
         const partyProfile = partyProfileById.get(transaction.partyProfileId);
         if (!partyProfile) {
-          return transaction;
+          return enriched;
         }
 
         return {
-          ...transaction,
+          ...enriched,
           partyProfileSnapshot: partyProfile,
-        } as Transaction;
+        } as Transaction & { productCodes: string[] };
       }) as Transaction[],
       total,
       pagination,
@@ -2336,16 +2401,14 @@ export class TransactionsService {
           : ((remittancePayload.fbBearerOptionSnapshot as TransactionReferenceSnapshotValue) ??
             null);
         if (fbBearerOptionId) {
-          const fbBearerOption = await this.selectOptionRepository.findOne({
-            where: {
-              id: fbBearerOptionId,
-              code: "FB_CHARGE_BEARER",
-              isActive: true,
-            },
-          });
+          const fbBearerOption =
+            await this.selectOptionService.findActiveEntityByIdAndCode(
+              fbBearerOptionId,
+              CategoryOptionCodeEnum.FbChargeBearer,
+            );
           if (!fbBearerOption) {
             throw new BadRequestException(
-              "TT remittance FB charge bearer must be an active FB_CHARGE_BEARER option",
+              "TT remittance FB charge bearer must be an active FBCHARGEBEARER option",
             );
           }
         }

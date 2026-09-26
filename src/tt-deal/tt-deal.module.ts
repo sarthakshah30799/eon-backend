@@ -4,6 +4,7 @@ import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { Branch } from "../branches/branch.entity";
 import { SelectOption } from "../category-options/category-option.entity";
+import { SelectOptionModule } from "../category-options/category-option.module";
 import { Currency } from "../currencies/currency.entity";
 import { CurrencyRatesModule } from "../currency-rates/currency-rates.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
@@ -14,6 +15,7 @@ import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { Product } from "../products/product.entity";
 import { PurposeSubpurpose } from "../purpose/purpose-subpurpose.entity";
 import { Purpose } from "../purpose/purpose.entity";
+import { UserModule } from "../users/user.module";
 import { UserRole } from "../user-roles/user-role.entity";
 import { DealCover, TtRemittanceDetail } from "./entities";
 import { DealCoverController } from "./deal-cover.controller";
@@ -25,6 +27,8 @@ import { DealCoverService } from "./deal-cover.service";
     DayEndStartProcessModule,
     CurrencyRatesModule,
     MailModule,
+    SelectOptionModule,
+    UserModule,
     TypeOrmModule.forFeature([
       Branch,
       AccountProfile,

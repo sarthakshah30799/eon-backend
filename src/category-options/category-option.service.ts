@@ -13,6 +13,7 @@ import { SelectOptionResponseDto } from "./dto/category-option-response.dto";
 import { SelectOptionGroupResponseDto } from "./dto/select-option-group-response.dto";
 import { StaticSelectOptionResponseDto } from "./dto/static-select-option-response.dto";
 import { CategoryOptionCodeEnum } from "./category-option-code.enum";
+import { normalizeCategoryOptionCode } from "./category-option-code.util";
 import {
   getStaticSelectOptions,
   type StaticSelectOption,
@@ -45,17 +46,11 @@ export class SelectOptionService {
   ) {}
 
   private getCacheKey(code: string): string {
-    return code
-      .trim()
-      .replace(/[_\s-]/g, "")
-      .toLowerCase();
+    return normalizeCategoryOptionCode(code).toLowerCase();
   }
 
   private normalizeCode(code: string): string {
-    return code
-      .trim()
-      .replace(/[_\s-]/g, "")
-      .toUpperCase();
+    return normalizeCategoryOptionCode(code);
   }
 
   private resolveStaticOptions(code: string): StaticSelectOption[] | null {
@@ -273,6 +268,29 @@ export class SelectOptionService {
     }
 
     return SelectOptionResponseDto.fromEntity(option);
+  }
+
+  /**
+   * Resolve an active option by id whose code matches CategoryOptionCodeEnum
+   * (normalized: underscores/spaces/dashes ignored).
+   */
+  async findActiveEntityByIdAndCode(
+    id: string,
+    code: CategoryOptionCodeEnum | string,
+  ): Promise<SelectOption | null> {
+    const option = await this.selectOptionRepository.findOne({
+      where: { id, isActive: true },
+    });
+    if (!option) {
+      return null;
+    }
+    if (
+      normalizeCategoryOptionCode(option.code) !==
+      normalizeCategoryOptionCode(String(code))
+    ) {
+      return null;
+    }
+    return option;
   }
 
   async create(

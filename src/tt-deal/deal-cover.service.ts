@@ -12,6 +12,7 @@ import { AuthenticatedSession } from "../auth/types/session-context";
 import { Branch } from "../branches/branch.entity";
 import { CategoryOptionCodeEnum } from "../category-options/category-option-code.enum";
 import { SelectOption } from "../category-options/category-option.entity";
+import { SelectOptionService } from "../category-options/category-option.service";
 import {
   toDateOnlyString,
   toUtcDateOnly,
@@ -48,8 +49,6 @@ import {
   UpdateDealCoverDto,
 } from "./dto/deal-cover.dto";
 import {
-  DealCoverAckListResponseDto,
-  DealCoverCurrencyAggregateDto,
   DealCoverResponseDto,
 } from "./dto/deal-cover-response.dto";
 import { DealCover } from "./entities/deal-cover.entity";
@@ -83,6 +82,7 @@ export class DealCoverService {
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    private readonly selectOptionService: SelectOptionService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly additionalSettingService: AdditionalSettingService,
@@ -213,71 +213,43 @@ export class DealCoverService {
     }
   }
 
-  private async loadMaturityDayLimits(): Promise<Record<string, unknown>> {
-    const limitsRaw = await this.additionalSettingService.getSettingTextValue(
-      "TT_SETTINGS",
-      "TT_MATURITY_DAY_LIMITS",
-    );
-    if (!limitsRaw) {
-      throw new BadRequestException(
-        "TT maturity day limits are not configured",
-      );
-    }
-
-    try {
-      return JSON.parse(limitsRaw) as Record<string, unknown>;
-    } catch {
-      throw new BadRequestException(
-        "TT maturity day limits setting is invalid JSON",
-      );
-    }
-  }
-
   async getMaturityDayLimit(maturityOptionId: string): Promise<number> {
-    const option = await this.selectOptionRepository.findOne({
-      where: {
-        id: maturityOptionId,
-        code: CategoryOptionCodeEnum.TT_MATURITY,
-        isActive: true,
-      },
-    });
+    const option = await this.selectOptionService.findActiveEntityByIdAndCode(
+      maturityOptionId,
+      CategoryOptionCodeEnum.TtMaturity,
+    );
     if (!option) {
       throw new BadRequestException(
-        "Maturity option must be an active TT_MATURITY category option",
+        "Maturity option must be an active TTMATURITY category option",
       );
     }
+    return this.parseMaturityDayLimitFromOption(option);
+  }
 
-    const limits = await this.loadMaturityDayLimits();
-    const dayLimit =
-      limits[option.value] ?? limits[option.id] ?? limits[option.label];
-    if (dayLimit === undefined || dayLimit === null || dayLimit === "") {
+  private parseMaturityDayLimitFromOption(option: {
+    value: string;
+    label: string;
+  }): number {
+    const parsed = Number(String(option.value).trim());
+    if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
       throw new BadRequestException(
-        `TT maturity day limit is not configured for option "${option.value}"`,
-      );
-    }
-    const parsed = Number(dayLimit);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      throw new BadRequestException(
-        `TT maturity day limit for option "${option.value}" is invalid`,
+        `TT maturity option "${option.label}" value must be a non-negative whole number of days (got "${option.value}")`,
       );
     }
     return parsed;
   }
 
   private async assertMaturityOption(maturityOptionId: string) {
-    const option = await this.selectOptionRepository.findOne({
-      where: {
-        id: maturityOptionId,
-        code: CategoryOptionCodeEnum.TT_MATURITY,
-        isActive: true,
-      },
-    });
+    const option = await this.selectOptionService.findActiveEntityByIdAndCode(
+      maturityOptionId,
+      CategoryOptionCodeEnum.TtMaturity,
+    );
     if (!option) {
       throw new BadRequestException(
-        "Maturity option must be an active TT_MATURITY category option",
+        "Maturity option must be an active TTMATURITY category option",
       );
     }
-    await this.getMaturityDayLimit(maturityOptionId);
+    this.parseMaturityDayLimitFromOption(option);
     return option;
   }
 
@@ -451,9 +423,12 @@ export class DealCoverService {
     }
 
     const party = await this.partyProfileRepository.findOne({
-      where: { id: dto.partyProfileId, isActive: true },
+      where: { id: dto.partyProfileId, active: true },
     });
-    if (!party || party.type !== dto.partyProfileType) {
+    if (!party) {
+      throw new NotFoundException("Active party profile was not found");
+    }
+    if (party.type !== dto.partyProfileType) {
       throw new BadRequestException(
         "Party profile type does not match the selected party",
       );
@@ -464,7 +439,7 @@ export class DealCoverService {
       marketing = await this.partyProfileRepository.findOne({
         where: {
           id: dto.marketingExecutiveId,
-          isActive: true,
+          active: true,
           type: ClientType.MARKETING_EXECUTIVE,
         },
       });
@@ -492,7 +467,7 @@ export class DealCoverService {
     const issuer = await this.partyProfileRepository.findOne({
       where: {
         id: dto.issuerPartyProfileId,
-        isActive: true,
+        active: true,
         type: ClientType.CARD_ISSUER_PROFILE,
       },
     });
@@ -631,10 +606,11 @@ export class DealCoverService {
       qb.andWhere("cover.branchId = :branchId", { branchId: query.branchId });
     }
 
-    const statuses = query.status?.length
-      ? query.status
-      : [DealCoverStatus.PENDING];
-    qb.andWhere("cover.status IN (:...statuses)", { statuses });
+    if (query.status?.length) {
+      qb.andWhere("cover.status IN (:...statuses)", {
+        statuses: query.status,
+      });
+    }
 
     if (query.bankAccountProfileId) {
       qb.andWhere("cover.bankAccountProfileId = :bankAccountProfileId", {
@@ -735,63 +711,8 @@ export class DealCoverService {
   async listForAck(
     query: DealCoverAckListQueryDto,
     session: AuthenticatedSession,
-  ): Promise<DealCoverAckListResponseDto> {
-    const pagination = normalizePagination(query);
-    const qb = this.coverRepository.createQueryBuilder("cover");
-    this.applyListFilters(qb, query, session);
-    qb.orderBy("cover.transactionDate", "DESC").addOrderBy(
-      "cover.createdAt",
-      "DESC",
-    );
-    applyPagination(qb, pagination);
-    const [rows, total] = await qb.getManyAndCount();
-
-    const groupMap = new Map<
-      string,
-      DealCoverCurrencyAggregateDto & { weightedNumerator: number }
-    >();
-    for (const row of rows) {
-      let group = groupMap.get(row.currencyId);
-      if (!group) {
-        group = {
-          currencyId: row.currencyId,
-          currencySnapshot: row.currencySnapshot,
-          totalFeAmount: "0",
-          weightedAvgDealRate: "0",
-          totalInrAmount: "0",
-          dealCount: 0,
-          deals: [],
-          weightedNumerator: 0,
-        };
-        groupMap.set(row.currencyId, group);
-      }
-      const fe = Number(row.feAmount);
-      const rate = Number(row.dealRate);
-      const inr = Number(row.inrAmount);
-      group.totalFeAmount = (Number(group.totalFeAmount) + fe).toFixed(2);
-      group.totalInrAmount = (Number(group.totalInrAmount) + inr).toFixed(2);
-      group.weightedNumerator += rate * fe;
-      group.dealCount += 1;
-      group.deals.push(DealCoverResponseDto.fromEntity(row));
-    }
-
-    const groups = [...groupMap.values()]
-      .filter((group) => group.dealCount > 0)
-      .map(({ weightedNumerator, ...group }) => {
-        const totalFe = Number(group.totalFeAmount);
-        return {
-          ...group,
-          weightedAvgDealRate:
-            totalFe > 0 ? (weightedNumerator / totalFe).toFixed(7) : "0",
-        };
-      });
-
-    return {
-      groups,
-      total,
-      limit: pagination.limit,
-      offset: pagination.offset,
-    };
+  ) {
+    return this.list(query, session);
   }
 
   async get(id: string, session: AuthenticatedSession) {

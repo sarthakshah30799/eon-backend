@@ -177,8 +177,11 @@ const getItemAmount = (item: TransactionItem) => {
   return item.cardId ? amount + Number(item.roundOff ?? 0) : amount;
 };
 
+const isSettledProductLine = (item: TransactionItem) =>
+  Boolean(item.cardId || item.dealCoverId);
+
 const getItemCostAmount = (item: TransactionItem) => {
-  if (item.cardId && item.profitAmount !== null) {
+  if (isSettledProductLine(item) && item.profitAmount !== null) {
     return getItemAmount(item) - Number(item.profitAmount);
   }
   const quantity = Number(item.quantity ?? 0);
@@ -187,7 +190,7 @@ const getItemCostAmount = (item: TransactionItem) => {
 };
 
 const getItemGpAmount = (item: TransactionItem) => {
-  if (item.cardId) {
+  if (isSettledProductLine(item)) {
     return Number(item.profitAmount ?? 0);
   }
   const quantity = Number(item.quantity ?? 0);

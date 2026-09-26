@@ -50,7 +50,7 @@ export class DealCoverController {
 
   @Get("ack")
   @ApiOperation({
-    summary: "List deal covers for acknowledgement with currency aggregates",
+    summary: "List deal covers for acknowledgement (paginated)",
   })
   listForAck(
     @Query() query: DealCoverAckListQueryDto,

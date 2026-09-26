@@ -31,6 +31,13 @@ export class TransactionListQueryDto extends PaginationQueryDto {
   @IsOptional()
   partyProfileId?: string;
 
+  @ApiPropertyOptional({
+    description: "Filter by product code on any transaction item (e.g. CN, CC, TT)",
+  })
+  @IsString()
+  @IsOptional()
+  productCode?: string;
+
   @ApiPropertyOptional({ enum: Object.values(TransactionType) })
   @IsIn(Object.values(TransactionType))
   @IsOptional()

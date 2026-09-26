@@ -6,6 +6,7 @@ import { CardStockModule } from "../card-stock/card-stock.module";
 import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
 import { DealCover } from "../tt-deal/entities/deal-cover.entity";
+import { UserModule } from "../users/user.module";
 import { ProductSettlementController } from "./product-settlement.controller";
 import { ProductSettlementService } from "./product-settlement.service";
 import { ProductSettlementWorker } from "./product-settlement.worker";
@@ -18,6 +19,7 @@ import {
   imports: [
     AdditionalSettingModule,
     DayEndStartProcessModule,
+    UserModule,
     forwardRef(() => CardStockModule),
     TypeOrmModule.forFeature([Branch]),
     TypeOrmModule.forFeature(

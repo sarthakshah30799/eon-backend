@@ -32,6 +32,6 @@ export enum CategoryOptionCodeEnum {
   VoucherAccountType = "VOUCHER_ACCOUNT_TYPE",
   VoucherItemType = "VOUCHER_ITEM_TYPE",
   VoucherRemark = "VOUCHER_REMARK",
-  TT_MATURITY = "TT_MATURITY",
-  FB_CHARGE_BEARER = "FB_CHARGE_BEARER",
+  TtMaturity = "TTMATURITY",
+  FbChargeBearer = "FBCHARGEBEARER",
 }
