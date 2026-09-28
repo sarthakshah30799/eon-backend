@@ -298,6 +298,7 @@ export class PurchaseRuleService {
 
   /**
    * Currency master Rate/Per unit divisor (e.g. per 1 / per 100).
+   * If currency/code is missing or ratePer is empty/invalid, use 1 (same as before).
    * Kept separate from the FX board base rate.
    */
   private async resolveReferenceRatePer(
@@ -307,7 +308,7 @@ export class PurchaseRuleService {
       referenceCurrencyValue,
     );
 
-    return this.resolvePositiveDivisor(currency?.ratePer, 1);
+    return Math.max(1, toNumber(currency?.ratePer || 1) || 1);
   }
 
   /**
@@ -407,9 +408,9 @@ export class PurchaseRuleService {
     const referenceCurrencyCode = normalizeUpper(
       referenceCurrency?.currencyCode ?? config.referenceCurrencyCode,
     );
-    const referenceRatePer = this.resolvePositiveDivisor(
-      referenceCurrency?.ratePer,
+    const referenceRatePer = Math.max(
       1,
+      toNumber(referenceCurrency?.ratePer || 1) || 1,
     );
     const referenceBaseRate = await this.resolveReferenceBaseRate(
       config.referenceCurrencyCode,
@@ -447,9 +448,10 @@ export class PurchaseRuleService {
       const rate = toNumber(item.rate);
       const rowCurrency = await resolveRowCurrency(item.currencyId);
       // Line INR uses item.per when present, otherwise the currency master ratePer.
-      const per = this.resolvePositiveDivisor(
-        item.per ?? rowCurrency?.ratePer,
+      // Missing/invalid values fall back to 1 (same as previous behavior).
+      const per = Math.max(
         1,
+        toNumber(item.per ?? rowCurrency?.ratePer ?? 1) || 1,
       );
       const baseAmount = (quantity * rate) / per;
       transactionAmount += baseAmount;
@@ -506,7 +508,7 @@ export class PurchaseRuleService {
     referenceRatePer: number,
     referenceBaseRate: number,
   ): number {
-    const ratePer = this.resolvePositiveDivisor(referenceRatePer, 1);
+    const ratePer = Math.max(1, toNumber(referenceRatePer || 1) || 1);
     const baseRate = this.resolvePositiveDivisor(referenceBaseRate, 1);
     return amount / ratePer / baseRate;
   }
