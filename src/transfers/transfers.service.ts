@@ -978,15 +978,26 @@ export class TransfersService {
         transferType: params.transferType,
       });
     }
-    if (params?.branchId) {
+    // Workplace scope must be paired: show only transfers where this
+    // branch+counter is the source OR the destination. Independent ORs
+    // incorrectly surface other counters on the same branch.
+    if (params?.branchId && params?.counterId) {
+      query.andWhere(
+        `((transfer.sourceBranchId = :branchId AND transfer.sourceCounterId = :counterId)
+          OR (transfer.destinationBranchId = :branchId AND transfer.destinationCounterId = :counterId))`,
+        {
+          branchId: params.branchId,
+          counterId: params.counterId,
+        },
+      );
+    } else if (params?.branchId) {
       query.andWhere(
         "(transfer.sourceBranchId = :branchId OR transfer.destinationBranchId = :branchId)",
         {
           branchId: params.branchId,
         },
       );
-    }
-    if (params?.counterId) {
+    } else if (params?.counterId) {
       query.andWhere(
         "(transfer.sourceCounterId = :counterId OR transfer.destinationCounterId = :counterId)",
         {
