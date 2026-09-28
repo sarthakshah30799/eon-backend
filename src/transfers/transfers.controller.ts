@@ -32,20 +32,16 @@ export class TransfersController {
     @Session() session: any,
     @Query() query: TransferListQueryDto,
   ): Promise<PaginatedResponseDto<CurrencyTransfer>> {
+    // Always scope to the active workplace when set, including Admin/HO.
+    // Indonesia C1 → Andheri C1 must not appear for Andheri C2.
     return this.transfersService.findAll({
       transferType: query.transferType,
       status: query.status,
       search: query.search,
       limit: query.limit,
       offset: query.offset,
-      branchId:
-        session?.isAdmin || session?.isHoStaff
-          ? undefined
-          : session?.activeBranchId,
-      counterId:
-        session?.isAdmin || session?.isHoStaff
-          ? undefined
-          : session?.activeCounterId,
+      branchId: session?.activeBranchId ?? undefined,
+      counterId: session?.activeCounterId ?? undefined,
     });
   }
 
