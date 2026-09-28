@@ -48,6 +48,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
   const usdCurrency = {
     id: "currency-usd",
     currencyCode: "USD",
+    ratePer: "1",
   };
 
   const cnProduct = {
@@ -584,7 +585,11 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     expect(result.passengerMatchTier).toBe(1);
   });
 
-  it("converts cash using latest currency-rates baseRate not currency.ratePer", async () => {
+  it("converts cash using currency.ratePer then currency-rates baseRate", async () => {
+    currencyRepository.findOne.mockResolvedValue({
+      ...usdCurrency,
+      ratePer: "100",
+    });
     currencyRatesService.findLatestRates.mockResolvedValue([
       {
         ...latestUsdRate,
@@ -598,13 +603,14 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
       payments: [
         {
           paymentMethod: TransactionPaymentMethod.CASH,
-          amount: 8300,
+          amount: 830000,
         },
       ],
     });
 
     const result = await service.preview(body);
 
+    // 830000 / ratePer(100) / baseRate(83) = 100
     expect(currencyRatesService.findLatestRates).toHaveBeenCalledWith(
       usdCurrency.id,
     );

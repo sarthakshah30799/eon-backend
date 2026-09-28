@@ -269,7 +269,7 @@ export class PurchaseRuleService {
 
   private async resolveCurrencyByCodeOrId(
     currencyValue?: string | null,
-  ): Promise<Pick<Currency, "id" | "currencyCode"> | null> {
+  ): Promise<Pick<Currency, "id" | "currencyCode" | "ratePer"> | null> {
     const normalizedValue = normalize(currencyValue);
 
     if (!normalizedValue) {
@@ -278,7 +278,7 @@ export class PurchaseRuleService {
 
     const byCode = await this.currencyRepository.findOne({
       where: { currencyCode: normalizeUpper(normalizedValue) },
-      select: { id: true, currencyCode: true },
+      select: { id: true, currencyCode: true, ratePer: true },
     });
 
     if (byCode) {
@@ -287,13 +287,32 @@ export class PurchaseRuleService {
 
     return this.currencyRepository.findOne({
       where: { id: normalizedValue },
-      select: { id: true, currencyCode: true },
+      select: { id: true, currencyCode: true, ratePer: true },
     });
+  }
+
+  private resolvePositiveDivisor(value: unknown, fallback = 1): number {
+    const parsed = toNumber(value);
+    return parsed > 0 ? parsed : fallback;
+  }
+
+  /**
+   * Currency master Rate/Per unit divisor (e.g. per 1 / per 100).
+   * Kept separate from the FX board base rate.
+   */
+  private async resolveReferenceRatePer(
+    referenceCurrencyValue: string,
+  ): Promise<number> {
+    const currency = await this.resolveCurrencyByCodeOrId(
+      referenceCurrencyValue,
+    );
+
+    return this.resolvePositiveDivisor(currency?.ratePer, 1);
   }
 
   /**
    * Base FX rate shown under Currency Rates → Product Currency Overrides
-   * ("Base Price"), from the latest currency_rates board entry — not currency.ratePer.
+   * ("Base Price"), from the latest currency_rates board entry.
    * Purchase side uses buy base for TICKER providers.
    */
   private pickReferenceBaseRate(rate: CurrencyRate | null | undefined): number {
@@ -305,8 +324,7 @@ export class PurchaseRuleService {
       rate.provider === CurrencyRateProvider.TICKER
         ? rate.baseBuyRate || rate.baseRate || rate.baseSaleRate
         : rate.baseRate || rate.baseBuyRate || rate.baseSaleRate;
-    const parsed = toNumber(raw);
-    return parsed > 0 ? parsed : 1;
+    return this.resolvePositiveDivisor(raw, 1);
   }
 
   private async resolveReferenceBaseRate(
@@ -389,12 +407,16 @@ export class PurchaseRuleService {
     const referenceCurrencyCode = normalizeUpper(
       referenceCurrency?.currencyCode ?? config.referenceCurrencyCode,
     );
+    const referenceRatePer = this.resolvePositiveDivisor(
+      referenceCurrency?.ratePer,
+      1,
+    );
     const referenceBaseRate = await this.resolveReferenceBaseRate(
       config.referenceCurrencyCode,
     );
     const currencyCache = new Map<
       string,
-      Pick<Currency, "id" | "currencyCode">
+      Pick<Currency, "id" | "currencyCode" | "ratePer">
     >();
 
     const resolveRowCurrency = async (currencyId?: string | null) => {
@@ -423,17 +445,26 @@ export class PurchaseRuleService {
     for (const item of filteredItems) {
       const quantity = toNumber(item.quantity);
       const rate = toNumber(item.rate);
-      const per = Math.max(1, toNumber(item.per) || 1);
+      const rowCurrency = await resolveRowCurrency(item.currencyId);
+      // Line INR uses item.per when present, otherwise the currency master ratePer.
+      const per = this.resolvePositiveDivisor(
+        item.per ?? rowCurrency?.ratePer,
+        1,
+      );
       const baseAmount = (quantity * rate) / per;
       transactionAmount += baseAmount;
 
-      const rowCurrency = await resolveRowCurrency(item.currencyId);
       const rowCurrencyCode = normalizeUpper(rowCurrency?.currencyCode);
 
       if (rowCurrencyCode && rowCurrencyCode === referenceCurrencyCode) {
         referenceAmount += quantity;
       } else {
-        referenceAmount += baseAmount / referenceBaseRate;
+        // Keep ratePer divisor, then apply board baseRate FX conversion.
+        referenceAmount += this.convertAmountToReferenceCurrency(
+          baseAmount,
+          referenceRatePer,
+          referenceBaseRate,
+        );
       }
     }
 
@@ -441,7 +472,11 @@ export class PurchaseRuleService {
       for (const charge of charges) {
         const amount = toNumber(charge.amount);
         transactionAmount += amount;
-        referenceAmount += amount / referenceBaseRate;
+        referenceAmount += this.convertAmountToReferenceCurrency(
+          amount,
+          referenceRatePer,
+          referenceBaseRate,
+        );
       }
     }
 
@@ -461,11 +496,19 @@ export class PurchaseRuleService {
     );
   }
 
+  /**
+   * INR → reference currency:
+   * 1) divide by currency master ratePer (unit)
+   * 2) divide by currency-rates board baseRate (FX)
+   */
   private convertAmountToReferenceCurrency(
     amount: number,
+    referenceRatePer: number,
     referenceBaseRate: number,
   ): number {
-    return amount / (referenceBaseRate > 0 ? referenceBaseRate : 1);
+    const ratePer = this.resolvePositiveDivisor(referenceRatePer, 1);
+    const baseRate = this.resolvePositiveDivisor(referenceBaseRate, 1);
+    return amount / ratePer / baseRate;
   }
 
   private async findPassengerCandidate(
@@ -718,6 +761,7 @@ export class PurchaseRuleService {
     candidatePassengerIds: string[],
     windowStart: Date,
     windowEnd: Date,
+    referenceRatePer: number,
     referenceBaseRate: number,
     excludeTransactionId?: string | null,
   ): Promise<number> {
@@ -771,6 +815,7 @@ export class PurchaseRuleService {
 
     return this.convertAmountToReferenceCurrency(
       cashInrTotal,
+      referenceRatePer,
       referenceBaseRate,
     );
   }
@@ -814,6 +859,9 @@ export class PurchaseRuleService {
       "USD";
     const passenger = this.getTransactionPassengerInput(body);
     const payments = this.getPayments(body);
+    const referenceRatePer = await this.resolveReferenceRatePer(
+      config.referenceCurrencyCode,
+    );
     const referenceBaseRate = await this.resolveReferenceBaseRate(
       config.referenceCurrencyCode,
     );
@@ -939,6 +987,7 @@ export class PurchaseRuleService {
         candidatePassengerIds,
         windowStart,
         windowEnd,
+        referenceRatePer,
         referenceBaseRate,
         excludeTransactionId,
       );
@@ -954,6 +1003,7 @@ export class PurchaseRuleService {
             sum + toNumber(payment.amount),
           0,
         ),
+      referenceRatePer,
       referenceBaseRate,
     );
     const cashTotalAmount =
@@ -968,6 +1018,7 @@ export class PurchaseRuleService {
             sum + toNumber(payment.amount),
           0,
         ),
+      referenceRatePer,
       referenceBaseRate,
     );
 
