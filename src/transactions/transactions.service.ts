@@ -14,6 +14,7 @@ import {
   TransactionDocumentStatus,
   TransactionPaymentMethod,
   TransactionPaymentDirection,
+  TradeMode,
   TransactionStatus,
   TransactionType,
   formatTransactionPaymentMethodLabel,
@@ -38,6 +39,7 @@ import { TransactionPassengerOtherDocument } from "./entities/transaction-passen
 import { PassengerOtherIdProofType } from "../passengers/passenger.entity";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
+import { assertProductAvailableForContext } from "../products/product-availability";
 import { ProductIssuer } from "../products/entities/product-issuer.entity";
 import { DocumentProfile } from "../document-profiles/document-profile.entity";
 import { StorageService } from "../storage/storage.service";
@@ -2491,6 +2493,11 @@ export class TransactionsService {
         const currency = await resolveCurrency(String(row.currencyId));
         const product = await resolveProduct(String(row.productId));
         const productEntity = await resolveProductEntity(String(row.productId));
+        assertProductAvailableForContext(productEntity, {
+          kind: "sale_purchase",
+          transactionType: transactionPayload.transactionType,
+          tradeMode: transactionPayload.tradeMode ?? TradeMode.BULK,
+        });
         const isCardItem = isCardProductCode(productEntity.productCode);
         const isTtItem = isTtProductCode(productEntity.productCode);
         const isMultiCurrencyCard = isMultiCurrencyCardProduct(

@@ -455,6 +455,15 @@ export class CreateProductDto {
   availableInOtherTransaction?: boolean;
 
   @ApiProperty({
+    description: "Available in Deal Cover",
+    required: false,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  availableInDealCover?: boolean;
+
+  @ApiProperty({
     description: "Allow Product Cancellation",
     required: false,
     default: false,

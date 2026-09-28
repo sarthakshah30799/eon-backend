@@ -34,6 +34,7 @@ import {
   PartyProfile,
 } from "../party-profiles/party-profile.entity";
 import { ProductIssuer } from "../products/entities/product-issuer.entity";
+import { assertProductAvailableForContext } from "../products/product-availability";
 import { Product } from "../products/product.entity";
 import { PurposeSubpurpose } from "../purpose/purpose-subpurpose.entity";
 import { Purpose } from "../purpose/purpose.entity";
@@ -421,6 +422,7 @@ export class DealCoverService {
     if (!product) {
       throw new NotFoundException("Active product was not found");
     }
+    assertProductAvailableForContext(product, { kind: "deal_cover" });
 
     const party = await this.partyProfileRepository.findOne({
       where: { id: dto.partyProfileId, active: true },

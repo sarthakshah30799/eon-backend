@@ -4,6 +4,22 @@ import { PaginationQueryDto } from "../../common/pagination";
 import { BooleanQuery } from "../../common/transformers/parse-boolean-query";
 
 export class ProductListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    description: "Filter products available in retail buying",
+  })
+  @IsBoolean()
+  @IsOptional()
+  @BooleanQuery()
+  retailBuying?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Filter products available in retail selling",
+  })
+  @IsBoolean()
+  @IsOptional()
+  @BooleanQuery()
+  retailSelling?: boolean;
+
   @ApiPropertyOptional({ description: "Filter products available in bulk buying" })
   @IsBoolean()
   @IsOptional()
@@ -25,6 +41,14 @@ export class ProductListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @BooleanQuery()
   otherTransaction?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Filter products available in deal cover",
+  })
+  @IsBoolean()
+  @IsOptional()
+  @BooleanQuery()
+  dealCover?: boolean;
 
   @ApiPropertyOptional({
     description: "Global search across product code and description",
