@@ -231,6 +231,8 @@ export class DayEndProcessWorker implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    // Party profiles are branch-scoped via party_profile_branches (many-to-many),
+    // not a party_profiles.branch_id column.
     await this.partyProfileRepository
       .createQueryBuilder()
       .update(PartyProfile)
@@ -240,7 +242,15 @@ export class DayEndProcessWorker implements OnModuleInit, OnModuleDestroy {
         updatedBy: actorUserId,
         updatedAt: new Date(),
       })
-      .where("branch_id = :branchId", { branchId })
+      .where(
+        `id IN (
+          SELECT ppb.party_profile_id
+          FROM party_profile_branches ppb
+          WHERE ppb.branch_id = :branchId
+            AND ppb.deleted_at IS NULL
+        )`,
+        { branchId },
+      )
       .andWhere(
         "(temporary_credit_limit IS NOT NULL OR temporary_credit_days IS NOT NULL)",
       )
