@@ -3,6 +3,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { Currency } from "../currencies/currency.entity";
+import { CurrencyRatesService } from "../currency-rates/currency-rates.service";
+import { CurrencyRateProvider } from "../currency-rates/currency-rates.enums";
+import { CurrencyRate } from "../currency-rates/currency-rate.entity";
 import {
   Passenger,
   PassengerEntityType,
@@ -43,6 +46,7 @@ type PurchaseRulePassengerInput = {
 };
 
 type PurchaseRuleTransactionBlock = {
+  id?: string | null;
   transactionType?: string | null;
   transactionDate?: string | null;
   slug?: string | null;
@@ -53,6 +57,7 @@ type PurchaseRuleTransactionBlock = {
 };
 
 type PurchaseRuleTransactionInput = {
+  id?: string | null;
   transactionType?: string | null;
   transactionDate?: string | null;
   slug?: string | null;
@@ -95,6 +100,7 @@ export type PurchaseRulePreviewResponse = {
   transactionAmount: string;
   transactionAmountInReferenceCurrency: string;
   cumulativeAmountInReferenceCurrency: string;
+  cumulativeCashAmountInReferenceCurrency: string;
   cashLimitAmount: string;
   cashTotalAmount: string;
   chequeTotalAmount: string;
@@ -121,6 +127,7 @@ const toNumber = (value: unknown) => {
 export class PurchaseRuleService {
   constructor(
     private readonly additionalSettingService: AdditionalSettingService,
+    private readonly currencyRatesService: CurrencyRatesService,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Passenger)
@@ -206,6 +213,13 @@ export class PurchaseRuleService {
     );
   }
 
+  private resolveExcludeTransactionId(
+    body: PurchaseRuleTransactionInput,
+  ): string | null {
+    const excludeId = normalize(body.transaction?.id ?? body.id);
+    return excludeId || null;
+  }
+
   private resolveHistoryWindow(
     body: PurchaseRuleTransactionInput,
     windowDays: number,
@@ -239,24 +253,9 @@ export class PurchaseRuleService {
     return (quantity * rate) / per;
   }
 
-  private async resolveCurrencyRatePer(
-    currencyId?: string | null,
-  ): Promise<number> {
-    if (!currencyId) {
-      return 1;
-    }
-
-    const currency = await this.currencyRepository.findOne({
-      where: { id: currencyId },
-      select: { id: true, ratePer: true },
-    });
-
-    return Math.max(1, toNumber(currency?.ratePer || 1) || 1);
-  }
-
   private async resolveCurrencyByCodeOrId(
     currencyValue?: string | null,
-  ): Promise<Pick<Currency, "id" | "currencyCode" | "ratePer"> | null> {
+  ): Promise<Pick<Currency, "id" | "currencyCode"> | null> {
     const normalizedValue = normalize(currencyValue);
 
     if (!normalizedValue) {
@@ -265,7 +264,7 @@ export class PurchaseRuleService {
 
     const byCode = await this.currencyRepository.findOne({
       where: { currencyCode: normalizeUpper(normalizedValue) },
-      select: { id: true, currencyCode: true, ratePer: true },
+      select: { id: true, currencyCode: true },
     });
 
     if (byCode) {
@@ -274,18 +273,44 @@ export class PurchaseRuleService {
 
     return this.currencyRepository.findOne({
       where: { id: normalizedValue },
-      select: { id: true, currencyCode: true, ratePer: true },
+      select: { id: true, currencyCode: true },
     });
   }
 
-  private async resolveReferenceRatePer(
+  /**
+   * Base FX rate shown under Currency Rates → Product Currency Overrides
+   * ("Base Price"), from the latest currency_rates board entry — not currency.ratePer.
+   * Purchase side uses buy base for TICKER providers.
+   */
+  private pickReferenceBaseRate(rate: CurrencyRate | null | undefined): number {
+    if (!rate) {
+      return 1;
+    }
+
+    const raw =
+      rate.provider === CurrencyRateProvider.TICKER
+        ? rate.baseBuyRate || rate.baseRate || rate.baseSaleRate
+        : rate.baseRate || rate.baseBuyRate || rate.baseSaleRate;
+    const parsed = toNumber(raw);
+    return parsed > 0 ? parsed : 1;
+  }
+
+  private async resolveReferenceBaseRate(
     referenceCurrencyValue: string,
   ): Promise<number> {
     const currency = await this.resolveCurrencyByCodeOrId(
       referenceCurrencyValue,
     );
 
-    return Math.max(1, toNumber(currency?.ratePer || 1) || 1);
+    if (!currency?.id) {
+      return 1;
+    }
+
+    const [latestRate] = await this.currencyRatesService.findLatestRates(
+      currency.id,
+    );
+
+    return this.pickReferenceBaseRate(latestRate ?? null);
   }
 
   private async calculateRowsAmountInReferenceCurrency(
@@ -299,13 +324,12 @@ export class PurchaseRuleService {
     const referenceCurrencyCode = normalizeUpper(
       referenceCurrency?.currencyCode ?? config.referenceCurrencyCode,
     );
-    const referenceRatePer = Math.max(
-      1,
-      toNumber(referenceCurrency?.ratePer || 1) || 1,
+    const referenceBaseRate = await this.resolveReferenceBaseRate(
+      config.referenceCurrencyCode,
     );
     const currencyCache = new Map<
       string,
-      Pick<Currency, "id" | "currencyCode" | "ratePer">
+      Pick<Currency, "id" | "currencyCode">
     >();
 
     const resolveRowCurrency = async (currencyId?: string | null) => {
@@ -344,14 +368,14 @@ export class PurchaseRuleService {
       if (rowCurrencyCode && rowCurrencyCode === referenceCurrencyCode) {
         referenceAmount += quantity;
       } else {
-        referenceAmount += baseAmount / referenceRatePer;
+        referenceAmount += baseAmount / referenceBaseRate;
       }
     }
 
     for (const charge of charges) {
       const amount = toNumber(charge.amount);
       transactionAmount += amount;
-      referenceAmount += amount / referenceRatePer;
+      referenceAmount += amount / referenceBaseRate;
     }
 
     return { transactionAmount, referenceAmount };
@@ -370,9 +394,9 @@ export class PurchaseRuleService {
 
   private convertAmountToReferenceCurrency(
     amount: number,
-    referenceRatePer: number,
+    referenceBaseRate: number,
   ): number {
-    return amount / Math.max(1, referenceRatePer || 1);
+    return amount / (referenceBaseRate > 0 ? referenceBaseRate : 1);
   }
 
   private async findPassengerCandidate(
@@ -605,6 +629,67 @@ export class PurchaseRuleService {
     return referenceAmount;
   }
 
+  private async calculateHistoricalCashAmountInReferenceCurrency(
+    candidatePassengerIds: string[],
+    windowStart: Date,
+    windowEnd: Date,
+    referenceBaseRate: number,
+    excludeTransactionId?: string | null,
+  ): Promise<number> {
+    if (!candidatePassengerIds.length) {
+      return 0;
+    }
+
+    const queryBuilder = this.transactionRepository
+      .createQueryBuilder("transaction")
+      .leftJoinAndSelect("transaction.payments", "payment")
+      .where("transaction.isLatest = true")
+      .andWhere("transaction.status = :status", {
+        status: TransactionStatus.APPROVED,
+      })
+      .andWhere("transaction.transactionType = :transactionType", {
+        transactionType: TransactionType.PURCHASE,
+      })
+      .andWhere("transaction.passengerId = ANY(:passengerIds)", {
+        passengerIds: candidatePassengerIds,
+      })
+      .andWhere("transaction.transactionDate >= :windowStart", { windowStart })
+      .andWhere("transaction.transactionDate < :windowEnd", { windowEnd });
+
+    const normalizedExcludeId = normalize(excludeTransactionId);
+    if (normalizedExcludeId) {
+      queryBuilder.andWhere("transaction.id != :excludeTransactionId", {
+        excludeTransactionId: normalizedExcludeId,
+      });
+    }
+
+    const transactions = await queryBuilder.getMany();
+
+    if (!transactions.length) {
+      return 0;
+    }
+
+    const cashInrTotal = transactions.reduce((sum, transaction) => {
+      const cashPayments = (transaction.payments ?? []).filter(
+        (payment) =>
+          normalizeUpper(payment.paymentMethod) ===
+          TransactionPaymentMethod.CASH,
+      );
+      return (
+        sum +
+        cashPayments.reduce(
+          (paymentSum, payment) => paymentSum + toNumber(payment.amount),
+          0,
+        )
+      );
+    }, 0);
+
+    return this.convertAmountToReferenceCurrency(
+      cashInrTotal,
+      referenceBaseRate,
+    );
+  }
+
   async preview(
     body: PurchaseRuleTransactionInput,
   ): Promise<PurchaseRulePreviewResponse> {
@@ -622,6 +707,7 @@ export class PurchaseRuleService {
         transactionAmount: "0.00",
         transactionAmountInReferenceCurrency: "0.00",
         cumulativeAmountInReferenceCurrency: "0.00",
+        cumulativeCashAmountInReferenceCurrency: "0.00",
         cashLimitAmount: "0.00",
         cashTotalAmount: "0.00",
         chequeTotalAmount: "0.00",
@@ -643,7 +729,7 @@ export class PurchaseRuleService {
       "USD";
     const passenger = this.getTransactionPassengerInput(body);
     const payments = this.getPayments(body);
-    const referenceRatePer = await this.resolveReferenceRatePer(
+    const referenceBaseRate = await this.resolveReferenceBaseRate(
       config.referenceCurrencyCode,
     );
     const entityType = normalizeUpper(passenger?.entityType);
@@ -677,6 +763,7 @@ export class PurchaseRuleService {
           transactionAmount: "0.00",
           transactionAmountInReferenceCurrency: "0.00",
           cumulativeAmountInReferenceCurrency: "0.00",
+          cumulativeCashAmountInReferenceCurrency: "0.00",
           cashLimitAmount: "0.00",
           cashTotalAmount: "0.00",
           chequeTotalAmount: "0.00",
@@ -699,6 +786,7 @@ export class PurchaseRuleService {
         transactionAmount: "0.00",
         transactionAmountInReferenceCurrency: "0.00",
         cumulativeAmountInReferenceCurrency: "0.00",
+        cumulativeCashAmountInReferenceCurrency: "0.00",
         cashLimitAmount: "0.00",
         cashTotalAmount: "0.00",
         chequeTotalAmount: "0.00",
@@ -717,6 +805,7 @@ export class PurchaseRuleService {
       });
     const candidate = await this.findPassengerCandidate(body);
     const candidatePassengerIds = candidate ? [candidate.passenger.id] : [];
+    const excludeTransactionId = this.resolveExcludeTransactionId(body);
     const { windowStart, windowEnd } = this.resolveHistoryWindow(
       body,
       config.windowDays,
@@ -731,7 +820,15 @@ export class PurchaseRuleService {
           referenceCurrencyCode,
         },
       );
-    const cashTotalAmount = this.convertAmountToReferenceCurrency(
+    const cumulativeCashAmountInReferenceCurrency =
+      await this.calculateHistoricalCashAmountInReferenceCurrency(
+        candidatePassengerIds,
+        windowStart,
+        windowEnd,
+        referenceBaseRate,
+        excludeTransactionId,
+      );
+    const currentCashAmount = this.convertAmountToReferenceCurrency(
       payments
         .filter(
           (payment: PurchaseRulePaymentInput) =>
@@ -743,8 +840,10 @@ export class PurchaseRuleService {
             sum + toNumber(payment.amount),
           0,
         ),
-      referenceRatePer,
+      referenceBaseRate,
     );
+    const cashTotalAmount =
+      currentCashAmount + cumulativeCashAmountInReferenceCurrency;
     const chequeTotalAmount = this.convertAmountToReferenceCurrency(
       payments
         .filter((payment: PurchaseRulePaymentInput) =>
@@ -755,7 +854,7 @@ export class PurchaseRuleService {
             sum + toNumber(payment.amount),
           0,
         ),
-      referenceRatePer,
+      referenceBaseRate,
     );
 
     const paymentMethodsAllowed: Array<"CASH" | "CHEQUE"> = [];
@@ -784,7 +883,7 @@ export class PurchaseRuleService {
     };
 
     if (isCorporate) {
-      if (cashTotalAmount > 0) {
+      if (currentCashAmount > 0) {
         addBlockingReason(
           "CORPORATE_CHEQUE_ONLY",
           "Corporate purchases can only be settled by cheque",
@@ -798,10 +897,11 @@ export class PurchaseRuleService {
         requiresCdf = true;
       }
 
-      if (cashTotalAmount > config.indianCashLimitAmount) {
+      const indianLimitComparableAmount = referenceAmount + cashTotalAmount;
+      if (!(indianLimitComparableAmount < config.indianCashLimitAmount)) {
         addBlockingReason(
           "CASH_LIMIT_EXCEEDED",
-          `Cash payment exceeds the Indian limit of ${config.indianCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
+          `Converted amount plus cash (including history) must be less than the Indian limit of ${config.indianCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
         );
       }
     } else if (isNriOrForeigner) {
@@ -812,10 +912,11 @@ export class PurchaseRuleService {
         );
       }
 
-      if (cashTotalAmount > config.nriCashLimitAmount) {
+      const nriLimitComparableAmount = referenceAmount + cashTotalAmount;
+      if (!(nriLimitComparableAmount < config.nriCashLimitAmount)) {
         addBlockingReason(
           "CASH_LIMIT_EXCEEDED",
-          `Cash payment exceeds the NRI / FOREIGNER limit of ${config.nriCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
+          `Converted amount plus cash (including history) must be less than the NRI / FOREIGNER limit of ${config.nriCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
         );
       }
     }
@@ -838,6 +939,8 @@ export class PurchaseRuleService {
       transactionAmountInReferenceCurrency: referenceAmount.toFixed(2),
       cumulativeAmountInReferenceCurrency:
         cumulativeAmountInReferenceCurrency.toFixed(2),
+      cumulativeCashAmountInReferenceCurrency:
+        cumulativeCashAmountInReferenceCurrency.toFixed(2),
       cashLimitAmount: isCorporate
         ? "0.00"
         : isIndian

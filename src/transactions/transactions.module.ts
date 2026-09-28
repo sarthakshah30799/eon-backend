@@ -39,6 +39,7 @@ import { User } from "../users/user.entity";
 import { ManualBookPageTracking } from "../manual-bill-books/entities/manual-book-page-tracking.entity";
 import { ChequeBookPageTracking } from "../chequebooks/entities/cheque-book-page-tracking.entity";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
+import { CurrencyRatesModule } from "../currency-rates/currency-rates.module";
 import { Counter } from "../counters/counter.entity";
 import { PurchaseRuleService } from "./purchase-rule.service";
 import { PartyCreditService } from "../party-profiles/party-credit.service";
@@ -55,6 +56,7 @@ import { TtDealModule } from "../tt-deal/tt-deal.module";
   imports: [
     CompanyModule,
     AdditionalSettingModule,
+    CurrencyRatesModule,
     CountryModule,
     DayEndStartProcessModule,
     UserModule,
