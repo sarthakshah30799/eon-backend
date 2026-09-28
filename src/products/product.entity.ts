@@ -185,6 +185,9 @@ export class Product extends BaseEntity {
   availableInOtherTransaction: boolean;
 
   @Column({ type: "boolean", default: false })
+  availableInDealCover: boolean;
+
+  @Column({ type: "boolean", default: false })
   allowProductCancellation: boolean;
 
   @Column({ type: "boolean", default: false })

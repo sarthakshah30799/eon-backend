@@ -75,6 +75,12 @@ export class ProductService {
       "DESC",
     );
 
+    if (query?.retailBuying) {
+      qb.andWhere("product.availableInRetailBuying = true");
+    }
+    if (query?.retailSelling) {
+      qb.andWhere("product.availableInRetailSelling = true");
+    }
     if (query?.bulkBuying) {
       qb.andWhere("product.availableInBulkBuying = true");
     }
@@ -83,6 +89,9 @@ export class ProductService {
     }
     if (query?.otherTransaction) {
       qb.andWhere("product.availableInOtherTransaction = true");
+    }
+    if (query?.dealCover) {
+      qb.andWhere("product.availableInDealCover = true");
     }
     if (query?.activeOnly !== false) {
       qb.andWhere("product.isActiveProduct = true");

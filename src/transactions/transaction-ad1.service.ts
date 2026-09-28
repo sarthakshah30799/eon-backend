@@ -14,6 +14,7 @@ import {
 import { Currency } from "../currencies/currency.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { assertProductAvailableForContext } from "../products/product-availability";
 import { Product } from "../products/product.entity";
 import { Purpose } from "../purpose/purpose.entity";
 import { TransactionProfileType, TransactionType } from "./transactions.enums";
@@ -127,7 +128,13 @@ export class TransactionAd1Service {
       const product = await this.productRepository.findOne({
         where: { id: payload.productId },
       });
-      snapshots.productSnapshot = product ?? null;
+      if (!product) {
+        throw new NotFoundException(
+          `Product with id ${payload.productId} not found`,
+        );
+      }
+      assertProductAvailableForContext(product, { kind: "other_transaction" });
+      snapshots.productSnapshot = product;
     }
 
     if (payload.agentId) {
