@@ -11,6 +11,7 @@ import {
 
 type MockRepo = {
   findOne: jest.Mock;
+  find?: jest.Mock;
   createQueryBuilder?: jest.Mock;
 };
 
@@ -23,6 +24,10 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
   };
   const currencyRepository: MockRepo = {
     findOne: jest.fn(),
+  };
+  const productRepository: MockRepo = {
+    findOne: jest.fn(),
+    find: jest.fn(),
   };
   const passengerRepository: MockRepo = {
     findOne: jest.fn(),
@@ -43,6 +48,11 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
   const usdCurrency = {
     id: "currency-usd",
     currencyCode: "USD",
+  };
+
+  const cnProduct = {
+    id: "product-cn",
+    productCode: "CN",
   };
 
   const latestUsdRate = {
@@ -73,20 +83,22 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     address1: "12 Test Street",
   };
 
+  const cnItem = {
+    currencyId: usdCurrency.id,
+    productId: cnProduct.id,
+    productCode: "CN",
+    quantity: 12,
+    rate: 90,
+    per: 1,
+  };
+
   const purchaseBody = (overrides: Record<string, unknown> = {}) => ({
     transaction: {
       transactionType: TransactionType.PURCHASE,
       transactionDate: "2026-08-26",
       slug: "PURCHASE_CORPORATE_INDIVIDUAL",
       passenger: baseIndianPassenger,
-      items: [
-        {
-          currencyId: usdCurrency.id,
-          quantity: 12,
-          rate: 90,
-          per: 1,
-        },
-      ],
+      items: [cnItem],
       additionalCharges: [],
       payments: [
         {
@@ -99,11 +111,13 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
   });
 
   const mockHistoryQueries = (
-    itemHistory: unknown[] = [],
+    cdfItemHistory: unknown[] = [],
+    cnItemHistory: unknown[] = [],
     cashHistory: unknown[] = [],
   ) => {
     queryBuilder.getMany
-      .mockResolvedValueOnce(itemHistory)
+      .mockResolvedValueOnce(cdfItemHistory)
+      .mockResolvedValueOnce(cnItemHistory)
       .mockResolvedValueOnce(cashHistory);
   };
 
@@ -130,6 +144,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     );
 
     currencyRepository.findOne.mockResolvedValue(usdCurrency);
+    productRepository.find.mockResolvedValue([cnProduct]);
     currencyRatesService.findLatestRates.mockResolvedValue([latestUsdRate]);
     passengerRepository.findOne.mockResolvedValue(null);
 
@@ -145,6 +160,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
       additionalSettingService as never,
       currencyRatesService as never,
       currencyRepository as never,
+      productRepository as never,
       passengerRepository as never,
       transactionRepository as never,
     );
@@ -231,7 +247,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     const result = await service.preview(body);
 
-    // Converted amount is 12 USD (USD face qty) + cash 900 = 912 < 1000
+    // Converted amount is 12 USD (CN USD face qty) + cash 900 = 912 < 1000
     expect(result.allowed).toBe(true);
     expect(result.ruleType).toBe("OK");
     expect(result.transactionAmountInReferenceCurrency).toBe("12.00");
@@ -242,10 +258,8 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     const body = purchaseBody({
       items: [
         {
-          currencyId: usdCurrency.id,
+          ...cnItem,
           quantity: 100,
-          rate: 90,
-          per: 1,
         },
       ],
       payments: [
@@ -275,6 +289,23 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
           items: [
             {
               currencyId: usdCurrency.id,
+              productId: cnProduct.id,
+              productCode: "CN",
+              quantity: "25",
+              rate: "90",
+              per: "1",
+            },
+          ],
+          additionalCharges: [],
+        },
+      ],
+      [
+        {
+          items: [
+            {
+              currencyId: usdCurrency.id,
+              productId: cnProduct.id,
+              productCode: "CN",
               quantity: "25",
               rate: "90",
               per: "1",
@@ -303,7 +334,36 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     expect(result.allowed).toBe(true);
     expect(result.passengerId).toBe("passenger-1");
     expect(result.cumulativeAmountInReferenceCurrency).toBe("25.00");
+    // Converted amount for limit = current CN 12 + history CN 25
+    expect(result.transactionAmountInReferenceCurrency).toBe("37.00");
     expect(result.cumulativeCashAmountInReferenceCurrency).toBe("0.00");
+  });
+
+  it("ignores non-CN products in the cash-limit converted amount", async () => {
+    const body = purchaseBody({
+      items: [
+        {
+          currencyId: usdCurrency.id,
+          productId: "product-tt",
+          productCode: "TT",
+          quantity: 5000,
+          rate: 90,
+          per: 1,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: TransactionPaymentMethod.CASH,
+          amount: 100,
+        },
+      ],
+    });
+
+    const result = await service.preview(body);
+
+    expect(result.transactionAmountInReferenceCurrency).toBe("0.00");
+    expect(result.cashTotalAmount).toBe("100.00");
+    expect(result.allowed).toBe(true);
   });
 
   it("blocks Indian when current cash plus historical approved cash exceeds limit", async () => {
@@ -313,6 +373,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     });
 
     mockHistoryQueries(
+      [],
       [],
       [
         {
@@ -351,6 +412,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     });
 
     mockHistoryQueries(
+      [],
       [],
       [
         {
@@ -391,6 +453,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     mockHistoryQueries(
       [],
+      [],
       [
         {
           id: "history-tx-1",
@@ -430,7 +493,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
       panNumber: "ABCDE1234F",
     });
 
-    mockHistoryQueries([], []);
+    mockHistoryQueries([], [], []);
 
     const body = purchaseBody({
       id: "current-tx-1",
