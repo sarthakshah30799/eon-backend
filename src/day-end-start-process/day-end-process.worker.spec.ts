@@ -99,9 +99,10 @@ describe("DayEndProcessWorker", () => {
         updatedBy: "user-1",
       }),
     );
-    expect(updateQb.where).toHaveBeenCalledWith("branch_id = :branchId", {
-      branchId: "branch-a",
-    });
+    expect(updateQb.where).toHaveBeenCalledWith(
+      expect.stringMatching(/party_profile_branches[\s\S]*branch_id = :branchId/),
+      { branchId: "branch-a" },
+    );
     expect(updateQb.andWhere).toHaveBeenCalledWith(
       "(temporary_credit_limit IS NOT NULL OR temporary_credit_days IS NOT NULL)",
     );
