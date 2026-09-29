@@ -220,7 +220,31 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     await expect(service.validate(body)).resolves.toBeUndefined();
   });
 
-  it("still blocks Indian cash above configured limit for a new PAN", async () => {
+  it("skips cash-limit check when current payment is not cash", async () => {
+    const body = purchaseBody({
+      items: [
+        {
+          ...cnItem,
+          quantity: 5000,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: TransactionPaymentMethod.CHEQUE,
+          amount: 450000,
+        },
+      ],
+    });
+
+    const result = await service.preview(body);
+
+    expect(result.transactionAmountInReferenceCurrency).toBe("5000.00");
+    expect(result.cashTotalAmount).toBe("0.00");
+    expect(result.allowed).toBe(true);
+    expect(result.ruleType).toBe("OK");
+  });
+
+  it("blocks Indian cash above configured limit for a new PAN", async () => {
     const body = purchaseBody({
       payments: [
         {
@@ -335,8 +359,10 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
     expect(result.allowed).toBe(true);
     expect(result.passengerId).toBe("passenger-1");
     expect(result.cumulativeAmountInReferenceCurrency).toBe("25.00");
-    // Converted amount for limit = current CN 12 + history CN 25
-    expect(result.transactionAmountInReferenceCurrency).toBe("37.00");
+    // Converted amount = current CN only (12)
+    expect(result.transactionAmountInReferenceCurrency).toBe("12.00");
+    // Cash total = past CN (25) + cash payments (0)
+    expect(result.cashTotalAmount).toBe("25.00");
     expect(result.cumulativeCashAmountInReferenceCurrency).toBe("0.00");
   });
 
@@ -375,18 +401,29 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     mockHistoryQueries(
       [],
-      [],
       [
         {
           id: "history-tx-1",
+          items: [
+            {
+              currencyId: usdCurrency.id,
+              productId: cnProduct.id,
+              productCode: "CN",
+              quantity: "800",
+              rate: "90",
+              per: "1",
+            },
+          ],
+          additionalCharges: [],
           payments: [
             {
               paymentMethod: TransactionPaymentMethod.CASH,
-              amount: "700",
+              amount: "72000",
             },
           ],
         },
       ],
+      [],
     );
 
     const body = purchaseBody({
@@ -400,10 +437,11 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     const result = await service.preview(body);
 
+    // Converted current CN 12 + cash total (past CN 800 + current cash 400) = 1212
     expect(result.allowed).toBe(false);
     expect(result.ruleType).toBe("CASH_LIMIT_EXCEEDED");
-    expect(result.cumulativeCashAmountInReferenceCurrency).toBe("700.00");
-    expect(result.cashTotalAmount).toBe("1100.00");
+    expect(result.transactionAmountInReferenceCurrency).toBe("12.00");
+    expect(result.cashTotalAmount).toBe("1200.00");
   });
 
   it("blocks NRI when current cash plus historical approved cash exceeds limit", async () => {
@@ -414,10 +452,20 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     mockHistoryQueries(
       [],
-      [],
       [
         {
           id: "history-tx-nri-1",
+          items: [
+            {
+              currencyId: usdCurrency.id,
+              productId: cnProduct.id,
+              productCode: "CN",
+              quantity: "2800",
+              rate: "90",
+              per: "1",
+            },
+          ],
+          additionalCharges: [],
           payments: [
             {
               paymentMethod: TransactionPaymentMethod.CASH,
@@ -426,6 +474,7 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
           ],
         },
       ],
+      [],
     );
 
     const body = purchaseBody({
@@ -440,10 +489,10 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     const result = await service.preview(body);
 
+    // Converted 12 + cash total (past CN 2800 + current cash 600) = 3412 > 3000
     expect(result.allowed).toBe(false);
     expect(result.ruleType).toBe("CASH_LIMIT_EXCEEDED");
-    expect(result.cumulativeCashAmountInReferenceCurrency).toBe("2500.00");
-    expect(result.cashTotalAmount).toBe("3100.00");
+    expect(result.cashTotalAmount).toBe("3400.00");
   });
 
   it("ignores non-cash historical payment rows when summing cash history", async () => {
@@ -483,9 +532,10 @@ describe("PurchaseRuleService passenger + rule coverage", () => {
 
     const result = await service.preview(body);
 
+    // Cash total = past CN (0) + current cash 700; history cash display still 200
     expect(result.allowed).toBe(true);
     expect(result.cumulativeCashAmountInReferenceCurrency).toBe("200.00");
-    expect(result.cashTotalAmount).toBe("900.00");
+    expect(result.cashTotalAmount).toBe("700.00");
   });
 
   it("excludes the current transaction id from historical cash totals", async () => {

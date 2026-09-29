@@ -34,6 +34,7 @@ type PurchaseRuleCandidate = {
 };
 
 type PurchaseRulePassengerInput = {
+  id?: string | null;
   entityType?: string;
   nationalityType?: string;
   contactNo?: string;
@@ -133,6 +134,8 @@ type CalculateRowsOptions = {
   /** When set, only rows whose product code is in this list are converted. */
   productCodes?: string[] | null;
   includeCharges?: boolean;
+  /** When true, only include past purchases that have at least one CASH payment. */
+  requireCashPayment?: boolean;
 };
 
 @Injectable()
@@ -521,6 +524,17 @@ export class PurchaseRuleService {
       return null;
     }
 
+    // Prefer explicit passenger id from the form (set after AML / prior save).
+    const passengerId = normalize(passenger.id);
+    if (passengerId) {
+      const byId = await this.passengerRepository.findOne({
+        where: { id: passengerId },
+      });
+      if (byId) {
+        return { passenger: byId, matchTier: 0 };
+      }
+    }
+
     const entityType = normalizeUpper(passenger.entityType);
     const nationalityType = normalizeUpper(passenger.nationalityType);
     const searchTiers: Array<{ tier: number; where: Record<string, unknown> }> =
@@ -702,6 +716,8 @@ export class PurchaseRuleService {
       return 0;
     }
 
+    const requireCashPayment = options.requireCashPayment === true;
+
     const queryBuilder = this.transactionRepository
       .createQueryBuilder("transaction")
       .leftJoinAndSelect("transaction.items", "item")
@@ -719,6 +735,18 @@ export class PurchaseRuleService {
       .andWhere("transaction.transactionDate >= :windowStart", { windowStart })
       .andWhere("transaction.transactionDate < :windowEnd", { windowEnd });
 
+    if (requireCashPayment) {
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1
+          FROM transaction_payments cash_payment
+          WHERE cash_payment.transaction_id = transaction.id
+            AND cash_payment.payment_method = :cashPaymentMethod
+        )`,
+        { cashPaymentMethod: TransactionPaymentMethod.CASH },
+      );
+    }
+
     const normalizedExcludeId = normalize(excludeTransactionId);
     if (normalizedExcludeId) {
       queryBuilder.andWhere("transaction.id != :excludeTransactionId", {
@@ -735,15 +763,27 @@ export class PurchaseRuleService {
     const { referenceAmount } =
       await this.calculateRowsAmountInReferenceCurrency(
         transactions.flatMap((transaction) =>
-          (transaction.items ?? []).map((item) => ({
-            quantity: item.quantity,
-            rate: item.rate,
-            per: item.per,
-            currencyId: item.currencyId,
-            productId: item.productId,
-            productCode:
-              item.productSnapshot?.code ?? item.productSnapshot?.label ?? null,
-          })),
+          (transaction.items ?? []).map((item) => {
+            const snapshotCode = normalizeUpper(
+              item.productSnapshot?.code ?? null,
+            );
+            const snapshotLabel = normalize(item.productSnapshot?.label);
+            // Prefer real product code; avoid treating labels like "CN - ..." as code.
+            const productCode =
+              snapshotCode ||
+              (normalizeUpper(snapshotLabel).startsWith(CN_PRODUCT_CODE)
+                ? CN_PRODUCT_CODE
+                : null);
+
+            return {
+              quantity: item.quantity,
+              rate: item.rate,
+              per: item.per,
+              currencyId: item.currencyId,
+              productId: item.productId,
+              productCode,
+            };
+          }),
         ),
         options.includeCharges === false
           ? []
@@ -979,11 +1019,11 @@ export class PurchaseRuleService {
         {
           productCodes: [CN_PRODUCT_CODE],
           includeCharges: false,
+          // Past CN counts toward cash total only when that purchase was cash-settled.
+          requireCashPayment: true,
         },
         excludeTransactionId,
       );
-    const cnConvertedAmountInReferenceCurrency =
-      cnCurrentReferenceAmount + cnHistoricalReferenceAmount;
     const cumulativeCashAmountInReferenceCurrency =
       await this.calculateHistoricalCashAmountInReferenceCurrency(
         candidatePassengerIds,
@@ -1008,8 +1048,9 @@ export class PurchaseRuleService {
       referenceRatePer,
       referenceBaseRate,
     );
-    const cashTotalAmount =
-      currentCashAmount + cumulativeCashAmountInReferenceCurrency;
+    // Cash total = past CN (cash-settled purchases) + current cash payment.
+    // Do not also add historical cash payment amounts (that double-counts past CN).
+    const cashTotalAmount = cnHistoricalReferenceAmount + currentCashAmount;
     const chequeTotalAmount = this.convertAmountToReferenceCurrency(
       payments
         .filter((payment: PurchaseRulePaymentInput) =>
@@ -1064,13 +1105,17 @@ export class PurchaseRuleService {
         requiresCdf = true;
       }
 
-      const indianLimitComparableAmount =
-        cnConvertedAmountInReferenceCurrency + cashTotalAmount;
-      if (!(indianLimitComparableAmount < config.indianCashLimitAmount)) {
-        addBlockingReason(
-          "CASH_LIMIT_EXCEEDED",
-          `CN converted amount (current + history) plus cash (including history) must be less than the Indian limit of ${config.indianCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
-        );
+      // Cash-limit (this branch) applies only when payment method is CASH.
+      // Compare: current CN converted + (past CN converted + cash payments).
+      if (currentCashAmount > 0) {
+        const indianLimitComparableAmount =
+          cnCurrentReferenceAmount + cashTotalAmount;
+        if (!(indianLimitComparableAmount < config.indianCashLimitAmount)) {
+          addBlockingReason(
+            "CASH_LIMIT_EXCEEDED",
+            `Current CN converted amount plus cash total (past cash-settled CN + current cash) must be less than the Indian limit of ${config.indianCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
+          );
+        }
       }
     } else if (isNriOrForeigner) {
       if (chequeTotalAmount > 0) {
@@ -1080,13 +1125,16 @@ export class PurchaseRuleService {
         );
       }
 
-      const nriLimitComparableAmount =
-        cnConvertedAmountInReferenceCurrency + cashTotalAmount;
-      if (!(nriLimitComparableAmount < config.nriCashLimitAmount)) {
-        addBlockingReason(
-          "CASH_LIMIT_EXCEEDED",
-          `CN converted amount (current + history) plus cash (including history) must be less than the NRI / FOREIGNER limit of ${config.nriCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
-        );
+      // Cash-limit (this branch) applies only when payment method is CASH.
+      if (currentCashAmount > 0) {
+        const nriLimitComparableAmount =
+          cnCurrentReferenceAmount + cashTotalAmount;
+        if (!(nriLimitComparableAmount < config.nriCashLimitAmount)) {
+          addBlockingReason(
+            "CASH_LIMIT_EXCEEDED",
+            `Current CN converted amount plus cash total (past cash-settled CN + current cash) must be less than the NRI / FOREIGNER limit of ${config.nriCashLimitAmount.toFixed(2)} ${referenceCurrencyCode}`,
+          );
+        }
       }
     }
 
@@ -1106,7 +1154,7 @@ export class PurchaseRuleService {
       referenceCurrencyCode,
       transactionAmount: transactionAmount.toFixed(2),
       transactionAmountInReferenceCurrency:
-        cnConvertedAmountInReferenceCurrency.toFixed(2),
+        cnCurrentReferenceAmount.toFixed(2),
       cumulativeAmountInReferenceCurrency:
         cumulativeAmountInReferenceCurrency.toFixed(2),
       cumulativeCashAmountInReferenceCurrency:
