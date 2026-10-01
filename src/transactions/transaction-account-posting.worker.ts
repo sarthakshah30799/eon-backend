@@ -29,7 +29,10 @@ import { TransactionAccountPosting } from "./entities/transaction-account-postin
 import { TransactionEvent } from "./entities/transaction-event.entity";
 import { loadEntitySnapshot } from "../common/snapshot/entity-snapshot.util";
 import { TransactionReferenceSnapshotValue } from "./types/transaction-snapshot.types";
-import { resolveProductAccountSettingCodes } from "./product-account-settings.util";
+import {
+  requireProductSaleAccounts,
+  requireProductSettlementAccounts,
+} from "./product-account-settings.util";
 import {
   resolveProductTransactionAccount,
   roundMoney,
@@ -39,7 +42,6 @@ import {
 
 const RETRY_DELAY_MS = 30_000;
 const MAX_ATTEMPTS = 10;
-const CARD_ACCOUNTING_CATEGORY = "TRANSACTION_ACCOUNTING";
 const PRODUCT_SETTLE_SLUGS = new Set([
   "CARD_SETTLE",
   "CM_SETTLE",
@@ -55,23 +57,22 @@ const CARD_TECHNICAL_SLUGS = [
   "CARD_VOID",
 ] as const;
 
-const resolveProductAccountCodes = (productCode?: string | null) => {
-  const code = String(productCode ?? "")
-    .trim()
-    .toUpperCase();
-  if (!code) {
-    throw new BadRequestException(
-      "Product code is required for product control-account posting",
-    );
-  }
-  try {
-    return resolveProductAccountSettingCodes(code);
-  } catch {
-    throw new BadRequestException(
-      `Unsupported product code for control accounts: ${code}`,
-    );
-  }
-};
+const PRODUCT_ACCOUNT_RELATIONS = [
+  "bulkPurAc",
+  "purchaseAc",
+  "commissionAc",
+  "fakeAccount",
+  "lossAccount",
+  "bulkSaleAc",
+  "saleAc",
+  "bulkProficAc",
+  "profitAc",
+  "branchPurAc",
+  "branchSaleAc",
+  "profitAcBrnSale",
+  "closingAc",
+  "acOfIssuer",
+] as const;
 
 const productCodeFromSnapshot = (
   snapshot: Record<string, unknown> | null | undefined,
@@ -462,6 +463,7 @@ export class TransactionAccountPostingWorker
       settlementId: string;
       settlementType: string;
       productCode: string;
+      productId: string | null;
       settlementBuyRate: string;
       saleItemId: string;
       hoBranchId: string;
@@ -475,6 +477,7 @@ export class TransactionAccountPostingWorker
       SELECT settlement.id AS "settlementId",
              settlement.type AS "settlementType",
              settlement.product_code AS "productCode",
+             sale_item.product_id AS "productId",
              settlement.buy_rate AS "settlementBuyRate",
              sale_item.id AS "saleItemId",
              settlement.ho_branch_id AS "hoBranchId",
@@ -498,66 +501,107 @@ export class TransactionAccountPostingWorker
         "CARD branch settlement has no linked sale items",
       );
 
-    const settingCodes = new Set<string>(["BRANCH_CONTROL_ACCOUNT"]);
-    for (const row of rows) {
-      const accounts = resolveProductAccountCodes(row.productCode);
-      settingCodes.add(accounts.control);
-      settingCodes.add(accounts.closing);
-      settingCodes.add(accounts.purchase);
-      settingCodes.add(accounts.profit);
+    const branchControlAccountId =
+      await this.additionalSettingService.getSettingTextValue(
+        "TRANSACTION_ACCOUNTING",
+        "BRANCH_CONTROL_ACCOUNT",
+      );
+    if (!branchControlAccountId) {
+      throw new BadRequestException(
+        "Missing BRANCH_CONTROL_ACCOUNT additional setting",
+      );
     }
 
-    const accountIds = new Map<string, string>();
-    for (const code of settingCodes) {
-      const accountId = await this.additionalSettingService.getSettingTextValue(
-        CARD_ACCOUNTING_CATEGORY,
-        code,
-      );
-      if (!accountId)
-        throw new BadRequestException(`Missing ${code} additional setting`);
-      accountIds.set(code, accountId);
-    }
+    const productById = new Map<string, Product>();
+    const productByCode = new Map<string, Product>();
+    const loadSettlementProduct = async (row: (typeof rows)[number]) => {
+      const productId = row.productId ? String(row.productId) : "";
+      if (productId) {
+        const cached = productById.get(productId);
+        if (cached) return cached;
+        const product = await this.productRepository.findOne({
+          where: { id: productId },
+          relations: [...PRODUCT_ACCOUNT_RELATIONS],
+        });
+        if (!product) {
+          throw new BadRequestException(
+            `Product with id ${productId} not found for settlement`,
+          );
+        }
+        productById.set(productId, product);
+        return product;
+      }
+      const productCode = String(row.productCode ?? "")
+        .trim()
+        .toUpperCase();
+      if (!productCode) {
+        throw new BadRequestException(
+          `Product id/code missing for settlement ${row.settlementId}`,
+        );
+      }
+      const cachedByCode = productByCode.get(productCode);
+      if (cachedByCode) return cachedByCode;
+      const product = await this.productRepository.findOne({
+        where: { productCode },
+        relations: [...PRODUCT_ACCOUNT_RELATIONS],
+      });
+      if (!product) {
+        throw new BadRequestException(
+          `Product with code ${productCode} not found for settlement`,
+        );
+      }
+      productByCode.set(productCode, product);
+      return product;
+    };
 
     const accountSnapshots = new Map<
       string,
       TransactionReferenceSnapshotValue
     >();
-    for (const accountId of new Set(accountIds.values())) {
+    const resolveAccountSnapshot = async (accountId: string) => {
+      const cached = accountSnapshots.get(accountId);
+      if (cached) return cached;
       const snapshot = await loadEntitySnapshot(
         this.accountProfileRepository,
         accountId,
       );
-      if (!snapshot)
+      if (!snapshot) {
         throw new BadRequestException(
           `Account profile with id ${accountId} not found`,
         );
-      accountSnapshots.set(
-        accountId,
-        snapshot as TransactionReferenceSnapshotValue,
-      );
-    }
+      }
+      const typed = snapshot as TransactionReferenceSnapshotValue;
+      accountSnapshots.set(accountId, typed);
+      return typed;
+    };
+    await resolveAccountSnapshot(branchControlAccountId);
+
+    type SettlementRole =
+      | "BRANCH_CONTROL_ACCOUNT"
+      | "control"
+      | "closing"
+      | "purchase"
+      | "profit";
 
     const actorId =
       transaction.updatedBy || transaction.createdBy || this.workerId;
     const drafts: PostingDraft[] = [];
     const add = (
       row: (typeof rows)[number],
-      code: string,
+      role: SettlementRole,
+      accountId: string,
       direction: TransactionPostingDirection,
       amount: number,
       remarks: string,
       profileId: string | null = null,
     ) => {
       if (!Number.isFinite(amount) || amount <= 0) return;
-      const accountId = accountIds.get(code);
-      if (!accountId)
-        throw new BadRequestException(`Missing ${code} additional setting`);
       drafts.push({
         transactionId: transaction.id,
         createdBy: actorId,
         updatedBy: actorId,
         sourceType:
-          code === "BRANCH_CONTROL_ACCOUNT"
+          role === "BRANCH_CONTROL_ACCOUNT"
             ? TransactionPostingSourceType.PARTY_CONTROL
             : TransactionPostingSourceType.ITEM,
         sourceId: row.settlementId,
@@ -571,10 +615,19 @@ export class TransactionAccountPostingWorker
     };
 
     for (const row of rows) {
-      const productCode = String(row.productCode ?? "")
+      const product = await loadSettlementProduct(row);
+      const accounts = requireProductSettlementAccounts(product);
+      await Promise.all([
+        resolveAccountSnapshot(accounts.controlAccountId),
+        resolveAccountSnapshot(accounts.closingAccountId),
+        resolveAccountSnapshot(accounts.purchaseAccountId),
+        resolveAccountSnapshot(accounts.profitAccountId),
+      ]);
+      const productCode = String(
+        row.productCode ?? product.productCode ?? "",
+      )
         .trim()
         .toUpperCase();
-      const accounts = resolveProductAccountCodes(productCode);
       const isTt = row.settlementType === "TT" || productCode === "TT";
       const label = productCode || (isTt ? "TT" : "CARD");
       const quantity = Number(row.quantity);
@@ -599,6 +652,7 @@ export class TransactionAccountPostingWorker
       add(
         row,
         "BRANCH_CONTROL_ACCOUNT",
+        branchControlAccountId,
         branchAmount >= 0
           ? TransactionPostingDirection.CREDIT
           : TransactionPostingDirection.DEBIT,
@@ -608,21 +662,24 @@ export class TransactionAccountPostingWorker
       );
       add(
         row,
-        accounts.control,
+        "control",
+        accounts.controlAccountId,
         TransactionPostingDirection.DEBIT,
         saleAmount,
         `${label} settlement control`,
       );
       add(
         row,
-        accounts.closing,
+        "closing",
+        accounts.closingAccountId,
         TransactionPostingDirection.CREDIT,
         saleAmount,
         `${label} closing settlement`,
       );
       add(
         row,
-        accounts.purchase,
+        "purchase",
+        accounts.purchaseAccountId,
         TransactionPostingDirection.DEBIT,
         saleAmount,
         `${label} purchase settlement`,
@@ -630,7 +687,8 @@ export class TransactionAccountPostingWorker
       if (profitAmount > 0)
         add(
           row,
-          accounts.profit,
+          "profit",
+          accounts.profitAccountId,
           TransactionPostingDirection.DEBIT,
           profitAmount,
           `${label} settlement profit`,
@@ -638,7 +696,8 @@ export class TransactionAccountPostingWorker
       if (profitAmount < 0)
         add(
           row,
-          accounts.profit,
+          "profit",
+          accounts.profitAccountId,
           TransactionPostingDirection.CREDIT,
           Math.abs(profitAmount),
           `${label} settlement loss`,
@@ -692,20 +751,7 @@ export class TransactionAccountPostingWorker
 
       const product = await this.productRepository.findOne({
         where: { id: productId },
-        relations: [
-          "bulkPurAc",
-          "purchaseAc",
-          "commissionAc",
-          "fakeAccount",
-          "lossAccount",
-          "bulkSaleAc",
-          "saleAc",
-          "bulkProficAc",
-          "profitAc",
-          "branchPurAc",
-          "branchSaleAc",
-          "profitAcBrnSale",
-        ],
+        relations: [...PRODUCT_ACCOUNT_RELATIONS],
       });
 
       if (!product) {
@@ -899,47 +945,25 @@ export class TransactionAccountPostingWorker
         controlAccountSnapshot: TransactionReferenceSnapshotValue;
       }
     >();
-    const resolveProductSaleAccounts = async (productCode: string) => {
-      const code = String(productCode ?? "")
-        .trim()
-        .toUpperCase();
-      if (!code) {
-        throw new BadRequestException(
-          "Product code is required for product sale control-account posting",
-        );
-      }
-      const cached = productSaleAccountCache.get(code);
+    const resolveProductSaleAccounts = async (product: Product) => {
+      const cached = productSaleAccountCache.get(product.id);
       if (cached) return cached;
-      const accounts = resolveProductAccountCodes(code);
-      const sellAccountId =
-        await this.additionalSettingService.getSettingTextValue(
-          CARD_ACCOUNTING_CATEGORY,
-          accounts.sell,
-        );
-      const closingAccountId =
-        await this.additionalSettingService.getSettingTextValue(
-          CARD_ACCOUNTING_CATEGORY,
-          accounts.closing,
-        );
-      const controlAccountId =
-        await this.additionalSettingService.getSettingTextValue(
-          CARD_ACCOUNTING_CATEGORY,
-          accounts.control,
-        );
-      if (!sellAccountId || !closingAccountId || !controlAccountId) {
-        throw new BadRequestException(
-          `Missing ${code} sell, closing, or control account additional setting`,
-        );
-      }
+      const accounts = requireProductSaleAccounts(product);
       const resolved = {
-        sellAccountId,
-        closingAccountId,
-        controlAccountId,
-        sellAccountSnapshot: await resolveAccountSnapshot(sellAccountId),
-        closingAccountSnapshot: await resolveAccountSnapshot(closingAccountId),
-        controlAccountSnapshot: await resolveAccountSnapshot(controlAccountId),
+        sellAccountId: accounts.sellAccountId,
+        closingAccountId: accounts.closingAccountId,
+        controlAccountId: accounts.controlAccountId,
+        sellAccountSnapshot: await resolveAccountSnapshot(
+          accounts.sellAccountId,
+        ),
+        closingAccountSnapshot: await resolveAccountSnapshot(
+          accounts.closingAccountId,
+        ),
+        controlAccountSnapshot: await resolveAccountSnapshot(
+          accounts.controlAccountId,
+        ),
       };
-      productSaleAccountCache.set(code, resolved);
+      productSaleAccountCache.set(product.id, resolved);
       return resolved;
     };
 
@@ -949,15 +973,12 @@ export class TransactionAccountPostingWorker
     ) {
       for (const item of sortedItems) {
         if (!item.cardId && !item.dealCoverId) continue;
-        const code = productCodeFromSnapshot(
-          item.productSnapshot as Record<string, unknown> | null,
-        );
-        if (!code) {
+        if (!item.productId) {
           throw new BadRequestException(
-            `Product code missing on sale item ${item.id} snapshot; cannot resolve control accounts`,
+            `Product id missing on sale item ${item.id}; cannot resolve product accounts`,
           );
         }
-        await resolveProductSaleAccounts(code);
+        await resolveProductSaleAccounts(await loadProduct(item.productId));
       }
     }
 
@@ -1125,13 +1146,8 @@ export class TransactionAccountPostingWorker
         String(product.productCode ?? "")
           .trim()
           .toUpperCase();
-      if (isCardOrTtSaleItem && !itemProductCode) {
-        throw new BadRequestException(
-          `Product code missing for sale item ${item.id}; cannot resolve control accounts`,
-        );
-      }
       const productSaleAccounts = isCardOrTtSaleItem
-        ? await resolveProductSaleAccounts(itemProductCode)
+        ? await resolveProductSaleAccounts(product)
         : null;
       const itemAccount = isCardOrTtSaleItem
         ? null

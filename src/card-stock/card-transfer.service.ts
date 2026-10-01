@@ -393,21 +393,63 @@ export class CardTransferService {
     });
   }
 
-  async availableCards(sourceBranchId: string, session: AuthenticatedSession) {
+  async availableCards(
+    query: {
+      sourceBranchId: string;
+      productId: string;
+      issuerPartyProfileId: string;
+      currencyId?: string;
+    },
+    session: AuthenticatedSession,
+  ) {
+    const sourceBranchId = query.sourceBranchId?.trim();
+    const productId = query.productId?.trim();
+    const issuerPartyProfileId = query.issuerPartyProfileId?.trim();
+    const currencyId = query.currencyId?.trim() || undefined;
+    if (!sourceBranchId)
+      throw new BadRequestException("sourceBranchId is required");
+    if (!productId) throw new BadRequestException("productId is required");
+    if (!issuerPartyProfileId)
+      throw new BadRequestException("issuerPartyProfileId is required");
     this.assertCanManageSource(session, sourceBranchId);
     const branch = await this.branchRepository.findOne({
       where: { id: sourceBranchId, isActive: true },
     });
     if (!branch)
       throw new BadRequestException("Source branch must be active");
-    const cards = await this.cardRepository.find({
-      where: {
-        currentBranchId: sourceBranchId,
-        status: CardStockCardStatus.AVAILABLE,
-      },
-      relations: ["receiptItem"],
-      order: { series: "ASC", kitNumber: "ASC" },
+    const product = await this.productRepository.findOne({
+      where: { id: productId },
     });
+    if (!product?.isActiveProduct)
+      throw new BadRequestException("Product must be an active product");
+    if (!product.maintainBlankStockOfProduct) {
+      throw new BadRequestException(
+        "Product does not maintain blank CARD stock",
+      );
+    }
+    const multiCurrency = isMultiCurrencyCardProduct(product.productCode);
+    if (!multiCurrency && !currencyId) {
+      throw new BadRequestException("currencyId is required for this product");
+    }
+    const qb = this.cardRepository
+      .createQueryBuilder("card")
+      .innerJoinAndSelect("card.receiptItem", "receiptItem")
+      .where("card.currentBranchId = :sourceBranchId", { sourceBranchId })
+      .andWhere("card.status = :status", {
+        status: CardStockCardStatus.AVAILABLE,
+      })
+      .andWhere("card.reservedByTransferId IS NULL")
+      .andWhere("card.reservedAt IS NULL")
+      .andWhere("receiptItem.productId = :productId", { productId })
+      .andWhere("receiptItem.issuerPartyProfileId = :issuerPartyProfileId", {
+        issuerPartyProfileId,
+      })
+      .orderBy("card.series", "ASC")
+      .addOrderBy("card.kitNumber", "ASC");
+    if (!multiCurrency && currencyId) {
+      qb.andWhere("receiptItem.currencyId = :currencyId", { currencyId });
+    }
+    const cards = await qb.getMany();
     const decrypted = await this.database2.query(
       'SELECT id, public.decrypt_card_number(card_number) AS "cardNumber" FROM card_stock_cards WHERE id = ANY($1::uuid[])',
       [cards.map((card) => card.id)],

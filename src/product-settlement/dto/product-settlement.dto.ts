@@ -47,11 +47,19 @@ export class ProductSettlementDocumentQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() currencyId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() branchId?: string;
   @ApiPropertyOptional({
-    description: "Filter by product code on linked settlement items (e.g. CC, CM, TT)",
+    description: "Filter by product code on linked settlement items (e.g. CC, CM, TT, EM)",
   })
   @IsOptional()
   @IsString()
   productCode?: string;
+  @ApiPropertyOptional({
+    enum: ["settlement", "surrender"],
+    description:
+      "settlement = blank-stock CARD/TT settle docs. surrender = non-blank-stock products (excluding CN).",
+  })
+  @IsOptional()
+  @IsIn(["settlement", "surrender"])
+  scope?: "settlement" | "surrender";
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
 }

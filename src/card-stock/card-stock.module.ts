@@ -30,8 +30,10 @@ import { CardTransferService } from "./card-transfer.service";
 import { CardStockTransactionService } from "./card-stock-transaction.service";
 import { CardStockSaleLifecycleService } from "./card-stock-sale-lifecycle.service";
 import { CardStockPrintService } from "./card-stock-print.service";
+import { EmSurrenderService } from "./em-surrender.service";
 import { ProductSettlementModule } from "../product-settlement/product-settlement.module";
 import { TransactionLog } from "../transactions/entities/transaction-log.entity";
+import { CurrencyRate } from "../currency-rates/currency-rate.entity";
 
 @Module({
   imports: [
@@ -50,6 +52,7 @@ import { TransactionLog } from "../transactions/entities/transaction-log.entity"
       ProductIssuer,
       User,
       UserRole,
+      CurrencyRate,
     ]),
     TypeOrmModule.forFeature(
       [
@@ -73,10 +76,12 @@ import { TransactionLog } from "../transactions/entities/transaction-log.entity"
     CardStockTransactionService,
     CardStockSaleLifecycleService,
     CardStockPrintService,
+    EmSurrenderService,
   ],
   exports: [
     CardStockTransactionService,
     CardStockSaleLifecycleService,
+    EmSurrenderService,
     ProductSettlementModule,
   ],
 })

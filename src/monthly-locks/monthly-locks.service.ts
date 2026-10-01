@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, IsNull, Repository } from "typeorm";
 import { Branch } from "../branches/branch.entity";
 import { User } from "../users/user.entity";
 import {
@@ -14,11 +14,22 @@ import {
 import { MonthlyLockWindow } from "./entities/monthly-lock-window.entity";
 
 const normalizeDateOnly = (value: Date | string): string => {
+  if (typeof value === "string") {
+    const isoPrefix = value.trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoPrefix)) {
+      return isoPrefix;
+    }
+  }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "";
   }
 
+  // date columns may arrive as UTC midnight; prefer ISO date prefix when present
+  const iso = date.toISOString().slice(0, 10);
+  if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) {
+    return iso;
+  }
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
@@ -41,7 +52,7 @@ export class MonthlyLocksService {
     userId: string,
   ): Promise<MonthlyLockWindowResponseDto | null> {
     const activeMonthlyLock = await this.monthlyLockWindowRepository.findOne({
-      where: { branchId, userId, isActive: true },
+      where: { branchId, userId, isActive: true, revokedAt: IsNull() },
       order: { createdAt: "DESC" },
     });
 
@@ -49,12 +60,37 @@ export class MonthlyLocksService {
       return null;
     }
 
+    return this.toResponse(activeMonthlyLock);
+  }
+
+  /**
+   * Any active monthwise window on the branch (used when HO/Admin posts
+   * against a selling branch using another user's backdate window).
+   */
+  async getActiveMonthlyLockForBranch(
+    branchId: string,
+  ): Promise<MonthlyLockWindowResponseDto | null> {
+    const activeMonthlyLock = await this.monthlyLockWindowRepository.findOne({
+      where: { branchId, isActive: true, revokedAt: IsNull() },
+      order: { createdAt: "DESC" },
+    });
+
+    if (!activeMonthlyLock) {
+      return null;
+    }
+
+    return this.toResponse(activeMonthlyLock);
+  }
+
+  private toResponse(
+    activeMonthlyLock: MonthlyLockWindow,
+  ): MonthlyLockWindowResponseDto {
     return {
       id: activeMonthlyLock.id,
       branchId: activeMonthlyLock.branchId,
       userId: activeMonthlyLock.userId,
-      fromDate: activeMonthlyLock.fromDate,
-      toDate: activeMonthlyLock.toDate,
+      fromDate: normalizeDateOnly(activeMonthlyLock.fromDate),
+      toDate: normalizeDateOnly(activeMonthlyLock.toDate),
       isActive: activeMonthlyLock.isActive,
       revokedAt: activeMonthlyLock.revokedAt,
       revokedBy: activeMonthlyLock.revokedBy,

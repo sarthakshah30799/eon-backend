@@ -9,6 +9,11 @@ import { DataSource } from "typeorm";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionStatus } from "../transactions/transactions.enums";
+import {
+  isCardProductCode,
+  isSurrenderUnitSnapshot,
+  type ProductSnapshotLike,
+} from "../card-stock/card-product.util";
 import { CardStockSaleLifecycleService } from "../card-stock/card-stock-sale-lifecycle.service";
 import { ProductSettlementService } from "./product-settlement.service";
 
@@ -47,12 +52,31 @@ export class ProductSettlementWorker
     }
   }
 
+  private isBlankStockCardItem(item: TransactionItem): boolean {
+    if (!item.cardId) return false;
+    const snapshot = item.productSnapshot as ProductSnapshotLike | null;
+    if (isSurrenderUnitSnapshot(snapshot)) return false;
+    const code =
+      snapshot?.productCode ?? snapshot?.product_code ?? snapshot?.code ?? null;
+    return isCardProductCode(code);
+  }
+
   private async reconcileApprovedSales() {
+    // Blank-stock CC/CM only. Surrender EM/etc. issuer sales also have card_id
+    // but use finalizeEmIssuerSale (no LOAD / product_settlements) — do not
+    // re-run blank-stock finalizeApprovedSale against CM receipt parents.
     const rows: Array<{ transaction_id: string }> = await this.database2.query(`
       SELECT t.id AS transaction_id
       FROM transactions t
       JOIN transaction_items i ON i.transaction_id=t.id AND i.card_id IS NOT NULL
       WHERE t.status='APPROVED' AND t.transaction_type='SALE'
+        AND UPPER(COALESCE(
+          i.product_snapshot->>'productCode',
+          i.product_snapshot->>'product_code',
+          i.product_snapshot->>'code',
+          ''
+        )) IN ('CC', 'CM')
+        AND COALESCE((i.product_snapshot->>'maintainBlankStockOfProduct')::boolean, true) = true
         AND (
           NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='CARD_STOCK_LOAD')
           OR NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='SELL')
@@ -78,10 +102,14 @@ export class ProductSettlementWorker
           const items = await manager
             .getRepository(TransactionItem)
             .find({ where: { transactionId: transaction.id } });
+          const blankStockCardItems = items.filter((item) =>
+            this.isBlankStockCardItem(item),
+          );
+          if (!blankStockCardItems.length) return;
           await this.saleLifecycleService.finalizeApprovedSale(
             manager,
             transaction,
-            items.filter((item) => Boolean(item.cardId)),
+            blankStockCardItems,
             transaction.approvedById ?? transaction.updatedBy,
           );
         });

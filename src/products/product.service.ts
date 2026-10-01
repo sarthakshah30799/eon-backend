@@ -255,6 +255,10 @@ export class ProductService {
     if (!product.availableInBulkSelling) {
       product.bulkSellingSeriesApplicable = false;
     }
+    // Non-blank-stock products never store blank CARD stock / blank-stock flags.
+    if (product.maintainBlankStockOfProduct === false) {
+      product.splitAndStoreBlankStockReceived = false;
+    }
   }
 
   private mapAccountingRelations(

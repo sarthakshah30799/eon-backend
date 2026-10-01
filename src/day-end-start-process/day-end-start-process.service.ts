@@ -21,6 +21,7 @@ import {
   PolicyChecklistItemDto,
 } from "./dto/day-end-start-process.dto";
 import { SessionContext } from "../auth/types/session-context";
+import { toDateOnlyString, toDisplayDateOnly } from "../common/date/date.util";
 
 const POLICY_CATEGORY_CODE = "DAY_END_POLICY";
 
@@ -357,7 +358,7 @@ export class DayEndStartProcessService {
           dataLock.lockedThroughDate,
         );
         throw new BadRequestException(
-          `Transaction dates through ${dataLock.lockedThroughDate} are locked. Allowed dates start from ${earliestAllowed}`,
+          `Transaction dates through ${toDisplayDateOnly(dataLock.lockedThroughDate)} are locked. Allowed dates start from ${toDisplayDateOnly(earliestAllowed)}`,
         );
       }
     };
@@ -375,7 +376,7 @@ export class DayEndStartProcessService {
 
       if (context.workflowState === "CLOSED_TODAY") {
         throw new BadRequestException(
-          `Day end is already completed for ${context.openBusinessDate}`,
+          `Day end is already completed for ${toDisplayDateOnly(context.openBusinessDate)}`,
         );
       }
 
@@ -396,12 +397,16 @@ export class DayEndStartProcessService {
     assertNotDataLocked(requestedDate);
 
     if (hasMonthlyLockOverride) {
+      const windowFrom = toDateOnlyString(activeWindow.fromDate);
+      const windowTo = toDateOnlyString(activeWindow.toDate);
       if (
-        requestedDate < activeWindow.fromDate ||
-        requestedDate > activeWindow.toDate
+        !windowFrom ||
+        !windowTo ||
+        requestedDate < windowFrom ||
+        requestedDate > windowTo
       ) {
         throw new BadRequestException(
-          `Transaction date must be between ${activeWindow.fromDate} and ${activeWindow.toDate}`,
+          `Transaction date must be between ${toDisplayDateOnly(activeWindow.fromDate)} and ${toDisplayDateOnly(activeWindow.toDate)}`,
         );
       }
       return { allowedDate: requestedDate, context };
@@ -409,7 +414,7 @@ export class DayEndStartProcessService {
 
     if (context.workflowState === "CLOSED_TODAY") {
       throw new BadRequestException(
-        `Day end is already completed for ${context.openBusinessDate}`,
+        `Day end is already completed for ${toDisplayDateOnly(context.openBusinessDate)}`,
       );
     }
 
@@ -427,13 +432,13 @@ export class DayEndStartProcessService {
       requestedDate !== context.openBusinessDate
     ) {
       throw new BadRequestException(
-        `EOD is pending for this branch/user. Allowed transaction date is ${context.openBusinessDate}`,
+        `EOD is pending for this branch. Allowed transaction date is ${toDisplayDateOnly(context.openBusinessDate)}`,
       );
     }
 
     if (requestedDate !== allowedDate) {
       throw new BadRequestException(
-        `Transaction date must be ${allowedDate} unless a monthly lock is active`,
+        `Transaction date must be ${toDisplayDateOnly(allowedDate)} unless a monthly lock is active`,
       );
     }
 

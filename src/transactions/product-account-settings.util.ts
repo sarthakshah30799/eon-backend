@@ -1,66 +1,72 @@
+import { BadRequestException } from "@nestjs/common";
+import { Product } from "../products/product.entity";
+
 /**
- * Per-product TRANSACTION_ACCOUNTING setting codes for CC / CM / TT.
- * Closing was formerly named LOAD (Account Profile short codes CLOCC / CLOCM / CLOTT).
+ * Product Profile account roles for CARD / CM / TT / EM posting
+ * (legacy intupd: SAL* / CLO* / CRD*I / PUR* / PRO*).
  */
-export const PRODUCT_SELL_CONTROL_ACCOUNT_BY_CODE: Record<string, string> = {
-  CC: "CARD_SELL_CONTROL_ACCOUNT",
-  CM: "CM_SELL_CONTROL_ACCOUNT",
-  TT: "TT_SELL_CONTROL_ACCOUNT",
+export type ProductSaleAccountIds = {
+  sellAccountId: string;
+  closingAccountId: string;
+  /** Issuer control — legacy CRD*I (`acOfIssuer`). */
+  controlAccountId: string;
 };
 
-export const PRODUCT_CLOSING_CONTROL_ACCOUNT_BY_CODE: Record<string, string> = {
-  CC: "CARD_CLOSING_CONTROL_ACCOUNT",
-  CM: "CM_CLOSING_CONTROL_ACCOUNT",
-  TT: "TT_CLOSING_CONTROL_ACCOUNT",
+export type ProductSettlementAccountIds = {
+  /** Issuer control — legacy CRD*I (`acOfIssuer`). */
+  controlAccountId: string;
+  closingAccountId: string;
+  purchaseAccountId: string;
+  profitAccountId: string;
 };
 
-export const PRODUCT_CONTROL_ACCOUNT_BY_CODE: Record<string, string> = {
-  CC: "CARD_CONTROL_ACCOUNT",
-  CM: "CM_CONTROL_ACCOUNT",
-  TT: "TT_CONTROL_ACCOUNT",
-};
+const accountId = (
+  account: { id: string } | null | undefined,
+): string | null => (account?.id ? String(account.id) : null);
 
-export const PRODUCT_PURCHASE_CONTROL_ACCOUNT_BY_CODE: Record<string, string> = {
-  CC: "CARD_PURCHASE_CONTROL_ACCOUNT",
-  CM: "CM_PURCHASE_CONTROL_ACCOUNT",
-  TT: "TT_PURCHASE_CONTROL_ACCOUNT",
-};
-
-export const PRODUCT_PROFIT_CONTROL_ACCOUNT_BY_CODE: Record<string, string> = {
-  CC: "CARD_PROFIT_CONTROL_ACCOUNT",
-  CM: "CM_PROFIT_CONTROL_ACCOUNT",
-  TT: "TT_PROFIT_CONTROL_ACCOUNT",
-};
-
-export type ProductAccountSettingCodes = {
-  sell: string;
-  closing: string;
-  control: string;
-  purchase: string;
-  profit: string;
-};
-
-export const normalizeProductAccountCode = (
-  productCode?: string | null,
-): string => String(productCode ?? "").trim().toUpperCase();
-
-export const resolveProductAccountSettingCodes = (
-  productCode?: string | null,
-): ProductAccountSettingCodes => {
-  const code = normalizeProductAccountCode(productCode);
-  const sell = PRODUCT_SELL_CONTROL_ACCOUNT_BY_CODE[code];
-  const closing = PRODUCT_CLOSING_CONTROL_ACCOUNT_BY_CODE[code];
-  const control = PRODUCT_CONTROL_ACCOUNT_BY_CODE[code];
-  const purchase = PRODUCT_PURCHASE_CONTROL_ACCOUNT_BY_CODE[code];
-  const profit = PRODUCT_PROFIT_CONTROL_ACCOUNT_BY_CODE[code];
-  if (!sell || !closing || !control || !purchase || !profit) {
-    throw new Error(
-      `Unsupported product code for control accounts: ${code || "(empty)"}`,
+export const requireProductSaleAccounts = (
+  product: Product,
+): ProductSaleAccountIds => {
+  const sellAccountId = accountId(product.saleAc);
+  const closingAccountId = accountId(product.closingAc);
+  const controlAccountId = accountId(product.acOfIssuer);
+  const missing: string[] = [];
+  if (!sellAccountId) missing.push("saleAc");
+  if (!closingAccountId) missing.push("closingAc");
+  if (!controlAccountId) missing.push("acOfIssuer");
+  if (missing.length) {
+    throw new BadRequestException(
+      `Product ${product.productCode || product.id} is missing required account(s): ${missing.join(", ")}`,
     );
   }
-  return { sell, closing, control, purchase, profit };
+  return {
+    sellAccountId: sellAccountId!,
+    closingAccountId: closingAccountId!,
+    controlAccountId: controlAccountId!,
+  };
 };
 
-export const resolveSellControlAccountSettingCode = (
-  productCode?: string | null,
-): string => resolveProductAccountSettingCodes(productCode).sell;
+export const requireProductSettlementAccounts = (
+  product: Product,
+): ProductSettlementAccountIds => {
+  const controlAccountId = accountId(product.acOfIssuer);
+  const closingAccountId = accountId(product.closingAc);
+  const purchaseAccountId = accountId(product.purchaseAc);
+  const profitAccountId = accountId(product.profitAc);
+  const missing: string[] = [];
+  if (!controlAccountId) missing.push("acOfIssuer");
+  if (!closingAccountId) missing.push("closingAc");
+  if (!purchaseAccountId) missing.push("purchaseAc");
+  if (!profitAccountId) missing.push("profitAc");
+  if (missing.length) {
+    throw new BadRequestException(
+      `Product ${product.productCode || product.id} is missing required settlement account(s): ${missing.join(", ")}`,
+    );
+  }
+  return {
+    controlAccountId: controlAccountId!,
+    closingAccountId: closingAccountId!,
+    purchaseAccountId: purchaseAccountId!,
+    profitAccountId: profitAccountId!,
+  };
+};

@@ -37,9 +37,20 @@ export class CardTransferController {
   @ApiOperation({ summary: "List available CARD stock for transfer" })
   availableCards(
     @Query("sourceBranchId") sourceBranchId: string,
+    @Query("productId") productId: string,
+    @Query("issuerPartyProfileId") issuerPartyProfileId: string,
+    @Query("currencyId") currencyId: string | undefined,
     @Session() session: any,
   ) {
-    return this.service.availableCards(sourceBranchId, session);
+    return this.service.availableCards(
+      {
+        sourceBranchId,
+        productId,
+        issuerPartyProfileId,
+        currencyId,
+      },
+      session,
+    );
   }
 
   @Get(":id")

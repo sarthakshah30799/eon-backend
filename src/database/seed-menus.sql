@@ -62,6 +62,7 @@ BEGIN
 
   -- CARD
   (300, 'Product Settlement',     '/product-settlement',             'CARD', NULL, FALSE, 'credit-card', 'unique'),
+  (305, 'Product Surrender',      '/product-surrender',              'CARD', NULL, FALSE, 'undo-2',      'unique'),
   (310, 'Card Transfer',          '/card-transfer',                  'CARD', NULL, FALSE, 'arrow-left-right','unique'),
   (320, 'Receipt Stock',          '/card-stock',                     'CARD', NULL, FALSE, 'archive',     'unique'),
 

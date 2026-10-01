@@ -101,10 +101,15 @@ import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 import { CardStockSaleLifecycleService } from "../card-stock/card-stock-sale-lifecycle.service";
 import {
   isCardProductCode,
+  isSurrenderBuyingProduct,
+  isSurrenderBulkSaleProduct,
   isMultiCurrencyCardProduct,
 } from "../card-stock/card-product.util";
+import { EmSurrenderService } from "../card-stock/em-surrender.service";
 import { isTtProductCode } from "../tt-deal/tt-product.util";
-import { resolveSellControlAccountSettingCode } from "./product-account-settings.util";
+import {
+  requireProductSaleAccounts,
+} from "./product-account-settings.util";
 import { DealCoverService } from "../tt-deal/deal-cover.service";
 import { ProductSettlementService } from "../product-settlement/product-settlement.service";
 import { DealCover } from "../tt-deal/entities/deal-cover.entity";
@@ -244,6 +249,7 @@ type TransactionItemPayload = {
   issuerPartyProfileSnapshot?: Record<string, unknown> | null;
   cardSnapshot?: Record<string, unknown> | null;
   isReload?: boolean;
+  autoSurrender?: boolean;
   passengerId?: string | null;
   dealCoverId?: string | null;
   dealCoverSnapshot?: Record<string, unknown> | null;
@@ -444,6 +450,7 @@ export class TransactionsService {
     private readonly dayEndStartProcessService: DayEndStartProcessService,
     private readonly countryService: CountryService,
     private readonly cardStockSaleLifecycleService: CardStockSaleLifecycleService,
+    private readonly emSurrenderService: EmSurrenderService,
     private readonly dealCoverService: DealCoverService,
     private readonly productSettlementService: ProductSettlementService,
     private readonly mailService: MailService,
@@ -1631,9 +1638,6 @@ export class TransactionsService {
     const requestedItemRows = Array.isArray(transactionPayload.items)
       ? transactionPayload.items
       : [];
-    const hasRequestedCardItems = requestedItemRows.some((item) =>
-      Boolean(item.cardId),
-    );
     const requestedProductIds = [
       ...new Set(
         requestedItemRows
@@ -1646,6 +1650,30 @@ export class TransactionsService {
           where: { id: In(requestedProductIds) },
         })
       : [];
+    const cardProductIds = new Set(
+      requestedProducts
+        .filter((product) => isCardProductCode(product.productCode))
+        .map((product) => product.id),
+    );
+    const surrenderProductIds = new Set(
+      requestedProducts
+        .filter((product) => isSurrenderBulkSaleProduct(product))
+        .map((product) => product.id),
+    );
+    const hasRequestedCardItems =
+      transactionPayload.transactionType === TransactionType.SALE &&
+      requestedItemRows.some(
+        (item) =>
+          Boolean(item.cardId) &&
+          cardProductIds.has(String(item.productId)),
+      );
+    const hasRequestedEmSaleItems =
+      transactionPayload.transactionType === TransactionType.SALE &&
+      requestedItemRows.some(
+        (item) =>
+          Boolean(item.cardId) &&
+          surrenderProductIds.has(String(item.productId)),
+      );
     const ttProductIds = new Set(
       requestedProducts
         .filter((product) => isTtProductCode(product.productCode))
@@ -1661,10 +1689,14 @@ export class TransactionsService {
         : TransactionStatus.APPROVED;
     const shouldAutoFinalizeCardSale =
       transactionStatus === TransactionStatus.APPROVED && hasRequestedCardItems;
+    const shouldAutoFinalizeEmSale =
+      transactionStatus === TransactionStatus.APPROVED && hasRequestedEmSaleItems;
     const shouldAutoFinalizeTtItems =
       transactionStatus === TransactionStatus.APPROVED && hasRequestedTtItems;
     const persistedTransactionStatus =
-      shouldAutoFinalizeCardSale || shouldAutoFinalizeTtItems
+      shouldAutoFinalizeCardSale ||
+      shouldAutoFinalizeEmSale ||
+      shouldAutoFinalizeTtItems
         ? TransactionStatus.DRAFT
         : transactionStatus;
     const now = new Date();
@@ -2331,6 +2363,8 @@ export class TransactionsService {
             "bulkProficAc",
             "profitAc",
             "fakeAccount",
+            "closingAc",
+            "acOfIssuer",
           ],
         });
 
@@ -2361,8 +2395,10 @@ export class TransactionsService {
 
       const itemRows = requestedItemRows;
       const cardSaleItems: TransactionItem[] = [];
+      const emSaleItems: TransactionItem[] = [];
       const ttSaleItems: TransactionItem[] = [];
       const selectedCardCurrencyKeys = new Set<string>();
+      const selectedEmCardIds = new Set<string>();
       const selectedTtDealIds = new Set<string>();
       const dealCoverRepository = manager.getRepository(DealCover);
       const remittanceRepository = manager.getRepository(TtRemittanceDetail);
@@ -2499,10 +2535,94 @@ export class TransactionsService {
           tradeMode: transactionPayload.tradeMode ?? TradeMode.BULK,
         });
         const isCardItem = isCardProductCode(productEntity.productCode);
+        const isEmItem =
+          transactionPayload.transactionType === TransactionType.PURCHASE
+            ? isSurrenderBuyingProduct(productEntity)
+            : isSurrenderBulkSaleProduct(productEntity);
         const isTtItem = isTtProductCode(productEntity.productCode);
         const isMultiCurrencyCard = isMultiCurrencyCardProduct(
           productEntity.productCode,
         );
+        if (isEmItem) {
+          if (
+            transactionPayload.transactionType === TransactionType.PURCHASE
+          ) {
+            this.emSurrenderService.assertEmPurchaseProduct(productEntity);
+            if (transactionPayload.tradeMode !== TradeMode.RETAIL) {
+              throw new BadRequestException(
+                "Product surrender purchase must use retail trade mode",
+              );
+            }
+            if (!row.cardId || !row.issuerPartyProfileId) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} requires a sold CARD and issuer`,
+              );
+            }
+            if (selectedEmCardIds.has(String(row.cardId))) {
+              throw new BadRequestException(
+                `Sold CARD ${row.cardId} cannot be surrendered more than once in one transaction`,
+              );
+            }
+            selectedEmCardIds.add(String(row.cardId));
+            const feAmount = Number(row.quantity);
+            if (!Number.isFinite(feAmount) || feAmount <= 0) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} FE amount must be greater than 0`,
+              );
+            }
+            const baseSale = await this.emSurrenderService.getBaseSaleRate(
+              String(row.currencyId),
+            );
+            const buyRate = Number(row.rate);
+            const baseSaleRate = Number(baseSale.baseSaleRate);
+            if (
+              Number.isFinite(baseSaleRate) &&
+              baseSaleRate > 0 &&
+              Number.isFinite(buyRate) &&
+              buyRate > baseSaleRate
+            ) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} rate ${buyRate} cannot exceed base sale price ${baseSaleRate}`,
+              );
+            }
+          } else if (
+            transactionPayload.transactionType === TransactionType.SALE
+          ) {
+            if (transactionPayload.tradeMode !== TradeMode.BULK) {
+              throw new BadRequestException(
+                "Surrender issuer sale must use bulk trade mode",
+              );
+            }
+            if (!row.cardId || !row.issuerPartyProfileId) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} requires issuer and unit selection`,
+              );
+            }
+            if (selectedEmCardIds.has(String(row.cardId))) {
+              throw new BadRequestException(
+                `Surrender card ${row.cardId} cannot be selected more than once in one transaction`,
+              );
+            }
+            selectedEmCardIds.add(String(row.cardId));
+            const emCard = await this.cardStockCardRepository.findOne({
+              where: { id: String(row.cardId) },
+            });
+            if (
+              !emCard ||
+              emCard.currentBranchId !== resolvedBranchId ||
+              emCard.status !== "RESERVED" ||
+              emCard.reservedByTransferId
+            ) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} is not available for issuer sale at this branch`,
+              );
+            }
+          } else {
+            throw new BadRequestException(
+              "Surrender products are only allowed on purchase surrender or bulk sale",
+            );
+          }
+        }
         if (isCardItem) {
           if (transactionPayload.transactionType !== TransactionType.SALE) {
             throw new BadRequestException(
@@ -2711,12 +2831,10 @@ export class TransactionsService {
             );
           }
         }
-        const cardSellAccountId = isCardItem || isTtItem
-          ? await this.additionalSettingService.getSettingTextValue(
-              "TRANSACTION_ACCOUNTING",
-              resolveSellControlAccountSettingCode(productEntity.productCode),
-            )
-          : null;
+        const cardSellAccountId =
+          isCardItem || isTtItem
+            ? requireProductSaleAccounts(productEntity).sellAccountId
+            : null;
         const itemAccount =
           isCardItem || isTtItem
             ? cardSellAccountId
@@ -2737,7 +2855,7 @@ export class TransactionsService {
 
         if (!itemAccount) {
           throw new NotFoundException(
-            `${isCardItem || isTtItem ? "Product sell control account" : isFakeCurrency ? "Fake account" : "Product account"} is not configured for product ${row.productId}`,
+            `${isCardItem || isTtItem ? "Product sale account (saleAc)" : isFakeCurrency ? "Fake account" : "Product account"} is not configured for product ${row.productId}`,
           );
         }
 
@@ -2790,10 +2908,34 @@ export class TransactionsService {
           transactionItemRepo.create(transactionItemToSave),
         );
         if (
+          isEmItem &&
+          transaction.transactionType === TransactionType.PURCHASE &&
+          row.cardId
+        ) {
+          await this.emSurrenderService.createEmUnitOnPurchase({
+            manager,
+            transaction,
+            item: savedItem,
+            sourceSoldCardId: String(row.cardId),
+            emProduct: productEntity,
+            actorId: performedById,
+            lineNo: index + 1,
+            autoSurrender: row.autoSurrender !== false,
+          });
+        }
+        if (
           savedItem.cardId &&
-          transaction.transactionType === TransactionType.SALE
+          transaction.transactionType === TransactionType.SALE &&
+          isCardItem
         ) {
           cardSaleItems.push(savedItem);
+        }
+        if (
+          savedItem.cardId &&
+          transaction.transactionType === TransactionType.SALE &&
+          isEmItem
+        ) {
+          emSaleItems.push(savedItem);
         }
         if (savedItem.dealCoverId) {
           ttSaleItems.push(savedItem);
@@ -3187,6 +3329,7 @@ export class TransactionsService {
 
       if (
         (shouldAutoFinalizeCardSale && cardSaleItems.length) ||
+        (shouldAutoFinalizeEmSale && emSaleItems.length) ||
         (shouldAutoFinalizeTtItems && ttSaleItems.length)
       ) {
         const locked = await transactionRepo
@@ -3216,7 +3359,31 @@ export class TransactionsService {
           await this.cardStockSaleLifecycleService.finalizeApprovedSale(
             manager,
             approved,
-            approvedItems.filter((item) => Boolean(item.cardId)),
+            approvedItems.filter((item) => {
+              const product = requestedProducts.find(
+                (row) => row.id === item.productId,
+              );
+              return (
+                Boolean(item.cardId) &&
+                isCardProductCode(product?.productCode)
+              );
+            }),
+            performedById,
+          );
+        }
+        if (shouldAutoFinalizeEmSale) {
+          await this.emSurrenderService.finalizeEmIssuerSale(
+            manager,
+            approved,
+            approvedItems.filter((item) => {
+              const product = requestedProducts.find(
+                (row) => row.id === item.productId,
+              );
+              return (
+                Boolean(item.cardId) &&
+                  isSurrenderBulkSaleProduct(product ?? {})
+              );
+            }),
             performedById,
           );
         }
@@ -3382,12 +3549,35 @@ export class TransactionsService {
       const approvedItems = await itemRepo.find({
         where: { transactionId: approved.id },
       });
-      const cardItems = approvedItems.filter((item) => Boolean(item.cardId));
+      const productIds = [
+        ...new Set(approvedItems.map((item) => item.productId).filter(Boolean)),
+      ];
+      const products = productIds.length
+        ? await this.productRepository.find({ where: { id: In(productIds) } })
+        : [];
+      const productById = new Map(products.map((p) => [p.id, p]));
+      const cardItems = approvedItems.filter((item) => {
+        if (!item.cardId) return false;
+        return isCardProductCode(productById.get(item.productId)?.productCode);
+      });
+      const emItems = approvedItems.filter((item) => {
+        if (!item.cardId) return false;
+        return isSurrenderBulkSaleProduct(
+          productById.get(item.productId) ?? {},
+        );
+      });
       if (cardItems.length)
         await this.cardStockSaleLifecycleService.finalizeApprovedSale(
           manager,
           approved,
           cardItems,
+          performedById,
+        );
+      if (emItems.length)
+        await this.emSurrenderService.finalizeEmIssuerSale(
+          manager,
+          approved,
+          emItems,
           performedById,
         );
       await this.finalizeApprovedTtItems(
@@ -3420,6 +3610,75 @@ export class TransactionsService {
     await this.hydrateCounterSnapshot(approvedTransaction);
 
     return approvedTransaction;
+  }
+
+  async rejectTransaction(
+    transactionId: string,
+    performedById: string | null,
+    rejectionReason: string | null = null,
+  ): Promise<Transaction> {
+    if (!performedById) {
+      throw new BadRequestException("User session not found");
+    }
+    const reason = String(rejectionReason ?? "").trim();
+    if (!reason) {
+      throw new BadRequestException("Rejection reason is required");
+    }
+
+    const transaction = await this.transactionRepository.findOne({
+      where: { id: transactionId, isLatest: true },
+    });
+    if (!transaction) {
+      throw new NotFoundException(
+        `Transaction with id ${transactionId} not found`,
+      );
+    }
+    if (transaction.status !== TransactionStatus.DRAFT) {
+      throw new BadRequestException("Only draft transactions can be rejected");
+    }
+
+    const saved = await this.database2.transaction(async (manager) => {
+      const transactionRepo = manager.getRepository(Transaction);
+      const logRepo = manager.getRepository(TransactionLog);
+      const locked = await transactionRepo
+        .createQueryBuilder("transaction")
+        .where("transaction.id = :id", { id: transaction.id })
+        .setLock("pessimistic_write")
+        .getOne();
+      if (!locked || locked.status !== TransactionStatus.DRAFT) {
+        throw new BadRequestException("Only draft transactions can be rejected");
+      }
+      await this.emSurrenderService.cleanupEmPurchase(
+        manager,
+        locked.id,
+        performedById,
+      );
+      locked.status = TransactionStatus.REJECTED;
+      locked.rejectedAt = new Date();
+      locked.rejectedById = performedById;
+      locked.rejectionReason = reason;
+      locked.updatedBy = performedById;
+      const rejected = await transactionRepo.save(locked);
+      await logRepo.save(
+        logRepo.create({
+          transactionId: rejected.id,
+          action: TransactionLogAction.REJECT,
+          message: "Transaction rejected",
+          metadata: {
+            status: TransactionStatus.REJECTED,
+            rejectionReason: reason,
+          },
+          performedById,
+          createdBy: performedById,
+          updatedBy: performedById,
+        }),
+      );
+      return rejected;
+    });
+
+    return (await this.transactionRepository.findOne({
+      where: { id: saved.id },
+    })) as Transaction;
   }
 
   async getTransactionById(
