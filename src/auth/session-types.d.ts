@@ -9,8 +9,6 @@ declare module "express-session" {
     isHoStaff?: boolean;
     activeBranchId?: string | null;
     activeCounterId?: string | null;
-    clientTimeZone?: string | null;
-    clientNow?: string | null;
     pendingPasswordSetupUserId?: string | null;
     pendingPasswordSetupEmail?: string | null;
     lastActivityAt?: number;

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
+import { IsOptional, IsUUID } from "class-validator";
 import { MonthlyLockWindowResponseDto } from "../../monthly-locks/dto/monthly-lock-window.dto";
 
 export class CompleteDayEndDto {
@@ -11,26 +11,6 @@ export class CompleteDayEndDto {
   @ApiPropertyOptional({ description: "Checklist answers as a JSON object" })
   @IsOptional()
   answers?: Record<string, unknown>;
-
-  @ApiPropertyOptional({
-    description:
-      "IANA time zone of the client PC used to resolve the business calendar day",
-    example: "Asia/Kolkata",
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  timeZone?: string;
-
-  @ApiPropertyOptional({
-    description:
-      "Client PC current instant (ISO-8601). Used with timeZone to resolve the business calendar day from the browser clock.",
-    example: "2026-10-02T04:30:00.000Z",
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  clientNow?: string;
 }
 
 export class PolicyChecklistItemDto {
@@ -80,12 +60,6 @@ export class DayEndStartProcessContextDto {
 
   @ApiProperty()
   workflowState: string;
-
-  @ApiPropertyOptional({
-    description: "IANA time zone used to resolve the business calendar day",
-    example: "Asia/Kolkata",
-  })
-  timeZone?: string;
 
   @ApiPropertyOptional({
     description: "UTC timestamp when BOD was completed (ISO-8601)",

@@ -21,28 +21,8 @@ export const resolveBusinessTimeZone = (
 };
 
 /**
- * Parse a client-provided instant (ISO-8601). Invalid/empty values return null
- * so callers can fall back to the server clock.
- */
-export const parseClientNow = (
-  clientNow?: string | Date | null,
-): Date | null => {
-  if (clientNow == null) {
-    return null;
-  }
-
-  const date = clientNow instanceof Date ? clientNow : new Date(clientNow);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
-};
-
-/**
- * Calendar date (yyyy-MM-dd) for an instant in the given IANA time zone.
- * Prefer the client PC instant (`clientNow`) so punch eligibility follows the
- * browser/PC clock, not only the server host clock.
+ * Calendar date (yyyy-MM-dd) for an instant in the business time zone.
+ * BOD/EOD persistence uses Asia/Kolkata by default (not the server host locale).
  */
 export const getBusinessDateOnly = (
   reference: Date = new Date(),
@@ -81,7 +61,5 @@ export const normalizeDateOnlyInput = (
     return "";
   }
 
-  // Date-only strings without zone are treated as calendar dates above.
-  // Instants fall back to UTC calendar date for normalization of timestamps.
   return getBusinessDateOnly(date, "UTC");
 };

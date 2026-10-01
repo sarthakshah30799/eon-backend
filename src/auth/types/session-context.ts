@@ -11,10 +11,6 @@ export interface SessionContext {
   isHoStaff?: boolean;
   activeBranchId?: string | null;
   activeCounterId?: string | null;
-  /** IANA time zone from the client PC for business-date resolution */
-  clientTimeZone?: string | null;
-  /** Client PC current instant (ISO-8601) for business-date resolution */
-  clientNow?: string | null;
 }
 
 /** Session context after an authentication guard has established the user. */

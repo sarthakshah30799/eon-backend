@@ -216,39 +216,21 @@ export class AuthController {
     @Session() session: any,
     @Query("branchId") branchId?: string,
     @Query("counterId") counterId?: string,
-    @Query("timeZone") timeZone?: string,
-    @Query("clientNow") clientNow?: string,
   ) {
     const canSelectBranch = Boolean(
       session?.isAdmin || session?.isHo || session?.isHoStaff,
     );
-    const resolvedTimeZone = timeZone?.trim() || session?.clientTimeZone || null;
-    const resolvedClientNow = clientNow?.trim() || session?.clientNow || null;
-    if (resolvedTimeZone) {
-      session.clientTimeZone = resolvedTimeZone;
-    }
-    if (resolvedClientNow) {
-      session.clientNow = resolvedClientNow;
-    }
     const effectiveSession =
       canSelectBranch && branchId?.trim()
         ? {
             ...session,
             activeBranchId: branchId.trim(),
             activeCounterId: counterId?.trim() || session.activeCounterId,
-            clientTimeZone: resolvedTimeZone,
-            clientNow: resolvedClientNow,
           }
-        : {
-            ...session,
-            clientTimeZone: resolvedTimeZone,
-            clientNow: resolvedClientNow,
-          };
+        : session;
     return this.dayEndStartProcessService.getPolicyContext(
       effectiveSession,
       false,
-      resolvedTimeZone,
-      resolvedClientNow,
     );
   }
 
