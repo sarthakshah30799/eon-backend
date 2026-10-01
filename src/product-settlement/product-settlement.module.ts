@@ -5,7 +5,9 @@ import { Branch } from "../branches/branch.entity";
 import { CardStockModule } from "../card-stock/card-stock.module";
 import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
+import { MonthlyLocksModule } from "../monthly-locks/monthly-locks.module";
 import { DealCover } from "../tt-deal/entities/deal-cover.entity";
+import { Product } from "../products/product.entity";
 import { UserModule } from "../users/user.module";
 import { ProductSettlementController } from "./product-settlement.controller";
 import { ProductSettlementService } from "./product-settlement.service";
@@ -19,9 +21,10 @@ import {
   imports: [
     AdditionalSettingModule,
     DayEndStartProcessModule,
+    MonthlyLocksModule,
     UserModule,
     forwardRef(() => CardStockModule),
-    TypeOrmModule.forFeature([Branch]),
+    TypeOrmModule.forFeature([Branch, Product]),
     TypeOrmModule.forFeature(
       [
         ProductSettlement,

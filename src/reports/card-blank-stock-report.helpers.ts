@@ -209,6 +209,8 @@ const loadBlankStockRows = async (
     "c.reserved_by_transfer_id IS NULL",
     "c.reserved_at IS NULL",
     `stock.operation_type = '${CardStockOperationType.STOCK}'`,
+    `(COALESCE((b.product_snapshot->>'maintainBlankStockOfProduct')::boolean, NULL) IS DISTINCT FROM false)
+     AND UPPER(COALESCE(b.product_snapshot->>'productCode', b.product_snapshot->>'product_code', b.product_snapshot->>'code', '')) <> 'EM'`,
   ];
   const params: unknown[] = [];
 

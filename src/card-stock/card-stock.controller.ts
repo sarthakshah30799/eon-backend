@@ -24,6 +24,7 @@ import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { CreateCardStockReceiptDto } from "./dto/card-stock-receipt.dto";
 import { RecordCardStockPrintDto } from "./dto/card-stock-print.dto";
 import { CardStockService } from "./card-stock.service";
+import { EmSurrenderService } from "./em-surrender.service";
 import { CardStockReceiptListQueryDto } from "./dto/card-stock-receipt-list-query.dto";
 import { AuthenticatedSession } from "../auth/types/session-context";
 
@@ -32,7 +33,10 @@ import { AuthenticatedSession } from "../auth/types/session-context";
 @UseGuards(AuthenticatedGuard)
 @Controller("card-stock/receipts")
 export class CardStockController {
-  constructor(private readonly cardStockService: CardStockService) {}
+  constructor(
+    private readonly cardStockService: CardStockService,
+    private readonly emSurrenderService: EmSurrenderService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List CARD stock receipts" })
@@ -74,6 +78,53 @@ export class CardStockController {
   ) {
     if (!file) throw new BadRequestException("CARD stock file is required");
     return this.cardStockService.previewUpload(file, issuerPartyProfileId);
+  }
+
+  @Get("cards/sold")
+  @ApiOperation({
+    summary: "Search sold CC/CM cards for EM surrender purchase",
+  })
+  searchSoldCards(
+    @Query("search") search: string | undefined,
+    @Query("currencyId") currencyId: string | undefined,
+    @Query("issuerPartyProfileId") issuerPartyProfileId: string | undefined,
+    @Query("productId") productId: string | undefined,
+    @Query("limit") limit: string | undefined,
+  ) {
+    return this.emSurrenderService.searchSoldCards({
+      search,
+      currencyId,
+      issuerPartyProfileId,
+      productId,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get("cards/base-sale-rate")
+  @ApiOperation({ summary: "Base sale price for EM loss validation" })
+  getBaseSaleRate(@Query("currencyId") currencyId: string) {
+    return this.emSurrenderService.getBaseSaleRate(currencyId);
+  }
+
+  @Get("cards/em-units")
+  @ApiOperation({ summary: "List EM units available for HO bulk sale" })
+  listEmUnits(
+    @Query("branchId") branchId: string,
+    @Query("productId") productId: string,
+    @Query("issuerPartyProfileId") issuerPartyProfileId: string | undefined,
+    @Query("currencyId") currencyId: string | undefined,
+    @Session() session: any,
+  ) {
+    const effectiveBranchId =
+      session?.isAdmin || session?.isHo || session?.isHoStaff
+        ? branchId
+        : session?.activeBranchId;
+    return this.emSurrenderService.listEmUnitsForBulkSale({
+      branchId: effectiveBranchId,
+      productId,
+      issuerPartyProfileId,
+      currencyId,
+    });
   }
 
   @Get("cards/available")

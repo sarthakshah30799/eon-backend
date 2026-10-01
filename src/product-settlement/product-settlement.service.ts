@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from "@nestjs/common";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, In, Repository } from "typeorm";
@@ -16,6 +18,7 @@ import {
   toUtcNextDate,
 } from "../common/date/date.util";
 import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
+import { MonthlyLocksService } from "../monthly-locks/monthly-locks.service";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import {
@@ -23,6 +26,11 @@ import {
   TransactionTypeProfileEnum,
 } from "../transactions/transactions.enums";
 import { CardStockReferenceType } from "../card-stock/card-stock.enums";
+import {
+  isSurrenderBuyingProduct,
+  normalizeProductCode,
+} from "../card-stock/card-product.util";
+import { Product } from "../products/product.entity";
 import {
   ProductSettlementDocumentKind,
   ProductSettlementDocumentStatus,
@@ -32,6 +40,7 @@ import {
   ProductSettlementType,
 } from "./product-settlement.enums";
 import { CardStockTransactionService } from "../card-stock/card-stock-transaction.service";
+import { EmSurrenderService } from "../card-stock/em-surrender.service";
 import {
   CancelProductSettlementDocumentDto,
   ProductSettlementDocumentQueryDto,
@@ -62,9 +71,14 @@ export class ProductSettlementService {
     private readonly documentRepository: Repository<ProductSettlementDocument>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
     private readonly additionalSettingService: AdditionalSettingService,
     private readonly cardStockTransactionService: CardStockTransactionService,
+    @Inject(forwardRef(() => EmSurrenderService))
+    private readonly emSurrenderService: EmSurrenderService,
     private readonly dayEndStartProcessService: DayEndStartProcessService,
+    private readonly monthlyLocksService: MonthlyLocksService,
   ) {}
 
   private isHo(session: AuthenticatedSession) {
@@ -142,6 +156,69 @@ export class ProductSettlementService {
     if (!branch)
       throw new NotFoundException(`Active branch ${id} was not found`);
     return branch;
+  }
+
+  private async assertSettlementTransactionDateAllowed(
+    branch: { id: string; code: string; name: string },
+    actorId: string,
+    transactionDate: Date | string,
+  ) {
+    const requestedDate = toDateOnlyString(transactionDate);
+    if (requestedDate) {
+      const actorLock = await this.monthlyLocksService.getActiveMonthlyLock(
+        branch.id,
+        actorId,
+      );
+      const branchLock =
+        actorLock ??
+        (await this.monthlyLocksService.getActiveMonthlyLockForBranch(
+          branch.id,
+        ));
+      if (
+        branchLock &&
+        requestedDate >= branchLock.fromDate &&
+        requestedDate <= branchLock.toDate
+      ) {
+        return;
+      }
+    }
+
+    try {
+      await this.dayEndStartProcessService.assertTransactionDateAllowed(
+        branch.id,
+        actorId,
+        transactionDate,
+      );
+    } catch (error) {
+      if (!(error instanceof BadRequestException)) {
+        throw error;
+      }
+      const response = error.getResponse();
+      const raw =
+        typeof response === "string"
+          ? response
+          : typeof response === "object" &&
+              response !== null &&
+              "message" in response
+            ? (response as { message: string | string[] }).message
+            : error.message;
+      const message = Array.isArray(raw) ? raw.join(", ") : String(raw);
+      const branchName = String(branch.name || branch.code || "").trim();
+      const withBranch =
+        branchName && !message.includes(branchName)
+          ? message
+              .replace(/\bthis branch(?:\/user)?\b/gi, `branch ${branchName}`)
+              .replace(
+                /\bfor branch [0-9a-f-]{36}\b/gi,
+                `for branch ${branchName}`,
+              )
+          : message;
+      throw new BadRequestException(
+        withBranch === message && branchName && !message.includes(branchName)
+          ? `${message} (branch ${branchName})`
+          : withBranch,
+      );
+    }
   }
   private async getSettlementHo(
     receiptBranchId: string,
@@ -694,8 +771,8 @@ export class ProductSettlementService {
     }
     const isTt = items[0].type === ProductSettlementType.TT;
     const branch = await this.getBranch(document.branchId);
-    await this.dayEndStartProcessService.assertTransactionDateAllowed(
-      branch.id,
+    await this.assertSettlementTransactionDateAllowed(
+      branch,
       actorId,
       document.transactionDate,
     );
@@ -767,6 +844,13 @@ export class ProductSettlementService {
       manager,
       postedItems.map((row) => row.transactionItemId),
     );
+    if (acceptedByHo) {
+      await this.emSurrenderService.moveEmCardsToHoOnAccept(
+        manager,
+        postedItems,
+        actorId,
+      );
+    }
   }
 
   private async refreshSaleItemProfit(
@@ -814,8 +898,8 @@ export class ProductSettlementService {
     }
     const isTt = items[0].type === ProductSettlementType.TT;
     const ho = await this.getBranch(document.hoBranchId);
-    await this.dayEndStartProcessService.assertTransactionDateAllowed(
-      ho.id,
+    await this.assertSettlementTransactionDateAllowed(
+      ho,
       actorId,
       document.transactionDate,
     );
@@ -1156,10 +1240,29 @@ export class ProductSettlementService {
        FROM product_settlement_documents d`;
   }
 
-  private documentListWhere(
+  private async resolveSurrenderProductCodes(): Promise<string[]> {
+    const products = await this.productRepository.find({
+      select: [
+        "productCode",
+        "maintainBlankStockOfProduct",
+        "availableInRetailBuying",
+        "availableInBulkBuying",
+      ],
+    });
+    return [
+      ...new Set(
+        products
+          .filter((product) => isSurrenderBuyingProduct(product))
+          .map((product) => normalizeProductCode(product.productCode))
+          .filter((code) => Boolean(code)),
+      ),
+    ];
+  }
+
+  private async documentListWhere(
     query: ProductSettlementDocumentQueryDto,
     session: AuthenticatedSession,
-  ): { conditions: string[]; params: unknown[] } | { empty: true } {
+  ): Promise<{ conditions: string[]; params: unknown[] } | { empty: true }> {
     if (!session?.userId) return { empty: true };
     const conditions = ["d.deleted_at IS NULL"];
     const params: unknown[] = [];
@@ -1220,6 +1323,27 @@ export class ProductSettlementService {
            AND UPPER(TRIM(item.product_code::text)) = ${productParam}
       )`);
     }
+    const scope = query.scope?.trim().toLowerCase();
+    if (scope === "surrender" || scope === "settlement") {
+      const surrenderCodes = await this.resolveSurrenderProductCodes();
+      if (!surrenderCodes.length) {
+        if (scope === "surrender") return { empty: true };
+      } else {
+        const placeholders = surrenderCodes.map((code) => {
+          params.push(code);
+          return `$${params.length}`;
+        });
+        const inList = placeholders.join(", ");
+        const existsSql = `EXISTS (
+          SELECT 1
+            FROM product_settlements item
+           WHERE item.deleted_at IS NULL
+             AND ((d.kind='BRANCH_HO' AND item.branch_document_id=d.id) OR (d.kind='HO_ISSUER' AND item.issuer_document_id=d.id))
+             AND UPPER(TRIM(item.product_code::text)) IN (${inList})
+        )`;
+        conditions.push(scope === "surrender" ? existsSql : `NOT ${existsSql}`);
+      }
+    }
     if (query.dateFrom)
       add(
         "d.transaction_date >= ?",
@@ -1239,7 +1363,7 @@ export class ProductSettlementService {
     session: AuthenticatedSession,
   ) {
     const pagination = normalizePagination(query);
-    const where = this.documentListWhere(query, session);
+    const where = await this.documentListWhere(query, session);
     if ("empty" in where) return buildPaginatedResponse([], 0, pagination);
     const countRows = await this.database2.query(
       `SELECT COUNT(*)::int AS total FROM product_settlement_documents d WHERE ${where.conditions.join(" AND ")}`,
@@ -1254,7 +1378,7 @@ export class ProductSettlementService {
   }
 
   async get(id: string, session: AuthenticatedSession) {
-    const where = this.documentListWhere({}, session);
+    const where = await this.documentListWhere({}, session);
     if ("empty" in where)
       throw new NotFoundException("CARD settlement not found");
     where.params.push(id);
