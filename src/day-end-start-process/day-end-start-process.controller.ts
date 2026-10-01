@@ -22,6 +22,12 @@ export class DayEndStartProcessController {
     const canSelectWorkplace = Boolean(
       session?.isAdmin || session?.isHo || session?.isHoStaff,
     );
+    if (dto.timeZone?.trim()) {
+      session.clientTimeZone = dto.timeZone.trim();
+    }
+    if (dto.clientNow?.trim()) {
+      session.clientNow = dto.clientNow.trim();
+    }
     return this.dayEndStartProcessService.startDay(
       canSelectWorkplace
         ? (dto.branchId ?? "")
@@ -29,6 +35,8 @@ export class DayEndStartProcessController {
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",
+      dto.timeZone ?? session?.clientTimeZone,
+      dto.clientNow ?? session?.clientNow,
     );
   }
 
@@ -41,6 +49,12 @@ export class DayEndStartProcessController {
     const canSelectWorkplace = Boolean(
       session?.isAdmin || session?.isHo || session?.isHoStaff,
     );
+    if (dto.timeZone?.trim()) {
+      session.clientTimeZone = dto.timeZone.trim();
+    }
+    if (dto.clientNow?.trim()) {
+      session.clientNow = dto.clientNow.trim();
+    }
     return this.dayEndStartProcessService.completeDayEnd(
       canSelectWorkplace
         ? (dto.branchId ?? "")
@@ -48,6 +62,8 @@ export class DayEndStartProcessController {
       session?.userId ?? "",
       dto.answers ?? {},
       session?.userId ?? "",
+      dto.timeZone ?? session?.clientTimeZone,
+      dto.clientNow ?? session?.clientNow,
     );
   }
 }

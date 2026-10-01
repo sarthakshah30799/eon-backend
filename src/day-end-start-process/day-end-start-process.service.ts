@@ -16,25 +16,21 @@ import {
   DayEndExecutionStatus,
 } from "./entities/day-end-execution.entity";
 import {
-  CompleteDayEndDto,
   DayEndStartProcessContextDto,
   PolicyChecklistItemDto,
 } from "./dto/day-end-start-process.dto";
 import { SessionContext } from "../auth/types/session-context";
+import {
+  getBusinessDateOnly,
+  normalizeDateOnlyInput,
+  parseClientNow,
+  resolveBusinessTimeZone,
+} from "./business-date.utils";
 
 const POLICY_CATEGORY_CODE = "DAY_END_POLICY";
 
-const normalizeDateOnly = (value: Date | string): string => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const normalizeDateOnly = (value: Date | string): string =>
+  normalizeDateOnlyInput(value);
 
 const parseDateOnly = (value: string | null | undefined): Date | undefined => {
   const normalized = String(value ?? "").trim();
@@ -97,8 +93,31 @@ export class DayEndStartProcessService {
     return { userId, branchId, counterId: counterId ?? "" };
   }
 
-  private getTodayBusinessDate(reference = new Date()): string {
-    return normalizeDateOnly(reference);
+  private getTodayBusinessDate(
+    reference = new Date(),
+    timeZone?: string | null,
+  ): string {
+    return getBusinessDateOnly(reference, timeZone);
+  }
+
+  private resolveReferenceInstant(
+    session: SessionContext,
+    clientNow?: string | Date | null,
+  ): Date {
+    return (
+      parseClientNow(clientNow) ??
+      parseClientNow(session.clientNow) ??
+      new Date()
+    );
+  }
+
+  private resolveSessionTimeZone(
+    session: SessionContext,
+    timeZone?: string | null,
+  ): string {
+    return resolveBusinessTimeZone(
+      timeZone ?? session.clientTimeZone ?? null,
+    );
   }
 
   private async getPolicyChecklist(): Promise<PolicyChecklistItemDto[]> {
@@ -285,12 +304,16 @@ export class DayEndStartProcessService {
   async getDayEndContext(
     session: SessionContext,
     requireCounter = true,
+    timeZone?: string | null,
+    clientNow?: string | Date | null,
   ): Promise<DayEndStartProcessContextDto> {
     const { userId, branchId, counterId } = this.assertSessionContext(
       session,
       false,
     );
-    const today = this.getTodayBusinessDate();
+    const resolvedTimeZone = this.resolveSessionTimeZone(session, timeZone);
+    const referenceInstant = this.resolveReferenceInstant(session, clientNow);
+    const today = this.getTodayBusinessDate(referenceInstant, resolvedTimeZone);
     const todayExecution = await this.findExecution(branchId, today);
     const latestExecution = await this.findLatestExecution(branchId);
     const workflow = this.getWorkflowStateForExecution(
@@ -307,6 +330,12 @@ export class DayEndStartProcessService {
       activeMonthlyLock,
       transactionDataLock,
     );
+    const punchExecution =
+      todayExecution ??
+      (workflow.openBusinessDate
+        ? await this.findExecution(branchId, workflow.openBusinessDate)
+        : null) ??
+      latestExecution;
 
     return {
       userId,
@@ -320,6 +349,13 @@ export class DayEndStartProcessService {
       canCompleteDayEnd: workflow.canCompleteDayEnd,
       openBusinessDate: workflow.openBusinessDate,
       workflowState: workflow.workflowState,
+      timeZone: resolvedTimeZone,
+      bodAt: punchExecution?.bodAt
+        ? new Date(punchExecution.bodAt).toISOString()
+        : null,
+      eodAt: punchExecution?.eodAt
+        ? new Date(punchExecution.eodAt).toISOString()
+        : null,
       activeMonthlyLock,
       activeBackdateWindow: activeMonthlyLock,
       transactionDataLock: transactionDataLock
@@ -329,8 +365,13 @@ export class DayEndStartProcessService {
     };
   }
 
-  async getPolicyContext(session: SessionContext, requireCounter = true) {
-    return this.getDayEndContext(session, requireCounter);
+  async getPolicyContext(
+    session: SessionContext,
+    requireCounter = true,
+    timeZone?: string | null,
+    clientNow?: string | Date | null,
+  ) {
+    return this.getDayEndContext(session, requireCounter, timeZone, clientNow);
   }
 
   async assertTransactionDateAllowed(
@@ -338,10 +379,23 @@ export class DayEndStartProcessService {
     userId: string,
     transactionDate: Date | string | null | undefined,
     counterId?: string | null,
+    timeZone?: string | null,
+    clientNow?: string | Date | null,
   ): Promise<{ allowedDate: string; context: DayEndStartProcessContextDto }> {
     const context = await this.getDayEndContext(
-      { userId, activeBranchId: branchId, activeCounterId: counterId },
+      {
+        userId,
+        activeBranchId: branchId,
+        activeCounterId: counterId,
+        clientTimeZone: timeZone,
+        clientNow:
+          typeof clientNow === "string"
+            ? clientNow
+            : clientNow?.toISOString?.() ?? null,
+      },
       false,
+      timeZone,
+      clientNow,
     );
     const allowedDate = context.transactionDate;
     const activeWindow = context.activeMonthlyLock;
@@ -389,7 +443,22 @@ export class DayEndStartProcessService {
       throw new BadRequestException("Transaction date is invalid");
     }
 
-    if (requestedDate > this.getTodayBusinessDate()) {
+    if (
+      requestedDate >
+      this.getTodayBusinessDate(
+        this.resolveReferenceInstant(
+          {
+            clientTimeZone: timeZone ?? context.timeZone,
+            clientNow:
+              typeof clientNow === "string"
+                ? clientNow
+                : clientNow?.toISOString?.() ?? null,
+          },
+          clientNow,
+        ),
+        timeZone ?? context.timeZone,
+      )
+    ) {
       throw new BadRequestException("Transaction date cannot be in the future");
     }
 
@@ -445,15 +514,19 @@ export class DayEndStartProcessService {
     userId: string,
     answers: Record<string, unknown>,
     actorUserId: string,
+    timeZone?: string | null,
+    clientNow?: string | Date | null,
   ) {
-    const { branchId: resolvedBranchId, userId: resolvedUserId } =
-      this.assertSessionContext({
-        activeBranchId: branchId,
-        userId,
-        activeCounterId: null,
-      });
+    const { branchId: resolvedBranchId } = this.assertSessionContext({
+      activeBranchId: branchId,
+      userId,
+      activeCounterId: null,
+    });
+    const resolvedTimeZone = resolveBusinessTimeZone(timeZone);
+    const referenceInstant =
+      parseClientNow(clientNow) ?? new Date();
     const latest = await this.findLatestExecution(resolvedBranchId);
-    const today = this.getTodayBusinessDate();
+    const today = this.getTodayBusinessDate(referenceInstant, resolvedTimeZone);
     const todayExecution = await this.findExecution(resolvedBranchId, today);
     const businessDate =
       todayExecution && !todayExecution.eodAt
@@ -536,15 +609,20 @@ export class DayEndStartProcessService {
     userId: string,
     answers: Record<string, unknown>,
     actorUserId: string,
+    timeZone?: string | null,
+    clientNow?: string | Date | null,
   ) {
-    const { branchId: resolvedBranchId, userId: resolvedUserId } =
+    const { branchId: resolvedBranchId } =
       this.assertSessionContext({
         activeBranchId: branchId,
         userId,
         activeCounterId: null,
       });
+    const resolvedTimeZone = resolveBusinessTimeZone(timeZone);
+    const referenceInstant =
+      parseClientNow(clientNow) ?? new Date();
     const latest = await this.findLatestExecution(resolvedBranchId);
-    const today = this.getTodayBusinessDate();
+    const today = this.getTodayBusinessDate(referenceInstant, resolvedTimeZone);
     const todayExecution = await this.findExecution(resolvedBranchId, today);
 
     if (todayExecution?.bodAt && todayExecution.eodAt) {
