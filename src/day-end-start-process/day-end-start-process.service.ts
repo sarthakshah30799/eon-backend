@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
-import { AdvancedSetting } from "../additional-settings/advanced-setting.entity";
 import { MonthlyLocksService } from "../monthly-locks/monthly-locks.service";
 import { TransactionDataLocksService } from "../transaction-data-locks/transaction-data-locks.service";
 import { getEarliestAllowedPunchDate } from "../transaction-data-locks/transaction-data-lock.utils";
@@ -16,26 +15,20 @@ import {
   DayEndExecutionStatus,
 } from "./entities/day-end-execution.entity";
 import {
-  CompleteDayEndDto,
   DayEndStartProcessContextDto,
   PolicyChecklistItemDto,
 } from "./dto/day-end-start-process.dto";
 import { SessionContext } from "../auth/types/session-context";
+import {
+  getBusinessDateOnly,
+  normalizeDateOnlyInput,
+} from "./business-date.utils";
 import { toDateOnlyString, toDisplayDateOnly } from "../common/date/date.util";
 
 const POLICY_CATEGORY_CODE = "DAY_END_POLICY";
 
-const normalizeDateOnly = (value: Date | string): string => {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const normalizeDateOnly = (value: Date | string): string =>
+  normalizeDateOnlyInput(value);
 
 const parseDateOnly = (value: string | null | undefined): Date | undefined => {
   const normalized = String(value ?? "").trim();
@@ -99,7 +92,7 @@ export class DayEndStartProcessService {
   }
 
   private getTodayBusinessDate(reference = new Date()): string {
-    return normalizeDateOnly(reference);
+    return getBusinessDateOnly(reference);
   }
 
   private async getPolicyChecklist(): Promise<PolicyChecklistItemDto[]> {
@@ -308,6 +301,12 @@ export class DayEndStartProcessService {
       activeMonthlyLock,
       transactionDataLock,
     );
+    const punchExecution =
+      todayExecution ??
+      (workflow.openBusinessDate
+        ? await this.findExecution(branchId, workflow.openBusinessDate)
+        : null) ??
+      latestExecution;
 
     return {
       userId,
@@ -321,6 +320,12 @@ export class DayEndStartProcessService {
       canCompleteDayEnd: workflow.canCompleteDayEnd,
       openBusinessDate: workflow.openBusinessDate,
       workflowState: workflow.workflowState,
+      bodAt: punchExecution?.bodAt
+        ? new Date(punchExecution.bodAt).toISOString()
+        : null,
+      eodAt: punchExecution?.eodAt
+        ? new Date(punchExecution.eodAt).toISOString()
+        : null,
       activeMonthlyLock,
       activeBackdateWindow: activeMonthlyLock,
       transactionDataLock: transactionDataLock
@@ -341,7 +346,11 @@ export class DayEndStartProcessService {
     counterId?: string | null,
   ): Promise<{ allowedDate: string; context: DayEndStartProcessContextDto }> {
     const context = await this.getDayEndContext(
-      { userId, activeBranchId: branchId, activeCounterId: counterId },
+      {
+        userId,
+        activeBranchId: branchId,
+        activeCounterId: counterId,
+      },
       false,
     );
     const allowedDate = context.transactionDate;
@@ -451,12 +460,11 @@ export class DayEndStartProcessService {
     answers: Record<string, unknown>,
     actorUserId: string,
   ) {
-    const { branchId: resolvedBranchId, userId: resolvedUserId } =
-      this.assertSessionContext({
-        activeBranchId: branchId,
-        userId,
-        activeCounterId: null,
-      });
+    const { branchId: resolvedBranchId } = this.assertSessionContext({
+      activeBranchId: branchId,
+      userId,
+      activeCounterId: null,
+    });
     const latest = await this.findLatestExecution(resolvedBranchId);
     const today = this.getTodayBusinessDate();
     const todayExecution = await this.findExecution(resolvedBranchId, today);
@@ -542,7 +550,7 @@ export class DayEndStartProcessService {
     answers: Record<string, unknown>,
     actorUserId: string,
   ) {
-    const { branchId: resolvedBranchId, userId: resolvedUserId } =
+    const { branchId: resolvedBranchId } =
       this.assertSessionContext({
         activeBranchId: branchId,
         userId,

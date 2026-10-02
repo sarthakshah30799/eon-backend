@@ -61,6 +61,16 @@ export class DayEndStartProcessContextDto {
   @ApiProperty()
   workflowState: string;
 
+  @ApiPropertyOptional({
+    description: "UTC timestamp when BOD was completed (ISO-8601)",
+  })
+  bodAt?: string | null;
+
+  @ApiPropertyOptional({
+    description: "UTC timestamp when EOD was completed (ISO-8601)",
+  })
+  eodAt?: string | null;
+
   @ApiPropertyOptional()
   activeMonthlyLock?: MonthlyLockWindowResponseDto | null;
 
