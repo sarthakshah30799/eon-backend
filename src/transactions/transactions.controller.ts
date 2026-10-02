@@ -313,6 +313,28 @@ export class TransactionsController {
     );
   }
 
+  @Post(":id/reject")
+  @ApiOperation({ summary: "Reject a draft transaction" })
+  @ApiResponse({
+    status: 200,
+    description: "Transaction rejected successfully",
+  })
+  async rejectTransaction(
+    @Param("id") transactionId: string,
+    @Body() body: { rejectionReason?: string },
+    @Session() session: any,
+  ): Promise<Transaction> {
+    if (!session?.userId) {
+      throw new BadRequestException("User session not found");
+    }
+
+    return this.transactionsService.rejectTransaction(
+      transactionId,
+      session.userId,
+      body?.rejectionReason ?? null,
+    );
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Get transaction by ID" })
   @ApiResponse({

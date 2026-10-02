@@ -48,3 +48,15 @@ export function toUtcNextDate(
   next.setUTCDate(next.getUTCDate() + 1);
   return next;
 }
+
+/** Display date-only values as dd/mm/yyyy for user-facing messages. */
+export function toDisplayDateOnly(
+  value: string | Date | null | undefined,
+): string {
+  const isoDate = toDateOnlyString(value);
+  if (!isoDate) {
+    return String(value ?? "").trim();
+  }
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
