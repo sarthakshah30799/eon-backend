@@ -929,6 +929,32 @@ export class TransactionsService {
     }
   }
 
+  private assertForeignerSellCashOnlyPaymentMethods(params: {
+    transactionType: TransactionType;
+    nationalityType?: string | null;
+    rows: Array<{ paymentMethod: TransactionPaymentMethod }>;
+  }) {
+    if (params.transactionType !== TransactionType.SALE) {
+      return;
+    }
+
+    const nationalityType = String(params.nationalityType ?? "")
+      .trim()
+      .toUpperCase();
+    if (nationalityType !== PassengerNationalityType.FOREIGNER) {
+      return;
+    }
+
+    const hasNonCash = params.rows.some(
+      (row) => row.paymentMethod !== TransactionPaymentMethod.CASH,
+    );
+    if (hasNonCash) {
+      throw new BadRequestException(
+        "Foreigner sell transactions can only be settled in cash",
+      );
+    }
+  }
+
   private assertElectronicPaymentFieldsCleared(row: TransactionPaymentPayload) {
     if (normalizeNullableString(row.referenceNumber)) {
       throw new BadRequestException(
@@ -3092,15 +3118,19 @@ export class TransactionsService {
       }
 
       if (!isFakeCurrency) {
-        this.assertCompatiblePaymentMethods(
-          paymentRows.map((row) => ({
-            paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
-            isAdvance: Boolean(
-              normalizeNullableString(row.advanceVoucherId) ||
-                row.settlementSource === TransactionSettlementSource.ADVANCE,
-            ),
-          })),
-        );
+        const resolvedPaymentRows = paymentRows.map((row) => ({
+          paymentMethod: this.resolvePaymentMethod(row.paymentMethod),
+          isAdvance: Boolean(
+            normalizeNullableString(row.advanceVoucherId) ||
+              row.settlementSource === TransactionSettlementSource.ADVANCE,
+          ),
+        }));
+        this.assertCompatiblePaymentMethods(resolvedPaymentRows);
+        this.assertForeignerSellCashOnlyPaymentMethods({
+          transactionType: transactionPayload.transactionType,
+          nationalityType: passengerPayload?.nationalityType,
+          rows: resolvedPaymentRows,
+        });
       }
 
       const paymentDirection =
