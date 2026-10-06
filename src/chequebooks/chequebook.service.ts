@@ -57,7 +57,12 @@ export class ChequeBookService {
   async create(
     dto: CreateChequeBookDto,
     userId: string,
-    activeBranchId?: string,
+    session?: {
+      activeBranchId?: string | null;
+      isAdmin?: boolean;
+      isHo?: boolean;
+      isHoStaff?: boolean;
+    },
   ): Promise<ChequeBook> {
     const {
       dispatchDate,
@@ -70,9 +75,21 @@ export class ChequeBookService {
       remarks,
     } = dto;
 
-    const branchId = activeBranchId;
-    if (!branchId) {
-      throw new BadRequestException("Current branch is required");
+    const canSelectBranch = Boolean(
+      session?.isAdmin || session?.isHo || session?.isHoStaff,
+    );
+    const branchId = canSelectBranch
+      ? dto.branchId
+      : session?.activeBranchId || undefined;
+    if (
+      !branchId ||
+      (!canSelectBranch && dto.branchId !== branchId)
+    ) {
+      throw new BadRequestException(
+        canSelectBranch
+          ? "Branch is required"
+          : "Dispatch must use the current branch",
+      );
     }
 
     // Verify branch exists in primary DB
