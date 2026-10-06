@@ -46,7 +46,12 @@ export class ManualBillBookController {
   @ApiOperation({ summary: "Create manual bill book dispatch" })
   @ApiResponse({ status: 201, description: "Dispatch created successfully" })
   async create(@Body() dto: CreateManualBookDto, @Session() session: any) {
-    return this.service.create(dto, session.userId, session.activeBranchId);
+    return this.service.create(dto, session.userId, {
+      activeBranchId: session.activeBranchId,
+      isAdmin: session.isAdmin,
+      isHo: session.isHo,
+      isHoStaff: session.isHoStaff,
+    });
   }
 
   @Get("validate-book-range")

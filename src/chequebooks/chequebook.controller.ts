@@ -45,7 +45,12 @@ export class ChequeBookController {
   @ApiOperation({ summary: "Create check book dispatch" })
   @ApiResponse({ status: 201, description: "Dispatch created successfully" })
   async create(@Body() dto: CreateChequeBookDto, @Session() session: any) {
-    return this.service.create(dto, session.userId, session.activeBranchId);
+    return this.service.create(dto, session.userId, {
+      activeBranchId: session.activeBranchId,
+      isAdmin: session.isAdmin,
+      isHo: session.isHo,
+      isHoStaff: session.isHoStaff,
+    });
   }
 
   @Get("validate-book-range")

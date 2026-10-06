@@ -24,6 +24,11 @@ export class CreateChequeBookDto {
   @IsNotEmpty()
   dispatchDate: string;
 
+  @ApiProperty({ description: "Target branch UUID" })
+  @IsUUID()
+  @IsNotEmpty()
+  branchId: string;
+
   @ApiProperty({ description: "Bank Account Code UUID" })
   @IsString()
   @IsNotEmpty()
