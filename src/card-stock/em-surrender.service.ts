@@ -211,10 +211,11 @@ export class EmSurrenderService {
     }
     const product = await this.productRepository.findOne({
       where: { id: productId },
+      relations: ["issuerLinks"],
     });
     if (!product || !isSurrenderBulkSaleProduct(product)) {
       throw new BadRequestException(
-        "Only non-blank-stock surrender products with bulk selling can list reserved units",
+        "Only non-blank-stock surrender products with linked issuers, retail buying, and bulk selling can list reserved units",
       );
     }
     const params: SqlParam[] = [branchId, productId];
@@ -286,7 +287,7 @@ export class EmSurrenderService {
   assertEmPurchaseProduct(product: Product) {
     if (!isSurrenderBuyingProduct(product)) {
       throw new BadRequestException(
-        "Product surrender requires a non-blank-stock buying product (retail or bulk)",
+        "Product surrender requires a non-blank-stock product with linked issuers, retail buying, and bulk selling",
       );
     }
   }
@@ -671,13 +672,7 @@ export class EmSurrenderService {
         ? (
             await this.productRepository.find({
               where: { id: In(settlementProductIds) },
-              select: [
-                "id",
-                "productCode",
-                "maintainBlankStockOfProduct",
-                "availableInRetailBuying",
-                "availableInBulkBuying",
-              ],
+              relations: ["issuerLinks"],
             })
           )
             .filter((product) => isSurrenderBuyingProduct(product))
@@ -741,7 +736,7 @@ export class EmSurrenderService {
         ? (
             await this.productRepository.find({
               where: { id: In(productIds) },
-              select: ["id", "productCode", "maintainBlankStockOfProduct"],
+              relations: ["issuerLinks"],
             })
           )
             .filter((product) => isSurrenderMenuProduct(product))
@@ -816,10 +811,11 @@ export class EmSurrenderService {
     for (const item of surrenderItems) {
       const product = await this.productRepository.findOne({
         where: { id: item.productId },
+        relations: ["issuerLinks"],
       });
       if (!product || !isSurrenderBulkSaleProduct(product)) {
         throw new BadRequestException(
-          `Item ${item.lineNo} must use a non-blank-stock surrender product with bulk selling`,
+          `Item ${item.lineNo} must use a non-blank-stock surrender product with linked issuers, retail buying, and bulk selling`,
         );
       }
       if (!item.issuerPartyProfileId) {

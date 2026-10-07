@@ -1674,6 +1674,7 @@ export class TransactionsService {
     const requestedProducts = requestedProductIds.length
       ? await this.productRepository.find({
           where: { id: In(requestedProductIds) },
+          relations: ["issuerLinks"],
         })
       : [];
     const cardProductIds = new Set(
@@ -2391,6 +2392,7 @@ export class TransactionsService {
             "fakeAccount",
             "closingAc",
             "acOfIssuer",
+            "issuerLinks",
           ],
         });
 
@@ -3583,7 +3585,10 @@ export class TransactionsService {
         ...new Set(approvedItems.map((item) => item.productId).filter(Boolean)),
       ];
       const products = productIds.length
-        ? await this.productRepository.find({ where: { id: In(productIds) } })
+        ? await this.productRepository.find({
+            where: { id: In(productIds) },
+            relations: ["issuerLinks"],
+          })
         : [];
       const productById = new Map(products.map((p) => [p.id, p]));
       const cardItems = approvedItems.filter((item) => {
