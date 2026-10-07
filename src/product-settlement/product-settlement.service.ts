@@ -1242,12 +1242,7 @@ export class ProductSettlementService {
 
   private async resolveSurrenderProductCodes(): Promise<string[]> {
     const products = await this.productRepository.find({
-      select: [
-        "productCode",
-        "maintainBlankStockOfProduct",
-        "availableInRetailBuying",
-        "availableInBulkBuying",
-      ],
+      relations: ["issuerLinks"],
     });
     return [
       ...new Set(

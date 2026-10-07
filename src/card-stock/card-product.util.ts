@@ -18,6 +18,12 @@ export type SurrenderProductLike = {
   availableInRetailBuying?: boolean | null;
   availableInBulkBuying?: boolean | null;
   availableInBulkSelling?: boolean | null;
+  /** Linked CARD issuers on the product profile (API / form shape). */
+  issuerProfileIds?: string[] | null;
+  /** TypeORM relation when loaded. */
+  issuerLinks?: unknown[] | null;
+  /** Form-row convenience when issuer ids are not on the row. */
+  hasIssuerLinks?: boolean | null;
 };
 
 export type ProductSnapshotLike = {
@@ -46,30 +52,41 @@ export const isCnProductCode = (productCode?: string | null): boolean =>
 export const isTtProductCode = (productCode?: string | null): boolean =>
   normalizeProductCode(productCode) === TT_PRODUCT_CODE;
 
+/** Linked issuers required for surrender punch (sold CARD / issuer sale). */
+export const hasSurrenderIssuerLinks = (
+  product: SurrenderProductLike,
+): boolean => {
+  if (product.hasIssuerLinks === true) return true;
+  if ((product.issuerProfileIds?.length ?? 0) > 0) return true;
+  if ((product.issuerLinks?.length ?? 0) > 0) return true;
+  return false;
+};
+
+/** @deprecated Prefer hasSurrenderIssuerLinks. */
+export const hasSurrenderIssuerPath = hasSurrenderIssuerLinks;
+
 /**
- * Surrender master from Product Profile: non-blank-stock only.
- * No product-code allow/deny list — profile flags drive eligibility.
+ * Surrender product from Product Profile (data-driven, no product-code list):
+ * blank stock off + linked issuers + retail buying + bulk selling.
+ * Matches EM-style masters; CN (no issuers) and CC/CM (blank stock on) stay out.
  */
 export const isSurrenderMenuProduct = (
   product: SurrenderProductLike,
-): boolean => product.maintainBlankStockOfProduct === false;
+): boolean =>
+  product.maintainBlankStockOfProduct === false &&
+  hasSurrenderIssuerLinks(product) &&
+  product.availableInRetailBuying === true &&
+  product.availableInBulkSelling === true;
 
-/**
- * Surrender punch / menu: non-stocking and available for buying
- * (retail or bulk — both accepted for now).
- */
+/** Retail surrender purchase uses the same profile definition. */
 export const isSurrenderBuyingProduct = (
   product: SurrenderProductLike,
-): boolean =>
-  isSurrenderMenuProduct(product) &&
-  (product.availableInRetailBuying === true ||
-    product.availableInBulkBuying === true);
+): boolean => isSurrenderMenuProduct(product);
 
-/** HO bulk issuer sale of reserved surrender units. */
+/** HO bulk issuer sale uses the same profile definition. */
 export const isSurrenderBulkSaleProduct = (
   product: SurrenderProductLike,
-): boolean =>
-  isSurrenderMenuProduct(product) && product.availableInBulkSelling === true;
+): boolean => isSurrenderMenuProduct(product);
 
 /**
  * Snapshot for surrender units. Prefer maintainBlankStockOfProduct;
