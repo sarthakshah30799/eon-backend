@@ -11,15 +11,15 @@ import { CardTransferRequest } from "./card-transfer-request.entity";
 import { CardTransferRequestCard } from "./card-transfer-request-card.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 
-@Index("IDX_card_transfer_request_items_transfer_id", ["transferId"])
+@Index("IDX_product_transfer_request_items_transfer_id", ["transferId"])
 @Index(
-  "IDX_card_transfer_request_items_transfer_line",
+  "IDX_product_transfer_request_items_transfer_line",
   ["transferId", "lineNo"],
   {
     unique: true,
   },
 )
-@Entity("card_transfer_request_items")
+@Entity("product_transfer_request_items")
 export class CardTransferRequestItem extends BaseEntity {
   @Column({ type: "uuid", name: "transfer_id" })
   transferId: string;
@@ -29,7 +29,7 @@ export class CardTransferRequestItem extends BaseEntity {
   })
   @JoinColumn({
     name: "transfer_id",
-    foreignKeyConstraintName: "FK_card_transfer_request_items_transfer",
+    foreignKeyConstraintName: "FK_product_transfer_request_items_transfer",
   })
   transfer: CardTransferRequest;
 

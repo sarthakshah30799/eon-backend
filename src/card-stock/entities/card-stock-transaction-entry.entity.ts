@@ -8,17 +8,17 @@ import {
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import { Transaction } from "../../transactions/entities/transaction.entity";
 
-@Index("IDX_card_stock_entries_card_date", ["cardId", "date"])
-@Index("IDX_card_stock_entries_branch_date", ["branchId", "date"])
-@Index("IDX_card_stock_entries_reference", ["referenceType", "referenceId"])
-@Unique("UQ_card_stock_entries_card_operation_reference", [
+@Index("IDX_product_stock_entries_card_date", ["cardId", "date"])
+@Index("IDX_product_stock_entries_branch_date", ["branchId", "date"])
+@Index("IDX_product_stock_entries_reference", ["referenceType", "referenceId"])
+@Unique("UQ_product_stock_entries_card_operation_reference", [
   "cardId",
   "referenceType",
   "referenceId",
   "operationType",
   "currencyId",
 ])
-@Entity("card_stock_transaction_entries")
+@Entity("product_stock_transaction_entries")
 export class CardStockTransactionEntry extends BaseEntity {
   @Column({ type: "uuid", name: "card_id" })
   cardId: string;
@@ -28,7 +28,7 @@ export class CardStockTransactionEntry extends BaseEntity {
   })
   @JoinColumn({
     name: "card_id",
-    foreignKeyConstraintName: "FK_card_stock_entries_card",
+    foreignKeyConstraintName: "FK_product_stock_entries_card",
   })
   card: CardStockCard;
 
@@ -38,7 +38,7 @@ export class CardStockTransactionEntry extends BaseEntity {
   @ManyToOne(() => Transaction, { onDelete: "RESTRICT" })
   @JoinColumn({
     name: "transaction_id",
-    foreignKeyConstraintName: "FK_card_stock_entries_transaction",
+    foreignKeyConstraintName: "FK_product_stock_entries_transaction",
   })
   transaction: Transaction;
 

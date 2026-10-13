@@ -14,11 +14,11 @@ import { CardStockTransactionEntry } from "./card-stock-transaction-entry.entity
 import { CardStockBalance } from "./card-stock-balance.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 
-@Index("IDX_card_stock_cards_receipt_item", ["receiptItemId"])
-@Index("IDX_card_stock_cards_branch_status", ["currentBranchId", "status"])
-@Index("IDX_card_stock_cards_kit_number", ["kitNumber"])
-@Index("IDX_card_stock_cards_reserved_transfer", ["reservedByTransferId"])
-@Entity("card_stock_cards")
+@Index("IDX_product_stock_products_receipt_item", ["receiptItemId"])
+@Index("IDX_product_stock_products_branch_status", ["currentBranchId", "status"])
+@Index("IDX_product_stock_products_kit_number", ["kitNumber"])
+@Index("IDX_product_stock_products_reserved_transfer", ["reservedByTransferId"])
+@Entity("product_stock_products")
 export class CardStockCard extends BaseEntity {
   @Column({ type: "uuid", name: "receipt_item_id" })
   receiptItemId: string;
@@ -28,7 +28,7 @@ export class CardStockCard extends BaseEntity {
   })
   @JoinColumn({
     name: "receipt_item_id",
-    foreignKeyConstraintName: "FK_card_stock_cards_receipt_item",
+    foreignKeyConstraintName: "FK_product_stock_products_receipt_item",
   })
   receiptItem: CardStockReceiptItem;
 

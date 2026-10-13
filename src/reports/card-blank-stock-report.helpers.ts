@@ -250,9 +250,9 @@ const loadBlankStockRows = async (
         b.product_snapshot AS "productSnapshot",
         b.currency_snapshot AS "currencySnapshot",
         ${MASKED_CARD_SQL} AS "maskedCardNumber"
-      FROM card_stock_balance b
-      JOIN card_stock_cards c ON c.id = b.card_id
-      JOIN card_stock_transaction_entries stock ON stock.card_id = b.card_id
+      FROM product_stock_balance b
+      JOIN product_stock_products c ON c.id = b.card_id
+      JOIN product_stock_transaction_entries stock ON stock.card_id = b.card_id
       JOIN transactions t ON t.id = stock.transaction_id
       CROSS JOIN LATERAL (
         SELECT public.decrypt_card_number(c.card_number) clear_number

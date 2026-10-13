@@ -5,21 +5,21 @@ import { CardTransferRequest } from "./card-transfer-request.entity";
 import { CardTransferRequestItem } from "./card-transfer-request-item.entity";
 
 @Index(
-  "IDX_card_transfer_request_cards_transfer_card",
+  "IDX_product_transfer_request_products_transfer_card",
   ["transferId", "cardId"],
   {
     unique: true,
   },
 )
 @Index(
-  "IDX_card_transfer_request_cards_item_card",
+  "IDX_product_transfer_request_products_item_card",
   ["transferItemId", "cardId"],
   {
     unique: true,
   },
 )
-@Index("IDX_card_transfer_request_cards_card", ["cardId"])
-@Entity("card_transfer_request_cards")
+@Index("IDX_product_transfer_request_products_card", ["cardId"])
+@Entity("product_transfer_request_products")
 export class CardTransferRequestCard extends BaseEntity {
   @Column({ type: "uuid", name: "transfer_id" })
   transferId: string;
@@ -29,7 +29,7 @@ export class CardTransferRequestCard extends BaseEntity {
   })
   @JoinColumn({
     name: "transfer_id",
-    foreignKeyConstraintName: "FK_card_transfer_request_cards_transfer",
+    foreignKeyConstraintName: "FK_product_transfer_request_products_transfer",
   })
   transfer: CardTransferRequest;
 
@@ -41,7 +41,7 @@ export class CardTransferRequestCard extends BaseEntity {
   })
   @JoinColumn({
     name: "transfer_item_id",
-    foreignKeyConstraintName: "FK_card_transfer_request_cards_item",
+    foreignKeyConstraintName: "FK_product_transfer_request_products_item",
   })
   transferItem: CardTransferRequestItem;
 
@@ -53,7 +53,7 @@ export class CardTransferRequestCard extends BaseEntity {
   })
   @JoinColumn({
     name: "card_id",
-    foreignKeyConstraintName: "FK_card_transfer_request_cards_card",
+    foreignKeyConstraintName: "FK_product_transfer_request_products_card",
   })
   card: CardStockCard;
 }
