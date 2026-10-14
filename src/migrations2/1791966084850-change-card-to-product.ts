@@ -1,188 +1,323 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
+/**
+ * Data-preserving rename of card_stock_* / card_transfer_* tables to product_*.
+ * Rewrites PL/pgSQL bodies that hardcode old table names.
+ * Do NOT use migration:generate for this — it emits CREATE TABLE and drops data.
+ */
 export class ChangeCardToProduct1791966084850 implements MigrationInterface {
-    name = 'ChangeCardToProduct1791966084850'
+  name = "ChangeCardToProduct1791966084850";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "transaction_items" DROP CONSTRAINT "FK_transaction_items_card_id"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "FK_product_settlements_branch_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "FK_product_settlements_card"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "FK_product_settlements_issuer_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "CHK_product_settlements_type_refs"`);
-        await queryRunner.query(`CREATE TYPE "public"."product_stock_receipts_status_enum" AS ENUM('POSTED')`);
-        await queryRunner.query(`CREATE TABLE "product_stock_receipts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "transaction_number" citext NOT NULL, "receipt_date" date NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "company_id" uuid, "company_snapshot" jsonb, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "status" "public"."product_stock_receipts_status_enum" NOT NULL DEFAULT 'POSTED', "total_fe_amount" numeric(18,2) NOT NULL, "transaction_id" uuid, CONSTRAINT "PK_989e4237552cfa600675c44f230" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_receipts_date" ON "product_stock_receipts" ("receipt_date") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_product_stock_receipts_transaction_number" ON "product_stock_receipts" ("transaction_number") `);
-        await queryRunner.query(`CREATE TABLE "product_stock_receipt_items" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "receipt_id" uuid NOT NULL, "line_no" integer NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "per" numeric(18,7) NOT NULL, "product_id" uuid NOT NULL, "product_snapshot" jsonb NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "fe_amount" numeric(18,2) NOT NULL, CONSTRAINT "PK_ba15d09c3f3e9bf400ef4ea0ff6" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_receipt_items_issuer" ON "product_stock_receipt_items" ("issuer_party_profile_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_receipt_items_product" ON "product_stock_receipt_items" ("product_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_receipt_items_currency" ON "product_stock_receipt_items" ("currency_id") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_product_stock_receipt_items_receipt_line" ON "product_stock_receipt_items" ("receipt_id", "line_no") `);
-        await queryRunner.query(`CREATE TABLE "product_transfer_request_items" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "transfer_id" uuid NOT NULL, "line_no" integer NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "per" numeric(18,7) NOT NULL, "product_id" uuid NOT NULL, "product_snapshot" jsonb NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "fe_amount" numeric(18,2) NOT NULL, CONSTRAINT "PK_838867cbf1133899d09f1e63d98" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_product_transfer_request_items_transfer_line" ON "product_transfer_request_items" ("transfer_id", "line_no") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_transfer_request_items_transfer_id" ON "product_transfer_request_items" ("transfer_id") `);
-        await queryRunner.query(`CREATE TYPE "public"."product_transfer_requests_status_enum" AS ENUM('HELD', 'ACCEPTED', 'REJECTED', 'CANCELLED')`);
-        await queryRunner.query(`CREATE TABLE "product_transfer_requests" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "transaction_number" citext NOT NULL, "transaction_date" date NOT NULL, "source_branch_id" uuid NOT NULL, "source_branch_snapshot" jsonb NOT NULL, "destination_branch_id" uuid NOT NULL, "destination_branch_snapshot" jsonb NOT NULL, "company_id" uuid, "company_snapshot" jsonb, "status" "public"."product_transfer_requests_status_enum" NOT NULL DEFAULT 'HELD', "total_fe_amount" numeric(18,2) NOT NULL, "remarks" text, "acceptance_remarks" text, "rejection_reason" text, "cancellation_reason" text, "source_transaction_id" uuid, "destination_transaction_id" uuid, "held_at" TIMESTAMP WITH TIME ZONE, "accepted_at" TIMESTAMP WITH TIME ZONE, "rejected_at" TIMESTAMP WITH TIME ZONE, "cancelled_at" TIMESTAMP WITH TIME ZONE, "held_by_id" uuid, "accepted_by_id" uuid, "rejected_by_id" uuid, "cancelled_by_id" uuid, CONSTRAINT "PK_53eb8c55fc5721e41e35249557d" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_transfer_requests_destination_branch" ON "product_transfer_requests" ("destination_branch_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_transfer_requests_source_branch" ON "product_transfer_requests" ("source_branch_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_transfer_requests_transaction_date" ON "product_transfer_requests" ("transaction_date") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_transfer_requests_status" ON "product_transfer_requests" ("status") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_product_transfer_requests_transaction_number" ON "product_transfer_requests" ("transaction_number") `);
-        await queryRunner.query(`CREATE TABLE "product_transfer_request_products" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "transfer_id" uuid NOT NULL, "transfer_item_id" uuid NOT NULL, "card_id" uuid NOT NULL, CONSTRAINT "PK_dc406153e4fb2d97acac0fe339a" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_transfer_request_products_card" ON "product_transfer_request_products" ("card_id") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_product_transfer_request_products_item_card" ON "product_transfer_request_products" ("transfer_item_id", "card_id") `);
-        await queryRunner.query(`CREATE UNIQUE INDEX "IDX_product_transfer_request_products_transfer_card" ON "product_transfer_request_products" ("transfer_id", "card_id") `);
-        await queryRunner.query(`CREATE TYPE "public"."product_stock_transaction_entries_operation_type_enum" AS ENUM('STOCK', 'TRANSFER_OUT', 'TRANSFER_IN', 'CARD_STOCK_LOAD', 'SELL', 'SETTLE', 'RETURN', 'VOID')`);
-        await queryRunner.query(`CREATE TABLE "product_stock_transaction_entries" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "card_id" uuid NOT NULL, "transaction_id" uuid NOT NULL, "reference_type" "public"."card_stock_reference_type_enum" NOT NULL, "reference_id" uuid NOT NULL, "operation_type" "public"."product_stock_transaction_entries_operation_type_enum" NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "product_id" uuid NOT NULL, "product_snapshot" jsonb NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "series" citext NOT NULL, "date" TIMESTAMP WITH TIME ZONE NOT NULL, "rate" numeric(18,7) NOT NULL DEFAULT '0', "amount" numeric(18,2) NOT NULL DEFAULT '0', "remarks" text, CONSTRAINT "UQ_product_stock_entries_card_operation_reference" UNIQUE ("card_id", "reference_type", "reference_id", "operation_type", "currency_id"), CONSTRAINT "PK_4847abb37fb0ae1741f2d8b5181" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_entries_reference" ON "product_stock_transaction_entries" ("reference_type", "reference_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_entries_branch_date" ON "product_stock_transaction_entries" ("branch_id", "date") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_entries_card_date" ON "product_stock_transaction_entries" ("card_id", "date") `);
-        await queryRunner.query(`CREATE TABLE "product_stock_balance" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "card_id" uuid NOT NULL, "branch_id" uuid NOT NULL, "branch_snapshot" jsonb NOT NULL, "currency_id" uuid NOT NULL, "currency_snapshot" jsonb NOT NULL, "product_id" uuid NOT NULL, "product_snapshot" jsonb NOT NULL, "issuer_party_profile_id" uuid NOT NULL, "issuer_party_profile_snapshot" jsonb NOT NULL, "series" citext NOT NULL, "receive_date" TIMESTAMP WITH TIME ZONE, "receive_rate" numeric(18,7) NOT NULL DEFAULT '0', "receive_amount" numeric(18,2) NOT NULL DEFAULT '0', "receive_entry_id" uuid, "transfer_date" TIMESTAMP WITH TIME ZONE, "transfer_rate" numeric(18,7) NOT NULL DEFAULT '0', "transfer_amount" numeric(18,2) NOT NULL DEFAULT '0', "transfer_entry_id" uuid, "sell_date" TIMESTAMP WITH TIME ZONE, "sell_rate" numeric(18,7) NOT NULL DEFAULT '0', "sell_amount" numeric(18,2) NOT NULL DEFAULT '0', "sell_entry_id" uuid, "settle_date" TIMESTAMP WITH TIME ZONE, "settle_rate" numeric(18,7) NOT NULL DEFAULT '0', "settle_amount" numeric(18,2) NOT NULL DEFAULT '0', "settle_entry_id" uuid, "is_active" boolean NOT NULL DEFAULT true, CONSTRAINT "PK_47801eaea4b7066d66c42c631d6" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE UNIQUE INDEX "UQ_product_stock_balance_active_card_branch" ON "product_stock_balance" ("card_id", "branch_id") WHERE "is_active" = true`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_balance_branch_series" ON "product_stock_balance" ("branch_id", "series") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_balance_card_branch_active" ON "product_stock_balance" ("card_id", "branch_id", "is_active") `);
-        await queryRunner.query(`CREATE TYPE "public"."product_stock_products_status_enum" AS ENUM('AVAILABLE', 'RESERVED', 'SOLD')`);
-        await queryRunner.query(`CREATE TABLE "product_stock_products" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "created_by" uuid NOT NULL, "updated_by" uuid NOT NULL, "deleted_at" TIMESTAMP WITH TIME ZONE, "deleted_by" uuid, "receipt_item_id" uuid NOT NULL, "series" citext NOT NULL, "quantity" integer NOT NULL DEFAULT '1', "kit_number" citext NOT NULL, "card_number" bytea NOT NULL, "denomination" numeric(18,2) NOT NULL, "amount" numeric(18,2) NOT NULL, "expiration_date" date NOT NULL, "current_branch_id" uuid NOT NULL, "current_branch_snapshot" jsonb NOT NULL, "status" "public"."product_stock_products_status_enum" NOT NULL DEFAULT 'AVAILABLE', "reserved_by_transfer_id" uuid, "reserved_at" TIMESTAMP WITH TIME ZONE, CONSTRAINT "PK_c0d929ecf429c5997bd7fe6d367" PRIMARY KEY ("id"))`);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_products_reserved_transfer" ON "product_stock_products" ("reserved_by_transfer_id") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_products_kit_number" ON "product_stock_products" ("kit_number") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_products_branch_status" ON "product_stock_products" ("current_branch_id", "status") `);
-        await queryRunner.query(`CREATE INDEX "IDX_product_stock_products_receipt_item" ON "product_stock_products" ("receipt_item_id") `);
-        await queryRunner.query(`ALTER TYPE "public"."manual_books_transaction_type_enum" RENAME TO "manual_books_transaction_type_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."manual_books_transaction_type_enum" AS ENUM('FAKE_CURRENCY', 'PURCHASE_FFMC', 'PURCHASE_CORPORATE_INDIVIDUAL', 'SALE_CORPORATE_INDIVIDUAL', 'SALE_FFMC', 'SALE_RMC', 'SALE_FOREX', 'SALE_FOREIGN', 'SALE_MISC', 'SALE_FRANCHISE', 'PURCHASE_RMC', 'PURCHASE_FOREX', 'PURCHASE_FOREIGN', 'PURCHASE_MISC', 'PURCHASE_FRANCHISE')`);
-        await queryRunner.query(`ALTER TABLE "manual_books" ALTER COLUMN "transaction_type" TYPE "public"."manual_books_transaction_type_enum" USING "transaction_type"::"text"::"public"."manual_books_transaction_type_enum"`);
-        await queryRunner.query(`DROP TYPE "public"."manual_books_transaction_type_enum_old"`);
-        await queryRunner.query(`ALTER TYPE "public"."purpose_rate_type_enum" RENAME TO "purpose_rate_type_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."transaction_tcs_breakdowns_rate_type_enum" AS ENUM('PERCENT', 'RUPEES')`);
-        await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" ALTER COLUMN "rate_type" DROP DEFAULT`);
-        await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" ALTER COLUMN "rate_type" TYPE "public"."transaction_tcs_breakdowns_rate_type_enum" USING "rate_type"::"text"::"public"."transaction_tcs_breakdowns_rate_type_enum"`);
-        await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" ALTER COLUMN "rate_type" SET DEFAULT 'PERCENT'`);
-        await queryRunner.query(`DROP TYPE "public"."purpose_rate_type_enum_old"`);
-        await queryRunner.query(`ALTER TYPE "public"."purpose_rate_type_enum" RENAME TO "purpose_rate_type_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."transactions_tcs_rate_type_enum" AS ENUM('PERCENT', 'RUPEES')`);
-        await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "tcs_rate_type" TYPE "public"."transactions_tcs_rate_type_enum" USING "tcs_rate_type"::"text"::"public"."transactions_tcs_rate_type_enum"`);
-        await queryRunner.query(`DROP TYPE "public"."purpose_rate_type_enum_old"`);
-        await queryRunner.query(`ALTER TYPE "public"."deal_covers_status_enum" RENAME TO "deal_covers_status_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."deal_covers_status_enum" AS ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')`);
-        await queryRunner.query(`ALTER TABLE "deal_covers" ALTER COLUMN "status" DROP DEFAULT`);
-        await queryRunner.query(`ALTER TABLE "deal_covers" ALTER COLUMN "status" TYPE "public"."deal_covers_status_enum" USING "status"::"text"::"public"."deal_covers_status_enum"`);
-        await queryRunner.query(`ALTER TABLE "deal_covers" ALTER COLUMN "status" SET DEFAULT 'PENDING'`);
-        await queryRunner.query(`DROP TYPE "public"."deal_covers_status_enum_old"`);
-        await queryRunner.query(`ALTER TYPE "public"."card_stock_settlements_settlement_mode_enum" RENAME TO "card_stock_settlements_settlement_mode_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."product_settlements_settlement_mode_enum" AS ENUM('AUTO', 'MANUAL')`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ALTER COLUMN "settlement_mode" TYPE "public"."product_settlements_settlement_mode_enum" USING "settlement_mode"::"text"::"public"."product_settlements_settlement_mode_enum"`);
-        await queryRunner.query(`DROP TYPE "public"."card_stock_settlements_settlement_mode_enum_old"`);
-        await queryRunner.query(`ALTER TYPE "public"."card_stock_settlements_status_enum" RENAME TO "card_stock_settlements_status_enum_old"`);
-        await queryRunner.query(`CREATE TYPE "public"."product_settlements_status_enum" AS ENUM('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE', 'PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED', 'CANCELLED')`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ALTER COLUMN "status" TYPE "public"."product_settlements_status_enum" USING "status"::"text"::"public"."product_settlements_status_enum"`);
-        await queryRunner.query(`DROP TYPE "public"."card_stock_settlements_status_enum_old"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_receipt_items" ADD CONSTRAINT "FK_product_stock_receipt_items_receipt" FOREIGN KEY ("receipt_id") REFERENCES "product_stock_receipts"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_items" ADD CONSTRAINT "FK_product_transfer_request_items_transfer" FOREIGN KEY ("transfer_id") REFERENCES "product_transfer_requests"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_products" ADD CONSTRAINT "FK_product_transfer_request_products_transfer" FOREIGN KEY ("transfer_id") REFERENCES "product_transfer_requests"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_products" ADD CONSTRAINT "FK_product_transfer_request_products_item" FOREIGN KEY ("transfer_item_id") REFERENCES "product_transfer_request_items"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_products" ADD CONSTRAINT "FK_product_transfer_request_products_card" FOREIGN KEY ("card_id") REFERENCES "product_stock_products"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_transaction_entries" ADD CONSTRAINT "FK_product_stock_entries_card" FOREIGN KEY ("card_id") REFERENCES "product_stock_products"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_transaction_entries" ADD CONSTRAINT "FK_product_stock_entries_transaction" FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" ADD CONSTRAINT "FK_product_stock_balance_card" FOREIGN KEY ("card_id") REFERENCES "product_stock_products"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" ADD CONSTRAINT "FK_product_stock_balance_receive_entry" FOREIGN KEY ("receive_entry_id") REFERENCES "product_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" ADD CONSTRAINT "FK_product_stock_balance_transfer_entry" FOREIGN KEY ("transfer_entry_id") REFERENCES "product_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" ADD CONSTRAINT "FK_product_stock_balance_sell_entry" FOREIGN KEY ("sell_entry_id") REFERENCES "product_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" ADD CONSTRAINT "FK_product_stock_balance_settle_entry" FOREIGN KEY ("settle_entry_id") REFERENCES "product_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_stock_products" ADD CONSTRAINT "FK_product_stock_products_receipt_item" FOREIGN KEY ("receipt_item_id") REFERENCES "product_stock_receipt_items"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "transaction_items" ADD CONSTRAINT "FK_transaction_items_card_id" FOREIGN KEY ("card_id") REFERENCES "product_stock_products"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "FK_product_settlements_card" FOREIGN KEY ("card_id") REFERENCES "product_stock_products"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "FK_product_settlements_branch_entry" FOREIGN KEY ("branch_settlement_entry_id") REFERENCES "product_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "FK_product_settlements_issuer_entry" FOREIGN KEY ("issuer_settlement_entry_id") REFERENCES "product_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+  private readonly tableRenames: Array<[string, string]> = [
+    ["card_stock_transaction_entries", "product_stock_transaction_entries"],
+    ["card_transfer_request_cards", "product_transfer_request_products"],
+    ["card_transfer_request_items", "product_transfer_request_items"],
+    ["card_stock_receipt_items", "product_stock_receipt_items"],
+    ["card_transfer_requests", "product_transfer_requests"],
+    ["card_stock_receipts", "product_stock_receipts"],
+    ["card_stock_cards", "product_stock_products"],
+    ["card_stock_balance", "product_stock_balance"],
+  ];
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF to_regclass('public.card_stock_cards') IS NULL THEN
+          RAISE EXCEPTION 'card_stock_cards not found — cannot rename';
+        END IF;
+        IF to_regclass('public.product_stock_products') IS NOT NULL THEN
+          RAISE EXCEPTION 'product_stock_products already exists — cannot rename';
+        END IF;
+      END $$;
+    `);
+
+    for (const [from, to] of this.tableRenames) {
+      await queryRunner.query(`ALTER TABLE "${from}" RENAME TO "${to}"`);
     }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "FK_product_settlements_issuer_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "FK_product_settlements_branch_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" DROP CONSTRAINT "FK_product_settlements_card"`);
-        await queryRunner.query(`ALTER TABLE "transaction_items" DROP CONSTRAINT "FK_transaction_items_card_id"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_products" DROP CONSTRAINT "FK_product_stock_products_receipt_item"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" DROP CONSTRAINT "FK_product_stock_balance_settle_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" DROP CONSTRAINT "FK_product_stock_balance_sell_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" DROP CONSTRAINT "FK_product_stock_balance_transfer_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" DROP CONSTRAINT "FK_product_stock_balance_receive_entry"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_balance" DROP CONSTRAINT "FK_product_stock_balance_card"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_transaction_entries" DROP CONSTRAINT "FK_product_stock_entries_transaction"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_transaction_entries" DROP CONSTRAINT "FK_product_stock_entries_card"`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_products" DROP CONSTRAINT "FK_product_transfer_request_products_card"`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_products" DROP CONSTRAINT "FK_product_transfer_request_products_item"`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_products" DROP CONSTRAINT "FK_product_transfer_request_products_transfer"`);
-        await queryRunner.query(`ALTER TABLE "product_transfer_request_items" DROP CONSTRAINT "FK_product_transfer_request_items_transfer"`);
-        await queryRunner.query(`ALTER TABLE "product_stock_receipt_items" DROP CONSTRAINT "FK_product_stock_receipt_items_receipt"`);
-        await queryRunner.query(`CREATE TYPE "public"."card_stock_settlements_status_enum_old" AS ENUM('CANCELLED', 'ISSUER_SETTLED', 'PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE', 'PENDING_ISSUER_SETTLEMENT')`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ALTER COLUMN "status" TYPE "public"."card_stock_settlements_status_enum_old" USING "status"::"text"::"public"."card_stock_settlements_status_enum_old"`);
-        await queryRunner.query(`DROP TYPE "public"."product_settlements_status_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."card_stock_settlements_status_enum_old" RENAME TO "card_stock_settlements_status_enum"`);
-        await queryRunner.query(`CREATE TYPE "public"."card_stock_settlements_settlement_mode_enum_old" AS ENUM('AUTO', 'MANUAL')`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ALTER COLUMN "settlement_mode" TYPE "public"."card_stock_settlements_settlement_mode_enum_old" USING "settlement_mode"::"text"::"public"."card_stock_settlements_settlement_mode_enum_old"`);
-        await queryRunner.query(`DROP TYPE "public"."product_settlements_settlement_mode_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."card_stock_settlements_settlement_mode_enum_old" RENAME TO "card_stock_settlements_settlement_mode_enum"`);
-        await queryRunner.query(`CREATE TYPE "public"."deal_covers_status_enum_old" AS ENUM('APPROVED', 'CANCELLED', 'PENDING', 'REJECTED')`);
-        await queryRunner.query(`ALTER TABLE "deal_covers" ALTER COLUMN "status" DROP DEFAULT`);
-        await queryRunner.query(`ALTER TABLE "deal_covers" ALTER COLUMN "status" TYPE "public"."deal_covers_status_enum_old" USING "status"::"text"::"public"."deal_covers_status_enum_old"`);
-        await queryRunner.query(`ALTER TABLE "deal_covers" ALTER COLUMN "status" SET DEFAULT 'PENDING'`);
-        await queryRunner.query(`DROP TYPE "public"."deal_covers_status_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."deal_covers_status_enum_old" RENAME TO "deal_covers_status_enum"`);
-        await queryRunner.query(`CREATE TYPE "public"."purpose_rate_type_enum_old" AS ENUM('PERCENT', 'RUPEES')`);
-        await queryRunner.query(`ALTER TABLE "transactions" ALTER COLUMN "tcs_rate_type" TYPE "public"."purpose_rate_type_enum_old" USING "tcs_rate_type"::"text"::"public"."purpose_rate_type_enum_old"`);
-        await queryRunner.query(`DROP TYPE "public"."transactions_tcs_rate_type_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."purpose_rate_type_enum_old" RENAME TO "purpose_rate_type_enum"`);
-        await queryRunner.query(`CREATE TYPE "public"."purpose_rate_type_enum_old" AS ENUM('PERCENT', 'RUPEES')`);
-        await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" ALTER COLUMN "rate_type" DROP DEFAULT`);
-        await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" ALTER COLUMN "rate_type" TYPE "public"."purpose_rate_type_enum_old" USING "rate_type"::"text"::"public"."purpose_rate_type_enum_old"`);
-        await queryRunner.query(`ALTER TABLE "transaction_tcs_breakdowns" ALTER COLUMN "rate_type" SET DEFAULT 'PERCENT'`);
-        await queryRunner.query(`DROP TYPE "public"."transaction_tcs_breakdowns_rate_type_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."purpose_rate_type_enum_old" RENAME TO "purpose_rate_type_enum"`);
-        await queryRunner.query(`CREATE TYPE "public"."manual_books_transaction_type_enum_old" AS ENUM('DEAL_COVER', 'FAKE_CURRENCY', 'PURCHASE_CORPORATE_INDIVIDUAL', 'PURCHASE_FFMC', 'PURCHASE_FOREIGN', 'PURCHASE_FOREX', 'PURCHASE_FRANCHISE', 'PURCHASE_MISC', 'PURCHASE_RMC', 'SALE_CORPORATE_INDIVIDUAL', 'SALE_FFMC', 'SALE_FOREIGN', 'SALE_FOREX', 'SALE_FRANCHISE', 'SALE_MISC', 'SALE_RMC')`);
-        await queryRunner.query(`ALTER TABLE "manual_books" ALTER COLUMN "transaction_type" TYPE "public"."manual_books_transaction_type_enum_old" USING "transaction_type"::"text"::"public"."manual_books_transaction_type_enum_old"`);
-        await queryRunner.query(`DROP TYPE "public"."manual_books_transaction_type_enum"`);
-        await queryRunner.query(`ALTER TYPE "public"."manual_books_transaction_type_enum_old" RENAME TO "manual_books_transaction_type_enum"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_products_receipt_item"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_products_branch_status"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_products_kit_number"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_products_reserved_transfer"`);
-        await queryRunner.query(`DROP TABLE "product_stock_products"`);
-        await queryRunner.query(`DROP TYPE "public"."product_stock_products_status_enum"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_balance_card_branch_active"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_balance_branch_series"`);
-        await queryRunner.query(`DROP INDEX "public"."UQ_product_stock_balance_active_card_branch"`);
-        await queryRunner.query(`DROP TABLE "product_stock_balance"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_entries_card_date"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_entries_branch_date"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_entries_reference"`);
-        await queryRunner.query(`DROP TABLE "product_stock_transaction_entries"`);
-        await queryRunner.query(`DROP TYPE "public"."product_stock_transaction_entries_operation_type_enum"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_request_products_transfer_card"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_request_products_item_card"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_request_products_card"`);
-        await queryRunner.query(`DROP TABLE "product_transfer_request_products"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_requests_transaction_number"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_requests_status"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_requests_transaction_date"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_requests_source_branch"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_requests_destination_branch"`);
-        await queryRunner.query(`DROP TABLE "product_transfer_requests"`);
-        await queryRunner.query(`DROP TYPE "public"."product_transfer_requests_status_enum"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_request_items_transfer_id"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_transfer_request_items_transfer_line"`);
-        await queryRunner.query(`DROP TABLE "product_transfer_request_items"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_receipt_items_receipt_line"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_receipt_items_currency"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_receipt_items_product"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_receipt_items_issuer"`);
-        await queryRunner.query(`DROP TABLE "product_stock_receipt_items"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_receipts_transaction_number"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_product_stock_receipts_date"`);
-        await queryRunner.query(`DROP TABLE "product_stock_receipts"`);
-        await queryRunner.query(`DROP TYPE "public"."product_stock_receipts_status_enum"`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "CHK_product_settlements_type_refs" CHECK ((((type = 'CARD'::citext) AND (card_id IS NOT NULL) AND (deal_cover_id IS NULL)) OR ((type = 'TT'::citext) AND (deal_cover_id IS NOT NULL) AND (card_id IS NULL))))`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "FK_product_settlements_issuer_entry" FOREIGN KEY ("issuer_settlement_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "FK_product_settlements_card" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "product_settlements" ADD CONSTRAINT "FK_product_settlements_branch_entry" FOREIGN KEY ("branch_settlement_entry_id") REFERENCES "card_stock_transaction_entries"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "transaction_items" ADD CONSTRAINT "FK_transaction_items_card_id" FOREIGN KEY ("card_id") REFERENCES "card_stock_cards"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
-    }
+    await queryRunner.query(`
+      DO $$
+      DECLARE
+        r record;
+        new_name text;
+      BEGIN
+        FOR r IN
+          SELECT c.conname, t.relname
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE n.nspname = 'public'
+            AND (
+              c.conname LIKE '%card_stock_%'
+              OR c.conname LIKE '%card_transfer_%'
+            )
+            AND c.conname NOT LIKE '%card_stock_settlement%'
+        LOOP
+          new_name := r.conname;
+          new_name := replace(new_name, 'card_stock_transaction_entries', 'product_stock_transaction_entries');
+          new_name := replace(new_name, 'card_transfer_request_cards', 'product_transfer_request_products');
+          new_name := replace(new_name, 'card_transfer_request_items', 'product_transfer_request_items');
+          new_name := replace(new_name, 'card_stock_receipt_items', 'product_stock_receipt_items');
+          new_name := replace(new_name, 'card_transfer_requests', 'product_transfer_requests');
+          new_name := replace(new_name, 'card_stock_receipts', 'product_stock_receipts');
+          new_name := replace(new_name, 'card_stock_cards', 'product_stock_products');
+          new_name := replace(new_name, 'card_stock_balance', 'product_stock_balance');
+          new_name := replace(new_name, 'card_stock_entries', 'product_stock_entries');
+          IF new_name <> r.conname THEN
+            EXECUTE format(
+              'ALTER TABLE %I RENAME CONSTRAINT %I TO %I',
+              r.relname,
+              r.conname,
+              new_name
+            );
+          END IF;
+        END LOOP;
+      END $$;
+    `);
 
+    await queryRunner.query(`
+      DO $$
+      DECLARE
+        r record;
+        new_name text;
+      BEGIN
+        FOR r IN
+          SELECT indexname
+          FROM pg_indexes
+          WHERE schemaname = 'public'
+            AND (
+              indexname LIKE '%card_stock_%'
+              OR indexname LIKE '%card_transfer_%'
+            )
+            AND indexname NOT LIKE '%card_stock_settlement%'
+        LOOP
+          new_name := r.indexname;
+          new_name := replace(new_name, 'card_stock_transaction_entries', 'product_stock_transaction_entries');
+          new_name := replace(new_name, 'card_transfer_request_cards', 'product_transfer_request_products');
+          new_name := replace(new_name, 'card_transfer_request_items', 'product_transfer_request_items');
+          new_name := replace(new_name, 'card_stock_receipt_items', 'product_stock_receipt_items');
+          new_name := replace(new_name, 'card_transfer_requests', 'product_transfer_requests');
+          new_name := replace(new_name, 'card_stock_receipts', 'product_stock_receipts');
+          new_name := replace(new_name, 'card_stock_cards', 'product_stock_products');
+          new_name := replace(new_name, 'card_stock_balance', 'product_stock_balance');
+          new_name := replace(new_name, 'card_stock_entries', 'product_stock_entries');
+          IF new_name <> r.indexname THEN
+            EXECUTE format('ALTER INDEX %I RENAME TO %I', r.indexname, new_name);
+          END IF;
+        END LOOP;
+      END $$;
+    `);
+
+    await queryRunner.query(`
+      DO $$
+      DECLARE
+        r record;
+        function_definition text;
+      BEGIN
+        FOR r IN
+          SELECT p.oid::regprocedure AS signature
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public'
+            AND p.prokind = 'f'
+            AND (
+              pg_get_functiondef(p.oid) LIKE '%card_stock_cards%'
+              OR pg_get_functiondef(p.oid) LIKE '%card_stock_balance%'
+              OR pg_get_functiondef(p.oid) LIKE '%card_stock_receipt%'
+              OR pg_get_functiondef(p.oid) LIKE '%card_stock_transaction_entries%'
+              OR pg_get_functiondef(p.oid) LIKE '%card_transfer_request%'
+            )
+        LOOP
+          function_definition := pg_get_functiondef(r.signature);
+          function_definition := replace(
+            function_definition,
+            'card_stock_transaction_entries',
+            'product_stock_transaction_entries'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_transfer_request_cards',
+            'product_transfer_request_products'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_transfer_request_items',
+            'product_transfer_request_items'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_receipt_items',
+            'product_stock_receipt_items'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_transfer_requests',
+            'product_transfer_requests'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_receipts',
+            'product_stock_receipts'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_cards',
+            'product_stock_products'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_balance',
+            'product_stock_balance'
+          );
+          EXECUTE function_definition;
+        END LOOP;
+      END $$;
+    `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      DO $$
+      DECLARE
+        r record;
+        function_definition text;
+      BEGIN
+        FOR r IN
+          SELECT p.oid::regprocedure AS signature
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public'
+            AND p.prokind = 'f'
+            AND (
+              pg_get_functiondef(p.oid) LIKE '%product_stock_products%'
+              OR pg_get_functiondef(p.oid) LIKE '%product_stock_balance%'
+              OR pg_get_functiondef(p.oid) LIKE '%product_stock_receipt%'
+              OR pg_get_functiondef(p.oid) LIKE '%product_stock_transaction_entries%'
+              OR pg_get_functiondef(p.oid) LIKE '%product_transfer_request%'
+            )
+        LOOP
+          function_definition := pg_get_functiondef(r.signature);
+          function_definition := replace(
+            function_definition,
+            'product_stock_transaction_entries',
+            'card_stock_transaction_entries'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_transfer_request_products',
+            'card_transfer_request_cards'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_transfer_request_items',
+            'card_transfer_request_items'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_stock_receipt_items',
+            'card_stock_receipt_items'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_transfer_requests',
+            'card_transfer_requests'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_stock_receipts',
+            'card_stock_receipts'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_stock_products',
+            'card_stock_cards'
+          );
+          function_definition := replace(
+            function_definition,
+            'product_stock_balance',
+            'card_stock_balance'
+          );
+          EXECUTE function_definition;
+        END LOOP;
+      END $$;
+    `);
+
+    await queryRunner.query(`
+      DO $$
+      DECLARE
+        r record;
+        new_name text;
+      BEGIN
+        FOR r IN
+          SELECT indexname
+          FROM pg_indexes
+          WHERE schemaname = 'public'
+            AND (
+              indexname LIKE '%product_stock_%'
+              OR indexname LIKE '%product_transfer_%'
+            )
+            AND indexname NOT LIKE '%product_settlement%'
+        LOOP
+          new_name := r.indexname;
+          new_name := replace(new_name, 'product_stock_transaction_entries', 'card_stock_transaction_entries');
+          new_name := replace(new_name, 'product_transfer_request_products', 'card_transfer_request_cards');
+          new_name := replace(new_name, 'product_transfer_request_items', 'card_transfer_request_items');
+          new_name := replace(new_name, 'product_stock_receipt_items', 'card_stock_receipt_items');
+          new_name := replace(new_name, 'product_transfer_requests', 'card_transfer_requests');
+          new_name := replace(new_name, 'product_stock_receipts', 'card_stock_receipts');
+          new_name := replace(new_name, 'product_stock_products', 'card_stock_cards');
+          new_name := replace(new_name, 'product_stock_balance', 'card_stock_balance');
+          new_name := replace(new_name, 'product_stock_entries', 'card_stock_entries');
+          IF new_name <> r.indexname THEN
+            EXECUTE format('ALTER INDEX %I RENAME TO %I', r.indexname, new_name);
+          END IF;
+        END LOOP;
+      END $$;
+    `);
+
+    await queryRunner.query(`
+      DO $$
+      DECLARE
+        r record;
+        new_name text;
+      BEGIN
+        FOR r IN
+          SELECT c.conname, t.relname
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE n.nspname = 'public'
+            AND (
+              c.conname LIKE '%product_stock_%'
+              OR c.conname LIKE '%product_transfer_%'
+            )
+            AND c.conname NOT LIKE '%product_settlement%'
+        LOOP
+          new_name := r.conname;
+          new_name := replace(new_name, 'product_stock_transaction_entries', 'card_stock_transaction_entries');
+          new_name := replace(new_name, 'product_transfer_request_products', 'card_transfer_request_cards');
+          new_name := replace(new_name, 'product_transfer_request_items', 'card_transfer_request_items');
+          new_name := replace(new_name, 'product_stock_receipt_items', 'card_stock_receipt_items');
+          new_name := replace(new_name, 'product_transfer_requests', 'card_transfer_requests');
+          new_name := replace(new_name, 'product_stock_receipts', 'card_stock_receipts');
+          new_name := replace(new_name, 'product_stock_products', 'card_stock_cards');
+          new_name := replace(new_name, 'product_stock_balance', 'card_stock_balance');
+          new_name := replace(new_name, 'product_stock_entries', 'card_stock_entries');
+          IF new_name <> r.conname THEN
+            EXECUTE format(
+              'ALTER TABLE %I RENAME CONSTRAINT %I TO %I',
+              r.relname,
+              r.conname,
+              new_name
+            );
+          END IF;
+        END LOOP;
+      END $$;
+    `);
+
+    for (const [from, to] of [...this.tableRenames].reverse()) {
+      await queryRunner.query(`ALTER TABLE "${to}" RENAME TO "${from}"`);
+    }
+  }
 }

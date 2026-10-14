@@ -62,6 +62,7 @@ export class CardStockCard extends BaseEntity {
   @Column({
     type: "enum",
     enum: CardStockCardStatus,
+    enumName: "card_stock_cards_status_enum",
     default: CardStockCardStatus.AVAILABLE,
   })
   status: CardStockCardStatus;

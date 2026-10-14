@@ -44,6 +44,7 @@ export class CardTransferRequest extends BaseEntity {
   @Column({
     type: "enum",
     enum: CardTransferStatus,
+    enumName: "card_transfer_requests_status_enum",
     default: CardTransferStatus.HELD,
   })
   status: CardTransferStatus;

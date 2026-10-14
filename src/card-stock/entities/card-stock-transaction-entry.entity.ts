@@ -56,6 +56,7 @@ export class CardStockTransactionEntry extends BaseEntity {
   @Column({
     type: "enum",
     enum: CardStockOperationType,
+    enumName: "card_stock_transaction_entries_operation_type_enum",
     name: "operation_type",
   })
   operationType: CardStockOperationType;

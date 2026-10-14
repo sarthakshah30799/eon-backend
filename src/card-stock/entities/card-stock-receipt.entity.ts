@@ -38,6 +38,7 @@ export class CardStockReceipt extends BaseEntity {
   @Column({
     type: "enum",
     enum: CardStockReceiptStatus,
+    enumName: "card_stock_receipts_status_enum",
     name: "status",
     default: CardStockReceiptStatus.POSTED,
   })
