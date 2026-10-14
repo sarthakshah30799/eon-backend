@@ -130,6 +130,27 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             )
         LOOP
           function_definition := pg_get_functiondef(r.signature);
+          -- Protect enum type names: table renames are substrings of these enums.
+          function_definition := replace(
+            function_definition,
+            'card_stock_transaction_entries_operation_type_enum',
+            '__ENUM_CSE_OP__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_cards_status_enum',
+            '__ENUM_CSC_STATUS__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_receipts_status_enum',
+            '__ENUM_CSR_STATUS__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_transfer_requests_status_enum',
+            '__ENUM_CTR_STATUS__'
+          );
           function_definition := replace(
             function_definition,
             'card_stock_transaction_entries',
@@ -170,6 +191,26 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             'card_stock_balance',
             'product_stock_balance'
           );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CSE_OP__',
+            'card_stock_transaction_entries_operation_type_enum'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CSC_STATUS__',
+            'card_stock_cards_status_enum'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CSR_STATUS__',
+            'card_stock_receipts_status_enum'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CTR_STATUS__',
+            'card_transfer_requests_status_enum'
+          );
           EXECUTE function_definition;
         END LOOP;
       END $$;
@@ -198,6 +239,27 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             )
         LOOP
           function_definition := pg_get_functiondef(r.signature);
+          -- Protect enum type names from reverse table renames.
+          function_definition := replace(
+            function_definition,
+            'card_stock_transaction_entries_operation_type_enum',
+            '__ENUM_CSE_OP__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_cards_status_enum',
+            '__ENUM_CSC_STATUS__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_receipts_status_enum',
+            '__ENUM_CSR_STATUS__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_transfer_requests_status_enum',
+            '__ENUM_CTR_STATUS__'
+          );
           function_definition := replace(
             function_definition,
             'product_stock_transaction_entries',
@@ -237,6 +299,26 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             function_definition,
             'product_stock_balance',
             'card_stock_balance'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CSE_OP__',
+            'card_stock_transaction_entries_operation_type_enum'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CSC_STATUS__',
+            'card_stock_cards_status_enum'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CSR_STATUS__',
+            'card_stock_receipts_status_enum'
+          );
+          function_definition := replace(
+            function_definition,
+            '__ENUM_CTR_STATUS__',
+            'card_transfer_requests_status_enum'
           );
           EXECUTE function_definition;
         END LOOP;
