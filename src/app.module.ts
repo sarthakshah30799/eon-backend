@@ -47,6 +47,7 @@ import { ProductSettlementModule } from "./product-settlement/product-settlement
 import { TtDealModule } from "./tt-deal/tt-deal.module";
 import { VoucherModule } from "./vouchers/voucher.module";
 import { CreditRequestFundModule } from "./credit-request-fund/credit-request-fund.module";
+import { AdvanceRefundModule } from "./advance-refund/advance-refund.module";
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { CreditRequestFundModule } from "./credit-request-fund/credit-request-fu
     TtDealModule,
     VoucherModule,
     CreditRequestFundModule,
+    AdvanceRefundModule,
     MigrationToolModule,
     TransactionDataLocksModule,
     ReportsModule,
