@@ -378,14 +378,14 @@ const loadSettlementRows = async (
         COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date) AS "branchDocumentDate",
         bd.transaction_number AS "branchDocumentNumber"
       FROM product_settlements s
-      LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
+      LEFT JOIN product_stock_products c ON c.id = s.card_id AND s.type = 'CARD'
       LEFT JOIN LATERAL (
         SELECT public.decrypt_card_number(c.card_number) clear_number
         WHERE c.id IS NOT NULL
       ) decoded ON true
       LEFT JOIN LATERAL (
         SELECT balance.sell_rate, balance.sell_amount, balance.settle_rate, balance.settle_amount
-        FROM card_stock_balance balance
+        FROM product_stock_balance balance
         WHERE balance.card_id = s.card_id
           AND balance.branch_id = s.branch_id
           AND balance.series = s.series

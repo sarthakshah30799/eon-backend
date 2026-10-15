@@ -246,7 +246,7 @@ export class CardStockService {
         SELECT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
                i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
                CASE WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0)) ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4) END AS "maskedCardNumber"
-        FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+        FROM product_stock_products c JOIN product_stock_receipt_items i ON i.id=c.receipt_item_id
         CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
         WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND c.reserved_by_transfer_id IS NULL AND c.reserved_at IS NULL
           AND i.product_id=$2 AND i.issuer_party_profile_id=$3
@@ -260,7 +260,7 @@ export class CardStockService {
       SELECT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
              i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
              CASE WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0)) ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4) END AS "maskedCardNumber"
-      FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+      FROM product_stock_products c JOIN product_stock_receipt_items i ON i.id=c.receipt_item_id
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
       WHERE c.current_branch_id=$1 AND c.status='AVAILABLE' AND c.reserved_by_transfer_id IS NULL AND c.reserved_at IS NULL
         AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
@@ -291,7 +291,7 @@ export class CardStockService {
         SELECT DISTINCT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
           i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
           CASE WHEN length(decoded.clear_number) <= 8 THEN left(decoded.clear_number, 4) || repeat('X', greatest(length(decoded.clear_number) - 4, 0)) ELSE left(decoded.clear_number, 4) || repeat('X', length(decoded.clear_number) - 8) || right(decoded.clear_number, 4) END AS "maskedCardNumber"
-        FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+        FROM product_stock_products c JOIN product_stock_receipt_items i ON i.id=c.receipt_item_id
         CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
         WHERE c.current_branch_id=$1 AND c.status='SOLD' AND c.reserved_by_transfer_id IS NULL
           AND i.product_id=$2 AND i.issuer_party_profile_id=$3
@@ -307,7 +307,7 @@ export class CardStockService {
       SELECT DISTINCT c.id, c.series, c.kit_number AS "kitNumber", c.denomination, c.amount, c.expiration_date AS "expirationDate",
         i.currency_id AS "currencyId", i.product_id AS "productId", i.issuer_party_profile_id AS "issuerPartyProfileId",
         CASE WHEN length(decoded.clear_number) <= 8 THEN left(decoded.clear_number, 4) || repeat('X', greatest(length(decoded.clear_number) - 4, 0)) ELSE left(decoded.clear_number, 4) || repeat('X', length(decoded.clear_number) - 8) || right(decoded.clear_number, 4) END AS "maskedCardNumber"
-      FROM card_stock_cards c JOIN card_stock_receipt_items i ON i.id=c.receipt_item_id
+      FROM product_stock_products c JOIN product_stock_receipt_items i ON i.id=c.receipt_item_id
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
       WHERE c.current_branch_id=$1 AND c.status='SOLD' AND c.reserved_by_transfer_id IS NULL
         AND i.currency_id=$2 AND i.product_id=$3 AND i.issuer_party_profile_id=$4
@@ -445,7 +445,7 @@ export class CardStockService {
             );
           seenCards.add(duplicateKey);
           const existing = await manager.query(
-            "SELECT id FROM card_stock_cards WHERE kit_number = $1 AND public.decrypt_card_number(card_number) = $2 LIMIT 1",
+            "SELECT id FROM product_stock_products WHERE kit_number = $1 AND public.decrypt_card_number(card_number) = $2 LIMIT 1",
             [card.kitNumber, card.cardNumber],
           );
           if (existing.length)
@@ -625,7 +625,7 @@ export class CardStockService {
           WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0))
           ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4)
         END AS "maskedCardNumber"
-      FROM card_stock_cards
+      FROM product_stock_products
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(card_number) AS clear_number) decoded
       WHERE id = ANY($1::uuid[])
     `,

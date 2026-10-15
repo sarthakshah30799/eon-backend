@@ -71,4 +71,17 @@ export class AccountProfileListQueryDto extends PaginationQueryDto {
   @IsBoolean()
   @IsOptional()
   journalVoucher?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Filter by visible during advance refund",
+  })
+  @BooleanQuery()
+  @IsBoolean()
+  @IsOptional()
+  visibleDuringRefund?: boolean;
+
+  @ApiPropertyOptional({ description: "Filter by assigned branch ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
 }
