@@ -151,6 +151,14 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             'card_transfer_requests_status_enum',
             '__ENUM_CTR_STATUS__'
           );
+          -- Protect function names that embed a renamed table substring so
+          -- CREATE OR REPLACE updates the existing function instead of creating
+          -- an orphan (e.g. card_stock_balance_recalculate_sale_profit).
+          function_definition := replace(
+            function_definition,
+            'card_stock_balance_recalculate_sale_profit',
+            '__FN_BALANCE_RECALC_SALE_PROFIT__'
+          );
           function_definition := replace(
             function_definition,
             'card_stock_transaction_entries',
@@ -190,6 +198,11 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             function_definition,
             'card_stock_balance',
             'product_stock_balance'
+          );
+          function_definition := replace(
+            function_definition,
+            '__FN_BALANCE_RECALC_SALE_PROFIT__',
+            'card_stock_balance_recalculate_sale_profit'
           );
           function_definition := replace(
             function_definition,
@@ -262,6 +275,16 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
           );
           function_definition := replace(
             function_definition,
+            'product_stock_balance_recalculate_sale_profit',
+            '__FN_BALANCE_RECALC_SALE_PROFIT__'
+          );
+          function_definition := replace(
+            function_definition,
+            'card_stock_balance_recalculate_sale_profit',
+            '__FN_BALANCE_RECALC_SALE_PROFIT_CARD__'
+          );
+          function_definition := replace(
+            function_definition,
             'product_stock_transaction_entries',
             'card_stock_transaction_entries'
           );
@@ -299,6 +322,16 @@ export class ChangeCardToProduct1791966084850 implements MigrationInterface {
             function_definition,
             'product_stock_balance',
             'card_stock_balance'
+          );
+          function_definition := replace(
+            function_definition,
+            '__FN_BALANCE_RECALC_SALE_PROFIT__',
+            'product_stock_balance_recalculate_sale_profit'
+          );
+          function_definition := replace(
+            function_definition,
+            '__FN_BALANCE_RECALC_SALE_PROFIT_CARD__',
+            'card_stock_balance_recalculate_sale_profit'
           );
           function_definition := replace(
             function_definition,
