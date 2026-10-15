@@ -6,6 +6,8 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * new function `product_stock_balance_recalculate_sale_profit` while leaving
  * triggers bound to the old (stale) function that still references
  * `card_stock_transaction_entries`.
+ *
+ * Retarget triggers to the corrected function and rename them to product_*.
  */
 export class FixProductStockBalanceProfitTrigger1791966084851
   implements MigrationInterface
@@ -25,7 +27,9 @@ export class FixProductStockBalanceProfitTrigger1791966084851
     await queryRunner.query(`
       DROP TRIGGER IF EXISTS card_stock_balance_recalculate_sale_profit_insert
         ON public.product_stock_balance;
-      CREATE TRIGGER card_stock_balance_recalculate_sale_profit_insert
+      DROP TRIGGER IF EXISTS product_stock_balance_recalculate_sale_profit_insert
+        ON public.product_stock_balance;
+      CREATE TRIGGER product_stock_balance_recalculate_sale_profit_insert
       AFTER INSERT ON public.product_stock_balance
       FOR EACH ROW
       EXECUTE FUNCTION public.product_stock_balance_recalculate_sale_profit();
@@ -34,7 +38,9 @@ export class FixProductStockBalanceProfitTrigger1791966084851
     await queryRunner.query(`
       DROP TRIGGER IF EXISTS card_stock_balance_recalculate_sale_profit_update
         ON public.product_stock_balance;
-      CREATE TRIGGER card_stock_balance_recalculate_sale_profit_update
+      DROP TRIGGER IF EXISTS product_stock_balance_recalculate_sale_profit_update
+        ON public.product_stock_balance;
+      CREATE TRIGGER product_stock_balance_recalculate_sale_profit_update
       AFTER UPDATE OF settle_entry_id, settle_rate, settle_amount
         ON public.product_stock_balance
       FOR EACH ROW
@@ -126,6 +132,8 @@ export class FixProductStockBalanceProfitTrigger1791966084851
     `);
 
     await queryRunner.query(`
+      DROP TRIGGER IF EXISTS product_stock_balance_recalculate_sale_profit_insert
+        ON public.product_stock_balance;
       DROP TRIGGER IF EXISTS card_stock_balance_recalculate_sale_profit_insert
         ON public.product_stock_balance;
       CREATE TRIGGER card_stock_balance_recalculate_sale_profit_insert
@@ -135,6 +143,8 @@ export class FixProductStockBalanceProfitTrigger1791966084851
     `);
 
     await queryRunner.query(`
+      DROP TRIGGER IF EXISTS product_stock_balance_recalculate_sale_profit_update
+        ON public.product_stock_balance;
       DROP TRIGGER IF EXISTS card_stock_balance_recalculate_sale_profit_update
         ON public.product_stock_balance;
       CREATE TRIGGER card_stock_balance_recalculate_sale_profit_update
