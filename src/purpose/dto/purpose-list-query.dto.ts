@@ -5,7 +5,9 @@ import { TransactionType } from "../../transactions/transactions.enums";
 import { PurposePartyProfileType } from "../purpose.enums";
 
 export class PurposeListQueryDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: "Search code or description" })
+  @ApiPropertyOptional({
+    description: "Search code, RBI code, or description",
+  })
   @IsString()
   @IsOptional()
   search?: string;

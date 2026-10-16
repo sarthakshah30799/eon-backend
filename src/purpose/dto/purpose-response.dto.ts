@@ -11,6 +11,9 @@ export class PurposeResponseDto {
   @ApiProperty()
   code: string;
 
+  @ApiPropertyOptional({ nullable: true })
+  rbiCode: string | null;
+
   @ApiProperty()
   description: string;
 
@@ -57,6 +60,7 @@ export class PurposeResponseDto {
     const dto = new PurposeResponseDto();
     dto.id = entity.id;
     dto.code = entity.code;
+    dto.rbiCode = entity.rbiCode ?? null;
     dto.description = entity.description;
     dto.threshold = Number(entity.threshold);
     dto.rate = Number(entity.rate);
