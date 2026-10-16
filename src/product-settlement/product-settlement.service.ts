@@ -462,7 +462,7 @@ export class ProductSettlementService {
           (
             await manager.query(
               `SELECT e.series
-           FROM card_stock_transaction_entries e
+           FROM product_stock_transaction_entries e
            WHERE e.card_id=$1 AND e.reference_id=$2 AND e.currency_id=$3 AND e.operation_type='CARD_STOCK_LOAD'
            ORDER BY e.created_at DESC LIMIT 1`,
               [card.id, transaction.id, item.currencyId],
@@ -470,7 +470,7 @@ export class ProductSettlementService {
           )[0] ??
           (
             await manager.query(
-              `SELECT id,series FROM card_stock_balance WHERE card_id=$1 AND branch_id=$2 AND is_active=true ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+              `SELECT id,series FROM product_stock_balance WHERE card_id=$1 AND branch_id=$2 AND is_active=true ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
               [card.id, transaction.branchId],
             )
           )[0];
@@ -1207,7 +1207,7 @@ export class ProductSettlementService {
         s.product_id AS "productId", s.product_snapshot AS "productSnapshot",
         c.kit_number AS "kitNumber", ${MASKED_CARD_SQL} AS "maskedCardNumber"
        FROM product_settlements s
-       LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
+       LEFT JOIN product_stock_products c ON c.id = s.card_id AND s.type = 'CARD'
        LEFT JOIN LATERAL (
          SELECT public.decrypt_card_number(c.card_number) clear_number
          WHERE c.id IS NOT NULL
@@ -1393,7 +1393,7 @@ export class ProductSettlementService {
         s.product_id AS "productId", s.product_snapshot AS "productSnapshot",
         c.kit_number AS "kitNumber", ${MASKED_CARD_SQL} AS "maskedCardNumber"
        FROM product_settlements s
-       LEFT JOIN card_stock_cards c ON c.id = s.card_id AND s.type = 'CARD'
+       LEFT JOIN product_stock_products c ON c.id = s.card_id AND s.type = 'CARD'
        LEFT JOIN LATERAL (
          SELECT public.decrypt_card_number(c.card_number) clear_number
          WHERE c.id IS NOT NULL

@@ -5,11 +5,11 @@ import { CardStockReceiptItem } from "./card-stock-receipt-item.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import type { Company } from "../../company/company.entity";
 
-@Index("IDX_card_stock_receipts_transaction_number", ["transactionNumber"], {
+@Index("IDX_product_stock_receipts_transaction_number", ["transactionNumber"], {
   unique: true,
 })
-@Index("IDX_card_stock_receipts_date", ["receiptDate"])
-@Entity("card_stock_receipts")
+@Index("IDX_product_stock_receipts_date", ["receiptDate"])
+@Entity("product_stock_receipts")
 export class CardStockReceipt extends BaseEntity {
   @Column({ type: "citext", name: "transaction_number" })
   transactionNumber: string;
@@ -38,6 +38,7 @@ export class CardStockReceipt extends BaseEntity {
   @Column({
     type: "enum",
     enum: CardStockReceiptStatus,
+    enumName: "card_stock_receipts_status_enum",
     name: "status",
     default: CardStockReceiptStatus.POSTED,
   })

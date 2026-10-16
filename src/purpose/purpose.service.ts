@@ -40,6 +40,11 @@ export class PurposeService {
     return code.trim().toUpperCase();
   }
 
+  private normalizeOptionalCode(value?: string | null): string | null {
+    const normalized = this.normalizeCode(value ?? "");
+    return normalized || null;
+  }
+
   private normalizeText(value?: string | null): string {
     return String(value ?? "").trim();
   }
@@ -167,6 +172,7 @@ export class PurposeService {
         new Brackets((searchQb) => {
           searchQb
             .where("purpose.code ILIKE :like", { like })
+            .orWhere("purpose.rbiCode ILIKE :like", { like })
             .orWhere("purpose.description ILIKE :like", { like })
             .orWhere("purpose.threshold::text ILIKE :like", { like })
             .orWhere("purpose.rate::text ILIKE :like", { like });
@@ -190,6 +196,12 @@ export class PurposeService {
       qb.andWhere("purpose.individual = true");
     }
 
+    if (query?.hasRbiCode === true) {
+      qb.andWhere(
+        "NULLIF(BTRIM(COALESCE(purpose.rbi_code, '')), '') IS NOT NULL",
+      );
+    }
+
     qb.orderBy("purpose.code", "ASC")
       .addOrderBy("slab.sortOrder", "ASC")
       .addOrderBy("subpurpose.code", "ASC");
@@ -200,6 +212,21 @@ export class PurposeService {
       purposes.map(PurposeResponseDto.fromEntity),
       total,
       pagination,
+    );
+  }
+
+  async listRbiCodesByPurposeId(): Promise<Map<string, string>> {
+    const purposes = await this.purposeRepository
+      .createQueryBuilder("purpose")
+      .select(["purpose.id", "purpose.rbiCode"])
+      .where("NULLIF(BTRIM(COALESCE(purpose.rbi_code, '')), '') IS NOT NULL")
+      .getMany();
+
+    return new Map(
+      purposes.flatMap((purpose) => {
+        const rbiCode = this.normalizeCode(purpose.rbiCode ?? "");
+        return rbiCode ? [[purpose.id, rbiCode] as const] : [];
+      }),
     );
   }
 
@@ -241,6 +268,7 @@ export class PurposeService {
 
       const purpose = purposeRepository.create({
         code,
+        rbiCode: this.normalizeOptionalCode(dto.rbiCode),
         description: this.normalizeText(dto.description),
         threshold: String(dto.threshold ?? 0),
         rate: String(dto.rate ?? 0),
@@ -333,6 +361,9 @@ export class PurposeService {
         manager.getRepository(PurposeSubpurpose);
 
       existing.code = code;
+      if (dto.rbiCode !== undefined) {
+        existing.rbiCode = this.normalizeOptionalCode(dto.rbiCode);
+      }
       if (dto.description !== undefined) {
         existing.description = this.normalizeText(dto.description);
       }

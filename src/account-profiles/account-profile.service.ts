@@ -4,8 +4,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import { AccountProfile } from "./account-profile.entity";
+import { AccountProfileBranch } from "./entities/account-profile-branch.entity";
 import { Currency } from "../currencies/currency.entity";
 import { FinancialCode } from "../financial-codes/financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
@@ -72,7 +73,42 @@ export class AccountProfileService {
     private readonly financialSubProfileRepository: Repository<FinancialSubProfile>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(AccountProfileBranch)
+    private readonly accountProfileBranchRepository: Repository<AccountProfileBranch>,
   ) {}
+
+  private async syncBranchLinks(
+    accountProfileId: string,
+    branchIds: string[] | undefined,
+    userId: string,
+  ): Promise<void> {
+    if (branchIds === undefined) return;
+    await this.accountProfileBranchRepository
+      .createQueryBuilder()
+      .delete()
+      .from(AccountProfileBranch)
+      .where("account_profile_id = :accountProfileId", { accountProfileId })
+      .execute();
+
+    if (!branchIds.length) return;
+
+    const uniqueBranchIds = Array.from(new Set(branchIds.filter(Boolean)));
+    const branches = await this.branchRepository.find({
+      where: { id: In(uniqueBranchIds) },
+    });
+    if (!branches.length) return;
+
+    await this.accountProfileBranchRepository.save(
+      branches.map((b) =>
+        this.accountProfileBranchRepository.create({
+          accountProfileId,
+          branchId: b.id,
+          createdBy: userId,
+          updatedBy: userId,
+        }),
+      ),
+    );
+  }
 
   async create(
     dto: CreateAccountProfileDto,
@@ -159,8 +195,16 @@ export class AccountProfileService {
       }
     }
 
-    const { divisionDept, accountType, subLedger, bankNature, ...rest } =
-      normalized;
+    const {
+      divisionDept,
+      accountType,
+      subLedger,
+      bankNature,
+      branchIds,
+      visibleDuringRefund,
+      refundLimit,
+      ...rest
+    } = normalized;
     const account = this.accountProfileRepository.create({
       ...rest,
       divisionDept: divisionDept
@@ -169,11 +213,19 @@ export class AccountProfileService {
       accountType: accountType ? ({ id: accountType } as SelectOption) : null,
       subLedger: subLedger ? ({ id: subLedger } as SelectOption) : null,
       bankNature: bankNature ? ({ id: bankNature } as SelectOption) : null,
+      visibleDuringRefund: Boolean(visibleDuringRefund),
+      refundLimit:
+        refundLimit !== undefined && refundLimit !== null && refundLimit !== ""
+          ? String(refundLimit)
+          : null,
       createdBy: userId,
       updatedBy: userId,
     });
 
     const saved = await this.accountProfileRepository.save(account);
+    if (branchIds !== undefined) {
+      await this.syncBranchLinks(saved.id, branchIds, userId);
+    }
     return this.findById(saved.id);
   }
 
@@ -282,10 +334,22 @@ export class AccountProfileService {
       accountType,
       subLedger,
       bankNature,
+      branchIds,
+      visibleDuringRefund,
+      refundLimit,
       ...updatableFields
     } = normalized;
     const updates = pickDefinedFields(updatableFields);
     Object.assign(account, updates);
+    if (visibleDuringRefund !== undefined) {
+      account.visibleDuringRefund = Boolean(visibleDuringRefund);
+    }
+    if (refundLimit !== undefined) {
+      account.refundLimit =
+        refundLimit !== null && refundLimit !== ""
+          ? String(refundLimit)
+          : null;
+    }
     if (divisionDept !== undefined) {
       account.divisionDept = divisionDept
         ? ({ id: divisionDept } as SelectOption)
@@ -309,6 +373,9 @@ export class AccountProfileService {
     account.updatedBy = userId;
 
     await this.accountProfileRepository.save(account);
+    if (dto.branchIds !== undefined) {
+      await this.syncBranchLinks(id, dto.branchIds, userId);
+    }
     return this.findById(id);
   }
 
@@ -325,6 +392,8 @@ export class AccountProfileService {
         "accountType",
         "subLedger",
         "bankNature",
+        "branchLinks",
+        "branchLinks.branch",
       ],
     });
 
@@ -372,7 +441,9 @@ export class AccountProfileService {
       .leftJoinAndSelect("ap.divisionDept", "divisionDept")
       .leftJoinAndSelect("ap.accountType", "accountType")
       .leftJoinAndSelect("ap.subLedger", "subLedger")
-      .leftJoinAndSelect("ap.bankNature", "bankNature");
+      .leftJoinAndSelect("ap.bankNature", "bankNature")
+      .leftJoinAndSelect("ap.branchLinks", "branchLinks")
+      .leftJoinAndSelect("branchLinks.branch", "branch");
 
     if (query.search) {
       qb.andWhere(
@@ -467,6 +538,19 @@ export class AccountProfileService {
       qb.andWhere("ap.journalVoucher = :journalVoucher", {
         journalVoucher: query.journalVoucher,
       });
+
+    if (query.visibleDuringRefund !== undefined) {
+      qb.andWhere("ap.visibleDuringRefund = :visibleDuringRefund", {
+        visibleDuringRefund: query.visibleDuringRefund,
+      });
+    }
+
+    if (query.branchId) {
+      qb.andWhere(
+        "(branchLinks.branchId = :branchId OR NOT EXISTS (SELECT 1 FROM account_profile_branches apb WHERE apb.account_profile_id = ap.id))",
+        { branchId: query.branchId },
+      );
+    }
 
     qb.orderBy("ap.createdAt", "DESC");
     applyPagination(qb, pagination);

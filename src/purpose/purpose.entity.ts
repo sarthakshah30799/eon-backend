@@ -16,6 +16,9 @@ export class Purpose extends BaseEntity {
   @Column({ type: "citext" })
   code: string;
 
+  @Column({ type: "citext", name: "rbi_code", nullable: true })
+  rbiCode: string | null;
+
   @Column({ type: "citext" })
   description: string;
 
