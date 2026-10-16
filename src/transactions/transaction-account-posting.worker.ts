@@ -327,9 +327,9 @@ export class TransactionAccountPostingWorker
           SELECT count(*)::text AS incomplete_count
           FROM transaction_items item
           WHERE item.transaction_id=$1 AND item.card_id IS NOT NULL AND (
-            NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries entry WHERE entry.card_id=item.card_id AND entry.reference_id=$1 AND entry.operation_type='SELL')
+            NOT EXISTS (SELECT 1 FROM product_stock_transaction_entries entry WHERE entry.card_id=item.card_id AND entry.reference_id=$1 AND entry.operation_type='SELL')
             OR NOT EXISTS (SELECT 1 FROM product_settlements settlement WHERE settlement.transaction_item_id=item.id AND settlement.branch_settlement_entry_id IS NOT NULL)
-            OR NOT EXISTS (SELECT 1 FROM product_settlements settlement JOIN card_stock_balance balance ON balance.card_id=item.card_id AND balance.branch_id=$2 AND balance.series=settlement.series AND balance.settle_entry_id=settlement.branch_settlement_entry_id WHERE settlement.transaction_item_id=item.id)
+            OR NOT EXISTS (SELECT 1 FROM product_settlements settlement JOIN product_stock_balance balance ON balance.card_id=item.card_id AND balance.branch_id=$2 AND balance.series=settlement.series AND balance.settle_entry_id=settlement.branch_settlement_entry_id WHERE settlement.transaction_item_id=item.id)
           )`,
             [transaction.id, transaction.branchId],
           );

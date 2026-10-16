@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsArray,
   IsBoolean,
   IsNotEmpty,
   IsOptional,
@@ -153,4 +154,28 @@ export class CreateAccountProfileDto {
   @IsBoolean()
   @IsOptional()
   directRemittance?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Visible during advance refund flag",
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  visibleDuringRefund?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Applicable limit for advance refund knock off",
+    example: 50000,
+  })
+  @IsOptional()
+  refundLimit?: number | string;
+
+  @ApiPropertyOptional({
+    description: "Assigned branch IDs (UUIDs)",
+    type: [String],
+  })
+  @IsArray()
+  @IsUUID("4", { each: true })
+  @IsOptional()
+  branchIds?: string[];
 }

@@ -451,7 +451,7 @@ export class CardTransferService {
     }
     const cards = await qb.getMany();
     const decrypted = await this.database2.query(
-      'SELECT id, public.decrypt_card_number(card_number) AS "cardNumber" FROM card_stock_cards WHERE id = ANY($1::uuid[])',
+      'SELECT id, public.decrypt_card_number(card_number) AS "cardNumber" FROM product_stock_products WHERE id = ANY($1::uuid[])',
       [cards.map((card) => card.id)],
     );
     const numberById = new Map(
@@ -1020,7 +1020,7 @@ export class CardTransferService {
     );
     const decrypted = cardIds.length
       ? await this.database2.query(
-          'SELECT id, public.decrypt_card_number(card_number) AS "cardNumber" FROM card_stock_cards WHERE id = ANY($1::uuid[])',
+          'SELECT id, public.decrypt_card_number(card_number) AS "cardNumber" FROM product_stock_products WHERE id = ANY($1::uuid[])',
           [cardIds],
         )
       : [];

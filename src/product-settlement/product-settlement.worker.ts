@@ -78,11 +78,11 @@ export class ProductSettlementWorker
         )) IN ('CC', 'CM')
         AND COALESCE((i.product_snapshot->>'maintainBlankStockOfProduct')::boolean, true) = true
         AND (
-          NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='CARD_STOCK_LOAD')
-          OR NOT EXISTS (SELECT 1 FROM card_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='SELL')
+          NOT EXISTS (SELECT 1 FROM product_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='CARD_STOCK_LOAD')
+          OR NOT EXISTS (SELECT 1 FROM product_stock_transaction_entries e WHERE e.card_id=i.card_id AND e.reference_id=t.id AND e.currency_id=i.currency_id AND e.operation_type='SELL')
           OR NOT EXISTS (SELECT 1 FROM product_settlements s WHERE s.transaction_item_id=i.id)
           OR EXISTS (SELECT 1 FROM product_settlements s WHERE s.transaction_item_id=i.id AND s.branch_settlement_entry_id IS NOT NULL AND NOT EXISTS (
-            SELECT 1 FROM card_stock_balance balance WHERE balance.card_id=i.card_id AND balance.branch_id=t.branch_id AND balance.series=s.series AND balance.settle_entry_id=s.branch_settlement_entry_id
+            SELECT 1 FROM product_stock_balance balance WHERE balance.card_id=i.card_id AND balance.branch_id=t.branch_id AND balance.series=s.series AND balance.settle_entry_id=s.branch_settlement_entry_id
           ))
         )
       GROUP BY t.id, t.created_at ORDER BY t.created_at LIMIT 50`);

@@ -2372,14 +2372,45 @@ export class VoucherService implements OnModuleInit {
       .orderBy("voucher.transactionDate", "ASC")
       .addOrderBy("voucher.number", "ASC")
       .getRawAndEntities();
-    return rows.entities.map((voucher, index) => ({
-      ...voucher,
-      items: undefined,
-      applications: undefined,
-      availableAmount: money(
-        cents(voucher.finalAmount) - cents(rows.raw[index]?.consumed ?? 0),
-      ),
-    }));
+
+    const receiptIds = rows.entities.map((e) => e.id);
+    const refundConsumedMap = new Map<string, number>();
+    if (receiptIds.length > 0) {
+      try {
+        const refundRows = await this.database2
+          .createQueryBuilder()
+          .select("ari.receipt_voucher_id", "voucherId")
+          .addSelect("COALESCE(SUM(ari.refund_amount), 0)", "totalRefunded")
+          .from("advance_refund_items", "ari")
+          .innerJoin("advance_refund", "ar", "ar.id = ari.advance_refund_id")
+          .where("ari.receipt_voucher_id IN (:...receiptIds)", { receiptIds })
+          .andWhere("ar.status != 'CANCELLED'")
+          .groupBy("ari.receipt_voucher_id")
+          .getRawMany();
+        refundRows.forEach((r) => {
+          refundConsumedMap.set(r.voucherId, cents(r.totalRefunded ?? 0));
+        });
+      } catch {
+        // Table may not exist yet in test environment prior to migration
+      }
+    }
+
+    return rows.entities
+      .map((voucher, index) => {
+        const consumedBills = cents(rows.raw[index]?.consumed ?? 0);
+        const consumedRefunds = refundConsumedMap.get(voucher.id) ?? 0;
+        const totalConsumed = consumedBills + consumedRefunds;
+        const availableAmount = money(
+          Math.max(0, cents(voucher.finalAmount) - totalConsumed),
+        );
+        return {
+          ...voucher,
+          items: undefined,
+          applications: undefined,
+          availableAmount,
+        };
+      })
+      .filter((v) => Number(v.availableAmount) > 0);
   }
 
   async outstandingBills(
@@ -2912,5 +2943,619 @@ export class VoucherService implements OnModuleInit {
         `Missing active ${code} option with value ${value}`,
       );
     return option;
+  }
+
+  async getAvailableAdvancesForRefund(query: {
+    partyProfileId: string;
+    branchId: string;
+    asOnDate: string;
+    search?: string;
+  }) {
+    const receipts = await this.voucherRepository
+      .createQueryBuilder("voucher")
+      .where("voucher.voucherType = :type", { type: VoucherType.RECEIPT })
+      .andWhere("voucher.partyProfileId = :partyId", {
+        partyId: query.partyProfileId,
+      })
+      .andWhere("voucher.branchId = :branchId", { branchId: query.branchId })
+      .andWhere("voucher.transactionDate <= :asOnDate", {
+        asOnDate: query.asOnDate.slice(0, 10),
+      })
+      .andWhere("voucher.advanceControlAccountId IS NOT NULL")
+      .orderBy("voucher.transactionDate", "ASC")
+      .addOrderBy("voucher.number", "ASC")
+      .getMany();
+
+    if (!receipts.length) return [];
+
+    const receiptIds = receipts.map((r) => r.id);
+
+    const billApplications = await this.applicationRepository
+      .createQueryBuilder("app")
+      .leftJoin("app.transaction", "tx")
+      .select("app.voucherId", "voucherId")
+      .addSelect(
+        `SUM(CASE WHEN app.state = 'APPLIED' OR (app.state = 'RESERVED' AND tx.status = 'DRAFT' AND tx.is_latest = true) THEN app.amount ELSE 0 END)`,
+        "totalConsumed",
+      )
+      .where("app.voucherId IN (:...receiptIds)", { receiptIds })
+      .groupBy("app.voucherId")
+      .getRawMany();
+
+    const billConsumedMap = new Map<string, number>();
+    billApplications.forEach((row) => {
+      billConsumedMap.set(row.voucherId, cents(row.totalConsumed ?? 0));
+    });
+
+    const refundConsumedMap = new Map<string, number>();
+    try {
+      const refundRows = await this.database2
+        .createQueryBuilder()
+        .select("ari.receipt_voucher_id", "voucherId")
+        .addSelect("COALESCE(SUM(ari.refund_amount), 0)", "totalRefunded")
+        .from("advance_refund_items", "ari")
+        .innerJoin("advance_refund", "ar", "ar.id = ari.advance_refund_id")
+        .where("ari.receipt_voucher_id IN (:...receiptIds)", { receiptIds })
+        .andWhere("ar.status != 'CANCELLED'")
+        .groupBy("ari.receipt_voucher_id")
+        .getRawMany();
+      refundRows.forEach((r) => {
+        refundConsumedMap.set(r.voucherId, cents(r.totalRefunded ?? 0));
+      });
+    } catch {
+      // Table may not exist yet
+    }
+
+    const result = [];
+    for (const voucher of receipts) {
+      if (
+        query.search &&
+        !voucher.number.toLowerCase().includes(query.search.toLowerCase())
+      ) {
+        continue;
+      }
+      const totalCents = cents(voucher.finalAmount);
+      const consumedBillsCents = billConsumedMap.get(voucher.id) ?? 0;
+      const consumedRefundsCents = refundConsumedMap.get(voucher.id) ?? 0;
+      const totalConsumedCents = consumedBillsCents + consumedRefundsCents;
+      const availableCents = Math.max(0, totalCents - totalConsumedCents);
+
+      if (availableCents > 0) {
+        result.push({
+          id: voucher.id,
+          number: voucher.number,
+          transactionDate: voucher.transactionDate,
+          partyProfileId: voucher.partyProfileId,
+          partyProfileSnapshot: voucher.partyProfileSnapshot,
+          originalAmount: voucher.finalAmount,
+          consumedBillsAmount: money(consumedBillsCents),
+          consumedRefundsAmount: money(consumedRefundsCents),
+          consumedAmount: money(totalConsumedCents),
+          availableAmount: money(availableCents),
+        });
+      }
+    }
+
+    return result;
+  }
+
+  async createAdvanceRefundJournalVoucher(
+    input: {
+      branchId: string;
+      counterId: string;
+      transactionDate: string;
+      narration: string;
+      party: PartyProfile;
+      pan?: {
+        panNumber?: string | null;
+        panName?: string | null;
+        panDob?: string | null;
+      };
+      knockOffAccount: AccountProfile;
+      items: Array<{
+        receiptVoucherId: string;
+        amount: string;
+        receiptNumber: string;
+      }>;
+      totalAmount: string;
+      actorId: string;
+    },
+    manager: EntityManager,
+  ): Promise<AccountingVoucher> {
+    const advanceAccount = await this.resolveAdvanceAccount();
+    const itemType = await this.optionByValue(
+      "VOUCHER_ITEM_TYPE",
+      VoucherItemTypeValue.ACCOUNT,
+    );
+    const branch = await this.branchRepository.findOneOrFail({
+      where: { id: input.branchId },
+    });
+    const counter = await this.counterRepository.findOneOrFail({
+      where: { id: input.counterId },
+    });
+    const [branchSnapshot, counterSnapshot, partySnapshot] = await Promise.all([
+      this.snapshot(this.branchRepository, branch.id),
+      this.snapshot(this.counterRepository, counter.id),
+      this.snapshot(this.partyRepository, input.party.id),
+    ]);
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[VoucherType.JOURNAL],
+      branch.code,
+      new Date(input.transactionDate),
+    );
+
+    const voucherRepo = manager.getRepository(AccountingVoucher);
+    const itemRepo = manager.getRepository(AccountingVoucherItem);
+
+    const voucher = await voucherRepo.save(
+      voucherRepo.create({
+        voucherType: VoucherType.JOURNAL,
+        number,
+        transactionDate: input.transactionDate.slice(0, 10),
+        branchId: branch.id,
+        branchSnapshot,
+        counterId: counter.id,
+        counterSnapshot,
+        partyProfileId: input.party.id,
+        partyProfileSnapshot: partySnapshot,
+        panNumber: input.pan?.panNumber || null,
+        panName: input.pan?.panName || null,
+        panDob: input.pan?.panDob ? toDateOnly(input.pan.panDob) : null,
+        narration: normalize(input.narration),
+        totalDebit: input.totalAmount,
+        totalCredit: input.totalAmount,
+        finalAmount: input.totalAmount,
+        headerAccountId: null,
+        accountMode: null,
+        advanceControlAccountId: null,
+        advanceControlAccountSnapshot: null,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    let lineNo = 1;
+    for (const item of input.items) {
+      await itemRepo.save(
+        itemRepo.create({
+          voucherId: voucher.id,
+          voucher,
+          lineNo: lineNo++,
+          itemTypeOptionId: itemType.id,
+          itemTypeSnapshot: await this.snapshot(
+            this.optionRepository,
+            itemType.id,
+          ),
+          accountId: advanceAccount.id,
+          accountSnapshot: await this.snapshot(
+            this.accountRepository,
+            advanceAccount.id,
+          ),
+          direction: VoucherEntryDirection.DEBIT,
+          amount: money(cents(item.amount)),
+          subledgerPartyProfileId: input.party.id,
+          subledgerPartyProfileSnapshot: partySnapshot,
+          createdBy: input.actorId,
+          updatedBy: input.actorId,
+        }),
+      );
+    }
+
+    await itemRepo.save(
+      itemRepo.create({
+        voucherId: voucher.id,
+        voucher,
+        lineNo: lineNo,
+        itemTypeOptionId: itemType.id,
+        itemTypeSnapshot: await this.snapshot(
+          this.optionRepository,
+          itemType.id,
+        ),
+        accountId: input.knockOffAccount.id,
+        accountSnapshot: await this.snapshot(
+          this.accountRepository,
+          input.knockOffAccount.id,
+        ),
+        direction: VoucherEntryDirection.CREDIT,
+        amount: money(cents(input.totalAmount)),
+        subledgerPartyProfileId: input.party.id,
+        subledgerPartyProfileSnapshot: partySnapshot,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    return voucherRepo.findOneOrFail({
+      where: { id: voucher.id },
+      relations: ["items"],
+    });
+  }
+
+  async createAdvanceRefundPaymentVoucher(
+    input: {
+      branchId: string;
+      counterId: string;
+      transactionDate: string;
+      narration: string;
+      party: PartyProfile;
+      pan?: {
+        panNumber?: string | null;
+        panName?: string | null;
+        panDob?: string | null;
+      };
+      payingBankAccount: AccountProfile;
+      paymentDetails: {
+        paymentMethod?: string | null;
+        beneficiaryAccountNumber?: string | null;
+        beneficiaryIfscCode?: string | null;
+        beneficiaryName?: string | null;
+        bankName?: string | null;
+        chequeNumber?: string | null;
+        chequeDate?: string | null;
+        drawnOn?: string | null;
+      };
+      items: Array<{
+        receiptVoucherId: string;
+        amount: string;
+        receiptNumber: string;
+      }>;
+      totalAmount: string;
+      actorId: string;
+    },
+    manager: EntityManager,
+  ): Promise<AccountingVoucher> {
+    const advanceAccount = await this.resolveAdvanceAccount();
+    const itemType = await this.optionByValue(
+      "VOUCHER_ITEM_TYPE",
+      VoucherItemTypeValue.ACCOUNT,
+    );
+    const branch = await this.branchRepository.findOneOrFail({
+      where: { id: input.branchId },
+    });
+    const counter = await this.counterRepository.findOneOrFail({
+      where: { id: input.counterId },
+    });
+    const [branchSnapshot, counterSnapshot, partySnapshot, headerAccountSnapshot] =
+      await Promise.all([
+        this.snapshot(this.branchRepository, branch.id),
+        this.snapshot(this.counterRepository, counter.id),
+        this.snapshot(this.partyRepository, input.party.id),
+        this.snapshot(this.accountRepository, input.payingBankAccount.id),
+      ]);
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[VoucherType.PAYMENT],
+      branch.code,
+      new Date(input.transactionDate),
+    );
+
+    const voucherRepo = manager.getRepository(AccountingVoucher);
+    const itemRepo = manager.getRepository(AccountingVoucherItem);
+
+    const voucher = await voucherRepo.save(
+      voucherRepo.create({
+        voucherType: VoucherType.PAYMENT,
+        number,
+        transactionDate: input.transactionDate.slice(0, 10),
+        branchId: branch.id,
+        branchSnapshot,
+        counterId: counter.id,
+        counterSnapshot,
+        partyProfileId: input.party.id,
+        partyProfileSnapshot: partySnapshot,
+        panNumber: input.pan?.panNumber || null,
+        panName: input.pan?.panName || null,
+        panDob: input.pan?.panDob ? toDateOnly(input.pan.panDob) : null,
+        headerAccountId: input.payingBankAccount.id,
+        headerAccountSnapshot,
+        accountMode: VoucherAccountMode.BANK_CHEQUE,
+        paymentMethod:
+          (input.paymentDetails.paymentMethod as any) ||
+          TransactionPaymentMethod.NEFT,
+        chequeNumber: normalize(input.paymentDetails.chequeNumber) || null,
+        normalizedChequeNumber:
+          normalizeUpper(input.paymentDetails.chequeNumber) || null,
+        chequeDate: toDateOnly(input.paymentDetails.chequeDate),
+        drawnOn: normalize(input.paymentDetails.drawnOn) || null,
+        narration: normalize(input.narration),
+        totalDebit: input.totalAmount,
+        totalCredit: "0.00",
+        finalAmount: input.totalAmount,
+        advanceControlAccountId: null,
+        advanceControlAccountSnapshot: null,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    let lineNo = 1;
+    for (const item of input.items) {
+      await itemRepo.save(
+        itemRepo.create({
+          voucherId: voucher.id,
+          voucher,
+          lineNo: lineNo++,
+          itemTypeOptionId: itemType.id,
+          itemTypeSnapshot: await this.snapshot(
+            this.optionRepository,
+            itemType.id,
+          ),
+          accountId: advanceAccount.id,
+          accountSnapshot: await this.snapshot(
+            this.accountRepository,
+            advanceAccount.id,
+          ),
+          direction: VoucherEntryDirection.DEBIT,
+          amount: money(cents(item.amount)),
+          subledgerPartyProfileId: input.party.id,
+          subledgerPartyProfileSnapshot: partySnapshot,
+          createdBy: input.actorId,
+          updatedBy: input.actorId,
+        }),
+      );
+    }
+
+    return voucherRepo.findOneOrFail({
+      where: { id: voucher.id },
+      relations: ["items"],
+    });
+  }
+
+  async createAdvanceRefundAdviceVoucher(
+    input: {
+      sourceBranchId: string;
+      destinationBranchId: string;
+      counterId: string;
+      transactionDate: string;
+      narration: string;
+      party: PartyProfile;
+      pan?: {
+        panNumber?: string | null;
+        panName?: string | null;
+        panDob?: string | null;
+      };
+      items: Array<{
+        receiptVoucherId: string;
+        amount: string;
+        receiptNumber: string;
+      }>;
+      totalAmount: string;
+      actorId: string;
+    },
+    manager: EntityManager,
+  ): Promise<AccountingVoucher> {
+    const advanceAccount = await this.resolveAdvanceAccount();
+    const branchControlAccount = await this.resolveBranchControlAccount();
+    const itemType = await this.optionByValue(
+      "VOUCHER_ITEM_TYPE",
+      VoucherItemTypeValue.ACCOUNT,
+    );
+    const sourceBranch = await this.branchRepository.findOneOrFail({
+      where: { id: input.sourceBranchId },
+    });
+    const destinationBranch = await this.branchRepository.findOneOrFail({
+      where: { id: input.destinationBranchId },
+    });
+    const counter = await this.counterRepository.findOneOrFail({
+      where: { id: input.counterId },
+    });
+    const [
+      sourceBranchSnapshot,
+      destinationBranchSnapshot,
+      counterSnapshot,
+      partySnapshot,
+      headerAccountSnapshot,
+    ] = await Promise.all([
+      this.snapshot(this.branchRepository, sourceBranch.id),
+      this.snapshot(this.branchRepository, destinationBranch.id),
+      this.snapshot(this.counterRepository, counter.id),
+      this.snapshot(this.partyRepository, input.party.id),
+      this.snapshot(this.accountRepository, branchControlAccount.id),
+    ]);
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[VoucherType.ADVICE],
+      sourceBranch.code,
+      new Date(input.transactionDate),
+    );
+
+    const voucherRepo = manager.getRepository(AccountingVoucher);
+    const itemRepo = manager.getRepository(AccountingVoucherItem);
+
+    const voucher = await voucherRepo.save(
+      voucherRepo.create({
+        voucherType: VoucherType.ADVICE,
+        number,
+        transactionDate: input.transactionDate.slice(0, 10),
+        branchId: sourceBranch.id,
+        branchSnapshot: sourceBranchSnapshot,
+        counterId: counter.id,
+        counterSnapshot,
+        partyProfileId: input.party.id,
+        partyProfileSnapshot: partySnapshot,
+        panNumber: input.pan?.panNumber || null,
+        panName: input.pan?.panName || null,
+        panDob: input.pan?.panDob ? toDateOnly(input.pan.panDob) : null,
+        headerAccountId: branchControlAccount.id,
+        headerAccountSnapshot,
+        headerDirection: VoucherEntryDirection.CREDIT,
+        sourceBranchId: sourceBranch.id,
+        sourceBranchSnapshot,
+        destinationBranchId: destinationBranch.id,
+        destinationBranchSnapshot,
+        adviceRole: VoucherAdviceRole.ISSUER,
+        adviceStatus: VoucherAdviceStatus.PENDING_HONOUR,
+        narration: normalize(input.narration),
+        totalDebit: input.totalAmount,
+        totalCredit: "0.00",
+        finalAmount: input.totalAmount,
+        advanceControlAccountId: null,
+        advanceControlAccountSnapshot: null,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    let lineNo = 1;
+    for (const item of input.items) {
+      await itemRepo.save(
+        itemRepo.create({
+          voucherId: voucher.id,
+          voucher,
+          lineNo: lineNo++,
+          itemTypeOptionId: itemType.id,
+          itemTypeSnapshot: await this.snapshot(
+            this.optionRepository,
+            itemType.id,
+          ),
+          accountId: advanceAccount.id,
+          accountSnapshot: await this.snapshot(
+            this.accountRepository,
+            advanceAccount.id,
+          ),
+          direction: VoucherEntryDirection.DEBIT,
+          amount: money(cents(item.amount)),
+          subledgerPartyProfileId: input.party.id,
+          subledgerPartyProfileSnapshot: partySnapshot,
+          createdBy: input.actorId,
+          updatedBy: input.actorId,
+        }),
+      );
+    }
+
+    return voucherRepo.findOneOrFail({
+      where: { id: voucher.id },
+      relations: ["items"],
+    });
+  }
+
+  async honourAdvanceRefundAdvice(
+    input: {
+      adviceVoucherId: string;
+      hoBranchId: string;
+      hoCounterId: string;
+      transactionDate: string;
+      hoPayingBankAccount: AccountProfile;
+      paymentDetails: {
+        paymentMethod?: string | null;
+        beneficiaryAccountNumber?: string | null;
+        beneficiaryIfscCode?: string | null;
+        beneficiaryName?: string | null;
+        bankName?: string | null;
+        chequeNumber?: string | null;
+        chequeDate?: string | null;
+        drawnOn?: string | null;
+      };
+      narration?: string | null;
+      actorId: string;
+    },
+    manager: EntityManager,
+  ): Promise<AccountingVoucher> {
+    const voucherRepo = manager.getRepository(AccountingVoucher);
+    const itemRepo = manager.getRepository(AccountingVoucherItem);
+
+    const sourceAdvice = await voucherRepo
+      .createQueryBuilder("v")
+      .setLock("pessimistic_write")
+      .where("v.id = :id", { id: input.adviceVoucherId })
+      .getOne();
+
+    if (!sourceAdvice) throw new NotFoundException("Advice voucher not found");
+    if (sourceAdvice.adviceStatus !== VoucherAdviceStatus.PENDING_HONOUR)
+      throw new BadRequestException("Advice voucher is not pending honour");
+
+    sourceAdvice.adviceStatus = VoucherAdviceStatus.HONOURED;
+    await voucherRepo.save(sourceAdvice);
+
+    const branchControlAccount = await this.resolveBranchControlAccount();
+    const itemType = await this.optionByValue(
+      "VOUCHER_ITEM_TYPE",
+      VoucherItemTypeValue.ACCOUNT,
+    );
+    const hoBranch = await this.branchRepository.findOneOrFail({
+      where: { id: input.hoBranchId },
+    });
+    const hoCounter = await this.counterRepository.findOneOrFail({
+      where: { id: input.hoCounterId },
+    });
+    const [hoBranchSnapshot, hoCounterSnapshot, headerAccountSnapshot] =
+      await Promise.all([
+        this.snapshot(this.branchRepository, hoBranch.id),
+        this.snapshot(this.counterRepository, hoCounter.id),
+        this.snapshot(this.accountRepository, input.hoPayingBankAccount.id),
+      ]);
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[VoucherType.PAYMENT],
+      hoBranch.code,
+      new Date(input.transactionDate),
+    );
+
+    const hoPaymentVoucher = await voucherRepo.save(
+      voucherRepo.create({
+        voucherType: VoucherType.PAYMENT,
+        number,
+        transactionDate: input.transactionDate.slice(0, 10),
+        branchId: hoBranch.id,
+        branchSnapshot: hoBranchSnapshot,
+        counterId: hoCounter.id,
+        counterSnapshot: hoCounterSnapshot,
+        partyProfileId: sourceAdvice.partyProfileId,
+        partyProfileSnapshot: sourceAdvice.partyProfileSnapshot,
+        panNumber: sourceAdvice.panNumber,
+        panName: sourceAdvice.panName,
+        panDob: sourceAdvice.panDob,
+        headerAccountId: input.hoPayingBankAccount.id,
+        headerAccountSnapshot,
+        accountMode: VoucherAccountMode.BANK_CHEQUE,
+        paymentMethod:
+          (input.paymentDetails.paymentMethod as any) ||
+          TransactionPaymentMethod.NEFT,
+        chequeNumber: normalize(input.paymentDetails.chequeNumber) || null,
+        normalizedChequeNumber:
+          normalizeUpper(input.paymentDetails.chequeNumber) || null,
+        chequeDate: toDateOnly(input.paymentDetails.chequeDate),
+        drawnOn: normalize(input.paymentDetails.drawnOn) || null,
+        narration: normalize(input.narration) || sourceAdvice.narration,
+        totalDebit: sourceAdvice.finalAmount,
+        totalCredit: "0.00",
+        finalAmount: sourceAdvice.finalAmount,
+        advanceControlAccountId: null,
+        advanceControlAccountSnapshot: null,
+        pairedVoucherId: sourceAdvice.id,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    await itemRepo.save(
+      itemRepo.create({
+        voucherId: hoPaymentVoucher.id,
+        voucher: hoPaymentVoucher,
+        lineNo: 1,
+        itemTypeOptionId: itemType.id,
+        itemTypeSnapshot: await this.snapshot(
+          this.optionRepository,
+          itemType.id,
+        ),
+        accountId: branchControlAccount.id,
+        accountSnapshot: await this.snapshot(
+          this.accountRepository,
+          branchControlAccount.id,
+        ),
+        direction: VoucherEntryDirection.DEBIT,
+        amount: money(cents(sourceAdvice.finalAmount)),
+        subledgerBranchId: sourceAdvice.sourceBranchId,
+        subledgerBranchSnapshot: sourceAdvice.sourceBranchSnapshot,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    return voucherRepo.findOneOrFail({
+      where: { id: hoPaymentVoucher.id },
+      relations: ["items"],
+    });
   }
 }

@@ -1,10 +1,11 @@
-import { Entity, Column, Index, ManyToOne, JoinColumn } from "typeorm";
+import { Entity, Column, Index, ManyToOne, OneToMany, JoinColumn } from "typeorm";
 import { BaseEntity } from "../base/base.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { Currency } from "../currencies/currency.entity";
 import { FinancialCode } from "../financial-codes/financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
 import { Branch } from "../branches/branch.entity";
+import { AccountProfileBranch } from "./entities/account-profile-branch.entity";
 
 @Entity("account_profiles")
 export class AccountProfile extends BaseEntity {
@@ -116,4 +117,23 @@ export class AccountProfile extends BaseEntity {
 
   @Column({ type: "boolean", default: false })
   directRemittance: boolean;
+
+  @Column({ type: "boolean", default: false, name: "visible_during_refund" })
+  visibleDuringRefund: boolean;
+
+  @Column({
+    type: "numeric",
+    precision: 18,
+    scale: 2,
+    nullable: true,
+    name: "refund_limit",
+  })
+  refundLimit: string | null;
+
+  @OneToMany(
+    () => AccountProfileBranch,
+    (accountProfileBranch) => accountProfileBranch.accountProfile,
+    { cascade: true },
+  )
+  branchLinks: AccountProfileBranch[];
 }
