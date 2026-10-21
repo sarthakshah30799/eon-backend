@@ -45,6 +45,8 @@ import { Flm6SalesToFfmcController } from "./flm6-sales-to-ffmc.controller";
 import { Flm6SalesToFfmcService } from "./flm6-sales-to-ffmc.service";
 import { Flm8CnStatementController } from "./flm8-cn-statement.controller";
 import { Flm8CnStatementService } from "./flm8-cn-statement.service";
+import { LrsDailyReportController } from "./lrs-daily-report.controller";
+import { LrsDailyReportService } from "./lrs-daily-report.service";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { PurposeModule } from "../purpose/purpose.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
@@ -92,6 +94,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     Flm5SalesToPublicController,
     Flm6SalesToFfmcController,
     Flm8CnStatementController,
+    LrsDailyReportController,
   ],
   providers: [
     AccountPostingsCombinedQuery,
@@ -111,6 +114,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     Flm5SalesToPublicService,
     Flm6SalesToFfmcService,
     Flm8CnStatementService,
+    LrsDailyReportService,
   ],
 })
 export class ReportsModule {}

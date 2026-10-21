@@ -196,6 +196,12 @@ export class PurposeService {
       qb.andWhere("purpose.individual = true");
     }
 
+    if (query?.hasRbiCode === true) {
+      qb.andWhere(
+        "NULLIF(BTRIM(COALESCE(purpose.rbi_code, '')), '') IS NOT NULL",
+      );
+    }
+
     qb.orderBy("purpose.code", "ASC")
       .addOrderBy("slab.sortOrder", "ASC")
       .addOrderBy("subpurpose.code", "ASC");
@@ -206,6 +212,21 @@ export class PurposeService {
       purposes.map(PurposeResponseDto.fromEntity),
       total,
       pagination,
+    );
+  }
+
+  async listRbiCodesByPurposeId(): Promise<Map<string, string>> {
+    const purposes = await this.purposeRepository
+      .createQueryBuilder("purpose")
+      .select(["purpose.id", "purpose.rbiCode"])
+      .where("NULLIF(BTRIM(COALESCE(purpose.rbi_code, '')), '') IS NOT NULL")
+      .getMany();
+
+    return new Map(
+      purposes.flatMap((purpose) => {
+        const rbiCode = this.normalizeCode(purpose.rbiCode ?? "");
+        return rbiCode ? [[purpose.id, rbiCode] as const] : [];
+      }),
     );
   }
 
