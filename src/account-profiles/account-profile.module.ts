@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AccountProfile } from "./account-profile.entity";
+import { AccountProfileBranch } from "./entities/account-profile-branch.entity";
 import { Currency } from "../currencies/currency.entity";
 import { FinancialCode } from "../financial-codes/financial-code.entity";
 import { FinancialSubProfile } from "../financial-sub-profiles/financial-sub-profile.entity";
@@ -14,6 +15,7 @@ import { UserModule } from "../users/user.module";
   imports: [
     TypeOrmModule.forFeature([
       AccountProfile,
+      AccountProfileBranch,
       Currency,
       FinancialCode,
       FinancialSubProfile,

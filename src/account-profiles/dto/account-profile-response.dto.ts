@@ -1,5 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { SelectOptionResponseDto } from "../../category-options/dto/category-option-response.dto";
+import { BranchResponseDto } from "../../branches/dto/branch-response.dto";
 import { AccountProfile } from "../account-profile.entity";
 
 export class AccountProfileResponseDto {
@@ -88,6 +89,18 @@ export class AccountProfileResponseDto {
   directRemittance: boolean;
 
   @ApiProperty()
+  visibleDuringRefund: boolean;
+
+  @ApiProperty({ nullable: true })
+  refundLimit: string | null;
+
+  @ApiProperty({ type: [String] })
+  branchIds: string[];
+
+  @ApiProperty({ type: () => [BranchResponseDto] })
+  branches: BranchResponseDto[];
+
+  @ApiProperty()
   createdAt: Date;
 
   @ApiProperty()
@@ -131,6 +144,20 @@ export class AccountProfileResponseDto {
     dto.active = entity.active;
     dto.cmsBank = entity.cmsBank;
     dto.directRemittance = entity.directRemittance;
+    dto.visibleDuringRefund = entity.visibleDuringRefund ?? false;
+    dto.refundLimit = entity.refundLimit != null ? String(entity.refundLimit) : null;
+    dto.branchIds = Array.isArray(entity.branchLinks)
+      ? entity.branchLinks
+          .map((link) => link.branchId)
+          .filter((branchId): branchId is string => Boolean(branchId))
+      : [];
+    dto.branches = Array.isArray(entity.branchLinks)
+      ? entity.branchLinks
+          .map((link) =>
+            link.branch ? BranchResponseDto.fromEntity(link.branch) : null,
+          )
+          .filter((branch): branch is BranchResponseDto => Boolean(branch))
+      : [];
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

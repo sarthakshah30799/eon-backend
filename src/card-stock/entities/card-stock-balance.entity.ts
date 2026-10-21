@@ -4,17 +4,17 @@ import { CardStockCard } from "./card-stock-card.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import { CardStockTransactionEntry } from "./card-stock-transaction-entry.entity";
 
-@Index("IDX_card_stock_balance_card_branch_active", [
+@Index("IDX_product_stock_balance_card_branch_active", [
   "cardId",
   "branchId",
   "isActive",
 ])
-@Index("IDX_card_stock_balance_branch_series", ["branchId", "series"])
-@Index("UQ_card_stock_balance_active_card_branch", ["cardId", "branchId"], {
+@Index("IDX_product_stock_balance_branch_series", ["branchId", "series"])
+@Index("UQ_product_stock_balance_active_card_branch", ["cardId", "branchId"], {
   unique: true,
   where: '"is_active" = true',
 })
-@Entity("card_stock_balance")
+@Entity("product_stock_balance")
 export class CardStockBalance extends BaseEntity {
   @Column({ type: "uuid", name: "card_id" })
   cardId: string;
@@ -24,7 +24,7 @@ export class CardStockBalance extends BaseEntity {
   })
   @JoinColumn({
     name: "card_id",
-    foreignKeyConstraintName: "FK_card_stock_balance_card",
+    foreignKeyConstraintName: "FK_product_stock_balance_card",
   })
   card: CardStockCard;
 
@@ -85,7 +85,7 @@ export class CardStockBalance extends BaseEntity {
   })
   @JoinColumn({
     name: "receive_entry_id",
-    foreignKeyConstraintName: "FK_card_stock_balance_receive_entry",
+    foreignKeyConstraintName: "FK_product_stock_balance_receive_entry",
   })
   receiveEntry: CardStockTransactionEntry | null;
 
@@ -119,7 +119,7 @@ export class CardStockBalance extends BaseEntity {
   })
   @JoinColumn({
     name: "transfer_entry_id",
-    foreignKeyConstraintName: "FK_card_stock_balance_transfer_entry",
+    foreignKeyConstraintName: "FK_product_stock_balance_transfer_entry",
   })
   transferEntry: CardStockTransactionEntry | null;
 
@@ -153,7 +153,7 @@ export class CardStockBalance extends BaseEntity {
   })
   @JoinColumn({
     name: "sell_entry_id",
-    foreignKeyConstraintName: "FK_card_stock_balance_sell_entry",
+    foreignKeyConstraintName: "FK_product_stock_balance_sell_entry",
   })
   sellEntry: CardStockTransactionEntry | null;
 
@@ -187,7 +187,7 @@ export class CardStockBalance extends BaseEntity {
   })
   @JoinColumn({
     name: "settle_entry_id",
-    foreignKeyConstraintName: "FK_card_stock_balance_settle_entry",
+    foreignKeyConstraintName: "FK_product_stock_balance_settle_entry",
   })
   settleEntry: CardStockTransactionEntry | null;
 

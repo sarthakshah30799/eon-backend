@@ -121,7 +121,7 @@ export class EmSurrenderService {
       conditions.push(
         `(i.currency_id = ${receiptCurrencyParam} OR EXISTS (
           SELECT 1
-          FROM card_stock_transaction_entries e
+          FROM product_stock_transaction_entries e
           WHERE e.card_id = c.id
             AND e.currency_id = ${saleCurrencyParam}
             AND e.reference_type = 'CARD_SALE'
@@ -165,8 +165,8 @@ export class EmSurrenderService {
                WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0))
                ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4)
              END AS "maskedCardNumber"
-      FROM card_stock_cards c
-      JOIN card_stock_receipt_items i ON i.id = c.receipt_item_id
+      FROM product_stock_products c
+      JOIN product_stock_receipt_items i ON i.id = c.receipt_item_id
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
       WHERE ${conditions.join(" AND ")}
         AND UPPER(COALESCE(i.product_snapshot->>'productCode', i.product_snapshot->>'product_code', i.product_snapshot->>'code', '')) IN ('CC', 'CM')
@@ -251,37 +251,14 @@ export class EmSurrenderService {
                WHEN length(clear_number) <= 8 THEN left(clear_number, 4) || repeat('X', greatest(length(clear_number) - 4, 0))
                ELSE left(clear_number, 4) || repeat('X', length(clear_number) - 8) || right(clear_number, 4)
              END AS "maskedCardNumber"
-      FROM card_stock_cards c
-      JOIN card_stock_balance b ON b.card_id = c.id AND b.is_active = true AND b.deleted_at IS NULL
+      FROM product_stock_products c
+      JOIN product_stock_balance b ON b.card_id = c.id AND b.is_active = true AND b.deleted_at IS NULL
       CROSS JOIN LATERAL (SELECT public.decrypt_card_number(c.card_number) AS clear_number) decoded
       WHERE ${conditions.join(" AND ")}
       ORDER BY c.series, c.kit_number
       `,
       params,
     );
-  }
-
-  buildEmCardNumber(
-    branchCode: string,
-    transactionDate: Date,
-    transactionNumber: string,
-    lineNo: number,
-  ): string {
-    const branch = String(branchCode ?? "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .padEnd(4, "0")
-      .slice(0, 4);
-    const year = String(transactionDate.getUTCFullYear()).slice(-2);
-    const txn = String(transactionNumber ?? "")
-      .replace(/\D/g, "")
-      .slice(-8)
-      .padStart(8, "0");
-    const series = String(Math.max(1, Number(lineNo) || 1))
-      .replace(/\D/g, "")
-      .slice(-2)
-      .padStart(2, "0");
-    return `${branch}${year}${txn}${series}`;
   }
 
   assertEmPurchaseProduct(product: Product) {
@@ -309,7 +286,6 @@ export class EmSurrenderService {
       sourceSoldCardId,
       emProduct,
       actorId,
-      lineNo,
       autoSurrender,
     } = input;
     this.assertEmPurchaseProduct(emProduct);
@@ -361,16 +337,7 @@ export class EmSurrenderService {
       );
     }
 
-    const generatedNumber = this.buildEmCardNumber(
-      branch.code,
-      new Date(transaction.transactionDate),
-      transaction.number,
-      lineNo,
-    );
-    const encrypted = await manager.query(
-      'SELECT public.encrypt_card_number($1) AS "cardNumber"',
-      [generatedNumber],
-    );
+    // Copy sold CC/CM card number onto the EM unit (duplicates allowed).
     const branchSnapshot =
       transaction.branchSnapshot ??
       ((await loadEntitySnapshot(this.branchRepository, branch.id)) as object);
@@ -385,7 +352,7 @@ export class EmSurrenderService {
         series: source.series,
         quantity: 1,
         kitNumber: source.kitNumber,
-        cardNumber: encrypted[0].cardNumber,
+        cardNumber: source.cardNumber,
         denomination: feAmount.toFixed(2),
         amount: feAmount.toFixed(2),
         expirationDate: source.expirationDate,
@@ -404,7 +371,7 @@ export class EmSurrenderService {
     // when the skip GUC migration is not applied yet. Clear those before EM receive.
     await manager.query(
       `
-      UPDATE card_stock_balance
+      UPDATE product_stock_balance
          SET is_active = false,
              updated_by = $2,
              updated_at = NOW()
@@ -416,7 +383,7 @@ export class EmSurrenderService {
     );
     await manager.query(
       `
-      UPDATE card_stock_transaction_entries
+      UPDATE product_stock_transaction_entries
          SET deleted_at = NOW(),
              deleted_by = $2,
              updated_by = $2,

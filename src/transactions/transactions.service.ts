@@ -1819,15 +1819,33 @@ export class TransactionsService {
       );
     }
 
-    const manualBookPageSnapshot = transactionPayload.manualBookPageId
+    const manualBookPageId =
+      String(transactionPayload.manualBookPageId ?? "").trim() || null;
+    if (!isFakeCurrency) {
+      const allowNullManualBook =
+        await this.additionalSettingService.getSettingBooleanValue(
+          "TRANSACTION_SETTINGS",
+          transactionPayload.transactionType === TransactionType.SALE
+            ? "ALLOW_NULL_MANUAL_BOOK_IN_SELL"
+            : "ALLOW_NULL_MANUAL_BOOK_IN_PURCHASE",
+          false,
+        );
+      if (!allowNullManualBook && !manualBookPageId) {
+        throw new BadRequestException(
+          "Manual book page is required for this transaction",
+        );
+      }
+    }
+
+    const manualBookPageSnapshot = manualBookPageId
       ? await loadEntitySnapshot(
           this.manualBookPageTrackingRepository,
-          String(transactionPayload.manualBookPageId),
+          manualBookPageId,
         )
       : null;
-    if (transactionPayload.manualBookPageId && !manualBookPageSnapshot) {
+    if (manualBookPageId && !manualBookPageSnapshot) {
       throw new NotFoundException(
-        `Manual book page with id ${transactionPayload.manualBookPageId} not found`,
+        `Manual book page with id ${manualBookPageId} not found`,
       );
     }
 
@@ -2185,7 +2203,7 @@ export class TransactionsService {
       passengerTravelSnapshot,
       agentProfileId: transactionPayload.agentProfileId ?? null,
       agentProfileSnapshot,
-      manualBookPageId: transactionPayload.manualBookPageId ?? null,
+      manualBookPageId,
       manualBookPageSnapshot,
       transactionDate: new Date(`${resolvedTransactionDate}T00:00:00.000Z`),
       transactionType: transactionPayload.transactionType,
@@ -2643,6 +2661,21 @@ export class TransactionsService {
             ) {
               throw new BadRequestException(
                 `Surrender item ${index + 1} is not available for issuer sale at this branch`,
+              );
+            }
+            const feAmount = Number(row.quantity);
+            const unitAmount = Number(emCard.amount);
+            if (!Number.isFinite(feAmount) || feAmount <= 0) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} FE amount must be greater than 0`,
+              );
+            }
+            if (
+              !Number.isFinite(unitAmount) ||
+              feAmount !== unitAmount
+            ) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} FE amount must equal the selected EM unit amount (${emCard.amount})`,
               );
             }
           } else {

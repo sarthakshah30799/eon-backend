@@ -321,6 +321,7 @@ export class Transaction extends BaseEntity {
   @Column({
     type: "enum",
     enum: PurposeRateType,
+    enumName: "purpose_rate_type_enum",
     name: "tcs_rate_type",
     nullable: true,
   })

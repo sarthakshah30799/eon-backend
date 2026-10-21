@@ -6,14 +6,16 @@ import { CardTransferRequestItem } from "./card-transfer-request-item.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import type { Company } from "../../company/company.entity";
 
-@Index("IDX_card_transfer_requests_transaction_number", ["transactionNumber"], {
+@Index("IDX_product_transfer_requests_transaction_number", ["transactionNumber"], {
   unique: true,
 })
-@Index("IDX_card_transfer_requests_status", ["status"])
-@Index("IDX_card_transfer_requests_transaction_date", ["transactionDate"])
-@Index("IDX_card_transfer_requests_source_branch", ["sourceBranchId"])
-@Index("IDX_card_transfer_requests_destination_branch", ["destinationBranchId"])
-@Entity("card_transfer_requests")
+@Index("IDX_product_transfer_requests_status", ["status"])
+@Index("IDX_product_transfer_requests_transaction_date", ["transactionDate"])
+@Index("IDX_product_transfer_requests_source_branch", ["sourceBranchId"])
+@Index("IDX_product_transfer_requests_destination_branch", [
+  "destinationBranchId",
+])
+@Entity("product_transfer_requests")
 export class CardTransferRequest extends BaseEntity {
   @Column({ type: "citext", name: "transaction_number" })
   transactionNumber: string;
@@ -42,6 +44,7 @@ export class CardTransferRequest extends BaseEntity {
   @Column({
     type: "enum",
     enum: CardTransferStatus,
+    enumName: "card_transfer_requests_status_enum",
     default: CardTransferStatus.HELD,
   })
   status: CardTransferStatus;

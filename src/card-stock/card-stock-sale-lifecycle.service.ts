@@ -153,12 +153,12 @@ export class CardStockSaleLifecycleService {
         );
 
       const existingLoad: Array<{ id: string }> = await manager.query(
-        `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
+        `SELECT id FROM product_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
         [card.id, transaction.id, item.currencyId],
       );
       if (!existingLoad[0]) {
         const siblingLoadInTx: Array<{ id: string }> = await manager.query(
-          `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 LIMIT 1`,
+          `SELECT id FROM product_stock_transaction_entries WHERE card_id=$1 AND operation_type='CARD_STOCK_LOAD' AND reference_type='CARD_SALE' AND reference_id=$2 LIMIT 1`,
           [card.id, transaction.id],
         );
         // Fresh multi-currency lines on the same card: first line needs AVAILABLE; later lines may already be SOLD after a prior SELL in this tx.
@@ -219,7 +219,7 @@ export class CardStockSaleLifecycleService {
       }
 
       const existingSell: Array<{ id: string }> = await manager.query(
-        `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
+        `SELECT id FROM product_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
         [card.id, transaction.id, item.currencyId],
       );
       if (!existingSell[0]) {
@@ -228,7 +228,7 @@ export class CardStockSaleLifecycleService {
           [item.id, actorId],
         );
         const createdSell: Array<{ id: string }> = await manager.query(
-          `SELECT id FROM card_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
+          `SELECT id FROM product_stock_transaction_entries WHERE card_id=$1 AND operation_type='SELL' AND reference_type='CARD_SALE' AND reference_id=$2 AND currency_id=$3 LIMIT 1`,
           [card.id, transaction.id, item.currencyId],
         );
         if (!createdSell[0])
