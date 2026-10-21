@@ -1,5 +1,12 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from "class-validator";
 import { PaginationQueryDto } from "../../common/pagination";
 import {
   AdvanceRefundStatus,
@@ -44,20 +51,25 @@ export class AdvanceRefundQueryDto extends PaginationQueryDto {
 }
 
 export class AvailableAdvanceForRefundQueryDto {
+  @ApiProperty({ description: "PAN Card Number" })
+  @IsString()
+  @IsNotEmpty()
+  panNumber: string;
+
   @ApiPropertyOptional({ description: "Branch ID (UUID)" })
   @IsUUID()
   @IsOptional()
-  branchId: string;
+  branchId?: string;
 
   @ApiPropertyOptional({ description: "Party Profile ID (UUID)" })
   @IsUUID()
   @IsOptional()
-  partyProfileId: string;
+  partyProfileId?: string;
 
   @ApiPropertyOptional({ description: "As-on Date (YYYY-MM-DD)" })
   @IsDateString()
   @IsOptional()
-  asOnDate: string;
+  asOnDate?: string;
 
   @ApiPropertyOptional({ description: "Search term" })
   @IsString()

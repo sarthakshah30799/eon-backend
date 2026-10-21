@@ -156,16 +156,18 @@ export class AdvanceRefundService {
 
     // 3. Validate Party Profile & Branch Visibility
     const party = await this.partyRepository.findOne({
-      where: { id: dto.partyProfileId, isActive: true },
-      relations: ["entityType"],
+      where: { id: dto.partyProfileId, active: true },
+      relations: ["entityType", "group"],
     });
     if (!party)
       throw new NotFoundException("Party profile not found or inactive");
+    if (party.status !== WorkflowStatus.APPROVE)
+      throw new BadRequestException("Party profile is not approved");
 
     const partyResult = await this.partyProfileService.findAll(
       {
         offset: 0,
-        limit: 10,
+        limit: 100,
         search: party.code,
         type: [party.type],
         branchIds: [branch.id],
@@ -192,9 +194,21 @@ export class AdvanceRefundService {
       panName = normalize(dto.panName) || null;
       panDob = dto.panDob ? toDateOnly(dto.panDob) : null;
     } else {
-      panNumber = normalize(party.panNo) || null;
-      panName = normalize(party.panName) || normalize(party.name) || null;
-      panDob = party.panDob ? toDateOnly(party.panDob) : null;
+      panNumber = normalize(party.panNo) || normalize(dto.panNumber) || null;
+      panName =
+        normalize(party.panName) ||
+        normalize(party.name) ||
+        normalize(dto.panName) ||
+        null;
+      panDob = party.panDob
+        ? toDateOnly(party.panDob)
+        : dto.panDob
+          ? toDateOnly(dto.panDob)
+          : null;
+    }
+
+    if (!panNumber) {
+      throw new BadRequestException("PAN card number is required for advance refund");
     }
 
     // 5. Remark Option validation if provided
@@ -288,6 +302,7 @@ export class AdvanceRefundService {
     // Fetch real-time available advances for validation
     const availableAdvances =
       await this.voucherService.getAvailableAdvancesForRefund({
+        panNumber,
         partyProfileId: party.id,
         branchId: branch.id,
         asOnDate: dto.asOnDate,
@@ -384,20 +399,18 @@ export class AdvanceRefundService {
       new Date(dto.transactionDate),
     );
 
-    // 10. Execute Transaction in DB2 & DB1
+    // 10. Execute Transaction in DB2
     const queryRunner2 = this.database2.createQueryRunner();
     await queryRunner2.connect();
     await queryRunner2.startTransaction();
-
-    const queryRunner1 = this.database1.createQueryRunner();
-    await queryRunner1.connect();
-    await queryRunner1.startTransaction();
 
     try {
       const headerRepo2 = queryRunner2.manager.getRepository(AdvanceRefund);
       const itemRepo2 = queryRunner2.manager.getRepository(AdvanceRefundItem);
 
       const advanceRefund = headerRepo2.create({
+        createdBy: actorId,
+        updatedBy: actorId,
         number,
         branchId: branch.id,
         branchSnapshot,
@@ -442,6 +455,8 @@ export class AdvanceRefundService {
       const createdItems: AdvanceRefundItem[] = [];
       for (const vi of validatedItems) {
         const itemEntity = itemRepo2.create({
+          createdBy: actorId,
+          updatedBy: actorId,
           advanceRefundId: savedAdvanceRefund.id,
           lineNo: lineNo++,
           receiptVoucherId: vi.receiptVoucherId,
@@ -454,10 +469,11 @@ export class AdvanceRefundService {
         createdItems.push(await itemRepo2.save(itemEntity));
       }
 
-      // Generate Accounting Vouchers in DB1
+      // Generate Accounting Vouchers in DB2
       if (dto.refundType === AdvanceRefundType.KNOCK_OFF) {
         const jv = await this.voucherService.createAdvanceRefundJournalVoucher(
           {
+            advanceRefundId: savedAdvanceRefund.id,
             branchId: branch.id,
             counterId: counter.id,
             transactionDate: dto.transactionDate,
@@ -473,7 +489,7 @@ export class AdvanceRefundService {
             totalAmount: totalRefundAmount,
             actorId,
           },
-          queryRunner1.manager,
+          queryRunner2.manager,
         );
 
         savedAdvanceRefund.journalVoucherId = jv.id;
@@ -484,6 +500,7 @@ export class AdvanceRefundService {
       ) {
         const pt = await this.voucherService.createAdvanceRefundPaymentVoucher(
           {
+            advanceRefundId: savedAdvanceRefund.id,
             branchId: branch.id,
             counterId: counter.id,
             transactionDate: dto.transactionDate,
@@ -509,7 +526,7 @@ export class AdvanceRefundService {
             totalAmount: totalRefundAmount,
             actorId,
           },
-          queryRunner1.manager,
+          queryRunner2.manager,
         );
 
         savedAdvanceRefund.paymentVoucherId = pt.id;
@@ -527,6 +544,7 @@ export class AdvanceRefundService {
 
         const ar = await this.voucherService.createAdvanceRefundAdviceVoucher(
           {
+            advanceRefundId: savedAdvanceRefund.id,
             sourceBranchId: branch.id,
             destinationBranchId: hoBranch.id,
             counterId: counter.id,
@@ -542,26 +560,24 @@ export class AdvanceRefundService {
             totalAmount: totalRefundAmount,
             actorId,
           },
-          queryRunner1.manager,
+          queryRunner2.manager,
         );
 
         savedAdvanceRefund.adviceVoucherId = ar.id;
         savedAdvanceRefund.status = AdvanceRefundStatus.PENDING_HO_APPROVAL;
       }
 
+      savedAdvanceRefund.updatedBy = actorId;
       await headerRepo2.save(savedAdvanceRefund);
 
-      await queryRunner1.commitTransaction();
       await queryRunner2.commitTransaction();
 
       savedAdvanceRefund.items = createdItems;
       return AdvanceRefundResponseDto.fromEntity(savedAdvanceRefund);
     } catch (err) {
-      await queryRunner1.rollbackTransaction();
       await queryRunner2.rollbackTransaction();
       throw err;
     } finally {
-      await queryRunner1.release();
       await queryRunner2.release();
     }
   }
@@ -644,18 +660,15 @@ export class AdvanceRefundService {
       );
     }
 
-    // Execute in DB1 & DB2
+    // Execute in DB2
     const queryRunner2 = this.database2.createQueryRunner();
     await queryRunner2.connect();
     await queryRunner2.startTransaction();
 
-    const queryRunner1 = this.database1.createQueryRunner();
-    await queryRunner1.connect();
-    await queryRunner1.startTransaction();
-
     try {
       const hoPt = await this.voucherService.honourAdvanceRefundAdvice(
         {
+          advanceRefundId: advanceRefund.id,
           adviceVoucherId: advanceRefund.adviceVoucherId,
           hoBranchId: hoBranch.id,
           hoCounterId: hoCounter.id,
@@ -674,7 +687,7 @@ export class AdvanceRefundService {
           narration: dto.narration || advanceRefund.narration,
           actorId,
         },
-        queryRunner1.manager,
+        queryRunner2.manager,
       );
 
       const headerRepo2 = queryRunner2.manager.getRepository(AdvanceRefund);
@@ -683,19 +696,17 @@ export class AdvanceRefundService {
       if (dto.chequeNumber) advanceRefund.chequeNumber = dto.chequeNumber;
       if (dto.chequeDate) advanceRefund.chequeDate = toDateOnly(dto.chequeDate);
       if (dto.drawnOn) advanceRefund.drawnOn = dto.drawnOn;
+      advanceRefund.updatedBy = actorId;
 
       await headerRepo2.save(advanceRefund);
 
-      await queryRunner1.commitTransaction();
       await queryRunner2.commitTransaction();
 
       return AdvanceRefundResponseDto.fromEntity(advanceRefund);
     } catch (err) {
-      await queryRunner1.rollbackTransaction();
       await queryRunner2.rollbackTransaction();
       throw err;
     } finally {
-      await queryRunner1.release();
       await queryRunner2.release();
     }
   }
@@ -806,11 +817,15 @@ export class AdvanceRefundService {
       throw new BadRequestException("Branch ID is required");
     }
 
-    if (!query.partyProfileId) {
-      throw new BadRequestException("Party profile ID is required");
+    const normalizedPan = normalizeUpper(query.panNumber);
+    if (!normalizedPan) {
+      throw new BadRequestException(
+        "PAN card number is required to find available advances",
+      );
     }
 
     return this.voucherService.getAvailableAdvancesForRefund({
+      panNumber: normalizedPan,
       partyProfileId: query.partyProfileId,
       branchId,
       asOnDate: query.asOnDate || new Date().toISOString().slice(0, 10),

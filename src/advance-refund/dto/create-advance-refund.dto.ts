@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
@@ -132,6 +132,7 @@ export class CreateAdvanceRefundDto {
   chequeNumber?: string;
 
   @ApiPropertyOptional({ description: "Cheque Date (YYYY-MM-DD)" })
+  @Transform(({ value }) => (typeof value === "string" && value.trim() === "" ? undefined : value))
   @IsDateString()
   @IsOptional()
   chequeDate?: string;

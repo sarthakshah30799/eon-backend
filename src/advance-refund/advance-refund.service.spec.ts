@@ -5,6 +5,7 @@ import {
   AdvanceRefundStatus,
   AdvanceRefundType,
 } from './advance-refund.enums';
+import { WorkflowStatus } from '../common/enums/workflow-status.enum';
 import { AdvanceRefund } from './entities/advance-refund.entity';
 import { AdvanceRefundItem } from './entities/advance-refund-item.entity';
 
@@ -52,9 +53,13 @@ describe('AdvanceRefundService', () => {
 
   const mockParty = {
     id: 'party-1',
+    code: 'PARTY001',
     name: 'Acme Forex Ltd',
     panNo: 'ABCDE1234F',
     isIndividual: false,
+    active: true,
+    status: WorkflowStatus.APPROVE,
+    type: 'CORPORATE_CLIENT',
   };
 
   const mockKnockOffAccount = {
@@ -350,8 +355,10 @@ describe('AdvanceRefundService', () => {
       );
 
       expect(res).toBeDefined();
-      expect(mockVoucherService.createAdvanceRefundJournalVoucher).toHaveBeenCalled();
-      expect(mockQueryRunner1.commitTransaction).toHaveBeenCalled();
+      expect(mockVoucherService.createAdvanceRefundJournalVoucher).toHaveBeenCalledWith(
+        expect.anything(),
+        mockQueryRunner2.manager,
+      );
       expect(mockQueryRunner2.commitTransaction).toHaveBeenCalled();
     });
   });
@@ -517,9 +524,59 @@ describe('AdvanceRefundService', () => {
       expect(res).toBeDefined();
       expect(res.status).toBe(AdvanceRefundStatus.COMPLETED);
       expect(res.hoPaymentVoucherId).toBe('ho-pt-created-id');
-      expect(mockVoucherService.honourAdvanceRefundAdvice).toHaveBeenCalled();
-      expect(mockQueryRunner1.commitTransaction).toHaveBeenCalled();
+      expect(mockVoucherService.honourAdvanceRefundAdvice).toHaveBeenCalledWith(
+        expect.anything(),
+        mockQueryRunner2.manager,
+      );
       expect(mockQueryRunner2.commitTransaction).toHaveBeenCalled();
+    });
+  });
+
+  describe('getAvailableAdvances', () => {
+    it('throws error if branchId is missing', async () => {
+      (service as any).isHoApprover = jest.fn().mockResolvedValue(false);
+      await expect(
+        service.getAvailableAdvances(
+          {
+            panNumber: 'ABCDE1234F',
+          } as any,
+          { ...mockSession, activeBranchId: null } as any,
+        ),
+      ).rejects.toThrow('Branch ID is required');
+    });
+
+    it('throws error if panNumber is missing', async () => {
+      (service as any).isHoApprover = jest.fn().mockResolvedValue(false);
+      await expect(
+        service.getAvailableAdvances(
+          {
+            branchId: 'branch-1',
+            panNumber: '',
+          } as any,
+          mockSession as any,
+        ),
+      ).rejects.toThrow('PAN card number is required to find available advances');
+    });
+
+    it('successfully calls voucherService.getAvailableAdvancesForRefund with uppercase PAN', async () => {
+      (service as any).isHoApprover = jest.fn().mockResolvedValue(false);
+      const res = await service.getAvailableAdvances(
+        {
+          branchId: 'branch-1',
+          panNumber: 'abcde1234f',
+          asOnDate: '2026-10-14',
+        } as any,
+        mockSession as any,
+      );
+
+      expect(res).toEqual([mockAvailableReceipt]);
+      expect(mockVoucherService.getAvailableAdvancesForRefund).toHaveBeenCalledWith({
+        panNumber: 'ABCDE1234F',
+        partyProfileId: undefined,
+        branchId: 'branch-1',
+        asOnDate: '2026-10-14',
+        search: undefined,
+      });
     });
   });
 });

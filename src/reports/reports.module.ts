@@ -45,6 +45,16 @@ import { Flm6SalesToFfmcController } from "./flm6-sales-to-ffmc.controller";
 import { Flm6SalesToFfmcService } from "./flm6-sales-to-ffmc.service";
 import { Flm8CnStatementController } from "./flm8-cn-statement.controller";
 import { Flm8CnStatementService } from "./flm8-cn-statement.service";
+import { LrsDailyReportController } from "./lrs-daily-report.controller";
+import { LrsDailyReportService } from "./lrs-daily-report.service";
+import { Flm8Ad2Controller } from "./flm8-ad2.controller";
+import { Flm8Ad2Service } from "./flm8-ad2.service";
+import { TourPaxReportController } from "./tour-pax-report.controller";
+import { TourPaxReportService } from "./tour-pax-report.service";
+import { OutstandingTransactionReportController } from "./outstanding-transaction-report.controller";
+import { OutstandingTransactionReportService } from "./outstanding-transaction-report.service";
+import { AgeingReportController } from "./ageing-report.controller";
+import { AgeingReportService } from "./ageing-report.service";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { PurposeModule } from "../purpose/purpose.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
@@ -92,6 +102,11 @@ import { UserRole } from "../user-roles/user-role.entity";
     Flm5SalesToPublicController,
     Flm6SalesToFfmcController,
     Flm8CnStatementController,
+    LrsDailyReportController,
+    Flm8Ad2Controller,
+    TourPaxReportController,
+    OutstandingTransactionReportController,
+    AgeingReportController,
   ],
   providers: [
     AccountPostingsCombinedQuery,
@@ -111,6 +126,11 @@ import { UserRole } from "../user-roles/user-role.entity";
     Flm5SalesToPublicService,
     Flm6SalesToFfmcService,
     Flm8CnStatementService,
+    LrsDailyReportService,
+    Flm8Ad2Service,
+    TourPaxReportService,
+    OutstandingTransactionReportService,
+    AgeingReportService,
   ],
 })
 export class ReportsModule {}

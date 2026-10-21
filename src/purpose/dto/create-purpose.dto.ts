@@ -23,6 +23,14 @@ export class CreatePurposeDto {
   @Length(2, 2)
   code: string;
 
+  @ApiPropertyOptional({
+    description: "RBI purpose code used by the LRS daily report",
+    example: "S0306",
+  })
+  @IsString()
+  @IsOptional()
+  rbiCode?: string;
+
   @ApiProperty({ description: "Purpose description", example: "Private Visit" })
   @IsString()
   @IsNotEmpty()
