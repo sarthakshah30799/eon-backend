@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import { IsDateString, IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
 
 export class HonourAdvanceRefundDto {
@@ -28,6 +29,7 @@ export class HonourAdvanceRefundDto {
   chequeNumber?: string;
 
   @ApiPropertyOptional({ description: "Cheque Date (YYYY-MM-DD)" })
+  @Transform(({ value }) => (typeof value === "string" && value.trim() === "" ? undefined : value))
   @IsDateString()
   @IsOptional()
   chequeDate?: string;

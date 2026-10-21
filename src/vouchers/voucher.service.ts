@@ -7,7 +7,7 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { Brackets, DataSource, EntityManager, Repository } from "typeorm";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
@@ -121,11 +121,11 @@ const toDateOnly = (value: unknown) => {
 };
 const isIndividualVoucherParty = (
   party: PartyProfile,
-  entityType: SelectOption,
+  entityType?: SelectOption | null,
 ) =>
   Boolean(party.isIndividual) ||
-  isIndividualToken(entityType.value) ||
-  isIndividualToken(entityType.label) ||
+  isIndividualToken(entityType?.value) ||
+  isIndividualToken(entityType?.label) ||
   isIndividualToken(party.entityType?.value) ||
   isIndividualToken(party.entityType?.label);
 const resolveVoucherPan = (
@@ -2826,6 +2826,18 @@ export class VoucherService implements OnModuleInit {
       };
       const totals = this.calculate(input.voucherType, [itemDto]);
 
+      let advanceAccount: AccountProfile | null = null;
+      try {
+        advanceAccount = await this.resolveAdvanceAccount();
+      } catch {
+        advanceAccount = null;
+      }
+      const isAdvanceReceipt =
+        input.voucherType === VoucherType.RECEIPT &&
+        input.itemDirection === VoucherEntryDirection.CREDIT &&
+        advanceAccount !== null &&
+        itemAccount.id === advanceAccount.id;
+
       const voucherRepo = tx.getRepository(AccountingVoucher);
       const itemRepo = tx.getRepository(AccountingVoucherItem);
       const number = await this.additionalSettings.reserveTransactionNumber(
@@ -2881,8 +2893,10 @@ export class VoucherService implements OnModuleInit {
             : null,
           narration: normalize(input.narration),
           ...totals,
-          advanceControlAccountId: null,
-          advanceControlAccountSnapshot: null,
+          advanceControlAccountId: isAdvanceReceipt ? advanceAccount!.id : null,
+          advanceControlAccountSnapshot: isAdvanceReceipt
+            ? await this.snapshot(this.accountRepository, advanceAccount!.id)
+            : null,
           createdBy: actorId,
           updatedBy: actorId,
         }),
@@ -2946,22 +2960,55 @@ export class VoucherService implements OnModuleInit {
   }
 
   async getAvailableAdvancesForRefund(query: {
-    partyProfileId: string;
+    panNumber: string;
+    partyProfileId?: string;
     branchId: string;
     asOnDate: string;
     search?: string;
   }) {
-    const receipts = await this.voucherRepository
+    const normalizedPan = normalizePan(query.panNumber);
+    if (!normalizedPan) {
+      throw new BadRequestException("PAN card number is required");
+    }
+
+    let advanceAccount: AccountProfile | null = null;
+    try {
+      advanceAccount = await this.resolveAdvanceAccount();
+    } catch {
+      advanceAccount = null;
+    }
+
+    const queryBuilder = this.voucherRepository
       .createQueryBuilder("voucher")
       .where("voucher.voucherType = :type", { type: VoucherType.RECEIPT })
-      .andWhere("voucher.partyProfileId = :partyId", {
-        partyId: query.partyProfileId,
-      })
+      .andWhere("voucher.panNumber = :panNumber", { panNumber: normalizedPan })
       .andWhere("voucher.branchId = :branchId", { branchId: query.branchId })
       .andWhere("voucher.transactionDate <= :asOnDate", {
         asOnDate: query.asOnDate.slice(0, 10),
-      })
-      .andWhere("voucher.advanceControlAccountId IS NOT NULL")
+      });
+
+    if (query.partyProfileId) {
+      const party = await this.partyRepository.findOne({
+        where: { id: query.partyProfileId },
+        relations: ["entityType"],
+      });
+      if (party && !isIndividualVoucherParty(party, party.entityType)) {
+        queryBuilder.andWhere("voucher.partyProfileId = :partyId", {
+          partyId: party.id,
+        });
+      }
+    }
+
+    if (advanceAccount) {
+      queryBuilder.andWhere(
+        "(voucher.advanceControlAccountId IS NOT NULL OR EXISTS (SELECT 1 FROM accounting_voucher_items avi WHERE avi.voucher_id = voucher.id AND avi.account_id = :advanceAccountId AND avi.direction = 'CREDIT'))",
+        { advanceAccountId: advanceAccount.id },
+      );
+    } else {
+      queryBuilder.andWhere("voucher.advanceControlAccountId IS NOT NULL");
+    }
+
+    const receipts = await queryBuilder
       .orderBy("voucher.transactionDate", "ASC")
       .addOrderBy("voucher.number", "ASC")
       .getMany();
@@ -3027,6 +3074,9 @@ export class VoucherService implements OnModuleInit {
           transactionDate: voucher.transactionDate,
           partyProfileId: voucher.partyProfileId,
           partyProfileSnapshot: voucher.partyProfileSnapshot,
+          panNumber: voucher.panNumber,
+          panName: voucher.panName,
+          panDob: voucher.panDob,
           originalAmount: voucher.finalAmount,
           consumedBillsAmount: money(consumedBillsCents),
           consumedRefundsAmount: money(consumedRefundsCents),
@@ -3041,6 +3091,8 @@ export class VoucherService implements OnModuleInit {
 
   async createAdvanceRefundJournalVoucher(
     input: {
+      advanceRefundId?: string;
+      idempotencyKey?: string;
       branchId: string;
       counterId: string;
       transactionDate: string;
@@ -3085,6 +3137,20 @@ export class VoucherService implements OnModuleInit {
       new Date(input.transactionDate),
     );
 
+    const idempotencyKey =
+      input.idempotencyKey ||
+      (input.advanceRefundId
+        ? `advance-refund:jv:${input.advanceRefundId}`
+        : `advance-refund:jv:${randomUUID()}`);
+    const payloadHash = this.payloadHash(VoucherType.JOURNAL, {
+      advanceRefundId: input.advanceRefundId,
+      branchId: input.branchId,
+      counterId: input.counterId,
+      transactionDate: input.transactionDate,
+      totalAmount: input.totalAmount,
+      items: input.items,
+    });
+
     const voucherRepo = manager.getRepository(AccountingVoucher);
     const itemRepo = manager.getRepository(AccountingVoucherItem);
 
@@ -3092,6 +3158,8 @@ export class VoucherService implements OnModuleInit {
       voucherRepo.create({
         voucherType: VoucherType.JOURNAL,
         number,
+        idempotencyKey,
+        payloadHash,
         transactionDate: input.transactionDate.slice(0, 10),
         branchId: branch.id,
         branchSnapshot,
@@ -3174,6 +3242,8 @@ export class VoucherService implements OnModuleInit {
 
   async createAdvanceRefundPaymentVoucher(
     input: {
+      advanceRefundId?: string;
+      idempotencyKey?: string;
       branchId: string;
       counterId: string;
       transactionDate: string;
@@ -3230,6 +3300,21 @@ export class VoucherService implements OnModuleInit {
       new Date(input.transactionDate),
     );
 
+    const idempotencyKey =
+      input.idempotencyKey ||
+      (input.advanceRefundId
+        ? `advance-refund:payment:${input.advanceRefundId}`
+        : `advance-refund:payment:${randomUUID()}`);
+    const payloadHash = this.payloadHash(VoucherType.PAYMENT, {
+      advanceRefundId: input.advanceRefundId,
+      branchId: input.branchId,
+      counterId: input.counterId,
+      transactionDate: input.transactionDate,
+      totalAmount: input.totalAmount,
+      items: input.items,
+      paymentDetails: input.paymentDetails,
+    });
+
     const voucherRepo = manager.getRepository(AccountingVoucher);
     const itemRepo = manager.getRepository(AccountingVoucherItem);
 
@@ -3237,6 +3322,8 @@ export class VoucherService implements OnModuleInit {
       voucherRepo.create({
         voucherType: VoucherType.PAYMENT,
         number,
+        idempotencyKey,
+        payloadHash,
         transactionDate: input.transactionDate.slice(0, 10),
         branchId: branch.id,
         branchSnapshot,
@@ -3304,6 +3391,8 @@ export class VoucherService implements OnModuleInit {
 
   async createAdvanceRefundAdviceVoucher(
     input: {
+      advanceRefundId?: string;
+      idempotencyKey?: string;
       sourceBranchId: string;
       destinationBranchId: string;
       counterId: string;
@@ -3360,6 +3449,21 @@ export class VoucherService implements OnModuleInit {
       new Date(input.transactionDate),
     );
 
+    const idempotencyKey =
+      input.idempotencyKey ||
+      (input.advanceRefundId
+        ? `advance-refund:advice:${input.advanceRefundId}`
+        : `advance-refund:advice:${randomUUID()}`);
+    const payloadHash = this.payloadHash(VoucherType.ADVICE, {
+      advanceRefundId: input.advanceRefundId,
+      sourceBranchId: input.sourceBranchId,
+      destinationBranchId: input.destinationBranchId,
+      counterId: input.counterId,
+      transactionDate: input.transactionDate,
+      totalAmount: input.totalAmount,
+      items: input.items,
+    });
+
     const voucherRepo = manager.getRepository(AccountingVoucher);
     const itemRepo = manager.getRepository(AccountingVoucherItem);
 
@@ -3367,6 +3471,8 @@ export class VoucherService implements OnModuleInit {
       voucherRepo.create({
         voucherType: VoucherType.ADVICE,
         number,
+        idempotencyKey,
+        payloadHash,
         transactionDate: input.transactionDate.slice(0, 10),
         branchId: sourceBranch.id,
         branchSnapshot: sourceBranchSnapshot,
@@ -3432,6 +3538,8 @@ export class VoucherService implements OnModuleInit {
 
   async honourAdvanceRefundAdvice(
     input: {
+      advanceRefundId?: string;
+      idempotencyKey?: string;
       adviceVoucherId: string;
       hoBranchId: string;
       hoCounterId: string;
@@ -3492,10 +3600,25 @@ export class VoucherService implements OnModuleInit {
       new Date(input.transactionDate),
     );
 
+    const idempotencyKey =
+      input.idempotencyKey ||
+      (input.advanceRefundId
+        ? `advance-refund:honour:${input.advanceRefundId}`
+        : `advance-refund:honour:${sourceAdvice.id}`);
+    const payloadHash = this.payloadHash(VoucherType.PAYMENT, {
+      advanceRefundId: input.advanceRefundId,
+      adviceVoucherId: input.adviceVoucherId,
+      hoBranchId: input.hoBranchId,
+      transactionDate: input.transactionDate,
+      paymentDetails: input.paymentDetails,
+    });
+
     const hoPaymentVoucher = await voucherRepo.save(
       voucherRepo.create({
         voucherType: VoucherType.PAYMENT,
         number,
+        idempotencyKey,
+        payloadHash,
         transactionDate: input.transactionDate.slice(0, 10),
         branchId: hoBranch.id,
         branchSnapshot: hoBranchSnapshot,
