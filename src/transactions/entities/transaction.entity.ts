@@ -506,6 +506,12 @@ export class Transaction extends BaseEntity {
   })
   splitMode: TransactionTaxSplitMode | null;
 
+  @Column({ type: "boolean", name: "tt_report_blocked", default: false })
+  ttReportBlocked: boolean;
+
+  @Column({ type: "timestamptz", name: "tt_report_blocked_at", nullable: true })
+  ttReportBlockedAt: Date | null;
+
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];
 
