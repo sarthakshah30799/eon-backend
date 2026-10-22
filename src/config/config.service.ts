@@ -94,8 +94,14 @@ export class ConfigService {
         this.getOptional("DB_HOST2") ||
         this.get("DB_HOST"),
       port: portVal ? parseInt(portVal, 10) : 5432,
-      username: this.getOptional("DB2_USERNAME") || this.get("DB_USERNAME"),
-      password: this.getOptional("DB2_PASSWORD") || this.get("DB_PASSWORD"),
+      username:
+        this.getOptional("DB_USERNAME2") ||
+        this.getOptional("DB2_USERNAME") ||
+        this.get("DB_USERNAME"),
+      password:
+        this.getOptional("DB_PASSWORD2") ||
+        this.getOptional("DB2_PASSWORD") ||
+        this.get("DB_PASSWORD"),
       database:
         this.getOptional("DB2_DATABASE") ||
         this.getOptional("DB_DATABASE2") ||
