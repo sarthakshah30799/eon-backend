@@ -102,6 +102,15 @@ export class LrsDailyReportQueryDto {
 
   @ApiPropertyOptional({
     description:
+      "Show tour passenger rows for sales that match these filters.",
+  })
+  @Transform(parseBooleanQuery)
+  @IsBoolean()
+  @IsOptional()
+  showTourPaxBreakup?: boolean;
+
+  @ApiPropertyOptional({
+    description:
       "Also include party profiles whose entity type is a proprietorship firm.",
   })
   @Transform(parseBooleanQuery)

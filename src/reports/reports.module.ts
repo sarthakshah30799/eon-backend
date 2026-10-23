@@ -55,6 +55,8 @@ import { OutstandingTransactionReportController } from "./outstanding-transactio
 import { OutstandingTransactionReportService } from "./outstanding-transaction-report.service";
 import { AgeingReportController } from "./ageing-report.controller";
 import { AgeingReportService } from "./ageing-report.service";
+import { TtReportController } from "./tt-report.controller";
+import { TtReportService } from "./tt-report.service";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
 import { PurposeModule } from "../purpose/purpose.module";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
@@ -107,6 +109,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     TourPaxReportController,
     OutstandingTransactionReportController,
     AgeingReportController,
+    TtReportController,
   ],
   providers: [
     AccountPostingsCombinedQuery,
@@ -131,6 +134,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     TourPaxReportService,
     OutstandingTransactionReportService,
     AgeingReportService,
+    TtReportService,
   ],
 })
 export class ReportsModule {}

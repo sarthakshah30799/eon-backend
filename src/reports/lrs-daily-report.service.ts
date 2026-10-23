@@ -17,6 +17,7 @@ import {
   buildLrsDailyReport,
   buildLrsDailyReportExport,
   loadLrsDailyReportSourceRows,
+  loadLrsTourPaxRows,
   resolveLrsReportDateRange,
 } from "./lrs-daily-report.helpers";
 
@@ -53,6 +54,7 @@ export class LrsDailyReportService {
       bankCode: query.bankCode ?? "",
       reportFormat: query.reportFormat ?? LrsDailyReportFormat.CIMS,
       rbiCodeByPurposeId,
+      showTourPaxBreakup: query.showTourPaxBreakup === true,
     };
     const hasNoBranchAccess =
       !canSeeAllFlmBranches(session) && resolvedBranchIds.length === 0;
@@ -61,7 +63,7 @@ export class LrsDailyReportService {
       return buildLrsDailyReport([], reportInput);
     }
 
-    const sourceRows = await loadLrsDailyReportSourceRows(this.database2, {
+    const sourceFilters = {
       startDate,
       endDateExclusive,
       branchIds: resolvedBranchIds,
@@ -69,9 +71,19 @@ export class LrsDailyReportService {
       issuerPartyProfileId: query.issuerPartyProfileId,
       purposeIds,
       includeCorporateTransactions: query.includeCorporateTransactions,
-    });
+    };
+    const sourceRows = await loadLrsDailyReportSourceRows(
+      this.database2,
+      sourceFilters,
+    );
+    const tourPaxRows = query.showTourPaxBreakup
+      ? await loadLrsTourPaxRows(this.database2, sourceFilters)
+      : [];
 
-    return buildLrsDailyReport(sourceRows, reportInput);
+    return buildLrsDailyReport(sourceRows, {
+      ...reportInput,
+      tourPassengers: tourPaxRows,
+    });
   }
 
   async buildExport(
