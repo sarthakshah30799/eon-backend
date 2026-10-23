@@ -12,6 +12,7 @@ import { TransactionEvent } from "./entities/transaction-event.entity";
 import { TransactionAd1 } from "./entities/transaction-ad1.entity";
 import { TransactionPassengerOtherDocument } from "./entities/transaction-passenger-other-document.entity";
 import { TransactionTcsBreakdown } from "./entities/transaction-tcs-breakdown.entity";
+import { TourPassenger } from "./entities/tour-passenger.entity";
 import { TransactionsController } from "./transactions.controller";
 import { TransactionsService } from "./transactions.service";
 import { TransactionAd1Service } from "./transaction-ad1.service";
@@ -98,6 +99,7 @@ import { TtDealModule } from "../tt-deal/tt-deal.module";
         TransactionEvent,
         TransactionPassengerOtherDocument,
         TransactionTcsBreakdown,
+        TourPassenger,
         ManualBookPageTracking,
         ChequeBookPageTracking,
         CardStockCard,

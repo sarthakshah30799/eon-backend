@@ -71,6 +71,15 @@ export type LrsDailyReport = {
   recordCount: number;
 };
 
+export type LrsTourPassenger = {
+  transactionNumber: string;
+  panNumber: string;
+  panName: string;
+  fcnCode: string;
+  fcnAmount: number;
+  remark: string;
+};
+
 export type LrsDailyReportFile = {
   buffer: Buffer;
   contentType: string;
@@ -296,6 +305,8 @@ export const buildLrsDailyReport = (
     bankCode?: string;
     reportFormat?: LrsDailyReportFormat;
     rbiCodeByPurposeId?: ReadonlyMap<string, string>;
+    showTourPaxBreakup?: boolean;
+    tourPassengers?: LrsTourPassenger[];
   },
 ): LrsDailyReport => {
   if (!Number.isFinite(input.usdRate) || input.usdRate <= 0) {
@@ -306,21 +317,28 @@ export const buildLrsDailyReport = (
   const startDate = (input.startDate ?? endDate).slice(0, 10);
   const bankName = input.bankName?.trim() ?? "";
   const bankCode = input.bankCode?.trim() ?? "";
-  const rows = [...sourceRows]
-    .sort(compareSourceRows)
-    .map((row, index) =>
-      mapLrsDailyReportRow(
-        row,
+  const sortedSourceRows = [...sourceRows].sort(compareSourceRows);
+  const officialRows = sortedSourceRows.map((row, index) =>
+    mapLrsDailyReportRow(
+      row,
+      input.usdRate,
+      index + 1,
+      input.rbiCodeByPurposeId,
+    ),
+  );
+  const rows = input.showTourPaxBreakup
+    ? insertTourPassengerRows(
+        sortedSourceRows,
+        officialRows,
+        input.tourPassengers ?? [],
         input.usdRate,
-        index + 1,
-        input.rbiCodeByPurposeId,
-      ),
-    );
-  const totalAmountUsd = rows.reduce(
+      )
+    : officialRows;
+  const totalAmountUsd = officialRows.reduce(
     (total, row) => addMoney(total, row.amountUsd),
     "0.00",
   );
-  const totalAmountInr = rows.reduce(
+  const totalAmountInr = officialRows.reduce(
     (total, row) => addMoney(total, row.amountInr),
     "0.00",
   );
@@ -339,14 +357,89 @@ export const buildLrsDailyReport = (
       date: endDate,
       bankName,
       bankCode,
-      rows,
+      rows: officialRows,
       totalAmountUsd,
       totalAmountInr,
     }),
     totalAmountUsd,
     totalAmountInr,
-    recordCount: rows.length,
+    recordCount: officialRows.length,
   };
+};
+
+const currencyCodeOf = (row: LrsDailyReportSourceRow) =>
+  sanitizeLrsField(
+    readSnapshotCode(nestedRecord(row.currencySnapshot), "currencyCode"),
+  ).toUpperCase();
+
+const tourPassengerKey = (transactionNumber: string, fcnCode: string) =>
+  `${transactionNumber}::${fcnCode}`;
+
+const insertTourPassengerRows = (
+  sourceRows: LrsDailyReportSourceRow[],
+  officialRows: LrsDailyReportRow[],
+  tourPassengers: LrsTourPassenger[],
+  usdRate: number,
+): LrsDailyReportRow[] => {
+  const passengersByCurrency = new Map<string, LrsTourPassenger[]>();
+  tourPassengers.forEach((passenger) => {
+    const key = tourPassengerKey(passenger.transactionNumber, passenger.fcnCode);
+    const current = passengersByCurrency.get(key) ?? [];
+    current.push(passenger);
+    passengersByCurrency.set(key, current);
+  });
+
+  const amountByCurrency = new Map<string, number>();
+  sourceRows.forEach((row) => {
+    const transactionNumber = sanitizeLrsField(row.transactionNumber ?? "");
+    const key = tourPassengerKey(transactionNumber, currencyCodeOf(row));
+    const amount = Number(row.amount ?? 0);
+    amountByCurrency.set(
+      key,
+      (amountByCurrency.get(key) ?? 0) + (Number.isFinite(amount) ? amount : 0),
+    );
+  });
+
+  const used = new Set<string>();
+  const displayRows: LrsDailyReportRow[] = [];
+  sourceRows.forEach((source, index) => {
+    const official = officialRows[index];
+    displayRows.push(official);
+    const transactionNumber = sanitizeLrsField(source.transactionNumber ?? "");
+    const key = tourPassengerKey(transactionNumber, official.currencyCode);
+    if (used.has(key)) {
+      return;
+    }
+    const passengers = passengersByCurrency.get(key) ?? [];
+    if (!passengers.length) {
+      return;
+    }
+    used.add(key);
+    const totalFcn = passengers.reduce(
+      (total, passenger) => total + passenger.fcnAmount,
+      0,
+    );
+    const currencyInr = amountByCurrency.get(key) ?? 0;
+    passengers.forEach((passenger) => {
+      const share =
+        totalFcn > 0 ? (currencyInr * passenger.fcnAmount) / totalFcn : 0;
+      const inr = roundLrsMoney(share);
+      displayRows.push({
+        ...official,
+        panOfRemitter: sanitizeLrsField(passenger.panNumber),
+        nameOfRemitter: sanitizeLrsField(passenger.panName),
+        currencyCode: passenger.fcnCode,
+        amountInr: inr,
+        amountUsd: roundLrsMoney(share / usdRate),
+        remarks: sanitizeLrsField(passenger.remark) || official.remarks,
+      });
+    });
+  });
+
+  return displayRows.map((row, index) => ({
+    ...row,
+    recordIdentifier: String(index + 1),
+  }));
 };
 
 export const loadLrsDailyReportSourceRows = async (
@@ -425,6 +518,115 @@ export const loadLrsDailyReportSourceRows = async (
       ORDER BY tx.transaction_date ASC, tx.number ASC NULLS LAST, item.line_no ASC`,
     params,
   );
+};
+
+const tourPaxText = (value: unknown) => String(value ?? "").trim();
+
+export const loadLrsTourPaxRows = async (
+  database2: DataSource,
+  filters: {
+    startDate: Date;
+    endDateExclusive: Date;
+    branchIds: string[];
+    productId?: string;
+    issuerPartyProfileId?: string;
+    purposeIds: string[];
+    includeCorporateTransactions?: boolean;
+  },
+): Promise<LrsTourPassenger[]> => {
+  if (!filters.purposeIds.length) {
+    return [];
+  }
+
+  const params: unknown[] = [filters.startDate, filters.endDateExclusive];
+  const conditions = [
+    "tp.deleted_at IS NULL",
+    "tx.deleted_at IS NULL",
+    "tx.is_latest = true",
+    `tx.status = '${TransactionStatus.APPROVED}'`,
+    `tx.transaction_type = '${TransactionType.SALE}'`,
+    `tx.trade_mode = '${TradeMode.RETAIL}'`,
+    `tx.slug = '${TransactionTypeProfileEnum.SALE_CORPORATE_INDIVIDUAL}'`,
+    "tx.transaction_date >= $1",
+    "tx.transaction_date < $2",
+    buildLrsPartyProfileCondition(
+      filters.includeCorporateTransactions === true,
+    ),
+  ];
+
+  if (filters.branchIds.length) {
+    const placeholders = filters.branchIds.map((branchId) => {
+      params.push(branchId);
+      return `$${params.length}`;
+    });
+    conditions.push(`tx.branch_id IN (${placeholders.join(", ")})`);
+  }
+
+  const purposePlaceholders = filters.purposeIds.map((purposeId) => {
+    params.push(purposeId);
+    return `$${params.length}`;
+  });
+  conditions.push(`tx.purpose_id IN (${purposePlaceholders.join(", ")})`);
+
+  const itemConditions = [
+    "item.transaction_id = tx.id",
+    "item.deleted_at IS NULL",
+    "COALESCE(item.product_snapshot->>'availableInRetailSelling', '') = 'true'",
+    "COALESCE(item.product_snapshot->>'allowProductCancellation', 'false') <> 'true'",
+  ];
+  if (filters.productId) {
+    params.push(filters.productId);
+    itemConditions.push(`item.product_id = $${params.length}`);
+  }
+  if (filters.issuerPartyProfileId) {
+    params.push(filters.issuerPartyProfileId);
+    itemConditions.push(`item.issuer_party_profile_id = $${params.length}`);
+  }
+  conditions.push(
+    `EXISTS (SELECT 1 FROM transaction_items item WHERE ${itemConditions.join(" AND ")})`,
+  );
+
+  const rows = (await database2.query(
+    `SELECT
+        tx.number AS "transactionNumber",
+        tp.traveller_pan_number AS "panNumber",
+        tp.pan_name AS "panName",
+        tp.passport_name AS "passportName",
+        tp.fcn_code AS "fcnCode",
+        tp.fcn_amount AS "fcnAmount",
+        tp.remark AS "remark"
+      FROM tour_passengers tp
+      INNER JOIN transactions tx ON tx.id = tp.transaction_id
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY tx.transaction_date ASC, tx.number ASC NULLS LAST, tp.line_no ASC`,
+    params,
+  )) as Array<{
+    transactionNumber: string | null;
+    panNumber: string | null;
+    panName: string | null;
+    passportName: string | null;
+    fcnCode: string | null;
+    fcnAmount: string | number | null;
+    remark: string | null;
+  }>;
+
+  return rows.flatMap((row) => {
+    const fcnAmount = Number(row.fcnAmount ?? NaN);
+    const fcnCode = tourPaxText(row.fcnCode).toUpperCase();
+    if (!fcnCode || !Number.isFinite(fcnAmount)) {
+      return [];
+    }
+    return [
+      {
+        transactionNumber: sanitizeLrsField(tourPaxText(row.transactionNumber)),
+        panNumber: tourPaxText(row.panNumber),
+        panName: tourPaxText(row.panName) || tourPaxText(row.passportName),
+        fcnCode,
+        fcnAmount,
+        remark: tourPaxText(row.remark),
+      },
+    ];
+  });
 };
 
 const reportFileLabel = (report: LrsDailyReport) =>
