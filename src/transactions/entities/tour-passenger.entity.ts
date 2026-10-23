@@ -75,15 +75,6 @@ export class TourPassenger extends BaseEntity {
   @Column({ type: "date", name: "other_ad_exchange_date", nullable: true })
   otherAdExchangeDate: string | null;
 
-  @Column({
-    type: "numeric",
-    name: "other_ad_fcn_amount",
-    precision: 18,
-    scale: 7,
-    nullable: true,
-  })
-  otherAdFcnAmount: string | null;
-
   @Column({ type: "text", name: "other_ad_name_address", nullable: true })
   otherAdNameAddress: string | null;
 }
