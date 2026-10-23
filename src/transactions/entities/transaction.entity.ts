@@ -23,6 +23,7 @@ import { TransactionLog } from "./transaction-log.entity";
 import { TransactionEvent } from "./transaction-event.entity";
 import { TransactionTcsBreakdown } from "./transaction-tcs-breakdown.entity";
 import { TransactionPassengerOtherDocument } from "./transaction-passenger-other-document.entity";
+import { TourPassenger } from "./tour-passenger.entity";
 import { TransferRequest } from "../../transfers/entities/transfer-request.entity";
 import {
   TransactionPassengerSnapshotValue,
@@ -514,6 +515,9 @@ export class Transaction extends BaseEntity {
 
   @OneToMany(() => TransactionItem, (item) => item.transaction)
   items: TransactionItem[];
+
+  @OneToMany(() => TourPassenger, (tourPassenger) => tourPassenger.transaction)
+  tourPassengers: TourPassenger[];
 
   @OneToMany(() => TransactionDocument, (document) => document.transaction)
   documents: TransactionDocument[];
