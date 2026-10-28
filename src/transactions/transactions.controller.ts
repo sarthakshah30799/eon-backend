@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Session,
+  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -21,6 +22,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { ParseUUIDPipe } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -187,6 +189,18 @@ export class TransactionsController {
       transactionId,
       session.userId,
     );
+  }
+
+  @Post("tour-passengers/parse")
+  @ApiOperation({ summary: "Parse a tour passenger Excel file into rows" })
+  @UseInterceptors(FileInterceptor("file"))
+  parseTourPassengers(
+    @UploadedFile() file?: { buffer?: Buffer },
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException("Upload the tour passenger Excel file");
+    }
+    return this.transactionsService.parseTourPassengerFile(file.buffer);
   }
 
   @Post("drafts")

@@ -36,6 +36,13 @@ import { TransactionAdditionalCharge } from "./entities/transaction-additional-c
 import { TransactionPayment } from "./entities/transaction-payment.entity";
 import { TransactionAd1 } from "./entities/transaction-ad1.entity";
 import { TransactionPassengerOtherDocument } from "./entities/transaction-passenger-other-document.entity";
+import { TourPassenger } from "./entities/tour-passenger.entity";
+import {
+  assertTourPassengerQuantities,
+  excelValueToIsoDate,
+  parseTourPassengerWorkbook,
+  type TourPassengerPayload,
+} from "./tour-passenger.helpers";
 import { PassengerOtherIdProofType } from "../passengers/passenger.entity";
 import { Currency } from "../currencies/currency.entity";
 import { Product } from "../products/product.entity";
@@ -363,6 +370,7 @@ type TransactionDraftPayload = {
   tcsDeclarationAccepted?: boolean | null;
   isProprietorship?: boolean | null;
   items?: TransactionItemPayload[];
+  tourPassengers?: TourPassengerPayload[];
   documents?: TransactionDocumentPayload[];
   additionalCharges?: TransactionAdditionalChargePayload[];
   payments?: TransactionPaymentPayload[];
@@ -1504,6 +1512,10 @@ export class TransactionsService {
     return { message: "Account posting rebuild queued successfully" };
   }
 
+  parseTourPassengerFile(buffer: Buffer) {
+    return parseTourPassengerWorkbook(buffer);
+  }
+
   async createDraft(
     body: Record<string, unknown>,
     files: UploadedDraftFile[],
@@ -2570,9 +2582,20 @@ export class TransactionsService {
         sharedTtRemittanceId = savedRemittance.id;
       }
 
+      const quantityByCurrencyCode = new Map<string, number>();
       for (let index = 0; index < itemRows.length; index += 1) {
         const row = itemRows[index];
         const currency = await resolveCurrency(String(row.currencyId));
+        const currencyCode = String(
+          (currency as { currencyCode?: string }).currencyCode ?? "",
+        )
+          .trim()
+          .toUpperCase();
+        quantityByCurrencyCode.set(
+          currencyCode,
+          (quantityByCurrencyCode.get(currencyCode) ?? 0) +
+            Number(row.quantity ?? 0),
+        );
         const product = await resolveProduct(String(row.productId));
         const productEntity = await resolveProductEntity(String(row.productId));
         assertProductAvailableForContext(productEntity, {
@@ -3000,6 +3023,58 @@ export class TransactionsService {
         }
         if (savedItem.dealCoverId) {
           ttSaleItems.push(savedItem);
+        }
+      }
+
+      const tourPassengerRows = Array.isArray(transactionPayload.tourPassengers)
+        ? transactionPayload.tourPassengers
+        : [];
+      if (
+        transaction.transactionType === TransactionType.SALE &&
+        tourPassengerRows.length
+      ) {
+        if (!passengerId) {
+          throw new BadRequestException(
+            "Add the main passenger before tour passenger data",
+          );
+        }
+        assertTourPassengerQuantities(
+          tourPassengerRows,
+          quantityByCurrencyCode,
+        );
+        const tourPassengerRepo = manager.getRepository(TourPassenger);
+        for (let index = 0; index < tourPassengerRows.length; index += 1) {
+          const row = tourPassengerRows[index];
+          await tourPassengerRepo.save(
+            tourPassengerRepo.create({
+              transactionId: transaction.id,
+              transaction,
+              passengerId,
+              lineNo: Number(row.lineNo ?? index + 1) || index + 1,
+              passportNumber: normalizeNullableString(row.passportNumber),
+              passportName: normalizeNullableString(row.passportName),
+              placeOfIssue: normalizeNullableString(row.placeOfIssue),
+              dateOfIssue: excelValueToIsoDate(row.dateOfIssue),
+              dateOfExpiry: excelValueToIsoDate(row.dateOfExpiry),
+              panHolderRelationship: normalizeNullableString(
+                row.panHolderRelationship,
+              ),
+              travellerPanNumber: normalizeNullableString(row.travellerPanNumber),
+              panName: normalizeNullableString(row.panName),
+              travellerDob: excelValueToIsoDate(row.travellerDob),
+              fcnCode: normalizeNullableString(row.fcnCode)?.toUpperCase() ?? null,
+              fcnAmount:
+                row.fcnAmount === undefined || row.fcnAmount === null
+                  ? null
+                  : String(row.fcnAmount),
+              contactNo: normalizeNullableString(row.contactNo),
+              remark: normalizeNullableString(row.remark),
+              otherAdExchangeDate: excelValueToIsoDate(row.otherAdExchangeDate),
+              otherAdNameAddress: normalizeNullableString(row.otherAdNameAddress),
+              createdBy: performedById,
+              updatedBy: performedById,
+            }),
+          );
         }
       }
 
@@ -3758,11 +3833,15 @@ export class TransactionsService {
       where: { id },
       relations: {
         items: true,
+        tourPassengers: true,
         documents: true,
         additionalCharges: true,
         payments: { advanceApplication: { voucher: true } },
         postings: true,
         logs: true,
+      },
+      order: {
+        tourPassengers: { lineNo: "ASC" },
       },
     });
 

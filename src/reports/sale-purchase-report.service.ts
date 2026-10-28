@@ -12,7 +12,11 @@ import {
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { TransactionAdditionalCharge } from "../transactions/entities/transaction-additional-charge.entity";
-import { SalePurchaseReportQueryDto } from "./dto/sale-purchase-report-query.dto";
+import {
+  SalePurchaseReportDetail,
+  SalePurchaseReportGroupBy,
+  SalePurchaseReportQueryDto,
+} from "./dto/sale-purchase-report-query.dto";
 import { ReportSortBy } from "./dto/report-sort.dto";
 
 type ReportLayout = "grouped" | "flat";
@@ -28,10 +32,14 @@ type ReportRow = Record<string, string> & {
   rowType: ReportRowType;
   transactionId: string;
   partyProfileId: string;
+  branchId: string;
   sortPartyProfile: string;
   sortBranch: string;
   sortDate: string;
+  sortDateKey: string;
   sortTransactionKey: string;
+  groupKey: string;
+  groupLabel: string;
 };
 
 type ResolvedFilters = {
@@ -44,6 +52,8 @@ type ResolvedFilters = {
   partyTypeCodes: string[];
   transactionTypes: TransactionType[];
   sortBy: ReportSortBy;
+  groupBy: SalePurchaseReportGroupBy;
+  detail: SalePurchaseReportDetail;
 };
 
 const BASE_COLUMNS: ReportColumn[] = [
@@ -94,6 +104,24 @@ const formatNumber = (value: number | string | null | undefined, scale = 2) => {
   }
 
   return parsed.toFixed(scale);
+};
+
+const formatSortDateKey = (value: Date | string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
 };
 
 const formatDateOnly = (value: Date | string | null | undefined) => {
@@ -180,6 +208,37 @@ const getItemUnitAmount = (item: TransactionItem) => {
   return quantity * (rate / per);
 };
 
+const snapshotField = (
+  snapshot: Record<string, unknown> | null | undefined,
+  key: string,
+) => toText(snapshot?.[key]);
+
+const getItemTaxAmount = (item: TransactionItem) => {
+  const gst = Number(item.gstAmount ?? 0);
+  if (Number.isFinite(gst) && gst !== 0) {
+    return gst;
+  }
+
+  return [item.igstAmount, item.cgstAmount, item.sgstAmount].reduce(
+    (sum, value) => {
+      const amount = Number(value ?? 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    },
+    0,
+  );
+};
+
+const getItemLineAmount = (item: TransactionItem) => {
+  if (item.amount !== null && item.amount !== undefined && item.amount !== "") {
+    const stored = Number(item.amount);
+    if (Number.isFinite(stored)) {
+      return stored;
+    }
+  }
+
+  return getItemUnitAmount(item);
+};
+
 const getItemProfitRate = (item: TransactionItem) => {
   if (item.profit !== null && item.profit !== undefined && item.profit !== "") {
     return Number(item.profit);
@@ -239,11 +298,53 @@ const buildChargeColumns = (maxCharges: number) =>
     })),
   );
 
-const buildColumns = (maxPayments: number, maxCharges: number) => [
-  ...BASE_COLUMNS,
-  ...buildPaymentColumns(maxPayments),
-  ...buildChargeColumns(maxCharges),
+const SHORT_COLUMNS: ReportColumn[] = [
+  { key: "brnCode", label: "BRNCODE" },
+  { key: "date", label: "DATE" },
+  { key: "vno", label: "VNO" },
+  { key: "type", label: "Type" },
+  { key: "partyName", label: "Party Name" },
+  { key: "passengerName", label: "Passenger Name" },
+  { key: "cnCode", label: "Cncode" },
+  { key: "exchType", label: "Exch Type" },
+  { key: "feAmount", label: "Feamount" },
+  { key: "rate", label: "Rate" },
+  { key: "amount", label: "Amount" },
+  { key: "taxAmt", label: "taxamt" },
+  { key: "netAmt", label: "Netamt" },
+  { key: "manualBillRef", label: "Manual Bill Ref." },
+  { key: "issuerCode", label: "Issuer Code" },
+  { key: "cardNumber", label: "Card Number" },
+  { key: "profit", label: "Profit" },
+  { key: "reference", label: "Refrence" },
+  { key: "category", label: "Category" },
+  { key: "paymentByBranch", label: "Receipt / Payment By Branch" },
+  { key: "paymentDate", label: "Receive /Payment Date" },
+  { key: "paymentNumber", label: "Receipt / Payment Number" },
+  { key: "paymentInBank", label: "Receipt / Payment In Bank" },
+  { key: "paidByName", label: "Paid By / Paid To Name" },
+  { key: "paidByPan", label: "Paid By / Paid To PAN NO" },
+  { key: "chequeRef", label: "Cheque No / Bank Reference No" },
+  { key: "paymentAmount", label: "Receipt / Payment Amount" },
+  { key: "chequeDate", label: "Cheque Date" },
+  { key: "drawnOn", label: "Drawn on" },
+  { key: "narration", label: "Narration" },
+  { key: "remarks", label: "Remarks" },
 ];
+
+const buildColumns = (
+  maxPayments: number,
+  maxCharges: number,
+  detail: SalePurchaseReportDetail,
+) =>
+  detail === SalePurchaseReportDetail.SHORT ||
+  detail === SalePurchaseReportDetail.LONG
+    ? SHORT_COLUMNS.map((column) => ({ ...column }))
+    : [
+        ...BASE_COLUMNS,
+        ...buildPaymentColumns(maxPayments),
+        ...buildChargeColumns(maxCharges),
+      ];
 
 const formatTransactionTypeLabel = (transaction: Transaction) =>
   transaction.transferRequestId
@@ -313,6 +414,8 @@ export class SalePurchaseReportService {
       partyTypeCodes: query.partyTypeCodes ?? [],
       transactionTypes: query.transactionTypes ?? [],
       sortBy: query.sortBy ?? ReportSortBy.DATE_ASC,
+      groupBy: query.groupBy ?? SalePurchaseReportGroupBy.CODE,
+      detail: query.detail ?? SalePurchaseReportDetail.SHORT,
     };
   }
 
@@ -392,18 +495,35 @@ export class SalePurchaseReportService {
       });
     }
 
-    qb.orderBy(
-      `COALESCE(transaction.party_profile_snapshot->>'code', transaction.party_profile_snapshot->>'name', transaction.party_profile_id::text)`,
+    const partyOrder = `COALESCE(transaction.party_profile_snapshot->>'code', transaction.party_profile_snapshot->>'name', transaction.party_profile_id::text)`;
+    const branchOrder = `COALESCE(transaction.branch_snapshot->>'code', transaction.branch_snapshot->>'name', transaction.branch_id::text)`;
+    const dateDirection =
+      filters.sortBy === ReportSortBy.DATE_DESC ? "DESC" : "ASC";
+    if (filters.groupBy === SalePurchaseReportGroupBy.DATE) {
+      qb.orderBy("transaction.approved_at", dateDirection)
+        .addOrderBy(partyOrder, "ASC")
+        .addOrderBy(branchOrder, "ASC");
+    } else if (filters.groupBy === SalePurchaseReportGroupBy.BRANCH) {
+      qb.orderBy(branchOrder, "ASC")
+        .addOrderBy(partyOrder, "ASC")
+        .addOrderBy("transaction.approved_at", dateDirection);
+    } else {
+      qb.orderBy(partyOrder, "ASC")
+        .addOrderBy(branchOrder, "ASC")
+        .addOrderBy("transaction.approved_at", dateDirection);
+    }
+    qb.addOrderBy("transaction.created_at", "ASC").addOrderBy(
+      "transaction.number",
       "ASC",
-    )
-      .addOrderBy("transaction.approved_at", "ASC")
-      .addOrderBy("transaction.created_at", "ASC")
-      .addOrderBy("transaction.number", "ASC");
+    );
 
     return qb.getMany();
   }
 
-  private buildTransactionRows(transaction: Transaction): {
+  private buildTransactionRows(
+    transaction: Transaction,
+    groupBy: SalePurchaseReportGroupBy,
+  ): {
     groupHeaderRow: ReportRow;
     groupedRows: ReportRow[];
     flatRows: ReportRow[];
@@ -411,7 +531,7 @@ export class SalePurchaseReportService {
     maxCharges: number;
   } {
     const items = [...(transaction.items ?? [])]
-      .filter((item) => !item.cardId && !item.dealCoverId)
+      .filter((item) => !item.dealCoverId)
       .sort((left, right) => left.lineNo - right.lineNo);
     const payments = [...(transaction.payments ?? [])].sort(
       (left, right) => left.lineNo - right.lineNo,
@@ -424,6 +544,7 @@ export class SalePurchaseReportService {
     const sortDate = transactionDate
       ? new Date(transactionDate).toISOString()
       : "";
+    const sortDateKey = formatSortDateKey(transactionDate);
     const sortTransactionKey = [
       transaction.approvedAt
         ? new Date(transaction.approvedAt).toISOString()
@@ -460,21 +581,83 @@ export class SalePurchaseReportService {
       )?.code,
     );
     const partyProfileId = transaction.partyProfileId;
+    const branchId = transaction.branchId ?? "";
+    const partyProfileDisplay =
+      partyProfileLabel || partyProfileCode || partyProfileId;
+    const groupKey =
+      groupBy === SalePurchaseReportGroupBy.DATE
+        ? sortDateKey
+        : groupBy === SalePurchaseReportGroupBy.BRANCH
+          ? branchId || branchSortKey
+          : partyProfileId;
+    const groupLabel =
+      groupBy === SalePurchaseReportGroupBy.DATE
+        ? `Date: ${dateLabel || "Unknown"}`
+        : groupBy === SalePurchaseReportGroupBy.BRANCH
+          ? `Branch: ${branchLabel || branchSortKey || "Unknown"}`
+          : `Party Profile: ${partyProfileDisplay || "Unknown"}`;
+    const partySnapshot = transaction.partyProfileSnapshot as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const passengerSnapshot = transaction.passengerSnapshot as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const brnCode = branchSortKey;
+    const partyName = snapshotField(partySnapshot, "name") || partyProfileLabel;
+    const passengerName =
+      snapshotField(passengerSnapshot, "passportPassengerName") ||
+      snapshotField(passengerSnapshot, "name");
+    const paidByName = snapshotField(passengerSnapshot, "paidByPanHolderName");
+    const paidByPan = snapshotField(passengerSnapshot, "paidByPanNumber");
+    const remarks = toText(transaction.remarks);
     const manualBillBook = getManualBookLabel(transaction);
-    const groupHeaderRow: ReportRow = {
-      rowType: "GROUP",
-      transactionId: transaction.id,
+    const emptyShortTransactionFields = {
+      brnCode: "",
+      partyName: "",
+      passengerName: "",
+      manualBillRef: "",
+      paidByName: "",
+      paidByPan: "",
+      reference: "",
+      category: "",
+      narration: "",
+      remarks: "",
+    };
+    const sortFields = {
       partyProfileId,
+      branchId,
       sortPartyProfile: partyProfileLabel,
       sortBranch: branchSortKey,
       sortDate,
+      sortDateKey,
       sortTransactionKey,
-      branch: "",
-      date: "",
+      groupKey,
+      groupLabel,
+    };
+    const groupHeaderRow: ReportRow = {
+      rowType: "GROUP",
+      transactionId: transaction.id,
+      ...sortFields,
+      branch: groupBy === SalePurchaseReportGroupBy.BRANCH ? branchLabel : "",
       vno: "",
-      type: "Party Profile",
-      partyProfileCode: partyProfileCode || "",
-      partyProfileName: partyProfileLabel || partyProfileCode || partyProfileId,
+      type:
+        groupBy === SalePurchaseReportGroupBy.DATE
+          ? "Date"
+          : groupBy === SalePurchaseReportGroupBy.BRANCH
+            ? "Branch"
+            : "Party Profile",
+      partyProfileCode:
+        groupBy === SalePurchaseReportGroupBy.CODE ? partyProfileCode || "" : "",
+      partyProfileName:
+        groupBy === SalePurchaseReportGroupBy.CODE ? partyProfileDisplay : "",
+      ...emptyShortTransactionFields,
+      brnCode:
+        groupBy === SalePurchaseReportGroupBy.BRANCH ? brnCode : "",
+      date: groupBy === SalePurchaseReportGroupBy.DATE ? dateLabel : "",
+      partyName:
+        groupBy === SalePurchaseReportGroupBy.CODE ? partyName : "",
       currencyCode: "",
       productCode: "",
       quantity: "",
@@ -493,17 +676,27 @@ export class SalePurchaseReportService {
       partyProfileCode,
       partyProfileName: partyProfileLabel,
       manualBillBook,
+      brnCode,
+      partyName,
+      passengerName,
+      manualBillRef: manualBillBook,
+      paidByName,
+      paidByPan,
+      reference: "",
+      category: "",
+      narration: "",
+      remarks,
     };
-    const netAmount = items.reduce(
-      (sum, item) => sum + getItemUnitAmount(item),
-      0,
-    );
     const subtotalAmount = items.reduce(
-      (sum, item) => sum + getItemUnitAmount(item),
+      (sum, item) => sum + getItemLineAmount(item),
       0,
     );
-    const subtotalTax = 0;
-    const subtotalNet = netAmount;
+    const subtotalTax = items.reduce(
+      (sum, item) => sum + getItemTaxAmount(item),
+      0,
+    );
+    const subtotalNet = subtotalAmount + subtotalTax;
+    const netAmount = subtotalAmount;
     const subtotalProfit = items.reduce(
       (sum, item) => sum + getItemProfitRate(item),
       0,
@@ -522,6 +715,7 @@ export class SalePurchaseReportService {
           partyProfileCode: "",
           partyProfileName: "",
           manualBillBook: "",
+          ...emptyShortTransactionFields,
         };
       }
 
@@ -540,11 +734,7 @@ export class SalePurchaseReportService {
       const row: ReportRow = {
         rowType: "ITEM",
         transactionId: transaction.id,
-        partyProfileId,
-        sortPartyProfile: partyProfileLabel,
-        sortBranch: branchSortKey,
-        sortDate,
-        sortTransactionKey,
+        ...sortFields,
         ...transactionColumns,
         currencyCode: toText(
           (item.currencySnapshot as Record<string, unknown> | null | undefined)
@@ -563,7 +753,78 @@ export class SalePurchaseReportService {
             ? formatNumber(netAmount, 2)
             : "0.00",
         profit: formatNumber(getItemProfitRate(item), 2),
+        cnCode: snapshotField(
+          item.currencySnapshot as Record<string, unknown> | null | undefined,
+          "code",
+        ),
+        exchType: snapshotField(
+          item.productSnapshot as Record<string, unknown> | null | undefined,
+          "code",
+        ),
+        feAmount: formatNumber(item.quantity, 7),
+        taxAmt: formatNumber(getItemTaxAmount(item), 2),
+        netAmt: formatNumber(
+          getItemLineAmount(item) + getItemTaxAmount(item),
+          2,
+        ),
+        issuerCode: snapshotField(
+          item.issuerPartyProfileSnapshot as
+            | Record<string, unknown>
+            | null
+            | undefined,
+          "code",
+        ),
+        cardNumber: snapshotField(
+          item.cardSnapshot as Record<string, unknown> | null | undefined,
+          "maskedCardNumber",
+        ),
+        remarks: transactionColumns.remarks || toText(item.remarks),
       } as ReportRow;
+
+      const showPayment = repeatTransactionData || rowIndex === 0;
+      const visiblePayments = showPayment ? payments : [];
+      const joinPaymentText = (values: string[]) =>
+        values.map((value) => value.trim()).filter(Boolean).join(" / ");
+      row.paymentByBranch = joinPaymentText(
+        visiblePayments.map((payment) => toText(payment.branchName)),
+      );
+      row.paymentDate = "";
+      row.paymentNumber = joinPaymentText(
+        visiblePayments.map((payment) => getPaymentNumber(payment)),
+      );
+      row.paymentInBank = joinPaymentText(
+        visiblePayments.map((payment) =>
+          getSnapshotLabel(
+            payment.accountSnapshot as
+              | Record<string, unknown>
+              | null
+              | undefined,
+          ),
+        ),
+      );
+      row.chequeRef = joinPaymentText(
+        visiblePayments.map((payment) =>
+          formatPaymentChequeReference(
+            payment.paymentMethod,
+            payment.referenceNumber,
+          ),
+        ),
+      );
+      row.paymentAmount = visiblePayments.length
+        ? formatNumber(
+            visiblePayments.reduce(
+              (sum, payment) => sum + Number(payment.amount ?? 0),
+              0,
+            ),
+            2,
+          )
+        : "";
+      row.chequeDate = joinPaymentText(
+        visiblePayments.map((payment) => formatDateOnly(payment.referenceDate)),
+      );
+      row.drawnOn = joinPaymentText(
+        visiblePayments.map((payment) => toText(payment.drawnOn)),
+      );
 
       payments.forEach((payment, index) => {
         const prefix = `payment_${index + 1}`;
@@ -621,11 +882,7 @@ export class SalePurchaseReportService {
       const subtotalRow: ReportRow = {
         rowType: "SUBTOTAL",
         transactionId: transaction.id,
-        partyProfileId,
-        sortPartyProfile: partyProfileLabel,
-        sortBranch: branchSortKey,
-        sortDate,
-        sortTransactionKey,
+        ...sortFields,
         branch: "",
         date: "",
         vno: "",
@@ -644,6 +901,26 @@ export class SalePurchaseReportService {
         netAmount: formatNumber(subtotalNet, 2),
         manualBillBook: "",
         profit: formatNumber(subtotalProfit, 2),
+        ...emptyShortTransactionFields,
+        exchType: "Subtotal",
+        feAmount: formatNumber(
+          items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0),
+          7,
+        ),
+        taxAmt: formatNumber(subtotalTax, 2),
+        netAmt: formatNumber(subtotalNet, 2),
+        issuerCode: "",
+        cardNumber: "",
+        paymentByBranch: "",
+        paymentDate: "",
+        paymentNumber: "",
+        paymentInBank: "",
+        paidByName: "",
+        paidByPan: "",
+        chequeRef: "",
+        paymentAmount: "",
+        chequeDate: "",
+        drawnOn: "",
       } as ReportRow;
 
       payments.forEach((_, index) => {
@@ -683,7 +960,7 @@ export class SalePurchaseReportService {
     const transactions = await this.loadTransactions(filters);
 
     const prepared = transactions.map((transaction) =>
-      this.buildTransactionRows(transaction),
+      this.buildTransactionRows(transaction, filters.groupBy),
     );
     const maxPayments = prepared.reduce(
       (max, item) => Math.max(max, item.maxPayments),
@@ -693,54 +970,55 @@ export class SalePurchaseReportService {
       (max, item) => Math.max(max, item.maxCharges),
       0,
     );
-    const columns = buildColumns(maxPayments, maxCharges);
+    const columns = buildColumns(maxPayments, maxCharges, filters.detail);
 
+    const compareText = (left: string, right: string) =>
+      left.localeCompare(right);
     const sortedPrepared = [...prepared].sort((left, right) => {
-      if (
-        left.groupHeaderRow.sortPartyProfile !==
-        right.groupHeaderRow.sortPartyProfile
-      ) {
-        return left.groupHeaderRow.sortPartyProfile.localeCompare(
-          right.groupHeaderRow.sortPartyProfile,
-        );
-      }
-
-      if (left.groupHeaderRow.sortBranch !== right.groupHeaderRow.sortBranch) {
-        return left.groupHeaderRow.sortBranch.localeCompare(
-          right.groupHeaderRow.sortBranch,
-        );
-      }
-
-      if (left.groupHeaderRow.sortDate !== right.groupHeaderRow.sortDate) {
-        return compareIsoDateStrings(
-          left.groupHeaderRow.sortDate,
-          right.groupHeaderRow.sortDate,
+      const leftHeader = left.groupHeaderRow;
+      const rightHeader = right.groupHeaderRow;
+      const byCode = () =>
+        compareText(leftHeader.sortPartyProfile, rightHeader.sortPartyProfile);
+      const byBranch = () =>
+        compareText(leftHeader.sortBranch, rightHeader.sortBranch);
+      const byDate = () =>
+        compareIsoDateStrings(
+          leftHeader.sortDateKey,
+          rightHeader.sortDateKey,
           filters.sortBy,
         );
-      }
-
-      if (
-        left.groupHeaderRow.sortTransactionKey !==
-        right.groupHeaderRow.sortTransactionKey
-      ) {
-        return left.groupHeaderRow.sortTransactionKey.localeCompare(
-          right.groupHeaderRow.sortTransactionKey,
+      const byTransaction = () =>
+        compareText(
+          leftHeader.sortTransactionKey,
+          rightHeader.sortTransactionKey,
         );
+      const checks =
+        filters.groupBy === SalePurchaseReportGroupBy.DATE
+          ? [byDate, byCode, byBranch, byTransaction]
+          : filters.groupBy === SalePurchaseReportGroupBy.BRANCH
+            ? [byBranch, byCode, byDate, byTransaction]
+            : [byCode, byBranch, byDate, byTransaction];
+
+      for (const check of checks) {
+        const result = check();
+        if (result !== 0) {
+          return result;
+        }
       }
 
       return 0;
     });
 
     const rows: ReportRow[] = [];
-    let lastPartyProfileId = "";
+    let lastGroupKey = "";
 
     sortedPrepared.forEach((item) => {
       if (
         layout === "grouped" &&
-        item.groupHeaderRow.partyProfileId !== lastPartyProfileId
+        item.groupHeaderRow.groupKey !== lastGroupKey
       ) {
         rows.push(item.groupHeaderRow);
-        lastPartyProfileId = item.groupHeaderRow.partyProfileId;
+        lastGroupKey = item.groupHeaderRow.groupKey;
       }
 
       rows.push(...(layout === "grouped" ? item.groupedRows : item.flatRows));
@@ -750,6 +1028,7 @@ export class SalePurchaseReportService {
       columns,
       rows,
       layout,
+      message: "",
     };
   }
 
@@ -759,6 +1038,29 @@ export class SalePurchaseReportService {
     format: ReportExportFormat,
   ) {
     const report = await this.buildReport(query, layout);
+    const detail = query.detail ?? SalePurchaseReportDetail.SHORT;
+    if (report.message && !report.rows.length) {
+      const filename = `sale-purchase-report-${detail}-${layout}.${format === "csv" ? "csv" : "xlsx"}`;
+      if (format === "csv") {
+        return {
+          buffer: Buffer.from(report.message, "utf8"),
+          contentType: "text/csv; charset=utf-8",
+          filename,
+        };
+      }
+      const worksheet = XLSX.utils.aoa_to_sheet([[report.message]]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "SalePurchase");
+      return {
+        buffer: XLSX.write(workbook, {
+          type: "buffer",
+          bookType: "xlsx",
+        }) as Buffer,
+        contentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename,
+      };
+    }
     const sheetData = report.rows.map((row) => {
       const output: Record<string, string> = {};
       report.columns.forEach((column) => {
@@ -775,7 +1077,7 @@ export class SalePurchaseReportService {
       return {
         buffer: Buffer.from(csv, "utf8"),
         contentType: "text/csv; charset=utf-8",
-        filename: `sale-purchase-report-${layout}.csv`,
+        filename: `sale-purchase-report-${detail}-${layout}.csv`,
       };
     }
 
@@ -793,7 +1095,7 @@ export class SalePurchaseReportService {
       buffer,
       contentType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      filename: `sale-purchase-report-${layout}.xlsx`,
+      filename: `sale-purchase-report-${detail}-${layout}.xlsx`,
     };
   }
 }

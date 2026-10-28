@@ -20,6 +20,17 @@ export enum SalePurchaseReportFormat {
   XLSX = "xlsx",
 }
 
+export enum SalePurchaseReportGroupBy {
+  CODE = "code",
+  DATE = "date",
+  BRANCH = "branch",
+}
+
+export enum SalePurchaseReportDetail {
+  SHORT = "short",
+  LONG = "long",
+}
+
 const parseArrayQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
     return undefined;
@@ -108,6 +119,24 @@ export class SalePurchaseReportQueryDto {
   @IsEnum(SalePurchaseReportLayout)
   @IsOptional()
   layout?: SalePurchaseReportLayout;
+
+  @ApiPropertyOptional({
+    description: "Group rows by party code, date, or branch",
+    enum: SalePurchaseReportGroupBy,
+    default: SalePurchaseReportGroupBy.CODE,
+  })
+  @IsEnum(SalePurchaseReportGroupBy)
+  @IsOptional()
+  groupBy?: SalePurchaseReportGroupBy;
+
+  @ApiPropertyOptional({
+    description: "Short or long column set",
+    enum: SalePurchaseReportDetail,
+    default: SalePurchaseReportDetail.SHORT,
+  })
+  @IsEnum(SalePurchaseReportDetail)
+  @IsOptional()
+  detail?: SalePurchaseReportDetail;
 
   @ApiPropertyOptional({
     description: "Sort order",
