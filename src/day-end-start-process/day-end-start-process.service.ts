@@ -30,28 +30,20 @@ const POLICY_CATEGORY_CODE = "DAY_END_POLICY";
 const normalizeDateOnly = (value: Date | string): string =>
   normalizeDateOnlyInput(value);
 
-const parseDateOnly = (value: string | null | undefined): Date | undefined => {
-  const normalized = String(value ?? "").trim();
-  if (!normalized) {
-    return undefined;
+/** Clamp yyyy-MM-dd strings without Date timezone conversion. */
+const clampDateOnly = (
+  value: string,
+  min?: string | null,
+  max?: string | null,
+): string => {
+  let next = value;
+  if (min && next < min) {
+    next = min;
   }
-
-  const parsed = new Date(`${normalized.slice(0, 10)}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
-};
-
-const formatDateOnly = (date: Date): string => normalizeDateOnly(date);
-
-const clampDate = (date: Date, min?: Date, max?: Date): Date => {
-  if (min && date < min) {
-    return min;
+  if (max && next > max) {
+    next = max;
   }
-
-  if (max && date > max) {
-    return max;
-  }
-
-  return date;
+  return next;
 };
 
 @Injectable()
@@ -208,26 +200,28 @@ export class DayEndStartProcessService {
     activeMonthlyLock: { fromDate: string; toDate: string } | null,
     transactionDataLock: { lockedThroughDate: string } | null,
   ): string {
-    const currentDate = parseDateOnly(currentBusinessDate);
+    const currentDate = normalizeDateOnly(currentBusinessDate);
     if (!currentDate) {
       return currentBusinessDate;
     }
 
-    let suggested = currentBusinessDate;
+    let suggested = currentDate;
 
     if (activeMonthlyLock) {
-      const minDate = parseDateOnly(activeMonthlyLock.fromDate);
-      const maxDate = parseDateOnly(activeMonthlyLock.toDate);
-      suggested = formatDateOnly(clampDate(currentDate, minDate, maxDate));
+      // Keep comparisons on yyyy-MM-dd strings. Parsing local midnight and
+      // formatting as UTC shifts the calendar day on Asia/Kolkata servers.
+      suggested = clampDateOnly(
+        suggested,
+        normalizeDateOnly(activeMonthlyLock.fromDate),
+        normalizeDateOnly(activeMonthlyLock.toDate),
+      );
     }
 
     if (transactionDataLock?.lockedThroughDate) {
       const earliestAllowed = getEarliestAllowedPunchDate(
         transactionDataLock.lockedThroughDate,
       );
-      const suggestedDate = parseDateOnly(suggested);
-      const earliestDate = parseDateOnly(earliestAllowed);
-      if (suggestedDate && earliestDate && suggestedDate < earliestDate) {
+      if (earliestAllowed && suggested < earliestAllowed) {
         return earliestAllowed;
       }
     }
