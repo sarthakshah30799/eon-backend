@@ -138,4 +138,32 @@ describe("DayEndStartProcessService post-process enqueue", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(dayEndEventRepository.manager.transaction).not.toHaveBeenCalled();
   });
+
+  it("keeps suggested transaction date on the business calendar day when a monthly lock is active", () => {
+    const suggested = (service as any).resolveSuggestedTransactionDate(
+      "2026-10-26",
+      { fromDate: "2026-10-01", toDate: "2026-10-31" },
+      null,
+    );
+
+    expect(suggested).toBe("2026-10-26");
+  });
+
+  it("clamps suggested transaction date to the monthly lock window without shifting days", () => {
+    expect(
+      (service as any).resolveSuggestedTransactionDate(
+        "2026-10-26",
+        { fromDate: "2026-10-01", toDate: "2026-10-25" },
+        null,
+      ),
+    ).toBe("2026-10-25");
+
+    expect(
+      (service as any).resolveSuggestedTransactionDate(
+        "2026-09-30",
+        { fromDate: "2026-10-01", toDate: "2026-10-31" },
+        null,
+      ),
+    ).toBe("2026-10-01");
+  });
 });
