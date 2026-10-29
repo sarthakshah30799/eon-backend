@@ -1,0 +1,7 @@
+export enum AdvanceAdjustmentStatus {
+  DRAFT = "DRAFT",
+  COMPLETED = "COMPLETED",
+  CANCELLED = "CANCELLED",
+}
+
+export const ADVANCE_ADJUSTMENT_NUMBER_SERIES = "ADVANCE_ADJUSTMENT";
