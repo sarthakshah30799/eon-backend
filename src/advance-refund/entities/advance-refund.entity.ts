@@ -11,6 +11,7 @@ import {
   AdvanceRefundType,
 } from "../advance-refund.enums";
 import { AdvanceRefundItem } from "./advance-refund-item.entity";
+import { AdvanceRefundPrintLog } from "./advance-refund-print-log.entity";
 
 @Entity("advance_refund")
 @Index("UQ_advance_refund_number", ["number"], { unique: true })
@@ -151,4 +152,7 @@ export class AdvanceRefund extends BaseEntity {
     cascade: true,
   })
   items: AdvanceRefundItem[];
+
+  @OneToMany(() => AdvanceRefundPrintLog, (log) => log.advanceRefund)
+  printLogs: AdvanceRefundPrintLog[];
 }

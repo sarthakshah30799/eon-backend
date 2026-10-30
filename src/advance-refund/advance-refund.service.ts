@@ -24,6 +24,7 @@ import {
   normalizePagination,
   PaginatedResponseDto,
 } from "../common/pagination";
+import { User } from "../users/user.entity";
 import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_REFUND_NUMBER_SERIES,
@@ -44,6 +45,7 @@ import { HonourAdvanceRefundDto } from "./dto/honour-advance-refund.dto";
 import { RecordAdvanceRefundPrintDto } from "./dto/record-advance-refund-print.dto";
 import { AdvanceRefund } from "./entities/advance-refund.entity";
 import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
+import { AdvanceRefundPrintLog } from "./entities/advance-refund-print-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -81,6 +83,8 @@ export class AdvanceRefundService {
     private readonly advanceRefundRepository: Repository<AdvanceRefund>,
     @InjectRepository(AdvanceRefundItem, "database2")
     private readonly itemRepository: Repository<AdvanceRefundItem>,
+    @InjectRepository(AdvanceRefundPrintLog, "database2")
+    private readonly printLogRepository: Repository<AdvanceRefundPrintLog>,
     @InjectRepository(AccountProfile)
     private readonly accountRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
@@ -93,6 +97,8 @@ export class AdvanceRefundService {
     private readonly counterRepository: Repository<Counter>,
     @InjectRepository(BranchCounter)
     private readonly branchCounterRepository: Repository<BranchCounter>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
@@ -103,6 +109,14 @@ export class AdvanceRefundService {
     const actorId = normalize(session.userId);
     if (!actorId) throw new ForbiddenException("Authenticated user required");
     return actorId;
+  }
+
+  private async resolveActorName(actorId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: actorId },
+      select: { id: true, name: true, email: true },
+    });
+    return normalize(user?.name) || normalize(user?.email) || null;
   }
 
   private isPrivileged(session: VoucherSession) {
@@ -786,7 +800,8 @@ export class AdvanceRefundService {
   ): Promise<AdvanceRefundResponseDto> {
     const advanceRefund = await this.advanceRefundRepository.findOne({
       where: { id },
-      relations: ["items"],
+      relations: ["items", "printLogs"],
+      order: { printLogs: { performedAt: "DESC" } },
     });
 
     if (!advanceRefund) {
@@ -854,17 +869,36 @@ export class AdvanceRefundService {
         ? AdvanceRefundPrintCopyType.CUSTOMER_COPY
         : AdvanceRefundPrintCopyType.DUPLICATE_COPY;
     const printCount = existingPrintCount + 1;
+    const message =
+      copyType === AdvanceRefundPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
+    const performedByName = await this.resolveActorName(actorId);
 
     await this.advanceRefundRepository.update(id, {
       printCount,
       updatedBy: actorId,
     });
+    await this.printLogRepository.save(
+      this.printLogRepository.create({
+        advanceRefundId: id,
+        copyType,
+        message,
+        metadata: {
+          copyType,
+          requestedCopyType: dto.copyType ?? null,
+          sendEmail: Boolean(dto.sendEmail),
+          subject: dto.subject || null,
+        },
+        performedById: actorId,
+        performedByName,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
 
     return {
-      message:
-        copyType === AdvanceRefundPrintCopyType.DUPLICATE_COPY
-          ? "Duplicate copy printed"
-          : "Original copy printed",
+      message,
       copyType,
       printCount,
     };

@@ -9,11 +9,16 @@ import { Counter } from "../counters/counter.entity";
 import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start-process.module";
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { PartyProfileModule } from "../party-profiles/party-profile.module";
+import { User } from "../users/user.entity";
 import { UserModule } from "../users/user.module";
 import { VoucherModule } from "../vouchers/voucher.module";
 import { CreditRequestFundController } from "./credit-request-fund.controller";
 import { CreditRequestFundService } from "./credit-request-fund.service";
-import { CreditRequestFund, CreditRequestFundItem } from "./entities";
+import {
+  CreditRequestFund,
+  CreditRequestFundItem,
+  CreditRequestFundPrintLog,
+} from "./entities";
 
 @Module({
   imports: [
@@ -29,9 +34,10 @@ import { CreditRequestFund, CreditRequestFundItem } from "./entities";
       Branch,
       Counter,
       BranchCounter,
+      User,
     ]),
     TypeOrmModule.forFeature(
-      [CreditRequestFund, CreditRequestFundItem],
+      [CreditRequestFund, CreditRequestFundItem, CreditRequestFundPrintLog],
       "database2",
     ),
   ],

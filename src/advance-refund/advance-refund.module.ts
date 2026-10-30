@@ -13,8 +13,10 @@ import { UserModule } from "../users/user.module";
 import { VoucherModule } from "../vouchers/voucher.module";
 import { AdvanceRefundController } from "./advance-refund.controller";
 import { AdvanceRefundService } from "./advance-refund.service";
+import { User } from "../users/user.entity";
 import { AdvanceRefund } from "./entities/advance-refund.entity";
 import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
+import { AdvanceRefundPrintLog } from "./entities/advance-refund-print-log.entity";
 
 @Module({
   imports: [
@@ -30,8 +32,12 @@ import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
       Branch,
       Counter,
       BranchCounter,
+      User,
     ]),
-    TypeOrmModule.forFeature([AdvanceRefund, AdvanceRefundItem], "database2"),
+    TypeOrmModule.forFeature(
+      [AdvanceRefund, AdvanceRefundItem, AdvanceRefundPrintLog],
+      "database2",
+    ),
   ],
   controllers: [AdvanceRefundController],
   providers: [AdvanceRefundService],

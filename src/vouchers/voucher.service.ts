@@ -31,6 +31,7 @@ import {
 } from "../transactions/transactions.enums";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
+import { User } from "../users/user.entity";
 import {
   AdvanceApplicationPayloadDto,
   AvailableAdvanceQueryDto,
@@ -211,6 +212,8 @@ export class VoucherService implements OnModuleInit {
     private readonly counterRepository: Repository<Counter>,
     @InjectRepository(BranchCounter)
     private readonly branchCounterRepository: Repository<BranchCounter>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
@@ -241,6 +244,14 @@ export class VoucherService implements OnModuleInit {
     const userId = normalize(session.userId);
     if (!userId) throw new BadRequestException("User session not found");
     return userId;
+  }
+
+  private async resolveActorName(actorId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: actorId },
+      select: { id: true, name: true, email: true },
+    });
+    return normalize(user?.name) || normalize(user?.email) || null;
   }
 
   private async findDefaultActiveCounterIdForBranch(
@@ -2195,6 +2206,7 @@ export class VoucherService implements OnModuleInit {
     const voucher = await this.voucherRepository.findOne({
       where: { id, voucherType: type },
       relations: ["items", "logs"],
+      order: { logs: { performedAt: "DESC" } },
     });
     if (!voucher) throw new NotFoundException("Voucher not found");
     const privileged = Boolean(
@@ -2257,6 +2269,7 @@ export class VoucherService implements OnModuleInit {
       copyType === VoucherPrintCopyType.DUPLICATE_COPY
         ? "Duplicate copy printed"
         : "Original copy printed";
+    const performedByName = await this.resolveActorName(actorId);
 
     await this.voucherLogRepository.save(
       this.voucherLogRepository.create({
@@ -2272,6 +2285,7 @@ export class VoucherService implements OnModuleInit {
           emailMessageId: null,
         },
         performedById: actorId,
+        performedByName,
         createdBy: actorId,
         updatedBy: actorId,
       }),
