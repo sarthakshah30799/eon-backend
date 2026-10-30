@@ -2,6 +2,7 @@ import { Column, Entity, Index, OneToMany } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { AdvanceAdjustmentStatus } from "../advance-adjustment.enums";
 import { AdvanceAdjustmentItem } from "./advance-adjustment-item.entity";
+import { AdvanceAdjustmentPrintLog } from "./advance-adjustment-print-log.entity";
 
 @Entity("advance_adjustment")
 @Index("UQ_advance_adjustment_number", ["number"], { unique: true })
@@ -63,8 +64,14 @@ export class AdvanceAdjustment extends BaseEntity {
   @Column({ type: "text" })
   narration: string;
 
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
+
   @OneToMany(() => AdvanceAdjustmentItem, (item) => item.advanceAdjustment, {
     cascade: true,
   })
   items: AdvanceAdjustmentItem[];
+
+  @OneToMany(() => AdvanceAdjustmentPrintLog, (log) => log.advanceAdjustment)
+  printLogs: AdvanceAdjustmentPrintLog[];
 }

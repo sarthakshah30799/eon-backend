@@ -27,9 +27,11 @@ import {
   TransactionStatus,
   TransactionType,
 } from "../transactions/transactions.enums";
+import { User } from "../users/user.entity";
 import { VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_ADJUSTMENT_NUMBER_SERIES,
+  AdvanceAdjustmentPrintCopyType,
   AdvanceAdjustmentStatus,
 } from "./advance-adjustment.enums";
 import {
@@ -41,8 +43,10 @@ import {
   OutstandingSaleForAdjustmentDto,
 } from "./dto/advance-adjustment-response.dto";
 import { CreateAdvanceAdjustmentDto } from "./dto/create-advance-adjustment.dto";
+import { RecordAdvanceAdjustmentPrintDto } from "./dto/record-advance-adjustment-print.dto";
 import { AdvanceAdjustment } from "./entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "./entities/advance-adjustment-item.entity";
+import { AdvanceAdjustmentPrintLog } from "./entities/advance-adjustment-print-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -77,6 +81,8 @@ export class AdvanceAdjustmentService {
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(AdvanceAdjustment, "database2")
     private readonly advanceAdjustmentRepository: Repository<AdvanceAdjustment>,
+    @InjectRepository(AdvanceAdjustmentPrintLog, "database2")
+    private readonly printLogRepository: Repository<AdvanceAdjustmentPrintLog>,
     @InjectRepository(Transaction, "database2")
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(PartyProfile)
@@ -87,6 +93,8 @@ export class AdvanceAdjustmentService {
     private readonly counterRepository: Repository<Counter>,
     @InjectRepository(BranchCounter)
     private readonly branchCounterRepository: Repository<BranchCounter>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
@@ -96,6 +104,14 @@ export class AdvanceAdjustmentService {
     const actorId = normalize(session.userId);
     if (!actorId) throw new ForbiddenException("Authenticated user required");
     return actorId;
+  }
+
+  private async resolveActorName(actorId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: actorId },
+      select: { id: true, name: true, email: true },
+    });
+    return normalize(user?.name) || normalize(user?.email) || null;
   }
 
   private isPrivileged(session: VoucherSession) {
@@ -267,6 +283,7 @@ export class AdvanceAdjustmentService {
         status: AdvanceAdjustmentStatus.DRAFT,
         totalAdjustmentAmount: "0.00",
         narration,
+        printCount: 0,
       });
 
       const savedHeader = await headerRepo2.save(header);
@@ -359,6 +376,9 @@ export class AdvanceAdjustmentService {
             slug: locked.slug,
             finalAmount: locked.finalAmount,
             partyProfileId: locked.partyProfileId,
+            partyProfileSnapshot: locked.partyProfileSnapshot ?? null,
+            agentProfileSnapshot: locked.agentProfileSnapshot ?? null,
+            passengerSnapshot: locked.passengerSnapshot ?? null,
           },
           finalAmount: money(cents(locked.finalAmount)),
           outstandingAmount: money(outstandingCents),
@@ -450,7 +470,8 @@ export class AdvanceAdjustmentService {
   ): Promise<AdvanceAdjustmentResponseDto> {
     const record = await this.advanceAdjustmentRepository.findOne({
       where: { id },
-      relations: ["items"],
+      relations: ["items", "printLogs"],
+      order: { printLogs: { performedAt: "DESC" } },
     });
 
     if (!record) {
@@ -469,6 +490,88 @@ export class AdvanceAdjustmentService {
     }
 
     return AdvanceAdjustmentResponseDto.fromEntity(record);
+  }
+
+  async recordPrint(
+    id: string,
+    dto: RecordAdvanceAdjustmentPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: AdvanceAdjustmentPrintCopyType;
+    printCount: number;
+  }> {
+    const actorId = this.getActor(session);
+    const record = await this.advanceAdjustmentRepository.findOne({
+      where: { id },
+    });
+
+    if (!record) {
+      throw new NotFoundException("Advance adjustment not found");
+    }
+
+    const isHo = await this.isHoApprover(session);
+    if (
+      !isHo &&
+      session.activeBranchId &&
+      record.branchId !== session.activeBranchId
+    ) {
+      throw new ForbiddenException(
+        "You do not have access to advance adjustments of other branches",
+      );
+    }
+
+    if (record.status !== AdvanceAdjustmentStatus.COMPLETED) {
+      throw new BadRequestException(
+        "Only completed advance adjustments can be printed",
+      );
+    }
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for advance adjustment print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = record.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? AdvanceAdjustmentPrintCopyType.CUSTOMER_COPY
+        : AdvanceAdjustmentPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+    const message =
+      copyType === AdvanceAdjustmentPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
+    const performedByName = await this.resolveActorName(actorId);
+
+    await this.advanceAdjustmentRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+    await this.printLogRepository.save(
+      this.printLogRepository.create({
+        advanceAdjustmentId: id,
+        copyType,
+        message,
+        metadata: {
+          copyType,
+          requestedCopyType: dto.copyType ?? null,
+          sendEmail: Boolean(dto.sendEmail),
+          subject: dto.subject || null,
+        },
+        performedById: actorId,
+        performedByName,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+
+    return {
+      message,
+      copyType,
+      printCount,
+    };
   }
 
   async getOutstandingSales(

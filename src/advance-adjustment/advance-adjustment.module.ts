@@ -8,11 +8,13 @@ import { DayEndStartProcessModule } from "../day-end-start-process/day-end-start
 import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { PartyProfileModule } from "../party-profiles/party-profile.module";
 import { Transaction } from "../transactions/entities/transaction.entity";
+import { User } from "../users/user.entity";
 import { UserModule } from "../users/user.module";
 import { AdvanceAdjustmentController } from "./advance-adjustment.controller";
 import { AdvanceAdjustmentService } from "./advance-adjustment.service";
 import { AdvanceAdjustment } from "./entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "./entities/advance-adjustment-item.entity";
+import { AdvanceAdjustmentPrintLog } from "./entities/advance-adjustment-print-log.entity";
 
 @Module({
   imports: [
@@ -25,9 +27,15 @@ import { AdvanceAdjustmentItem } from "./entities/advance-adjustment-item.entity
       Branch,
       Counter,
       BranchCounter,
+      User,
     ]),
     TypeOrmModule.forFeature(
-      [AdvanceAdjustment, AdvanceAdjustmentItem, Transaction],
+      [
+        AdvanceAdjustment,
+        AdvanceAdjustmentItem,
+        AdvanceAdjustmentPrintLog,
+        Transaction,
+      ],
       "database2",
     ),
   ],

@@ -137,3 +137,34 @@ export class ApproveCreditRequestFundDto {
   @IsDateString()
   transactionDate?: string;
 }
+
+export class RecordCreditRequestFundPrintDto {
+  @ApiPropertyOptional({ enum: ["CUSTOMER_COPY", "DUPLICATE_COPY"] })
+  @IsOptional()
+  @IsIn(["CUSTOMER_COPY", "DUPLICATE_COPY"])
+  copyType?: "CUSTOMER_COPY" | "DUPLICATE_COPY";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  recipientEmail?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subject?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  text?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  html?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  sendEmail?: boolean;
+}

@@ -19,6 +19,7 @@ import {
 } from "./dto/advance-refund-query.dto";
 import { CreateAdvanceRefundDto } from "./dto/create-advance-refund.dto";
 import { HonourAdvanceRefundDto } from "./dto/honour-advance-refund.dto";
+import { RecordAdvanceRefundPrintDto } from "./dto/record-advance-refund-print.dto";
 
 @ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
@@ -41,6 +42,16 @@ export class AdvanceRefundController {
     @Session() session: any,
   ) {
     return this.service.honour(id, dto, session);
+  }
+
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Advance Refund voucher print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordAdvanceRefundPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(id, dto, session);
   }
 
   @Get()
