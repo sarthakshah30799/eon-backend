@@ -48,6 +48,7 @@ import { TtDealModule } from "./tt-deal/tt-deal.module";
 import { VoucherModule } from "./vouchers/voucher.module";
 import { CreditRequestFundModule } from "./credit-request-fund/credit-request-fund.module";
 import { AdvanceRefundModule } from "./advance-refund/advance-refund.module";
+import { AdvanceAdjustmentModule } from "./advance-adjustment/advance-adjustment.module";
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { AdvanceRefundModule } from "./advance-refund/advance-refund.module";
     VoucherModule,
     CreditRequestFundModule,
     AdvanceRefundModule,
+    AdvanceAdjustmentModule,
     MigrationToolModule,
     TransactionDataLocksModule,
     ReportsModule,
