@@ -63,6 +63,9 @@ export class AdvanceAdjustment extends BaseEntity {
   @Column({ type: "text" })
   narration: string;
 
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
+
   @OneToMany(() => AdvanceAdjustmentItem, (item) => item.advanceAdjustment, {
     cascade: true,
   })

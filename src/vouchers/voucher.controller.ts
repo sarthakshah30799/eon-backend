@@ -192,6 +192,20 @@ export class DepositWithdrawalVoucherController {
       session,
     );
   }
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Deposit / Withdrawal voucher print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordVoucherPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(
+      VoucherType.DEPOSIT_WITHDRAWAL,
+      id,
+      dto,
+      session,
+    );
+  }
   @Get(":id") find(
     @Param("id", ParseUUIDPipe) id: string,
     @Session() session: any,
@@ -239,6 +253,16 @@ export class AdviceVoucherController {
     @Session() session: any,
   ) {
     return this.service.honourAdvice(id, dto ?? {}, session);
+  }
+
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Advice of Debit/Credit voucher print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordVoucherPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(VoucherType.ADVICE, id, dto, session);
   }
 
   @Get(":id") find(

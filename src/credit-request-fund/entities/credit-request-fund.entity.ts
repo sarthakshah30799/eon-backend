@@ -158,6 +158,9 @@ export class CreditRequestFund extends BaseEntity {
   })
   requestingPaymentVoucherSnapshot: TransactionReferenceSnapshotValue | null;
 
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
+
   @OneToMany(() => CreditRequestFundItem, (item) => item.creditRequestFund, {
     cascade: false,
   })

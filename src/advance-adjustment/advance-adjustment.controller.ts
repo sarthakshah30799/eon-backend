@@ -18,6 +18,7 @@ import {
   OutstandingSalesForAdjustmentQueryDto,
 } from "./dto/advance-adjustment-query.dto";
 import { CreateAdvanceAdjustmentDto } from "./dto/create-advance-adjustment.dto";
+import { RecordAdvanceAdjustmentPrintDto } from "./dto/record-advance-adjustment-print.dto";
 
 @ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard, PermissionsGuard)
@@ -30,6 +31,16 @@ export class AdvanceAdjustmentController {
   @ApiOperation({ summary: "Create Advance Adjustment" })
   create(@Body() dto: CreateAdvanceAdjustmentDto, @Session() session: any) {
     return this.service.create(dto, session);
+  }
+
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Advance Adjustment memo print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordAdvanceAdjustmentPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(id, dto, session);
   }
 
   @Get()

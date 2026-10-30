@@ -51,6 +51,7 @@ export class AdvanceAdjustmentResponseDto {
   status: AdvanceAdjustmentStatus;
   @ApiProperty() totalAdjustmentAmount: string;
   @ApiProperty() narration: string;
+  @ApiProperty() printCount: number;
   @ApiProperty({ type: [AdvanceAdjustmentItemResponseDto] })
   items: AdvanceAdjustmentItemResponseDto[];
   @ApiProperty() createdAt: Date;
@@ -74,6 +75,7 @@ export class AdvanceAdjustmentResponseDto {
     dto.status = entity.status;
     dto.totalAdjustmentAmount = entity.totalAdjustmentAmount;
     dto.narration = entity.narration;
+    dto.printCount = entity.printCount ?? 0;
     dto.items = Array.isArray(entity.items)
       ? entity.items.map((i) => AdvanceAdjustmentItemResponseDto.fromEntity(i))
       : [];

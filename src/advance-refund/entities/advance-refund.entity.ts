@@ -144,6 +144,9 @@ export class AdvanceRefund extends BaseEntity {
   @Column({ type: "uuid", nullable: true, name: "ho_payment_voucher_id" })
   hoPaymentVoucherId: string | null;
 
+  @Column({ type: "integer", name: "print_count", default: 0 })
+  printCount: number;
+
   @OneToMany(() => AdvanceRefundItem, (item) => item.advanceRefund, {
     cascade: true,
   })

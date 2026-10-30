@@ -30,6 +30,7 @@ import {
 import { VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_ADJUSTMENT_NUMBER_SERIES,
+  AdvanceAdjustmentPrintCopyType,
   AdvanceAdjustmentStatus,
 } from "./advance-adjustment.enums";
 import {
@@ -41,6 +42,7 @@ import {
   OutstandingSaleForAdjustmentDto,
 } from "./dto/advance-adjustment-response.dto";
 import { CreateAdvanceAdjustmentDto } from "./dto/create-advance-adjustment.dto";
+import { RecordAdvanceAdjustmentPrintDto } from "./dto/record-advance-adjustment-print.dto";
 import { AdvanceAdjustment } from "./entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "./entities/advance-adjustment-item.entity";
 
@@ -267,6 +269,7 @@ export class AdvanceAdjustmentService {
         status: AdvanceAdjustmentStatus.DRAFT,
         totalAdjustmentAmount: "0.00",
         narration,
+        printCount: 0,
       });
 
       const savedHeader = await headerRepo2.save(header);
@@ -359,6 +362,9 @@ export class AdvanceAdjustmentService {
             slug: locked.slug,
             finalAmount: locked.finalAmount,
             partyProfileId: locked.partyProfileId,
+            partyProfileSnapshot: locked.partyProfileSnapshot ?? null,
+            agentProfileSnapshot: locked.agentProfileSnapshot ?? null,
+            passengerSnapshot: locked.passengerSnapshot ?? null,
           },
           finalAmount: money(cents(locked.finalAmount)),
           outstandingAmount: money(outstandingCents),
@@ -469,6 +475,69 @@ export class AdvanceAdjustmentService {
     }
 
     return AdvanceAdjustmentResponseDto.fromEntity(record);
+  }
+
+  async recordPrint(
+    id: string,
+    dto: RecordAdvanceAdjustmentPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: AdvanceAdjustmentPrintCopyType;
+    printCount: number;
+  }> {
+    const actorId = this.getActor(session);
+    const record = await this.advanceAdjustmentRepository.findOne({
+      where: { id },
+    });
+
+    if (!record) {
+      throw new NotFoundException("Advance adjustment not found");
+    }
+
+    const isHo = await this.isHoApprover(session);
+    if (
+      !isHo &&
+      session.activeBranchId &&
+      record.branchId !== session.activeBranchId
+    ) {
+      throw new ForbiddenException(
+        "You do not have access to advance adjustments of other branches",
+      );
+    }
+
+    if (record.status !== AdvanceAdjustmentStatus.COMPLETED) {
+      throw new BadRequestException(
+        "Only completed advance adjustments can be printed",
+      );
+    }
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for advance adjustment print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = record.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? AdvanceAdjustmentPrintCopyType.CUSTOMER_COPY
+        : AdvanceAdjustmentPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+
+    await this.advanceAdjustmentRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+
+    return {
+      message:
+        copyType === AdvanceAdjustmentPrintCopyType.DUPLICATE_COPY
+          ? "Duplicate copy printed"
+          : "Original copy printed",
+      copyType,
+      printCount,
+    };
   }
 
   async getOutstandingSales(

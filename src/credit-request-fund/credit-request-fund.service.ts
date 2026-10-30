@@ -39,6 +39,7 @@ import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import { VoucherType } from "../vouchers/voucher.enums";
 import {
   CREDIT_REQUEST_FUND_NUMBER_SERIES,
+  CreditRequestFundPrintCopyType,
   CreditRequestFundStatus,
 } from "./credit-request-fund.enums";
 import {
@@ -46,6 +47,7 @@ import {
   CreateCreditRequestFundDto,
   CreateCreditRequestFundItemDto,
   CreditRequestFundListQueryDto,
+  RecordCreditRequestFundPrintDto,
   RejectCreditRequestFundDto,
   UpdateCreditRequestFundDto,
 } from "./dto/credit-request-fund.dto";
@@ -711,6 +713,7 @@ export class CreditRequestFundService {
           travelerPanName: resolved.travelerPanName,
           travelerPanDob: resolved.travelerPanDob,
           ...resolved.totals,
+          printCount: 0,
           createdBy: resolved.actorId,
           updatedBy: resolved.actorId,
         }),
@@ -901,6 +904,52 @@ export class CreditRequestFundService {
   async findById(id: string, session: VoucherSession) {
     this.getActor(session);
     return this.findEntity(id, session);
+  }
+
+  async recordPrint(
+    id: string,
+    dto: RecordCreditRequestFundPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: CreditRequestFundPrintCopyType;
+    printCount: number;
+  }> {
+    const actorId = this.getActor(session);
+    const header = await this.findEntity(id, session);
+
+    if (header.status !== CreditRequestFundStatus.APPROVE) {
+      throw new BadRequestException(
+        "Only approved credit request funds can be printed",
+      );
+    }
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for credit request fund print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = header.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? CreditRequestFundPrintCopyType.CUSTOMER_COPY
+        : CreditRequestFundPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+
+    await this.headerRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+
+    return {
+      message:
+        copyType === CreditRequestFundPrintCopyType.DUPLICATE_COPY
+          ? "Duplicate copy printed"
+          : "Original copy printed",
+      copyType,
+      printCount,
+    };
   }
 
   async list(query: CreditRequestFundListQueryDto, session: VoucherSession) {

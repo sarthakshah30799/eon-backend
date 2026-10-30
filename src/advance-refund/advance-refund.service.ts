@@ -28,6 +28,7 @@ import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_REFUND_NUMBER_SERIES,
   AdvanceRefundPayoutSource,
+  AdvanceRefundPrintCopyType,
   AdvanceRefundStatus,
   AdvanceRefundType,
 } from "./advance-refund.enums";
@@ -40,6 +41,7 @@ import {
 } from "./dto/advance-refund-response.dto";
 import { CreateAdvanceRefundDto } from "./dto/create-advance-refund.dto";
 import { HonourAdvanceRefundDto } from "./dto/honour-advance-refund.dto";
+import { RecordAdvanceRefundPrintDto } from "./dto/record-advance-refund-print.dto";
 import { AdvanceRefund } from "./entities/advance-refund.entity";
 import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
 
@@ -447,6 +449,7 @@ export class AdvanceRefundService {
         paymentVoucherId: null,
         adviceVoucherId: null,
         hoPaymentVoucherId: null,
+        printCount: 0,
       });
 
       const savedAdvanceRefund = await headerRepo2.save(advanceRefund);
@@ -802,6 +805,69 @@ export class AdvanceRefundService {
     }
 
     return AdvanceRefundResponseDto.fromEntity(advanceRefund);
+  }
+
+  async recordPrint(
+    id: string,
+    dto: RecordAdvanceRefundPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: AdvanceRefundPrintCopyType;
+    printCount: number;
+  }> {
+    const actorId = this.getActor(session);
+    const advanceRefund = await this.advanceRefundRepository.findOne({
+      where: { id },
+    });
+
+    if (!advanceRefund) {
+      throw new NotFoundException("Advance refund not found");
+    }
+
+    const isHo = await this.isHoApprover(session);
+    if (
+      !isHo &&
+      session.activeBranchId &&
+      advanceRefund.branchId !== session.activeBranchId
+    ) {
+      throw new ForbiddenException(
+        "You do not have access to advance refunds of other branches",
+      );
+    }
+
+    if (advanceRefund.status !== AdvanceRefundStatus.COMPLETED) {
+      throw new BadRequestException(
+        "Only completed advance refunds can be printed",
+      );
+    }
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for advance refund print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = advanceRefund.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? AdvanceRefundPrintCopyType.CUSTOMER_COPY
+        : AdvanceRefundPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+
+    await this.advanceRefundRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+
+    return {
+      message:
+        copyType === AdvanceRefundPrintCopyType.DUPLICATE_COPY
+          ? "Duplicate copy printed"
+          : "Original copy printed",
+      copyType,
+      printCount,
+    };
   }
 
   async getAvailableAdvances(

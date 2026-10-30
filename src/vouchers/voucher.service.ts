@@ -2225,10 +2225,12 @@ export class VoucherService implements OnModuleInit {
     if (
       type !== VoucherType.RECEIPT &&
       type !== VoucherType.PAYMENT &&
-      type !== VoucherType.JOURNAL
+      type !== VoucherType.JOURNAL &&
+      type !== VoucherType.DEPOSIT_WITHDRAWAL &&
+      type !== VoucherType.ADVICE
     ) {
       throw new BadRequestException(
-        "Print is only supported for Receipt, Payment, and Journal vouchers",
+        "Print is only supported for Receipt, Payment, Journal, Deposit/Withdrawal, and Advice vouchers",
       );
     }
 
