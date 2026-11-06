@@ -49,6 +49,7 @@ import { VoucherModule } from "./vouchers/voucher.module";
 import { CreditRequestFundModule } from "./credit-request-fund/credit-request-fund.module";
 import { AdvanceRefundModule } from "./advance-refund/advance-refund.module";
 import { AdvanceAdjustmentModule } from "./advance-adjustment/advance-adjustment.module";
+import { BankReconciliationModule } from "./bank-reconciliation/bank-reconciliation.module";
 
 @Module({
   imports: [
@@ -93,6 +94,7 @@ import { AdvanceAdjustmentModule } from "./advance-adjustment/advance-adjustment
     CreditRequestFundModule,
     AdvanceRefundModule,
     AdvanceAdjustmentModule,
+    BankReconciliationModule,
     MigrationToolModule,
     TransactionDataLocksModule,
     ReportsModule,

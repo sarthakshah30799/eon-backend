@@ -23,6 +23,8 @@ import { CurrencyBalanceReportController } from "./currency-balance-report.contr
 import { CurrencyBalanceReportService } from "./currency-balance-report.service";
 import { BankReportController } from "./bank-report.controller";
 import { BankReportService } from "./bank-report.service";
+import { BankReconciliationReportController } from "./bank-reconciliation-report.controller";
+import { BankReconciliationReportService } from "./bank-reconciliation-report.service";
 import { CashReportController } from "./cash-report.controller";
 import { CashReportService } from "./cash-report.service";
 import { GenerateLedgerController } from "./generate-ledger.controller";
@@ -55,6 +57,14 @@ import { OutstandingTransactionReportController } from "./outstanding-transactio
 import { OutstandingTransactionReportService } from "./outstanding-transaction-report.service";
 import { AgeingReportController } from "./ageing-report.controller";
 import { AgeingReportService } from "./ageing-report.service";
+import { AfcReconciliationReportController } from "./afc-reconciliation-report.controller";
+import { AfcReconciliationReportService } from "./afc-reconciliation-report.service";
+import { GeneralLedgerReportController } from "./general-ledger-report.controller";
+import { GeneralLedgerReportService } from "./general-ledger-report.service";
+import { TrialBalanceReportController } from "./trial-balance-report.controller";
+import { TrialBalanceReportService } from "./trial-balance-report.service";
+import { FinalAccountReportController } from "./final-account-report.controller";
+import { FinalAccountReportService } from "./final-account-report.service";
 import { TtReportController } from "./tt-report.controller";
 import { TtReportService } from "./tt-report.service";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
@@ -93,6 +103,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     SpecialReportController,
     CurrencyBalanceReportController,
     BankReportController,
+    BankReconciliationReportController,
     CashReportController,
     GenerateLedgerController,
     CardUnsettledReportController,
@@ -109,6 +120,10 @@ import { UserRole } from "../user-roles/user-role.entity";
     TourPaxReportController,
     OutstandingTransactionReportController,
     AgeingReportController,
+    AfcReconciliationReportController,
+    GeneralLedgerReportController,
+    TrialBalanceReportController,
+    FinalAccountReportController,
     TtReportController,
   ],
   providers: [
@@ -118,6 +133,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     SpecialReportService,
     CurrencyBalanceReportService,
     BankReportService,
+    BankReconciliationReportService,
     CashReportService,
     GenerateLedgerService,
     CardUnsettledReportService,
@@ -134,6 +150,10 @@ import { UserRole } from "../user-roles/user-role.entity";
     TourPaxReportService,
     OutstandingTransactionReportService,
     AgeingReportService,
+    AfcReconciliationReportService,
+    GeneralLedgerReportService,
+    TrialBalanceReportService,
+    FinalAccountReportService,
     TtReportService,
   ],
 })
