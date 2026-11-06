@@ -120,9 +120,6 @@ export class TransactionPayment extends BaseEntity {
   @Column({ type: "text", name: "reconciliation_remarks", nullable: true })
   reconciliationRemarks: string | null;
 
-  @Column({ type: "boolean", name: "is_cleared", default: false })
-  isCleared: boolean;
-
   @Column({ type: "boolean", name: "is_dishonored", default: false })
   isDishonored: boolean;
 
