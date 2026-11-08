@@ -35,10 +35,12 @@ import {
   VoucherEntryDirection,
   isVoucherAccountItemType,
 } from "../vouchers/voucher.enums";
+import { User } from "../users/user.entity";
 import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import { VoucherType } from "../vouchers/voucher.enums";
 import {
   CREDIT_REQUEST_FUND_NUMBER_SERIES,
+  CreditRequestFundPrintCopyType,
   CreditRequestFundStatus,
 } from "./credit-request-fund.enums";
 import {
@@ -46,11 +48,13 @@ import {
   CreateCreditRequestFundDto,
   CreateCreditRequestFundItemDto,
   CreditRequestFundListQueryDto,
+  RecordCreditRequestFundPrintDto,
   RejectCreditRequestFundDto,
   UpdateCreditRequestFundDto,
 } from "./dto/credit-request-fund.dto";
 import { CreditRequestFund } from "./entities/credit-request-fund.entity";
 import { CreditRequestFundItem } from "./entities/credit-request-fund-item.entity";
+import { CreditRequestFundPrintLog } from "./entities/credit-request-fund-print-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -93,6 +97,8 @@ export class CreditRequestFundService {
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(CreditRequestFund, "database2")
     private readonly headerRepository: Repository<CreditRequestFund>,
+    @InjectRepository(CreditRequestFundPrintLog, "database2")
+    private readonly printLogRepository: Repository<CreditRequestFundPrintLog>,
     @InjectRepository(AccountProfile)
     private readonly accountRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
@@ -105,6 +111,8 @@ export class CreditRequestFundService {
     private readonly counterRepository: Repository<Counter>,
     @InjectRepository(BranchCounter)
     private readonly branchCounterRepository: Repository<BranchCounter>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
@@ -115,6 +123,14 @@ export class CreditRequestFundService {
     const actorId = normalize(session.userId);
     if (!actorId) throw new ForbiddenException("Authenticated user required");
     return actorId;
+  }
+
+  private async resolveActorName(actorId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: actorId },
+      select: { id: true, name: true, email: true },
+    });
+    return normalize(user?.name) || normalize(user?.email) || null;
   }
 
   private isPrivileged(session: VoucherSession) {
@@ -711,6 +727,7 @@ export class CreditRequestFundService {
           travelerPanName: resolved.travelerPanName,
           travelerPanDob: resolved.travelerPanDob,
           ...resolved.totals,
+          printCount: 0,
           createdBy: resolved.actorId,
           updatedBy: resolved.actorId,
         }),
@@ -885,7 +902,8 @@ export class CreditRequestFundService {
   private async findEntity(id: string, session: VoucherSession) {
     const header = await this.headerRepository.findOne({
       where: { id },
-      relations: ["items"],
+      relations: ["items", "printLogs"],
+      order: { printLogs: { performedAt: "DESC" } },
     });
     if (!header) throw new NotFoundException("Credit Request Fund not found");
     if (!this.isPrivileged(session)) {
@@ -901,6 +919,71 @@ export class CreditRequestFundService {
   async findById(id: string, session: VoucherSession) {
     this.getActor(session);
     return this.findEntity(id, session);
+  }
+
+  async recordPrint(
+    id: string,
+    dto: RecordCreditRequestFundPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: CreditRequestFundPrintCopyType;
+    printCount: number;
+  }> {
+    const actorId = this.getActor(session);
+    const header = await this.findEntity(id, session);
+
+    if (header.status !== CreditRequestFundStatus.APPROVE) {
+      throw new BadRequestException(
+        "Only approved credit request funds can be printed",
+      );
+    }
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for credit request fund print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = header.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? CreditRequestFundPrintCopyType.CUSTOMER_COPY
+        : CreditRequestFundPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+    const message =
+      copyType === CreditRequestFundPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
+    const performedByName = await this.resolveActorName(actorId);
+
+    await this.headerRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+    await this.printLogRepository.save(
+      this.printLogRepository.create({
+        creditRequestFundId: id,
+        copyType,
+        message,
+        metadata: {
+          copyType,
+          requestedCopyType: dto.copyType ?? null,
+          sendEmail: Boolean(dto.sendEmail),
+          subject: dto.subject || null,
+        },
+        performedById: actorId,
+        performedByName,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+
+    return {
+      message,
+      copyType,
+      printCount,
+    };
   }
 
   async list(query: CreditRequestFundListQueryDto, session: VoucherSession) {

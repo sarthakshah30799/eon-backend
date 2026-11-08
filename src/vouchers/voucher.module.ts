@@ -11,6 +11,7 @@ import { PartyProfile } from "../party-profiles/party-profile.entity";
 import { PartyProfileModule } from "../party-profiles/party-profile.module";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
+import { User } from "../users/user.entity";
 import { UserModule } from "../users/user.module";
 import {
   AccountingVoucher,
@@ -43,6 +44,7 @@ import { VoucherAccountPostingWorker } from "./voucher-account-posting.worker";
       Branch,
       Counter,
       BranchCounter,
+      User,
     ]),
     TypeOrmModule.forFeature(
       [

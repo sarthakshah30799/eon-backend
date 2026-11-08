@@ -39,6 +39,9 @@ export class AccountingVoucherLog extends BaseEntity {
   @Column({ type: "uuid", name: "performed_by_id", nullable: true })
   performedById: string | null;
 
+  @Column({ type: "citext", name: "performed_by_name", nullable: true })
+  performedByName: string | null;
+
   @Column({ type: "timestamptz", name: "performed_at", default: () => "now()" })
   performedAt: Date;
 }

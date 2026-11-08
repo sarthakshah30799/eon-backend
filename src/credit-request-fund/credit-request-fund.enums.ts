@@ -5,4 +5,9 @@ export enum CreditRequestFundStatus {
   CANCELLED = "CANCELLED",
 }
 
+export enum CreditRequestFundPrintCopyType {
+  CUSTOMER_COPY = "CUSTOMER_COPY",
+  DUPLICATE_COPY = "DUPLICATE_COPY",
+}
+
 export const CREDIT_REQUEST_FUND_NUMBER_SERIES = "CREDIT_REQUEST_FUND";

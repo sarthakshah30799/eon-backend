@@ -1,7 +1,42 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { AdvanceAdjustmentStatus } from "../advance-adjustment.enums";
+import {
+  AdvanceAdjustmentPrintCopyType,
+  AdvanceAdjustmentStatus,
+} from "../advance-adjustment.enums";
 import { AdvanceAdjustment } from "../entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "../entities/advance-adjustment-item.entity";
+import { AdvanceAdjustmentPrintLog } from "../entities/advance-adjustment-print-log.entity";
+
+export class AdvanceAdjustmentPrintLogResponseDto {
+  @ApiProperty() id: string;
+  @ApiProperty() advanceAdjustmentId: string;
+  @ApiProperty({ enum: AdvanceAdjustmentPrintCopyType })
+  copyType: AdvanceAdjustmentPrintCopyType;
+  @ApiProperty() message: string;
+  @ApiProperty({ nullable: true }) metadata: Record<string, unknown> | null;
+  @ApiProperty({ nullable: true }) performedById: string | null;
+  @ApiProperty({ nullable: true }) performedByName: string | null;
+  @ApiProperty() performedAt: Date;
+  @ApiProperty() createdAt: Date;
+  @ApiProperty() updatedAt: Date;
+
+  static fromEntity(
+    entity: AdvanceAdjustmentPrintLog,
+  ): AdvanceAdjustmentPrintLogResponseDto {
+    const dto = new AdvanceAdjustmentPrintLogResponseDto();
+    dto.id = entity.id;
+    dto.advanceAdjustmentId = entity.advanceAdjustmentId;
+    dto.copyType = entity.copyType;
+    dto.message = entity.message;
+    dto.metadata = entity.metadata;
+    dto.performedById = entity.performedById;
+    dto.performedByName = entity.performedByName;
+    dto.performedAt = entity.performedAt;
+    dto.createdAt = entity.createdAt;
+    dto.updatedAt = entity.updatedAt;
+    return dto;
+  }
+}
 
 export class AdvanceAdjustmentItemResponseDto {
   @ApiProperty() id: string;
@@ -51,6 +86,9 @@ export class AdvanceAdjustmentResponseDto {
   status: AdvanceAdjustmentStatus;
   @ApiProperty() totalAdjustmentAmount: string;
   @ApiProperty() narration: string;
+  @ApiProperty() printCount: number;
+  @ApiProperty({ type: [AdvanceAdjustmentPrintLogResponseDto] })
+  printLogs: AdvanceAdjustmentPrintLogResponseDto[];
   @ApiProperty({ type: [AdvanceAdjustmentItemResponseDto] })
   items: AdvanceAdjustmentItemResponseDto[];
   @ApiProperty() createdAt: Date;
@@ -74,6 +112,12 @@ export class AdvanceAdjustmentResponseDto {
     dto.status = entity.status;
     dto.totalAdjustmentAmount = entity.totalAdjustmentAmount;
     dto.narration = entity.narration;
+    dto.printCount = entity.printCount ?? 0;
+    dto.printLogs = Array.isArray(entity.printLogs)
+      ? entity.printLogs.map((log) =>
+          AdvanceAdjustmentPrintLogResponseDto.fromEntity(log),
+        )
+      : [];
     dto.items = Array.isArray(entity.items)
       ? entity.items.map((i) => AdvanceAdjustmentItemResponseDto.fromEntity(i))
       : [];

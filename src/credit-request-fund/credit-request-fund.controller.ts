@@ -18,6 +18,7 @@ import {
   ApproveCreditRequestFundDto,
   CreateCreditRequestFundDto,
   CreditRequestFundListQueryDto,
+  RecordCreditRequestFundPrintDto,
   RejectCreditRequestFundDto,
   UpdateCreditRequestFundDto,
 } from "./dto/credit-request-fund.dto";
@@ -60,6 +61,16 @@ export class CreditRequestFundController {
     @Session() session: any,
   ) {
     return this.service.update(id, dto, session);
+  }
+
+  @Post(":id/print")
+  @ApiOperation({ summary: "Record Credit Request Fund print" })
+  recordPrint(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: RecordCreditRequestFundPrintDto,
+    @Session() session: any,
+  ) {
+    return this.service.recordPrint(id, dto, session);
   }
 
   @Post(":id/cancel")

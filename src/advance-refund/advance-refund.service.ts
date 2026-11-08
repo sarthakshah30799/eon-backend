@@ -24,10 +24,12 @@ import {
   normalizePagination,
   PaginatedResponseDto,
 } from "../common/pagination";
+import { User } from "../users/user.entity";
 import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_REFUND_NUMBER_SERIES,
   AdvanceRefundPayoutSource,
+  AdvanceRefundPrintCopyType,
   AdvanceRefundStatus,
   AdvanceRefundType,
 } from "./advance-refund.enums";
@@ -40,8 +42,10 @@ import {
 } from "./dto/advance-refund-response.dto";
 import { CreateAdvanceRefundDto } from "./dto/create-advance-refund.dto";
 import { HonourAdvanceRefundDto } from "./dto/honour-advance-refund.dto";
+import { RecordAdvanceRefundPrintDto } from "./dto/record-advance-refund-print.dto";
 import { AdvanceRefund } from "./entities/advance-refund.entity";
 import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
+import { AdvanceRefundPrintLog } from "./entities/advance-refund-print-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -79,6 +83,8 @@ export class AdvanceRefundService {
     private readonly advanceRefundRepository: Repository<AdvanceRefund>,
     @InjectRepository(AdvanceRefundItem, "database2")
     private readonly itemRepository: Repository<AdvanceRefundItem>,
+    @InjectRepository(AdvanceRefundPrintLog, "database2")
+    private readonly printLogRepository: Repository<AdvanceRefundPrintLog>,
     @InjectRepository(AccountProfile)
     private readonly accountRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
@@ -91,6 +97,8 @@ export class AdvanceRefundService {
     private readonly counterRepository: Repository<Counter>,
     @InjectRepository(BranchCounter)
     private readonly branchCounterRepository: Repository<BranchCounter>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
@@ -101,6 +109,14 @@ export class AdvanceRefundService {
     const actorId = normalize(session.userId);
     if (!actorId) throw new ForbiddenException("Authenticated user required");
     return actorId;
+  }
+
+  private async resolveActorName(actorId: string) {
+    const user = await this.userRepository.findOne({
+      where: { id: actorId },
+      select: { id: true, name: true, email: true },
+    });
+    return normalize(user?.name) || normalize(user?.email) || null;
   }
 
   private isPrivileged(session: VoucherSession) {
@@ -447,6 +463,7 @@ export class AdvanceRefundService {
         paymentVoucherId: null,
         adviceVoucherId: null,
         hoPaymentVoucherId: null,
+        printCount: 0,
       });
 
       const savedAdvanceRefund = await headerRepo2.save(advanceRefund);
@@ -783,7 +800,8 @@ export class AdvanceRefundService {
   ): Promise<AdvanceRefundResponseDto> {
     const advanceRefund = await this.advanceRefundRepository.findOne({
       where: { id },
-      relations: ["items"],
+      relations: ["items", "printLogs"],
+      order: { printLogs: { performedAt: "DESC" } },
     });
 
     if (!advanceRefund) {
@@ -802,6 +820,88 @@ export class AdvanceRefundService {
     }
 
     return AdvanceRefundResponseDto.fromEntity(advanceRefund);
+  }
+
+  async recordPrint(
+    id: string,
+    dto: RecordAdvanceRefundPrintDto,
+    session: VoucherSession,
+  ): Promise<{
+    message: string;
+    copyType: AdvanceRefundPrintCopyType;
+    printCount: number;
+  }> {
+    const actorId = this.getActor(session);
+    const advanceRefund = await this.advanceRefundRepository.findOne({
+      where: { id },
+    });
+
+    if (!advanceRefund) {
+      throw new NotFoundException("Advance refund not found");
+    }
+
+    const isHo = await this.isHoApprover(session);
+    if (
+      !isHo &&
+      session.activeBranchId &&
+      advanceRefund.branchId !== session.activeBranchId
+    ) {
+      throw new ForbiddenException(
+        "You do not have access to advance refunds of other branches",
+      );
+    }
+
+    if (advanceRefund.status !== AdvanceRefundStatus.COMPLETED) {
+      throw new BadRequestException(
+        "Only completed advance refunds can be printed",
+      );
+    }
+
+    if (dto.sendEmail) {
+      throw new BadRequestException(
+        "Email delivery for advance refund print is not enabled yet",
+      );
+    }
+
+    const existingPrintCount = advanceRefund.printCount ?? 0;
+    const copyType =
+      existingPrintCount === 0
+        ? AdvanceRefundPrintCopyType.CUSTOMER_COPY
+        : AdvanceRefundPrintCopyType.DUPLICATE_COPY;
+    const printCount = existingPrintCount + 1;
+    const message =
+      copyType === AdvanceRefundPrintCopyType.DUPLICATE_COPY
+        ? "Duplicate copy printed"
+        : "Original copy printed";
+    const performedByName = await this.resolveActorName(actorId);
+
+    await this.advanceRefundRepository.update(id, {
+      printCount,
+      updatedBy: actorId,
+    });
+    await this.printLogRepository.save(
+      this.printLogRepository.create({
+        advanceRefundId: id,
+        copyType,
+        message,
+        metadata: {
+          copyType,
+          requestedCopyType: dto.copyType ?? null,
+          sendEmail: Boolean(dto.sendEmail),
+          subject: dto.subject || null,
+        },
+        performedById: actorId,
+        performedByName,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+
+    return {
+      message,
+      copyType,
+      printCount,
+    };
   }
 
   async getAvailableAdvances(

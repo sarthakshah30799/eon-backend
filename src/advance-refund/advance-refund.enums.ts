@@ -15,4 +15,9 @@ export enum AdvanceRefundPayoutSource {
   HO_PAYOUT = "HO_PAYOUT",
 }
 
+export enum AdvanceRefundPrintCopyType {
+  CUSTOMER_COPY = "CUSTOMER_COPY",
+  DUPLICATE_COPY = "DUPLICATE_COPY",
+}
+
 export const ADVANCE_REFUND_NUMBER_SERIES = "ADVANCE_REFUND";
