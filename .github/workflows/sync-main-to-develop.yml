@@ -1,0 +1,41 @@
+name: Sync main to Destination develop
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Sync to Destination develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Destination develop
+        env:
+          DEST_REPO_TOKEN: ${{ secrets.DEST_REPO_TOKEN }}
+        run: |
+          if [ -z "$DEST_REPO_TOKEN" ]; then
+            echo "::error::Secret DEST_REPO_TOKEN is missing! Please configure it in your repository Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          TARGET_REPO="${{ secrets.DEST_REPO }}"
+          if [ -z "$TARGET_REPO" ]; then
+            TARGET_REPO="Maraekat-Infotech-Ltd/webeon-backend"
+          fi
+
+          CLEAN_REPO=$(echo "$TARGET_REPO" | sed -e 's|^https://github.com/||' -e 's|\.git$||')
+
+          echo "Configuring remote for https://github.com/${CLEAN_REPO}..."
+          git remote add destination "https://x-access-token:${DEST_REPO_TOKEN}@github.com/${CLEAN_REPO}.git"
+
+          echo "Pushing main to develop on destination..."
+          git push destination main:develop --force
+          echo "Sync completed successfully!"
+
