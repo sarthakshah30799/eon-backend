@@ -15,6 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Push to Destination develop
         env:
@@ -33,9 +34,8 @@ jobs:
           CLEAN_REPO=$(echo "$TARGET_REPO" | sed -e 's|^https://github.com/||' -e 's|\.git$||')
 
           echo "Configuring remote for https://github.com/${CLEAN_REPO}..."
-          git remote add destination "https://x-access-token:${DEST_REPO_TOKEN}@github.com/${CLEAN_REPO}.git"
+          git remote add destination "https://sarthakshah30799:${DEST_REPO_TOKEN}@github.com/${CLEAN_REPO}.git"
 
           echo "Pushing main to develop on destination..."
           git push destination main:develop --force
           echo "Sync completed successfully!"
-
