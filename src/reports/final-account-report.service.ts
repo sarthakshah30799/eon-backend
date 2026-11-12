@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { SessionContext } from "../auth/types/session-context";
 import { Branch } from "../branches/branch.entity";
+import { Product } from "../products/product.entity";
 import { TransactionPostingDirection } from "../transactions/transactions.enums";
 import { UserRole } from "../user-roles/user-role.entity";
 import { CardSettlementReportFormat } from "./dto/card-settlement-report-query.dto";
@@ -14,6 +15,11 @@ import {
   FinalAccountStatementType,
 } from "./dto/final-account-report-query.dto";
 import { resolveFlmAccessibleBranchIds } from "./flm-report-access.helpers";
+import {
+  applyCodeBasedProfitMergeTargets,
+  applyProfitMergeToBuckets,
+  resolveProfitMergeTargetsFromProducts,
+} from "./profit-merge.util";
 
 type ReportColumn = { key: string; label: string };
 
@@ -59,18 +65,19 @@ const CREDIT_COLUMNS: ReportColumn[] = [
   { key: "creditAmount", label: "Amount" },
 ];
 
+// Stock/transfer plumbing only — keep settlement (PUR*/PRO*) on the Trading statement.
 const TECHNICAL_SLUGS = [
   "CARD_STOCK",
   "CARD_TRANSFER_OUT",
   "CARD_TRANSFER_IN",
   "CARD_STOCK_LOAD",
   "CARD_SELL",
-  "CARD_SETTLE",
-  "CM_SETTLE",
-  "TT_SETTLE",
   "CARD_RETURN",
   "CARD_VOID",
 ];
+
+const isTradingAccountCode = (accountCode: string) =>
+  /^(PUR|SAL|SELL|PRO)/i.test(accountCode);
 
 const toText = (value: unknown) => String(value ?? "").trim();
 
@@ -115,6 +122,8 @@ export class FinalAccountReportService {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   async buildReport(
@@ -133,6 +142,7 @@ export class FinalAccountReportService {
     const scope = query.scope ?? FinalAccountReportScope.BRANCH;
     const statementType =
       query.statementType ?? FinalAccountStatementType.TRADING;
+    const mergeProfit = query.mergeProfit === true;
     const branchIds = await resolveFlmAccessibleBranchIds(
       this.userRoleRepository,
       query.branchIds ?? [],
@@ -140,7 +150,13 @@ export class FinalAccountReportService {
     );
 
     if (statementType !== FinalAccountStatementType.TRADING) {
-      return this.stubResponse(startDate, endDate, scope, statementType);
+      return this.stubResponse(
+        startDate,
+        endDate,
+        scope,
+        statementType,
+        mergeProfit,
+      );
     }
 
     const accounts = await this.resolveTradingAccounts();
@@ -149,6 +165,7 @@ export class FinalAccountReportService {
         startDate,
         endDate,
         scope,
+        mergeProfit,
         "No TRADING accounts available for the selected filters.",
       );
     }
@@ -157,7 +174,7 @@ export class FinalAccountReportService {
     const accountIds = accounts.map((account) => account.id);
     const branchMetaById = await this.resolveBranchMeta(branchIds);
 
-    const [openingRows, periodRows] = await Promise.all([
+    const [openingRows, periodRows, productMergeMap] = await Promise.all([
       this.collectAggregates({
         accountIds,
         branchIds,
@@ -169,14 +186,38 @@ export class FinalAccountReportService {
         startDate,
         endDate,
       }),
+      mergeProfit
+        ? resolveProfitMergeTargetsFromProducts({
+            productRepository: this.productRepository,
+            database2: this.database2,
+            branchIds,
+            startDate,
+            endDate,
+            accountById,
+            technicalSlugs: TECHNICAL_SLUGS,
+          })
+        : Promise.resolve(new Map<string, string>()),
     ]);
 
-    const buckets = this.mergeBuckets({
+    const profitMergeMap = mergeProfit
+      ? applyCodeBasedProfitMergeTargets(accountById, productMergeMap)
+      : productMergeMap;
+
+    let buckets = this.mergeBuckets({
       scope,
       openingRows,
       periodRows,
       branchMetaById,
     });
+
+    if (mergeProfit && profitMergeMap.size) {
+      buckets = applyProfitMergeToBuckets({
+        buckets,
+        profitMergeMap,
+        branchMetaById,
+        accountById,
+      });
+    }
 
     const sections = this.buildTradingSections({
       scope,
@@ -189,6 +230,7 @@ export class FinalAccountReportService {
       endDate,
       scope,
       statementType,
+      mergeProfit,
       message: sections.length
         ? ""
         : "No trading account rows for the selected filters.",
@@ -256,12 +298,14 @@ export class FinalAccountReportService {
     endDate: string,
     scope: FinalAccountReportScope,
     statementType: FinalAccountStatementType,
+    mergeProfit: boolean,
   ) {
     return {
       startDate,
       endDate,
       scope,
       statementType,
+      mergeProfit,
       message:
         "This statement type is not available yet. Select Trading to view the report.",
       debitColumns: DEBIT_COLUMNS.map((column) => ({ ...column })),
@@ -274,6 +318,7 @@ export class FinalAccountReportService {
     startDate: string,
     endDate: string,
     scope: FinalAccountReportScope,
+    mergeProfit: boolean,
     message: string,
   ) {
     return {
@@ -281,6 +326,7 @@ export class FinalAccountReportService {
       endDate,
       scope,
       statementType: FinalAccountStatementType.TRADING,
+      mergeProfit,
       message,
       debitColumns: DEBIT_COLUMNS.map((column) => ({ ...column })),
       creditColumns: CREDIT_COLUMNS.map((column) => ({ ...column })),
@@ -289,29 +335,61 @@ export class FinalAccountReportService {
   }
 
   private async resolveTradingAccounts(): Promise<AccountMeta[]> {
-    const accounts = await this.accountRepository
-      .createQueryBuilder("account")
-      .leftJoinAndSelect("account.financialCode", "financialCode")
-      .leftJoinAndSelect("financialCode.financialType", "financialType")
-      .where("account.active = true")
-      .andWhere("account.deleted_at IS NULL")
-      .orderBy("account.accountCode", "ASC")
-      .getMany();
+    const [accounts, products] = await Promise.all([
+      this.accountRepository
+        .createQueryBuilder("account")
+        .leftJoinAndSelect("account.financialCode", "financialCode")
+        .leftJoinAndSelect("financialCode.financialType", "financialType")
+        .where("account.active = true")
+        .andWhere("account.deleted_at IS NULL")
+        .orderBy("account.accountCode", "ASC")
+        .getMany(),
+      this.productRepository.find({
+        relations: ["profitAc", "saleAc", "purchaseAc", "bulkSaleAc", "bulkProficAc"],
+      }),
+    ]);
 
-    return accounts
-      .filter((account) => {
-        const financialType = account.financialCode?.financialType;
-        if (!financialType) return false;
-        return isTradingType(
-          toText(financialType.label),
-          toText(financialType.value),
-        );
-      })
-      .map((account) => ({
+    const productTradingAccountIds = new Set<string>();
+    for (const product of products) {
+      for (const account of [
+        product.profitAc,
+        product.saleAc,
+        product.purchaseAc,
+        product.bulkSaleAc,
+        product.bulkProficAc,
+      ]) {
+        if (account?.id) productTradingAccountIds.add(account.id);
+      }
+    }
+
+    const selected = new Map<string, AccountMeta>();
+    for (const account of accounts) {
+      const accountCode = toText(account.accountCode);
+      const financialType = account.financialCode?.financialType;
+      const tradingType = financialType
+        ? isTradingType(
+            toText(financialType.label),
+            toText(financialType.value),
+          )
+        : false;
+      // Include mis-tagged sale/purchase/profit ledgers (e.g. SALCN as Balance Sheet).
+      if (
+        !tradingType &&
+        !productTradingAccountIds.has(account.id) &&
+        !isTradingAccountCode(accountCode)
+      ) {
+        continue;
+      }
+      selected.set(account.id, {
         id: account.id,
-        accountCode: toText(account.accountCode),
+        accountCode,
         accountName: toText(account.accountName),
-      }));
+      });
+    }
+
+    return Array.from(selected.values()).sort((left, right) =>
+      left.accountCode.localeCompare(right.accountCode),
+    );
   }
 
   private async resolveBranchMeta(branchIds: string[]) {
@@ -357,17 +435,24 @@ export class FinalAccountReportService {
       conditions.push(`tx.branch_id = ANY($${params.length}::uuid[])`);
     }
 
+    // Calendar-date compare: transaction_date is timestamptz stored as UTC midnight.
     if (input.beforeDate) {
       params.push(input.beforeDate);
-      conditions.push(`tx.transaction_date < $${params.length}::date`);
+      conditions.push(
+        `(tx.transaction_date AT TIME ZONE 'UTC')::date < $${params.length}::date`,
+      );
     } else {
       if (input.startDate) {
         params.push(input.startDate);
-        conditions.push(`tx.transaction_date >= $${params.length}::date`);
+        conditions.push(
+          `(tx.transaction_date AT TIME ZONE 'UTC')::date >= $${params.length}::date`,
+        );
       }
       if (input.endDate) {
         params.push(input.endDate);
-        conditions.push(`tx.transaction_date <= $${params.length}::date`);
+        conditions.push(
+          `(tx.transaction_date AT TIME ZONE 'UTC')::date <= $${params.length}::date`,
+        );
       }
     }
 
@@ -499,10 +584,11 @@ export class FinalAccountReportService {
     for (const bucket of input.buckets) {
       const account = input.accountById.get(bucket.accountId);
       if (!account) continue;
-      const closingCents =
-        bucket.openingCents +
-        bucket.periodDebitCents -
-        bucket.periodCreditCents;
+      // Trading statement is period-scoped: From/To must change line amounts.
+      // Lifetime closing-as-of-endDate made most date presets look identical.
+      const periodNetCents =
+        bucket.periodDebitCents - bucket.periodCreditCents;
+      if (periodNetCents === 0) continue;
       const branchKey = bucket.branchId ?? "ALL";
       let section = byBranch.get(branchKey);
       if (!section) {
@@ -521,9 +607,9 @@ export class FinalAccountReportService {
       const line = {
         code: account.accountCode,
         name: account.accountName,
-        amountCents: Math.abs(closingCents),
+        amountCents: Math.abs(periodNetCents),
       };
-      if (closingCents >= 0) {
+      if (periodNetCents >= 0) {
         section.debit.push(line);
       } else {
         section.credit.push(line);

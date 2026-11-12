@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { Product } from "../products/product.entity";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
@@ -81,7 +82,13 @@ import { UserRole } from "../user-roles/user-role.entity";
     PurposeModule,
     DayEndStartProcessModule,
     TransactionDataLocksModule,
-    TypeOrmModule.forFeature([Branch, UserRole, Currency, AccountProfile]),
+    TypeOrmModule.forFeature([
+      Branch,
+      UserRole,
+      Currency,
+      AccountProfile,
+      Product,
+    ]),
     TypeOrmModule.forFeature(
       [
         Transaction,

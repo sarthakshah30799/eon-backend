@@ -1,13 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
   IsOptional,
   IsUUID,
 } from "class-validator";
-import { StringArrayQuery } from "../../common/transformers/parse-boolean-query";
+import {
+  BooleanQuery,
+  StringArrayQuery,
+} from "../../common/transformers/parse-boolean-query";
 import { CardSettlementReportFormat } from "./card-settlement-report-query.dto";
 
 export const FinalAccountReportScope = {
@@ -22,7 +26,6 @@ export const FinalAccountStatementType = {
   TRADING: "trading",
   PROFIT_AND_LOSS: "profit-and-loss",
   BALANCE_SHEET: "balance-sheet",
-  MERGE_PROFIT: "merge-profit",
 } as const;
 
 export type FinalAccountStatementType =
@@ -57,6 +60,15 @@ export class FinalAccountReportQueryDto {
   @IsIn(Object.values(FinalAccountStatementType))
   @IsOptional()
   statementType?: FinalAccountStatementType;
+
+  @ApiPropertyOptional({
+    description:
+      "When true with Trading, fold PRO* profit accounts into SAL* (sale-time) or PUR* (purchase-time settlement) lines using product snapshots/masters.",
+  })
+  @BooleanQuery()
+  @IsBoolean()
+  @IsOptional()
+  mergeProfit?: boolean;
 
   @ApiPropertyOptional({
     description: "Export format",
