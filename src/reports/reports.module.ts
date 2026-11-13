@@ -28,6 +28,8 @@ import { BankReconciliationReportController } from "./bank-reconciliation-report
 import { BankReconciliationReportService } from "./bank-reconciliation-report.service";
 import { CashReportController } from "./cash-report.controller";
 import { CashReportService } from "./cash-report.service";
+import { CashFlowReportController } from "./cash-flow-report.controller";
+import { CashFlowReportService } from "./cash-flow-report.service";
 import { GenerateLedgerController } from "./generate-ledger.controller";
 import { GenerateLedgerService } from "./generate-ledger.service";
 import { CardUnsettledReportController } from "./card-unsettled-report.controller";
@@ -112,6 +114,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     BankReportController,
     BankReconciliationReportController,
     CashReportController,
+    CashFlowReportController,
     GenerateLedgerController,
     CardUnsettledReportController,
     CardSettledReportController,
@@ -142,6 +145,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     BankReportService,
     BankReconciliationReportService,
     CashReportService,
+    CashFlowReportService,
     GenerateLedgerService,
     CardUnsettledReportService,
     CardSettledReportService,
