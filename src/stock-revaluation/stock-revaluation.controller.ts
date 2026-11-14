@@ -13,6 +13,7 @@ import {
   BadRequestException,
   Param,
   ForbiddenException,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import {
   ApiConsumes,
@@ -147,8 +148,14 @@ export class StockRevaluationController {
     );
   }
 
+  @Get(":id")
+  @ApiOperation({ summary: "Get stock revaluation by ID" })
+  async findOne(@Param("id", ParseUUIDPipe) id: string) {
+    return this.service.findOne(id);
+  }
+
   @Delete(":id")
-  async remove(@Param("id") id: string, @Session() session: any) {
+  async remove(@Param("id", ParseUUIDPipe) id: string, @Session() session: any) {
     this.requireManager(session);
     const revaluation = await this.service.findOne(id);
     return this.service.delete(id, session.userId);

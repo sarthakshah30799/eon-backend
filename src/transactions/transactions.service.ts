@@ -67,6 +67,7 @@ import { Passenger } from "../passengers/passenger.entity";
 import {
   PassengerEntityType,
   PassengerNationalityType,
+  PassengerPanHolderRelationType,
 } from "../passengers/passenger.entity";
 import { SelectOption } from "../category-options/category-option.entity";
 import { CategoryOptionCodeEnum } from "../category-options/category-option-code.enum";
@@ -101,6 +102,7 @@ import {
   TransactionEventStatus,
   TransactionEventType,
 } from "./transactions.enums";
+import { WorkflowStatus } from "../common/enums/workflow-status.enum";
 import { DeepPartial } from "typeorm";
 import { DayEndStartProcessService } from "../day-end-start-process/day-end-start-process.service";
 import { CountryService } from "../country/country.service";
@@ -211,25 +213,30 @@ const hasPassengerIdentityText = (value?: string | null) =>
 
 const hasCompletePassengerPan = (
   passenger?: TransactionPassengerPayload | null,
-) =>
-  Boolean(
-    passenger &&
-    hasPassengerIdentityText(passenger.panNumber) &&
-    hasPassengerIdentityText(passenger.panHolderName) &&
-    hasPassengerIdentityText(passenger.panDob),
-  );
+) => {
+  if (!passenger) return false;
+  const raw = passenger as Record<string, any>;
+  const pan = passenger.panNumber ?? raw.pan;
+  return hasPassengerIdentityText(pan);
+};
 
 const hasCompletePassengerPassport = (
   passenger?: TransactionPassengerPayload | null,
-) =>
-  Boolean(
-    passenger &&
-    hasPassengerIdentityText(passenger.passportNumber) &&
-    hasPassengerIdentityText(passenger.passportPassengerName) &&
+) => {
+  if (!passenger) return false;
+  const raw = passenger as Record<string, any>;
+  const passportNumber = passenger.passportNumber ?? raw.passport;
+  const passportName =
+    passenger.passportPassengerName ??
+    [raw.firstName, raw.lastName].filter(Boolean).join(" ").trim();
+  return Boolean(
+    hasPassengerIdentityText(passportNumber) &&
+    hasPassengerIdentityText(passportName) &&
     hasPassengerIdentityText(passenger.passportIssueAt) &&
     hasPassengerIdentityText(passenger.passportIssueDate) &&
     hasPassengerIdentityText(passenger.passportExpiryDate),
   );
+};
 
 const addMonthsUtc = (date: Date, months: number) => {
   const next = new Date(date);
@@ -303,7 +310,9 @@ type TransactionDocumentPayload = {
 };
 
 type TransactionAdditionalChargePayload = {
-  accountId: string;
+  accountId?: string | null;
+  chargeName?: string | null;
+  taxApplicable?: boolean;
   amount: string | number;
   gstRate?: string | null;
   gstAmount?: string | null;
@@ -312,7 +321,7 @@ type TransactionAdditionalChargePayload = {
 };
 
 type TransactionPaymentPayload = {
-  accountId: string;
+  accountId?: string | null;
   paymentMethod: TransactionPaymentMethod;
   paymentDirection?: TransactionPaymentDirection;
   referenceNumber?: string | null;
@@ -998,13 +1007,23 @@ export class TransactionsService {
     const canSelectWorkplace =
       await this.isRequesterAdminOrHoStaff(performedById);
     const payloadBranchId = String(transactionPayload.branchId ?? "").trim();
-    const payloadCounterId = String(transactionPayload.counterId ?? "").trim();
+    let payloadCounterId = String(transactionPayload.counterId ?? "").trim();
 
-    if (canSelectWorkplace && payloadBranchId && payloadCounterId) {
-      return {
-        resolvedBranchId: payloadBranchId,
-        resolvedCounterId: payloadCounterId,
-      };
+    if (canSelectWorkplace && payloadBranchId) {
+      if (!payloadCounterId) {
+        const branchCounter = await this.branchCounterRepository.findOne({
+          where: { branchId: payloadBranchId },
+        });
+        if (branchCounter?.counterId) {
+          payloadCounterId = branchCounter.counterId;
+        }
+      }
+      if (payloadCounterId) {
+        return {
+          resolvedBranchId: payloadBranchId,
+          resolvedCounterId: payloadCounterId,
+        };
+      }
     }
 
     return {
@@ -1527,12 +1546,37 @@ export class TransactionsService {
       throw new BadRequestException("User session not found");
     }
 
+    const rawTransaction =
+      body &&
+      typeof body === "object" &&
+      "transaction" in body &&
+      body.transaction !== undefined
+        ? body.transaction
+        : body;
     const transactionPayload = this.parseJsonField<
       Partial<TransactionDraftPayload>
-    >(body.transaction, {});
+    >(rawTransaction, {});
+
+    if (!transactionPayload.transactionType && transactionPayload.slug) {
+      const normalizedSlug = normalizeTransactionSlug(transactionPayload.slug);
+      if (
+        normalizedSlug.startsWith("PURCHASE") ||
+        normalizedSlug.includes("_PURCHASE") ||
+        normalizedSlug.includes("PURCHASE_")
+      ) {
+        transactionPayload.transactionType = TransactionType.PURCHASE;
+      } else if (
+        normalizedSlug.startsWith("SALE") ||
+        normalizedSlug.includes("_SALE") ||
+        normalizedSlug.includes("SALE_") ||
+        normalizedSlug.includes("SELL")
+      ) {
+        transactionPayload.transactionType = TransactionType.SALE;
+      }
+    }
     const attachments = this.parseJsonField<
       Array<{ documentProfileId: string; fileName?: string }>
-    >(body.attachments, []);
+    >(body?.attachments, []);
 
     const { resolvedBranchId, resolvedCounterId } =
       await this.resolveDraftWorkplace(
@@ -1818,6 +1862,20 @@ export class TransactionsService {
         `Party profile with id ${transactionPayload.partyProfileId} not found`,
       );
     }
+    if (!isFakeCurrency && partyProfileSnapshot) {
+      const party = partyProfileSnapshot as Record<string, unknown>;
+      const isPartyActive = party.active ?? party.isActive ?? true;
+      if (isPartyActive === false) {
+        throw new BadRequestException("Party profile is inactive");
+      }
+      if (
+        party.status === WorkflowStatus.REJECT ||
+        party.status === "REJECT" ||
+        party.status === "REJECTED"
+      ) {
+        throw new BadRequestException("Party profile is rejected");
+      }
+    }
 
     const agentProfileSnapshot = transactionPayload.agentProfileId
       ? await loadEntitySnapshot(
@@ -1830,6 +1888,20 @@ export class TransactionsService {
         `Agent profile with id ${transactionPayload.agentProfileId} not found`,
       );
     }
+    if (transactionPayload.agentProfileId && agentProfileSnapshot) {
+      const agent = agentProfileSnapshot as Record<string, unknown>;
+      const isAgentActive = agent.active ?? agent.isActive ?? true;
+      if (isAgentActive === false) {
+        throw new BadRequestException("Agent profile is inactive");
+      }
+      if (
+        agent.status === WorkflowStatus.REJECT ||
+        agent.status === "REJECT" ||
+        agent.status === "REJECTED"
+      ) {
+        throw new BadRequestException("Agent profile is rejected");
+      }
+    }
 
     const manualBookPageId =
       String(transactionPayload.manualBookPageId ?? "").trim() || null;
@@ -1840,7 +1912,7 @@ export class TransactionsService {
           transactionPayload.transactionType === TransactionType.SALE
             ? "ALLOW_NULL_MANUAL_BOOK_IN_SELL"
             : "ALLOW_NULL_MANUAL_BOOK_IN_PURCHASE",
-          false,
+          true,
         );
       if (!allowNullManualBook && !manualBookPageId) {
         throw new BadRequestException(
@@ -1905,6 +1977,42 @@ export class TransactionsService {
       : null;
 
     if (!isFakeCurrency) {
+      if (transactionPayload.transactionType === TransactionType.PURCHASE) {
+        for (let i = 0; i < requestedItemRows.length; i++) {
+          const item = requestedItemRows[i];
+          const prod = requestedProducts.find(
+            (p) => p.id === String(item.productId),
+          );
+          if (prod && isSurrenderBuyingProduct(prod)) {
+            if (item.cardId) {
+              const card = await this.cardStockCardRepository.findOne({
+                where: { id: String(item.cardId) },
+              });
+              if (!card) {
+                throw new BadRequestException(
+                  `Surrender item ${i + 1} sold CARD was not found`,
+                );
+              }
+            }
+            const baseSale = await this.emSurrenderService.getBaseSaleRate(
+              String(item.currencyId),
+            );
+            const buyRate = Number(item.rate);
+            const baseSaleRate = Number(baseSale.baseSaleRate);
+            if (
+              Number.isFinite(baseSaleRate) &&
+              baseSaleRate > 0 &&
+              Number.isFinite(buyRate) &&
+              buyRate > baseSaleRate
+            ) {
+              throw new BadRequestException(
+                `Surrender item ${i + 1} rate ${buyRate} cannot exceed base sale price ${baseSaleRate}`,
+              );
+            }
+          }
+        }
+      }
+
       await this.purchaseRuleService.validate(transactionPayload);
     }
 
@@ -1922,6 +2030,30 @@ export class TransactionsService {
       parseDateValue(resolvedTransactionDate) ?? now;
 
     if (passengerPayload) {
+      const rawPassenger = passengerPayload as Record<string, any>;
+      if (!passengerPayload.panNumber && rawPassenger.pan) {
+        passengerPayload.panNumber = rawPassenger.pan;
+      }
+      if (!passengerPayload.passportNumber && rawPassenger.passport) {
+        passengerPayload.passportNumber = rawPassenger.passport;
+      }
+      const fullName = [rawPassenger.firstName, rawPassenger.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || null;
+      if (!passengerPayload.panHolderName && fullName) {
+        passengerPayload.panHolderName = fullName;
+      }
+      if (!passengerPayload.passportPassengerName && fullName) {
+        passengerPayload.passportPassengerName = fullName;
+      }
+      if (!passengerPayload.entityType) {
+        passengerPayload.entityType = PassengerEntityType.INDIVIDUAL;
+      }
+      if (!passengerPayload.nationalityType) {
+        passengerPayload.nationalityType = PassengerNationalityType.INDIAN;
+      }
+
       if (passengerPayload.countryId) {
         await this.countryService.assertCountryAllowed(
           String(passengerPayload.countryId),
@@ -2015,37 +2147,111 @@ export class TransactionsService {
           })
         : null;
 
+      let resolvedCountryId =
+        passengerPayload.countryId &&
+        passengerPayload.countryId !== "undefined" &&
+        passengerPayload.countryId !== "null"
+          ? String(passengerPayload.countryId).trim()
+          : (existingPassenger?.countryId ?? null);
+
+      if (!resolvedCountryId) {
+        const defaultCountry =
+          (await this.countryRepository.findOne({
+            where: [
+              { code: "IN" },
+              { code: "IND" },
+              { name: "India" },
+            ],
+          })) ?? (await this.countryRepository.findOne({ where: {} }));
+        resolvedCountryId = defaultCountry?.id ?? null;
+      }
+
       const passengerToSave: DeepPartial<Passenger> = {
         id: existingPassenger?.id ?? undefined,
         partyProfileId: String(transactionPayload.partyProfileId),
-        entityType: passengerPayload.entityType as PassengerEntityType,
+        entityType:
+          (passengerPayload.entityType as PassengerEntityType) ??
+          existingPassenger?.entityType ??
+          PassengerEntityType.INDIVIDUAL,
         nationalityType:
-          passengerPayload.nationalityType as PassengerNationalityType,
-        countryId: String(passengerPayload.countryId),
-        residentStatusId: residentStatusOption?.id ?? null,
-        locationId: passengerPayload.locationId ?? null,
-        email: passengerPayload.email ?? null,
-        contactNo: passengerPayload.contactNo ?? null,
-        panNumber: normalizedPanNumber,
-        panHolderName: passengerPayload.panHolderName ?? null,
-        panDob: passengerPayload.panDob ?? null,
-        panHolderRelationType: passengerPayload.panHolderRelationType ?? null,
-        paidByPanNumber: passengerPayload.paidByPanNumber ?? null,
-        paidByPanHolderName: passengerPayload.paidByPanHolderName ?? null,
-        paidByPanDob: passengerPayload.paidByPanDob ?? null,
-        gstStateId: passengerPayload.gstStateId ?? null,
-        gstNumber: passengerPayload.gstNumber ?? null,
-        address1: passengerPayload.address1 ?? null,
-        address2: passengerPayload.address2 ?? null,
-        city: passengerPayload.city ?? null,
-        stateId: passengerPayload.stateId ?? null,
-        passportNumber: normalizedPassportNumber,
-        passportPassengerName: passengerPayload.passportPassengerName ?? null,
-        passportIssueAt: passengerPayload.passportIssueAt ?? null,
-        passportIssueDate: passengerPayload.passportIssueDate ?? null,
-        passportExpiryDate: passengerPayload.passportExpiryDate ?? null,
-        arrivalDate: passengerPayload.arrivalDate ?? null,
-        isPep: Boolean(passengerPayload.isPep),
+          (passengerPayload.nationalityType as PassengerNationalityType) ??
+          existingPassenger?.nationalityType ??
+          PassengerNationalityType.INDIAN,
+        countryId: resolvedCountryId!,
+        residentStatusId:
+          residentStatusOption?.id ??
+          existingPassenger?.residentStatusId ??
+          null,
+        locationId:
+          passengerPayload.locationId ??
+          existingPassenger?.locationId ??
+          null,
+        email: passengerPayload.email ?? existingPassenger?.email ?? null,
+        contactNo:
+          passengerPayload.contactNo ?? existingPassenger?.contactNo ?? null,
+        panNumber: normalizedPanNumber ?? existingPassenger?.panNumber ?? null,
+        panHolderName:
+          passengerPayload.panHolderName ??
+          existingPassenger?.panHolderName ??
+          null,
+        panDob: passengerPayload.panDob ?? existingPassenger?.panDob ?? null,
+        panHolderRelationType:
+          (passengerPayload.panHolderRelationType as PassengerPanHolderRelationType) ??
+          existingPassenger?.panHolderRelationType ??
+          null,
+        paidByPanNumber:
+          passengerPayload.paidByPanNumber ??
+          existingPassenger?.paidByPanNumber ??
+          null,
+        paidByPanHolderName:
+          passengerPayload.paidByPanHolderName ??
+          existingPassenger?.paidByPanHolderName ??
+          null,
+        paidByPanDob:
+          passengerPayload.paidByPanDob ??
+          (rawPassenger.paidByPanDob as string) ??
+          existingPassenger?.paidByPanDob ??
+          null,
+        gstStateId:
+          passengerPayload.gstStateId ??
+          existingPassenger?.gstStateId ??
+          null,
+        gstNumber:
+          passengerPayload.gstNumber ?? existingPassenger?.gstNumber ?? null,
+        address1:
+          passengerPayload.address1 ?? existingPassenger?.address1 ?? null,
+        address2:
+          passengerPayload.address2 ?? existingPassenger?.address2 ?? null,
+        city: passengerPayload.city ?? existingPassenger?.city ?? null,
+        stateId: passengerPayload.stateId ?? existingPassenger?.stateId ?? null,
+        passportNumber:
+          normalizedPassportNumber ??
+          existingPassenger?.passportNumber ??
+          null,
+        passportPassengerName:
+          passengerPayload.passportPassengerName ??
+          existingPassenger?.passportPassengerName ??
+          null,
+        passportIssueAt:
+          passengerPayload.passportIssueAt ??
+          existingPassenger?.passportIssueAt ??
+          null,
+        passportIssueDate:
+          passengerPayload.passportIssueDate ??
+          existingPassenger?.passportIssueDate ??
+          null,
+        passportExpiryDate:
+          passengerPayload.passportExpiryDate ??
+          existingPassenger?.passportExpiryDate ??
+          null,
+        arrivalDate:
+          passengerPayload.arrivalDate ??
+          existingPassenger?.arrivalDate ??
+          null,
+        isPep:
+          passengerPayload.isPep !== undefined && passengerPayload.isPep !== null
+            ? Boolean(passengerPayload.isPep)
+            : (existingPassenger?.isPep ?? false),
         remarks: null,
         createdBy: performedById,
         updatedBy: performedById,
@@ -2311,11 +2517,20 @@ export class TransactionsService {
           )
         : [];
 
+      const rawPassenger = (passengerPayload ?? {}) as Record<string, any>;
+      const indianHasPan = Boolean(
+        String(passengerPayload?.panNumber ?? rawPassenger.pan ?? "").trim(),
+      );
+      const indianHasPassport = Boolean(
+        String(
+          passengerPayload?.passportNumber ?? rawPassenger.passport ?? "",
+        ).trim(),
+      );
       if (
         passengerPayload?.nationalityType === PassengerNationalityType.INDIAN &&
         passengerOtherDocumentRows.length === 0 &&
-        !hasCompletePassengerPan(passengerPayload) &&
-        !hasCompletePassengerPassport(passengerPayload)
+        !indianHasPan &&
+        !indianHasPassport
       ) {
         throw new BadRequestException(
           "PAN, passport, or at least one other document is required for Indian passengers",
@@ -2633,6 +2848,21 @@ export class TransactionsService {
               );
             }
             selectedEmCardIds.add(String(row.cardId));
+
+            const soldCard = await this.cardStockCardRepository.findOne({
+              where: { id: String(row.cardId) },
+              relations: ["receiptItem"],
+            });
+            if (!soldCard || !soldCard.receiptItem) {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} sold CARD was not found`,
+              );
+            }
+            if (soldCard.status !== "SOLD") {
+              throw new BadRequestException(
+                `Surrender item ${index + 1} requires a sold CARD`,
+              );
+            }
             const feAmount = Number(row.quantity);
             if (!Number.isFinite(feAmount) || feAmount <= 0) {
               throw new BadRequestException(
@@ -3156,7 +3386,36 @@ export class TransactionsService {
         : [];
       for (let index = 0; index < additionalChargeRows.length; index += 1) {
         const row = additionalChargeRows[index];
-        const account = await resolveAccount(String(row.accountId));
+        let chargeAccountId = normalizeNullableString(row.accountId);
+        if (chargeAccountId === "undefined" || chargeAccountId === "null") {
+          chargeAccountId = null;
+        }
+        if (!chargeAccountId) {
+          const defaultChargeAccount = await this.accountProfileRepository
+            .createQueryBuilder("account")
+            .where("account.active = true")
+            .andWhere(
+              "(account.expense = true OR UPPER(account.accountName) LIKE '%CHARGE%' OR UPPER(account.accountName) LIKE '%EXPENSE%')",
+            )
+            .orderBy("account.createdAt", "ASC")
+            .getOne();
+          if (defaultChargeAccount) {
+            chargeAccountId = defaultChargeAccount.id;
+          } else {
+            const anyActiveAccount = await this.accountProfileRepository.findOne({
+              where: { active: true },
+            });
+            if (anyActiveAccount) {
+              chargeAccountId = anyActiveAccount.id;
+            }
+          }
+        }
+        if (!chargeAccountId) {
+          throw new BadRequestException(
+            "Charge account is required for additional charge",
+          );
+        }
+        const account = await resolveAccount(chargeAccountId);
         await transactionAdditionalChargeRepo.save(
           transactionAdditionalChargeRepo.create({
             transactionId: transaction.id,
@@ -3279,9 +3538,84 @@ export class TransactionsService {
               transactionDate: resolvedTransactionDate,
             })
           : null;
-        const accountId = preparedAdvance
+        let resolvedPaymentAccountId = preparedAdvance
           ? String(preparedAdvance.voucher.advanceControlAccountId)
-          : String(row.accountId);
+          : normalizeNullableString(row.accountId);
+
+        if (
+          resolvedPaymentAccountId === "undefined" ||
+          resolvedPaymentAccountId === "null"
+        ) {
+          resolvedPaymentAccountId = null;
+        }
+
+        if (!resolvedPaymentAccountId) {
+          if (paymentMethod === TransactionPaymentMethod.CASH) {
+            let cashAccount = await this.accountProfileRepository
+              .createQueryBuilder("account")
+              .leftJoinAndSelect("account.accountType", "accountType")
+              .leftJoinAndSelect("account.currency", "currency")
+              .where("account.active = true")
+              .andWhere(
+                "(UPPER(accountType.value) = 'CASH_LEDGER' OR UPPER(accountType.label) = 'CASH LEDGER')",
+              )
+              .andWhere("UPPER(currency.currencyCode) = 'INR'")
+              .orderBy("account.createdAt", "ASC")
+              .getOne();
+
+            if (!cashAccount) {
+              cashAccount = await this.accountProfileRepository
+                .createQueryBuilder("account")
+                .leftJoinAndSelect("account.accountType", "accountType")
+                .leftJoinAndSelect("account.currency", "currency")
+                .where("account.active = true")
+                .andWhere(
+                  "(UPPER(accountType.value) LIKE '%CASH%' OR UPPER(accountType.label) LIKE '%CASH%' OR UPPER(account.accountName) LIKE '%CASH%')",
+                )
+                .andWhere("UPPER(currency.currencyCode) = 'INR'")
+                .orderBy("account.createdAt", "ASC")
+                .getOne();
+            }
+
+            if (cashAccount) {
+              resolvedPaymentAccountId = cashAccount.id;
+            }
+          } else {
+            let bankAccount = await this.accountProfileRepository
+              .createQueryBuilder("account")
+              .leftJoinAndSelect("account.accountType", "accountType")
+              .where("account.active = true")
+              .andWhere(
+                "(UPPER(accountType.value) = 'BANK_LEDGER' OR UPPER(accountType.label) = 'BANK LEDGER')",
+              )
+              .orderBy("account.createdAt", "ASC")
+              .getOne();
+
+            if (!bankAccount) {
+              bankAccount = await this.accountProfileRepository
+                .createQueryBuilder("account")
+                .leftJoinAndSelect("account.accountType", "accountType")
+                .where("account.active = true")
+                .andWhere(
+                  "(UPPER(accountType.value) LIKE '%BANK%' OR UPPER(accountType.label) LIKE '%BANK%' OR UPPER(account.accountName) LIKE '%BANK%')",
+                )
+                .orderBy("account.createdAt", "ASC")
+                .getOne();
+            }
+
+            if (bankAccount) {
+              resolvedPaymentAccountId = bankAccount.id;
+            }
+          }
+        }
+
+        if (!resolvedPaymentAccountId) {
+          throw new BadRequestException(
+            `Payment account is required for ${paymentMethod}`,
+          );
+        }
+
+        const accountId = resolvedPaymentAccountId;
         const account = preparedAdvance
           ? preparedAdvance.voucher.advanceControlAccountSnapshot
           : await resolveAccount(accountId);
@@ -3308,7 +3642,13 @@ export class TransactionsService {
                 .replace(/[\s-]+/g, "_")
                 .toUpperCase(),
             );
-            if (!cashAccount || !cashAccountTypes.includes("CASH_LEDGER")) {
+            const isCashLedger =
+              cashAccountTypes.includes("CASH_LEDGER") ||
+              cashAccountTypes.some((t) => t.includes("CASH")) ||
+              String(cashAccount?.accountName ?? "")
+                .toUpperCase()
+                .includes("CASH");
+            if (!cashAccount || !isCashLedger) {
               throw new BadRequestException(
                 "Cash payments require an active CASH LEDGER account",
               );
