@@ -100,5 +100,62 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
     expect([400, 404, 422]).toContain(res.status);
     TestLogger.success('Transfer with non-existent branch correctly rejected');
   });
+
+  it('7.6 should reject branch transfer when requested quantity exceeds available counter stock (negative stock prevention)', async () => {
+    if (!registry.masters.branchA?.id || !registry.masters.branchB?.id || !registry.masters.counterB1?.id || !registry.masters.currencyUsd?.id) return;
+
+    const res = await client.post('/transfers/branch', {
+      sourceBranchId: registry.masters.branchA.id,
+      sourceCounterId: registry.masters.counterA1?.id,
+      destinationBranchId: registry.masters.branchB.id,
+      destinationCounterId: registry.masters.counterB1.id,
+      items: [
+        {
+          productId: registry.masters.productCn?.id,
+          currencyId: registry.masters.currencyUsd.id,
+          quantity: 99999999,
+          per: 1,
+          rate: 85.0,
+        },
+      ],
+      remarks: 'Attempting excessive transfer exceeding counter stock',
+    });
+
+    expect(res.status).toBe(400);
+    const message = typeof res.data?.message === 'string' ? res.data.message : JSON.stringify(res.data?.message ?? '');
+    expect(message.toLowerCase()).toContain('exceeds available counter stock');
+    TestLogger.success('Negative stock prevention on transfers verified: transfer exceeding counter stock cleanly rejected with 400 Bad Request');
+  });
+
+  it('7.7 should reject counter transfer when requested quantity exceeds available counter stock', async () => {
+    if (!registry.masters.branchA?.id || !registry.masters.counterA1?.id) return;
+    const testCurrency = registry.masters.currencyCmStocking?.id || registry.masters.currencyEur?.id || registry.masters.currencyGbp?.id || registry.masters.currencyUsd?.id;
+    if (!testCurrency) return;
+
+    const destCounterId = registry.masters.counterA2?.id && registry.masters.counterA2.id !== registry.masters.counterA1.id
+      ? registry.masters.counterA2.id
+      : registry.masters.counterB1?.id;
+    if (!destCounterId || destCounterId === registry.masters.counterA1.id) return;
+
+    const res = await client.post('/transfers/counter', {
+      sourceBranchId: registry.masters.branchA.id,
+      sourceCounterId: registry.masters.counterA1.id,
+      destinationBranchId: registry.masters.branchA.id,
+      destinationCounterId: destCounterId,
+      items: [
+        {
+          productId: registry.masters.productCn?.id,
+          currencyId: testCurrency,
+          quantity: 5000000,
+          per: 1,
+          rate: 100.0,
+        },
+      ],
+      remarks: 'Counter transfer exceeding stock',
+    });
+
+    expect([400, 422]).toContain(res.status);
+    TestLogger.success('Counter transfer stock enforcement verified: rejected with 400 Bad Request');
+  });
 });
 

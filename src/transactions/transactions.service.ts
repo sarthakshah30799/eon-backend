@@ -24,6 +24,10 @@ import {
 } from "./transactions.enums";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
 import { TransactionListQueryDto } from "./dto/transaction-list-query.dto";
+import { TransferRequestItem } from "../transfers/entities/transfer-request-item.entity";
+import { TransferRequestStatus } from "../transfers/transfers.enums";
+import { assertAvailableCounterStock } from "./counter-stock-availability.util";
+import { roundToScale } from "./transaction-accounting.util";
 import {
   applyPagination,
   buildPaginatedResponse,
@@ -427,6 +431,8 @@ export class TransactionsService {
     private readonly transactionEventRepository: Repository<TransactionEvent>,
     @InjectRepository(TransactionPassengerOtherDocument, "database2")
     private readonly transactionPassengerOtherDocumentRepository: Repository<TransactionPassengerOtherDocument>,
+    @InjectRepository(TransferRequestItem, "database2")
+    private readonly transferRequestItemRepository: Repository<TransferRequestItem>,
     @InjectRepository(Currency)
     private readonly currencyRepository: Repository<Currency>,
     @InjectRepository(Product)
@@ -1397,6 +1403,7 @@ export class TransactionsService {
     currencyId: string,
     productId: string,
     excludeTransactionId?: string,
+    excludeTransferId?: string,
   ): Promise<{
     branchId: string;
     counterId: string;
@@ -1404,6 +1411,8 @@ export class TransactionsService {
     productId: string;
     purchasedQuantity: string;
     soldQuantity: string;
+    draftSaleQuantity: string;
+    heldTransferQuantity: string;
     availableQuantity: string;
   }> {
     if (!branchId) {
@@ -1426,17 +1435,18 @@ export class TransactionsService {
       .createQueryBuilder("item")
       .innerJoin("item.transaction", "tx")
       .select(
-        `COALESCE(SUM(CASE WHEN tx.transaction_type = :purchaseType THEN item.quantity ELSE 0 END), 0)`,
+        `COALESCE(SUM(CASE WHEN tx.transaction_type = :purchaseType AND tx.status = :approvedStatus THEN item.quantity ELSE 0 END), 0)`,
         "purchasedQuantity",
       )
       .addSelect(
-        `COALESCE(SUM(CASE WHEN tx.transaction_type = :saleType THEN item.quantity ELSE 0 END), 0)`,
+        `COALESCE(SUM(CASE WHEN tx.transaction_type = :saleType AND tx.status = :approvedStatus THEN item.quantity ELSE 0 END), 0)`,
         "soldQuantity",
       )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN tx.transaction_type = :saleType AND tx.status = :draftStatus THEN item.quantity ELSE 0 END), 0)`,
+        "draftSaleQuantity",
+      )
       .where("tx.isLatest = true")
-      .andWhere("tx.status = :approvedStatus", {
-        approvedStatus: TransactionStatus.APPROVED,
-      })
       .andWhere("tx.branchId = :branchId", { branchId })
       .andWhere("tx.counterId = :counterId", { counterId })
       .andWhere("item.currencyId = :currencyId", { currencyId })
@@ -1444,6 +1454,8 @@ export class TransactionsService {
       .setParameters({
         purchaseType: TransactionType.PURCHASE,
         saleType: TransactionType.SALE,
+        approvedStatus: TransactionStatus.APPROVED,
+        draftStatus: TransactionStatus.DRAFT,
       });
 
     if (excludeTransactionId) {
@@ -1453,22 +1465,47 @@ export class TransactionsService {
     const raw = await qb.getRawOne<{
       purchasedQuantity?: string;
       soldQuantity?: string;
+      draftSaleQuantity?: string;
     }>();
 
-    const purchasedQuantity = String(raw?.purchasedQuantity ?? "0");
-    const soldQuantity = String(raw?.soldQuantity ?? "0");
-    const availableQuantity = (
-      Number(purchasedQuantity || 0) - Number(soldQuantity || 0)
-    ).toString();
+    const transferQb = this.transferRequestItemRepository
+      .createQueryBuilder("item")
+      .innerJoin("item.transfer", "tr")
+      .select(`COALESCE(SUM(item.quantity), 0)`, "heldTransferQuantity")
+      .where("tr.status = :heldStatus", {
+        heldStatus: TransferRequestStatus.HELD,
+      })
+      .andWhere("tr.sourceBranchId = :branchId", { branchId })
+      .andWhere("tr.sourceCounterId = :counterId", { counterId })
+      .andWhere("item.currencyId = :currencyId", { currencyId })
+      .andWhere("item.productId = :productId", { productId });
+
+    if (excludeTransferId) {
+      transferQb.andWhere("tr.id <> :excludeTransferId", { excludeTransferId });
+    }
+
+    const transferRaw = await transferQb.getRawOne<{
+      heldTransferQuantity?: string;
+    }>();
+
+    const purchased = Number(raw?.purchasedQuantity ?? 0);
+    const sold = Number(raw?.soldQuantity ?? 0);
+    const draftSale = Number(raw?.draftSaleQuantity ?? 0);
+    const heldTransfer = Number(transferRaw?.heldTransferQuantity ?? 0);
+
+    const netStock = purchased - sold;
+    const available = Math.max(0, netStock - draftSale - heldTransfer);
 
     return {
       branchId,
       counterId,
       currencyId,
       productId,
-      purchasedQuantity,
-      soldQuantity,
-      availableQuantity,
+      purchasedQuantity: roundToScale(purchased, 7),
+      soldQuantity: roundToScale(sold, 7),
+      draftSaleQuantity: roundToScale(draftSale, 7),
+      heldTransferQuantity: roundToScale(heldTransfer, 7),
+      availableQuantity: roundToScale(available, 7),
     };
   }
 
@@ -1676,17 +1713,33 @@ export class TransactionsService {
             "Fake currency item currency, product, and positive quantity are required",
           );
         }
-        const availability = await this.getQuantityAvailability(
-          resolvedBranchId,
-          resolvedCounterId,
-          currencyId,
-          productId,
-        );
-        if (quantity > Number(availability.availableQuantity)) {
-          throw new BadRequestException(
-            `Fake currency quantity exceeds available quantity for product ${productId}`,
-          );
-        }
+      }
+
+      await assertAvailableCounterStock(
+        (bId, cId, currId, prodId, exTxId, exTrId) =>
+          this.getQuantityAvailability(
+            bId,
+            cId,
+            currId,
+            prodId,
+            exTxId,
+            exTrId,
+          ),
+        {
+          branchId: resolvedBranchId,
+          counterId: resolvedCounterId,
+          items: fakeItems.map((item) => ({
+            currencyId: String(item.currencyId),
+            productId: String(item.productId),
+            quantity: item.quantity,
+          })),
+        },
+      );
+
+      for (const item of fakeItems) {
+        const quantity = Number(item.quantity);
+        const productId = String(item.productId ?? "").trim();
+        const currencyId = String(item.currencyId ?? "").trim();
         if (!rateEditable) {
           const averageSellRate = await this.getAverageSellPrice(
             productId,
@@ -2010,6 +2063,48 @@ export class TransactionsService {
               );
             }
           }
+        }
+      } else if (
+        transactionPayload.transactionType === TransactionType.SALE
+      ) {
+        const physicalStockItems = requestedItemRows
+          .filter(
+            (item) =>
+              !cardProductIds.has(String(item.productId)) &&
+              !surrenderProductIds.has(String(item.productId)) &&
+              !ttProductIds.has(String(item.productId)),
+          )
+          .map((item) => {
+            const prod = requestedProducts.find(
+              (p) => p.id === String(item.productId),
+            );
+            return {
+              currencyId: String(item.currencyId),
+              productId: String(item.productId),
+              quantity: item.quantity,
+              productCode: prod?.productCode ?? null,
+            };
+          });
+
+        if (physicalStockItems.length > 0) {
+          await assertAvailableCounterStock(
+            (bId, cId, currId, prodId, exTxId, exTrId) =>
+              this.getQuantityAvailability(
+                bId,
+                cId,
+                currId,
+                prodId,
+                exTxId,
+                exTrId,
+              ),
+            {
+              branchId: String(resolvedBranchId),
+              counterId: String(resolvedCounterId),
+              items: physicalStockItems,
+              excludeTransactionId:
+                transactionPayload.rootTransactionId ?? undefined,
+            },
+          );
         }
       }
 
@@ -4011,6 +4106,57 @@ export class TransactionsService {
         throw new BadRequestException(
           "Only draft transactions can be approved",
         );
+
+      if (locked.transactionType === TransactionType.SALE) {
+        const draftItems = await itemRepo.find({
+          where: { transactionId: locked.id },
+        });
+        const productIds = [
+          ...new Set(draftItems.map((item) => item.productId).filter(Boolean)),
+        ];
+        const products = productIds.length
+          ? await this.productRepository.find({
+              where: { id: In(productIds) },
+            })
+          : [];
+        const productById = new Map(products.map((p) => [p.id, p]));
+        const saleItemsToCheck = draftItems
+          .filter((item) => {
+            const prod = productById.get(item.productId);
+            return (
+              !isCardProductCode(prod?.productCode) &&
+              !isSurrenderBulkSaleProduct(prod ?? {}) &&
+              !isTtProductCode(prod?.productCode)
+            );
+          })
+          .map((item) => ({
+            currencyId: String(item.currencyId),
+            productId: String(item.productId),
+            quantity: item.quantity,
+            productCode: productById.get(item.productId)?.productCode ?? null,
+          }));
+
+        if (saleItemsToCheck.length > 0) {
+          await assertAvailableCounterStock(
+            (bId, cId, currId, prodId, exTxId, exTrId) =>
+              this.getQuantityAvailability(
+                bId,
+                cId,
+                currId,
+                prodId,
+                exTxId,
+                exTrId,
+              ),
+            {
+              branchId: String(locked.branchId),
+              counterId: String(locked.counterId),
+              items: saleItemsToCheck,
+              excludeTransactionId: locked.id,
+            },
+          );
+        }
+      }
+
       locked.number = transaction.number;
       locked.counterId = transaction.counterId;
       locked.counterSnapshot = transaction.counterSnapshot;

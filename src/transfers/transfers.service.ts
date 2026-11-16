@@ -28,6 +28,7 @@ import { TransactionReferenceSnapshotValue } from "../transactions/types/transac
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
 import { TransactionsService } from "../transactions/transactions.service";
+import { assertAvailableCounterStock } from "../transactions/counter-stock-availability.util";
 import { CurrencyTransfer, CurrencyTransferItem } from "./entities";
 import {
   CurrencyTransferStatus,
@@ -319,44 +320,26 @@ export class TransfersService {
       productId: string;
       quantity: number;
     }>;
+    excludeTransferId?: string;
   }) {
-    const { branchId, counterId, items } = params;
-    const groupedItems = new Map<
-      string,
-      { currencyId: string; productId: string; quantity: number }
-    >();
-
-    for (const item of items) {
-      const key = `${item.currencyId}:${item.productId}`;
-      const existing = groupedItems.get(key);
-      if (existing) {
-        existing.quantity += Number(item.quantity ?? 0);
-        continue;
-      }
-
-      groupedItems.set(key, {
-        currencyId: item.currencyId,
-        productId: item.productId,
-        quantity: Number(item.quantity ?? 0),
-      });
-    }
-
-    for (const item of groupedItems.values()) {
-      const availability =
-        await this.transactionsService.getQuantityAvailability(
-          branchId,
-          counterId,
-          item.currencyId,
-          item.productId,
-        );
-
-      const availableQuantity = Number(availability.availableQuantity ?? 0);
-      if (item.quantity > availableQuantity) {
-        throw new BadRequestException(
-          `Requested quantity exceeds available counter stock of ${roundToScale(availableQuantity, 7)}`,
-        );
-      }
-    }
+    const { branchId, counterId, items, excludeTransferId } = params;
+    await assertAvailableCounterStock(
+      (bId, cId, currId, prodId, exTxId, exTrId) =>
+        this.transactionsService.getQuantityAvailability(
+          bId,
+          cId,
+          currId,
+          prodId,
+          exTxId,
+          exTrId,
+        ),
+      {
+        branchId,
+        counterId,
+        items,
+        excludeTransferId,
+      },
+    );
   }
 
   private async validateTransferRates(
@@ -873,12 +856,12 @@ export class TransfersService {
     }
 
     const items = this.normalizeTransferItems(body.items);
-    await this.validateTransferRates(items, sourceBranchId, sourceCounterId);
     await this.assertAvailableCounterQuantity({
       branchId: sourceBranchId,
       counterId: sourceCounterId,
       items,
     });
+    await this.validateTransferRates(items, sourceBranchId, sourceCounterId);
     const [snapshots, transferNumber, companyForDate] = await Promise.all([
       this.resolveSnapshots({
         sourceBranchId,
@@ -1243,6 +1226,7 @@ export class TransfersService {
       branchId: transfer.sourceBranchId,
       counterId: transfer.sourceCounterId,
       items: sourceItems,
+      excludeTransferId: transfer.id,
     });
     await this.validateTransferRates(
       sourceItems,

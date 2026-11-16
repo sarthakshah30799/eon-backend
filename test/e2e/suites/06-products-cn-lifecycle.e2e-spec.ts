@@ -29,6 +29,7 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
       tradeMode: 'RETAIL',
       passenger: {
         firstName: 'Rajesh',
@@ -71,6 +72,7 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
       tradeMode: 'RETAIL',
       passenger: {
         firstName: 'Pooja',
@@ -127,6 +129,7 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       slug: TRANSACTION_SLUGS.PURCHASE_BULK_FFMC,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
       tradeMode: 'BULK',
       items: [
         {
@@ -154,6 +157,88 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
     } else {
       TestLogger.info(`Wholesale purchase returned ${res.status}`);
     }
+  });
+
+  it('3C.4 should reject retail sale of currency notes when requested quantity exceeds available counter stock (negative stock prevention)', async () => {
+    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+
+    const res = await client.post('/transactions/drafts', {
+      slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
+      tradeMode: 'RETAIL',
+      passenger: {
+        firstName: 'Over',
+        lastName: 'Buyer',
+        nationalityType: 'INDIAN',
+        pan: 'ABCDE1234F',
+        passportNumber: 'Z9988776',
+        ticketNumber: 'EK-999',
+      },
+      items: [
+        {
+          productId: registry.masters.productCn?.id,
+          currencyId: registry.masters.currencyUsd.id,
+          quantity: 999999,
+          rate: 88.5,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: 'CASH',
+          amount: 999999 * 88.5,
+        },
+      ],
+    });
+
+    expect(res.status).toBe(400);
+    const message = typeof res.data?.message === 'string' ? res.data.message : JSON.stringify(res.data?.message ?? '');
+    expect(message.toLowerCase()).toContain('exceeds available counter stock');
+    TestLogger.success('Negative stock prevention verified: selling more than counter stock cleanly rejected with 400 Bad Request');
+  });
+
+  it('3C.5 should reject sale of currency notes when counter stock is 0 (negative stock prevention)', async () => {
+    if (!registry.masters.branchA?.id) return;
+
+    // Use an unstocked currency or currency with 0 counter balance
+    const unstockedCurrencyId = registry.masters.currencyCmStocking?.id || registry.masters.currencyEur?.id || registry.masters.currencyGbp?.id;
+    if (!unstockedCurrencyId) return;
+
+    const res = await client.post('/transactions/drafts', {
+      slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
+      tradeMode: 'RETAIL',
+      passenger: {
+        firstName: 'Zero',
+        lastName: 'Stock',
+        nationalityType: 'INDIAN',
+        pan: 'ABCDE1234F',
+        passportNumber: 'Z9988776',
+        ticketNumber: 'EK-999',
+      },
+      items: [
+        {
+          productId: registry.masters.productCn?.id,
+          currencyId: unstockedCurrencyId,
+          quantity: 500000,
+          rate: 100.0,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: 'CASH',
+          amount: 500000 * 100.0,
+        },
+      ],
+    });
+
+    expect(res.status).toBe(400);
+    const message = typeof res.data?.message === 'string' ? res.data.message : JSON.stringify(res.data?.message ?? '');
+    expect(message.toLowerCase()).toContain('exceeds available counter stock');
+    TestLogger.success('Negative stock prevention verified: selling unstocked currency cleanly rejected with 400 Bad Request');
   });
 });
 

@@ -52,6 +52,10 @@ import { ProductSettlementModule } from "../product-settlement/product-settlemen
 import { CardStockCard } from "../card-stock/entities/card-stock-card.entity";
 import { VoucherModule } from "../vouchers/voucher.module";
 import { TtDealModule } from "../tt-deal/tt-deal.module";
+import {
+  TransferRequest,
+  TransferRequestItem,
+} from "../transfers/entities";
 
 @Module({
   imports: [
@@ -103,6 +107,8 @@ import { TtDealModule } from "../tt-deal/tt-deal.module";
         ManualBookPageTracking,
         ChequeBookPageTracking,
         CardStockCard,
+        TransferRequest,
+        TransferRequestItem,
       ],
       "database2",
     ),

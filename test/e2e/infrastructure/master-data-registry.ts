@@ -1,5 +1,6 @@
 import { ApiClient } from './api-client';
 import { TestLogger } from './test-logger';
+import { TRANSACTION_SLUGS } from '../config/test-constants';
 
 export interface DiscoveredMasters {
   companyId?: string;
@@ -81,23 +82,56 @@ export class MasterDataRegistry {
         name: matchedCounterA.name || matchedCounterA.counterName,
         branchId: matchedBranchA.id,
       };
-      this.masters.counterA2 = this.masters.counterA1;
+
+      const secondCounterForA = counters.find(
+        (c: any) =>
+          Array.isArray(c.branchIds) &&
+          c.branchIds.includes(matchedBranchA.id) &&
+          c.id !== matchedCounterA.id
+      );
+      this.masters.counterA2 = secondCounterForA
+        ? {
+            id: secondCounterForA.id,
+            name: secondCounterForA.name || secondCounterForA.counterName,
+            branchId: matchedBranchA.id,
+          }
+        : this.masters.counterA1;
 
       const remainingBranches = branches.filter((b: any) => b.id !== matchedBranchA.id);
-      if (remainingBranches.length > 0) {
+      const branchWithCounter = remainingBranches.find((b: any) =>
+        counters.some((c: any) => Array.isArray(c.branchIds) && c.branchIds.includes(b.id))
+      );
+
+      if (branchWithCounter) {
+        const counterForB = counters.find((c: any) => Array.isArray(c.branchIds) && c.branchIds.includes(branchWithCounter.id));
         this.masters.branchB = {
-          id: remainingBranches[0].id,
-          name: remainingBranches[0].name || remainingBranches[0].branchName,
-          code: remainingBranches[0].code || remainingBranches[0].branchCode,
+          id: branchWithCounter.id,
+          name: branchWithCounter.name || branchWithCounter.branchName,
+          code: branchWithCounter.code || branchWithCounter.branchCode,
         };
-        const counterForB = counters.find((c: any) => Array.isArray(c.branchIds) && c.branchIds.includes(remainingBranches[0].id));
-        if (counterForB) {
-          this.masters.counterB1 = {
-            id: counterForB.id,
-            name: counterForB.name || counterForB.counterName,
-            branchId: remainingBranches[0].id,
-          };
-        }
+        this.masters.counterB1 = {
+          id: counterForB.id,
+          name: counterForB.name || counterForB.counterName,
+          branchId: branchWithCounter.id,
+        };
+      } else if (remainingBranches.length > 0 && counters.length > 0) {
+        const targetBranch = remainingBranches[0];
+        const counterToLink = counters.find((c: any) => c.id !== matchedCounterA.id) || counters[0];
+        try {
+          await adminClient.put(`/branches/${targetBranch.id}`, {
+            counterIds: [counterToLink.id],
+          });
+        } catch {}
+        this.masters.branchB = {
+          id: targetBranch.id,
+          name: targetBranch.name || targetBranch.branchName,
+          code: targetBranch.code || targetBranch.branchCode,
+        };
+        this.masters.counterB1 = {
+          id: counterToLink.id,
+          name: counterToLink.name || counterToLink.counterName,
+          branchId: targetBranch.id,
+        };
       } else {
         this.masters.branchB = this.masters.branchA;
         this.masters.counterB1 = this.masters.counterA1;
@@ -265,12 +299,22 @@ export class MasterDataRegistry {
     const corpRes = await adminClient.get('/party-profiles', { type: 'CORPORATE_CLIENT', limit: 10 });
     const corps = Array.isArray(corpRes.data?.data) ? corpRes.data.data : (Array.isArray(corpRes.data?.items) ? corpRes.data.items : (Array.isArray(corpRes.data) ? corpRes.data : []));
     if (corps.length > 0) {
+      const approvedCorp = corps.find((c: any) => (c.status === 'APPROVE' || c.status === 'APPROVED') && c.active);
+      const chosen = approvedCorp || corps[0];
       this.masters.corporatePartyProfile = {
-        id: corps[0].id,
-        name: corps[0].name,
-        entityTypeId: corps[0].entityType?.id,
+        id: chosen.id,
+        name: chosen.name,
+        entityTypeId: chosen.entityType?.id,
       };
-      TestLogger.info(`Corporate Client Party Profile: ${corps[0].name} (${this.masters.corporatePartyProfile.id})`);
+      if (chosen.status !== 'APPROVE') {
+        try {
+          await adminClient.post(`/party-profiles/${chosen.id}/review`, {
+            status: 'APPROVE',
+            active: true,
+          });
+        } catch {}
+      }
+      TestLogger.info(`Corporate Client Party Profile: ${chosen.name} (${this.masters.corporatePartyProfile.id})`);
     } else {
       const createCorpRes = await adminClient.post('/party-profiles', {
         type: 'CORPORATE_CLIENT',
@@ -404,6 +448,65 @@ export class MasterDataRegistry {
       if (policyRes.ok && policyRes.data?.transactionDate) {
         this.masters.transactionDate = policyRes.data.transactionDate;
         TestLogger.info(`Policy Transaction Date: ${this.masters.transactionDate}`);
+      }
+    }
+
+    // 7. Ensure Counter A1 has baseline USD currency notes stock for sales testing
+    if (
+      this.masters.branchA?.id &&
+      this.masters.counterA1?.id &&
+      this.masters.currencyUsd?.id &&
+      this.masters.productCn?.id
+    ) {
+      try {
+        const availRes = await adminClient.get('/transactions/quantity-availability', {
+          branchId: this.masters.branchA.id,
+          counterId: this.masters.counterA1.id,
+          currencyId: this.masters.currencyUsd.id,
+          productId: this.masters.productCn.id,
+        });
+        const currentAvail = Number(availRes.data?.availableQuantity ?? 0);
+        if (currentAvail < 50000) {
+          const purchaseQty = 100000;
+          const purchaseRate = 87.0;
+          const partyProfileId = this.masters.corporatePartyProfile?.id || this.masters.cardIssuerPartyId;
+          const pDraftRes = await adminClient.post('/transactions/drafts', {
+            slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
+            transactionDate: this.masters.transactionDate,
+            branchId: this.masters.branchA.id,
+            counterId: this.masters.counterA1.id,
+            partyProfileId,
+            tradeMode: 'BULK',
+            items: [
+              {
+                productId: this.masters.productCn.id,
+                currencyId: this.masters.currencyUsd.id,
+                quantity: purchaseQty,
+                rate: purchaseRate,
+              },
+            ],
+            payments: [
+              {
+                paymentMethod: 'CHEQUE',
+                amount: purchaseQty * purchaseRate,
+                referenceNumber: 'CHQ-BASE-1001',
+              },
+            ],
+          });
+          const draftId = pDraftRes.data?.id;
+          if (draftId) {
+            const approveRes = await adminClient.post(`/transactions/${draftId}/approve`, {});
+            if (approveRes.ok || approveRes.status === 200 || approveRes.status === 201) {
+              TestLogger.info(`Provisioned ${purchaseQty} USD CN approved stock on Counter A1`);
+            } else {
+              TestLogger.warn(`Baseline stock approval returned ${approveRes.status}: ${JSON.stringify(approveRes.data)}`);
+            }
+          } else {
+            TestLogger.warn(`Baseline stock draft creation returned ${pDraftRes.status}: ${JSON.stringify(pDraftRes.data)}`);
+          }
+        }
+      } catch (err: any) {
+        TestLogger.info(`Counter stock provisioning note: ${err?.message}`);
       }
     }
 
