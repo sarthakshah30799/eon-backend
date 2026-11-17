@@ -2,6 +2,7 @@ import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
 import { ReportReconciler } from '../infrastructure/report-reconciler';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -10,6 +11,7 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
   let workplaceManager: WorkplaceManager;
   let registry: MasterDataRegistry;
   let reconciler: ReportReconciler;
+  let saleTxId: string | undefined;
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -98,8 +100,6 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       ],
     });
 
-    let saleTxId: string | undefined;
-
     if (res.status === 201 || res.status === 200) {
       saleTxId = res.data?.id;
       reconciler.recordOperationDelta({
@@ -119,6 +119,33 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       expect(Array.isArray(getRes.data?.items)).toBe(true);
       expect(getRes.data.items[0]?.quantity).toBe(500);
       TestLogger.success('CN retail sale transaction re-opened cleanly via GET /transactions/:id');
+    }
+  });
+
+  it('3C.2B should verify retail CN sale renders accurately on Sale/Purchase frontend report table', async () => {
+    if (!saleTxId) return;
+
+    const txRes = await client.get(`/transactions/${saleTxId}`);
+    const txNum = txRes.data?.number || txRes.data?.transactionNumber;
+    if (!txNum) return;
+
+    const spRes = await client.get('/reports/sale-purchase', {
+      limit: 100,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    });
+
+    if (spRes.status === 200) {
+      ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
+      ReportAccuracyValidator.verifyTransactionOnFrontend('sale-purchase', spRes.data, {
+        transactionNumber: txNum,
+        currencyCode: 'USD',
+        quantity: 500,
+        rate: 88.5,
+        grossAmount: 44250,
+        netAmount: 44250,
+      });
+      TestLogger.success('Retail CN sale verified on Sale/Purchase frontend table');
     }
   });
 

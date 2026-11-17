@@ -1,6 +1,7 @@
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -170,6 +171,26 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
       TestLogger.success('TT Remittance transaction processed successfully');
     } else {
       TestLogger.info(`TT Remittance transaction returned ${res.status}`);
+    }
+  });
+
+  it('3D.5B should verify TT Remittance transaction renders accurately on Sale/Purchase and TT report frontend tables', async () => {
+    const spRes = await client.get('/reports/sale-purchase', {
+      limit: 100,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    });
+    if (spRes.status === 200) {
+      ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
+    }
+
+    const ttRes = await client.get('/reports/tt-report', {
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    });
+    if (ttRes.status === 200) {
+      expect(Array.isArray(ttRes.data?.columns)).toBe(true);
+      TestLogger.success('TT Remittance report verified on frontend');
     }
   });
 

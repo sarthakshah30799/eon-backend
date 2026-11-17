@@ -2,6 +2,7 @@ import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
 import { ReportReconciler } from '../infrastructure/report-reconciler';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -148,6 +149,33 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
     expect(Array.isArray(res.data?.payments)).toBe(true);
     expect(res.data?.partyProfileSnapshot !== undefined || res.data?.passenger !== undefined).toBe(true);
     TestLogger.success('Sold CC transaction re-opened cleanly via GET /transactions/:id');
+  });
+
+  it('3A.4C should verify sold CC card transaction renders accurately on Sale/Purchase frontend report table', async () => {
+    if (!testSoldTransactionId) return;
+
+    const txRes = await client.get(`/transactions/${testSoldTransactionId}`);
+    const txNum = txRes.data?.number || txRes.data?.transactionNumber;
+    if (!txNum) return;
+
+    const spRes = await client.get('/reports/sale-purchase', {
+      limit: 100,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    });
+
+    if (spRes.status === 200) {
+      ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
+      ReportAccuracyValidator.verifyTransactionOnFrontend('sale-purchase', spRes.data, {
+        transactionNumber: txNum,
+        currencyCode: 'USD',
+        quantity: 1000,
+        rate: baseSaleRate,
+        grossAmount: 1000 * baseSaleRate,
+        netAmount: 1000 * baseSaleRate,
+      });
+      TestLogger.success('Sold CC card transaction verified on Sale/Purchase frontend table');
+    }
   });
 
   it('3A.5 should reject CC card reload to a different passenger', async () => {

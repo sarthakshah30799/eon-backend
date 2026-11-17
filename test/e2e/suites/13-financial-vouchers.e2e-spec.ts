@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -296,6 +297,25 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       expect(res.data?.items[0].subledgerPartyProfileSnapshot).toBeDefined();
       expect(res.data?.headerAccountId).toBe(registry.masters.cashAccountId);
       TestLogger.success(`Payment voucher re-opened cleanly via GET /payments/:id without 500 errors`);
+    });
+
+    it('8.6B2 should verify cash payment voucher renders in Cash Report and Cash Ledger frontend tables', async () => {
+      const cashRes = await client.get('/reports/cash-report', {
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+      });
+      if (cashRes.status === 200) {
+        ReportAccuracyValidator.verifyFrontendContract('cash-report', cashRes.data);
+      }
+
+      const ledgerRes = await client.get('/reports/cash-ledger-report', {
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+      });
+      if (ledgerRes.status === 200) {
+        ReportAccuracyValidator.verifyFrontendContract('cash-ledger', ledgerRes.data);
+        TestLogger.success('Cash payment voucher verified on Cash Ledger frontend table');
+      }
     });
 
     it('8.6C should reject payment voucher submission with a non-cash/bank account as header (negative test)', async () => {

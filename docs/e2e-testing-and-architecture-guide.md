@@ -137,9 +137,10 @@ flowchart TD
         S33["33-user-security-lockouts"]
     end
 
-    subgraph P6["Phase 6: Final Accounting Closure"]
+    subgraph P6["Phase 6: Final Accounting Closure & Report Audit"]
         S34["34-final-accounts-profit-merge"]
         S35["35-post-op-reconciliation"]
+        S36["36-reports-comprehensive-audit"]
     end
 
     P1 --> P2 --> P3 --> P4 --> P5 --> P6
@@ -184,6 +185,7 @@ flowchart TD
 | **33** | `33-user-security-lockouts` | Security & Sessions | Tracking failed logins, account lockout on brute-force | Locked user denied access; session hijacking prevention |
 | **34** | `34-final-accounts-profit-merge` | Final Accounts | Merging net P&L balance into balance sheet equity | Merging without accounting period closing |
 | **35** | `35-post-op-reconciliation` | Accounting Closure | **Final Mathematical Closure:** Reports = Baseline + Deltas | Asserts zero leakage from drafts/rejections; Debits = Credits |
+| **36** | `36-reports-comprehensive-audit` | Reports & Frontend Display | **18-Report Frontend Emulation Audit:** Cell-to-Entity, Math Invariants, Contract | Asserts zero NaN, zero corrupted strings, zero unrounded floats, table subtotal checks |
 
 ---
 
@@ -881,10 +883,10 @@ pnpm test:e2e
 ```
 **Acceptance Criterion:**
 ```text
-Test Suites: 35 passed, 35 total
-Tests:       320+ passed, 320+ total
+Test Suites: 36 passed, 36 total
+Tests:       330+ passed, 330+ total
 Snapshots:   0 total
-Time:        ~450-500 s
+Time:        ~460-520 s
 Ran all test suites.
 ```
 
@@ -899,4 +901,24 @@ Before marking tasks complete, the developer must verify:
 - [ ] CFR: Negative amount, duplicate idempotency key, HO rejection with remarks, and progressive multi-sale exhaustion are tested.
 - [ ] Reports: Inverted date range, zero-transaction date query, strict draft exclusion, trial balance debits = credits, and export downloads (xlsx, csv, pdf) are tested.
 - [ ] Both `npx tsc --noEmit -p test/tsconfig.e2e.json` and `pnpm build` pass with 0 errors.
-- [ ] `pnpm test:e2e` completes with **35 passed, 35 total**.
+- [ ] `pnpm test:e2e` completes with **36 passed, 36 total**.
+
+---
+
+## 16. Frontend Display Emulation & Report Accuracy Verification Standards
+
+### 16.1 Architecture Overview
+To completely eliminate report discrepancies and guarantee that what users see on screen strictly matches database records, the testing harness includes:
+1. **`FrontendReportEmulator` (`backend/test/e2e/infrastructure/frontend-report-emulator.ts`):**
+   - Replicates the React table rendering logic from `frontend/src/modules/reports/components/*.tsx`.
+   - Parses backend API columns and row dictionaries into rendered cells (`renderedText`).
+   - Validates that numeric columns are right-aligned and formatted, date columns use `DD/MM/YYYY`, and missing fields fall back cleanly without emitting `NaN`, `undefined`, or unrounded floats.
+2. **`ReportAccuracyValidator` (`backend/test/e2e/infrastructure/report-accuracy-validator.ts`):**
+   - **Tier 1 (Cell-to-Entity):** Matches individual table cells (`vno`, `date`, `partyProfileName`, `currencyCode`, `rate`, `quantity`, `taxAmount`, `netAmount`) against PostgreSQL entities with strict financial tolerance (0.01 INR).
+   - **Tier 2 (Mathematical Invariants):** Asserts formula constraints ($\text{Closing Stock} \equiv \text{Opening} + \text{In} - \text{Out}$, $\sum \text{Debits} \equiv \sum \text{Credits}$, and visual table subtotals).
+   - **Tier 3 (Frontend Contract):** Verifies that every required column key exists and has a non-empty header label.
+3. **`REPORT_SCHEMAS` (`backend/test/e2e/infrastructure/report-schemas.ts`):**
+   - Defines the exact expected column keys and labels for all 18 reports.
+4. **`36-reports-comprehensive-audit.e2e-spec.ts` (`backend/test/e2e/suites/36-reports-comprehensive-audit.e2e-spec.ts`):**
+   - Audits all 18 reports across branch, counter, date, and party permutations, plus verifies export file downloads (`.xlsx` and `.csv`).
+
