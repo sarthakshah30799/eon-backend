@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
@@ -7,6 +8,10 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
   let client: ApiClient;
   let workplaceManager: WorkplaceManager;
   let registry: MasterDataRegistry;
+
+  let testReceiptId: string;
+  let testRefundId: string;
+  const testPan = 'ABCDE1234F';
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -36,6 +41,182 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
     expect([200, 304]).toContain(res.status);
     expect(res.data).toBeDefined();
     TestLogger.success('Advance refunds listing retrieved');
+  });
+
+  it('25.2B should provision an advance receipt for refund lifecycle testing', async () => {
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+    expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+    expect(registry.masters.advanceControlAccountId).toBeDefined();
+
+    const receiptRes = await client.post('/receipts', {
+      transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
+      headerAccountId: registry.masters.bankAccountId,
+      entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      paymentMethod: 'NEFT',
+      referenceNumber: `NEFT-REF-${Date.now()}`,
+      referenceDate: new Date().toISOString().slice(0, 10),
+      narration: 'Advance receipt for refund testing',
+      idempotencyKey: randomUUID(),
+      items: [
+        {
+          itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
+          accountId: registry.masters.advanceControlAccountId,
+          subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
+          direction: 'CREDIT',
+          amount: '75000.00',
+        },
+      ],
+    });
+
+    expect([200, 201]).toContain(receiptRes.status);
+    expect(receiptRes.data?.id).toBeDefined();
+    testReceiptId = receiptRes.data.id;
+    TestLogger.success(`Provisioned advance receipt voucher for refund: ${testReceiptId} (₹75,000.00)`);
+  });
+
+  it('25.2C should create an advance refund via LOCAL_BANK paying bank account', async () => {
+    expect(testReceiptId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+
+    const refundRes = await client.post('/advance-refunds', {
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      asOnDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      refundType: 'REFUND',
+      payoutSource: 'LOCAL_BANK',
+      payingBankAccountId: registry.masters.bankAccountId,
+      paymentMethod: 'NEFT',
+      beneficiaryName: 'Corporate Beneficiary Ltd',
+      beneficiaryAccountNumber: '123456789012',
+      beneficiaryIfscCode: 'HDFC0000001',
+      bankName: 'HDFC Bank',
+      narration: 'Advance refund for unutilized booking amount',
+      items: [
+        {
+          receiptVoucherId: testReceiptId,
+          refundAmount: '25000.00',
+        },
+      ],
+    });
+
+    expect([200, 201]).toContain(refundRes.status);
+    expect(refundRes.data?.id).toBeDefined();
+    testRefundId = refundRes.data.id;
+    expect(refundRes.data?.status).toBe('COMPLETED');
+    expect(refundRes.data?.paymentVoucherId).toBeDefined();
+    TestLogger.success(`Advance refund created: ${testRefundId} (Refunded: ₹25,000.00, PaymentVoucher: ${refundRes.data?.paymentVoucherId})`);
+  });
+
+  it('25.2D should verify available advance balance is reduced after refund', async () => {
+    expect(testReceiptId).toBeDefined();
+
+    const res = await client.get('/advance-refunds/available-advances', {
+      branchId: registry.masters.branchA.id,
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+    });
+
+    expect([200, 304]).toContain(res.status);
+    const advances = Array.isArray(res.data)
+      ? res.data
+      : (Array.isArray(res.data?.data) ? res.data.data : []);
+    const matching = advances.find((adv: any) => adv.id === testReceiptId);
+    expect(matching).toBeDefined();
+    expect(Number(matching.consumedRefundsAmount)).toBeGreaterThanOrEqual(25000);
+    expect(Number(matching.availableAmount)).toBeLessThanOrEqual(50000);
+    TestLogger.success(`Advance receipt balance verified after refund: ConsumedRefunds=₹${matching.consumedRefundsAmount}, Remaining=₹${matching.availableAmount}`);
+  });
+
+  it('25.2E should record print copies (CUSTOMER_COPY and DUPLICATE_COPY) on advance refund and verify audit logs', async () => {
+    expect(testRefundId).toBeDefined();
+
+    // 1st Print
+    const print1 = await client.post(`/advance-refunds/${testRefundId}/print`, {
+      copyType: 'CUSTOMER_COPY',
+    });
+    expect([200, 201]).toContain(print1.status);
+    expect(print1.data?.copyType).toBe('CUSTOMER_COPY');
+    TestLogger.success(`Advance refund 1st print recorded (copyType: ${print1.data?.copyType})`);
+
+    // 2nd Print
+    const print2 = await client.post(`/advance-refunds/${testRefundId}/print`, {});
+    expect([200, 201]).toContain(print2.status);
+    expect(print2.data?.copyType).toBe('DUPLICATE_COPY');
+    TestLogger.success(`Advance refund 2nd print recorded (copyType: ${print2.data?.copyType})`);
+
+    // Verify audit logs
+    const detail = await client.get(`/advance-refunds/${testRefundId}`);
+    expect(detail.status).toBe(200);
+    const printLogs = (detail.data?.logs || []).filter((l: any) => l.action === 'PRINT');
+    expect(printLogs.length).toBeGreaterThanOrEqual(2);
+    TestLogger.success(`Advance refund audit logs verified: ${printLogs.length} PRINT log entries`);
+  });
+
+  it('25.2F should reject advance refund exceeding available receipt balance (negative test)', async () => {
+    expect(testReceiptId).toBeDefined();
+
+    const overRefundRes = await client.post('/advance-refunds', {
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      asOnDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      refundType: 'REFUND',
+      payoutSource: 'LOCAL_BANK',
+      payingBankAccountId: registry.masters.bankAccountId,
+      paymentMethod: 'NEFT',
+      narration: 'Excessive refund attempt',
+      items: [
+        {
+          receiptVoucherId: testReceiptId,
+          refundAmount: '99999999.00',
+        },
+      ],
+    });
+
+    expect([400, 422]).toContain(overRefundRes.status);
+    TestLogger.success('Over-refund exceeding available advance balance correctly rejected with 400');
+  });
+
+  it('25.2G should reject advance refund without paying bank account for LOCAL_BANK (negative test)', async () => {
+    expect(testReceiptId).toBeDefined();
+
+    const missingBankRes = await client.post('/advance-refunds', {
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      asOnDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      refundType: 'REFUND',
+      payoutSource: 'LOCAL_BANK',
+      // Missing payingBankAccountId
+      paymentMethod: 'NEFT',
+      narration: 'Missing bank account attempt',
+      items: [
+        {
+          receiptVoucherId: testReceiptId,
+          refundAmount: '1000.00',
+        },
+      ],
+    });
+
+    expect([400, 422]).toContain(missingBankRes.status);
+    TestLogger.success('Advance refund missing payingBankAccountId correctly rejected with 400');
   });
 
   it('25.3 should reject advance refund creation with missing mandatory items', async () => {
@@ -87,8 +268,8 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
       refundPaymentMethod: 'CASH',
       items: [
         {
-          advanceVoucherId: fakeVoucherId,
-          refundAmount: 5000,
+          receiptVoucherId: fakeVoucherId,
+          refundAmount: '5000.00',
         },
       ],
     });

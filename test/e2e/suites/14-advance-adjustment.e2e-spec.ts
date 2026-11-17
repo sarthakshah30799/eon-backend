@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
@@ -11,6 +12,8 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
 
   let testOutstandingSaleId: string;
   let testAdjustmentId: string;
+  let testAdvanceReceiptId: string;
+  const testPan = 'ABCDE1234F';
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -60,10 +63,70 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
     TestLogger.success('Queried advance adjustments history');
   });
 
-  it('9.5 should create an advance adjustment adjusting an outstanding sale bill', async () => {
+  it('9.5A should provision an advance receipt voucher for adjustment testing', async () => {
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+    expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+    expect(registry.masters.advanceControlAccountId).toBeDefined();
+
+    const receiptRes = await client.post('/receipts', {
+      transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
+      headerAccountId: registry.masters.bankAccountId,
+      entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      paymentMethod: 'NEFT',
+      referenceNumber: `NEFT-${Date.now()}`,
+      referenceDate: new Date().toISOString().slice(0, 10),
+      narration: 'Advance receipt for adjustment and refund testing',
+      idempotencyKey: randomUUID(),
+      items: [
+        {
+          itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
+          accountId: registry.masters.advanceControlAccountId,
+          subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
+          direction: 'CREDIT',
+          amount: '100000.00',
+        },
+      ],
+    });
+
+    expect([200, 201]).toContain(receiptRes.status);
+    expect(receiptRes.data?.id).toBeDefined();
+    testAdvanceReceiptId = receiptRes.data.id;
+    TestLogger.success(`Provisioned advance receipt voucher: ${testAdvanceReceiptId} (₹100,000.00)`);
+  });
+
+  it('9.5B should query available advances for adjustment (/advance-adjustments/available-advances)', async () => {
+    expect(testAdvanceReceiptId).toBeDefined();
+
+    const res = await client.get('/advance-adjustments/available-advances', {
+      branchId: registry.masters.branchA.id,
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      asOnDate: new Date().toISOString().slice(0, 10),
+    });
+
+    expect([200, 304]).toContain(res.status);
+    const advances = Array.isArray(res.data)
+      ? res.data
+      : (Array.isArray(res.data?.data) ? res.data.data : []);
+    const matching = advances.find((adv: any) => adv.id === testAdvanceReceiptId);
+    expect(matching).toBeDefined();
+    expect(Number(matching.availableAmount)).toBeGreaterThanOrEqual(100000);
+    TestLogger.success(`Available advance verified in adjustment search: Available=₹${matching.availableAmount}`);
+  });
+
+  it('9.5C should create an advance adjustment adjusting an outstanding sale bill', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.counterA1?.id).toBeDefined();
     expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(testAdvanceReceiptId).toBeDefined();
 
     // Step 1: Query outstanding sales for corporate client
     const salesRes = await client.get('/advance-adjustments/outstanding-sales', {
@@ -125,6 +188,8 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
       transactionDate: new Date().toISOString().slice(0, 10),
       asOnDate: new Date().toISOString().slice(0, 10),
       partyProfileId: registry.masters.corporatePartyProfile.id,
+      receiptVoucherId: testAdvanceReceiptId,
+      panNumber: testPan,
       narration: 'Advance adjustment against corporate client bill',
       items: [
         {
@@ -137,7 +202,104 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
     expect([200, 201]).toContain(adjRes.status);
     expect(adjRes.data?.id).toBeDefined();
     testAdjustmentId = adjRes.data.id;
-    TestLogger.success(`Advance adjustment created: ${testAdjustmentId} (Adjusted: ${adjAmount})`);
+    expect(adjRes.data?.receiptVoucherId).toBe(testAdvanceReceiptId);
+    expect(adjRes.data?.journalVoucherId).toBeDefined();
+    TestLogger.success(`Advance adjustment created: ${testAdjustmentId} (Adjusted: ₹${adjAmount}, JV: ${adjRes.data?.journalVoucherId})`);
+  });
+
+  it('9.5D should verify advance adjustment reduced available balance and updated consumedAdjustmentsAmount', async () => {
+    expect(testAdvanceReceiptId).toBeDefined();
+
+    const res = await client.get('/advance-adjustments/available-advances', {
+      branchId: registry.masters.branchA.id,
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      asOnDate: new Date().toISOString().slice(0, 10),
+    });
+
+    expect([200, 304]).toContain(res.status);
+    const advances = Array.isArray(res.data)
+      ? res.data
+      : (Array.isArray(res.data?.data) ? res.data.data : []);
+    const matching = advances.find((adv: any) => adv.id === testAdvanceReceiptId);
+    expect(matching).toBeDefined();
+    expect(Number(matching.consumedAdjustmentsAmount)).toBeGreaterThan(0);
+    TestLogger.success(`Advance receipt consumption verified: ConsumedAdjustments=₹${matching.consumedAdjustmentsAmount}, Remaining=₹${matching.availableAmount}`);
+  });
+
+  it('9.5E should record print copies (CUSTOMER_COPY and DUPLICATE_COPY) and verify audit logs', async () => {
+    expect(testAdjustmentId).toBeDefined();
+
+    // 1st Print: Original Customer Copy
+    const print1 = await client.post(`/advance-adjustments/${testAdjustmentId}/print`, {
+      copyType: 'CUSTOMER_COPY',
+    });
+    expect([200, 201]).toContain(print1.status);
+    expect(print1.data?.copyType).toBe('CUSTOMER_COPY');
+    TestLogger.success(`Advance adjustment 1st print recorded (copyType: ${print1.data?.copyType})`);
+
+    // 2nd Print: Duplicate Copy
+    const print2 = await client.post(`/advance-adjustments/${testAdjustmentId}/print`, {});
+    expect([200, 201]).toContain(print2.status);
+    expect(print2.data?.copyType).toBe('DUPLICATE_COPY');
+    TestLogger.success(`Advance adjustment 2nd print recorded (copyType: ${print2.data?.copyType})`);
+
+    // Verify audit logs
+    const detail = await client.get(`/advance-adjustments/${testAdjustmentId}`);
+    expect(detail.status).toBe(200);
+    const printLogs = (detail.data?.logs || []).filter((l: any) => l.action === 'PRINT');
+    expect(printLogs.length).toBeGreaterThanOrEqual(2);
+    TestLogger.success(`Advance adjustment audit logs verified: ${printLogs.length} PRINT log entries`);
+  });
+
+  it('9.5F should reject advance adjustment exceeding available advance balance (negative test)', async () => {
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(testOutstandingSaleId).toBeDefined();
+    expect(testAdvanceReceiptId).toBeDefined();
+
+    const overAdjRes = await client.post('/advance-adjustments', {
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      transactionDate: new Date().toISOString().slice(0, 10),
+      asOnDate: new Date().toISOString().slice(0, 10),
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      receiptVoucherId: testAdvanceReceiptId,
+      panNumber: testPan,
+      narration: 'Excessive adjustment attempt',
+      items: [
+        {
+          transactionId: testOutstandingSaleId,
+          adjustmentAmount: '99999999.00',
+        },
+      ],
+    });
+
+    expect([400, 422]).toContain(overAdjRes.status);
+    TestLogger.success('Over-adjustment exceeding available balance correctly rejected with 400');
+  });
+
+  it('9.5G should reject advance adjustment without receiptVoucherId (negative test)', async () => {
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(testOutstandingSaleId).toBeDefined();
+
+    const noReceiptRes = await client.post('/advance-adjustments', {
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      transactionDate: new Date().toISOString().slice(0, 10),
+      asOnDate: new Date().toISOString().slice(0, 10),
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      panNumber: testPan,
+      narration: 'Missing receipt attempt',
+      items: [
+        {
+          transactionId: testOutstandingSaleId,
+          adjustmentAmount: '100.00',
+        },
+      ],
+    });
+
+    expect([400, 422]).toContain(noReceiptRes.status);
+    TestLogger.success('Advance adjustment without receiptVoucherId correctly rejected with 400');
   });
 
   it('9.6 should get advance adjustment details by ID', async () => {
