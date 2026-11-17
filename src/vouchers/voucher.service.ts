@@ -3071,23 +3071,34 @@ export class VoucherService implements OnModuleInit {
 
     const adjustmentConsumedMap = new Map<string, number>();
     try {
-      const adjustmentRows = await this.database2
-        .createQueryBuilder()
-        .select("aa.receipt_voucher_id", "voucherId")
-        .addSelect(
-          "COALESCE(SUM(aa.total_adjustment_amount), 0)",
-          "totalAdjusted",
-        )
-        .from("advance_adjustment", "aa")
-        .where("aa.receipt_voucher_id IN (:...receiptIds)", { receiptIds })
-        .andWhere("aa.status != 'CANCELLED'")
-        .groupBy("aa.receipt_voucher_id")
-        .getRawMany();
+      const adjustmentRows: Array<{
+        voucherId?: string;
+        voucherid?: string;
+        totalAdjusted?: string | number;
+        totaladjusted?: string | number;
+      }> = await this.database2.query(
+        `
+          SELECT
+            aa.receipt_voucher_id::text AS "voucherId",
+            COALESCE(SUM(aa.total_adjustment_amount), 0)::text AS "totalAdjusted"
+          FROM advance_adjustment aa
+          WHERE aa.receipt_voucher_id = ANY($1::uuid[])
+            AND aa.status <> 'CANCELLED'
+            AND aa.deleted_at IS NULL
+          GROUP BY aa.receipt_voucher_id
+        `,
+        [receiptIds],
+      );
       adjustmentRows.forEach((r) => {
-        adjustmentConsumedMap.set(r.voucherId, cents(r.totalAdjusted ?? 0));
+        const voucherId = String(r.voucherId ?? r.voucherid ?? "").trim();
+        if (!voucherId) return;
+        adjustmentConsumedMap.set(
+          voucherId,
+          cents(r.totalAdjusted ?? r.totaladjusted ?? 0),
+        );
       });
     } catch {
-      // Column/table may not exist yet
+      // Column/table may not exist yet before migration
     }
 
     const result = [];
