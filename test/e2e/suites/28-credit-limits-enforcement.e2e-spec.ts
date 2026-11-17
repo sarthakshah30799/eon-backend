@@ -21,7 +21,7 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
   });
 
   it('28.1 should preview credit validation for party profile transaction', async () => {
-    if (!registry.masters.cardIssuerPartyId) return;
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
     const res = await client.post('/transactions/credit-preview', {
       partyProfileId: registry.masters.cardIssuerPartyId,
@@ -143,7 +143,8 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
   });
 
   it('28.4 should reject partial payment with outstanding balance when credit is not approved', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // Transaction where payable = 88,500, but payment = 40,000 (leaves 48,500 outstanding without credit)
     const res = await client.post('/transactions/drafts', {
@@ -180,7 +181,8 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
   });
 
   it('28.5 should allow full payment transaction without requiring credit facility', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,

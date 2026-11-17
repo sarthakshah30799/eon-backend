@@ -20,7 +20,7 @@ describe('Module 32: EOD Operational Closure & Period Locking', () => {
   });
 
   it('32.1 should query branch policy context and active transaction date', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const res = await client.get('/auth/policy-context', {
       branchId: registry.masters.branchA.id,
@@ -54,7 +54,8 @@ describe('Module 32: EOD Operational Closure & Period Locking', () => {
   });
 
   it('32.4 should strictly reject backdated transactions outside locked windows', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -76,7 +77,7 @@ describe('Module 32: EOD Operational Closure & Period Locking', () => {
   });
 
   it('32.5 should reject monthly lock with invalid month number without 500 error', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const res = await client.post('/monthly-locks', {
       branchId: registry.masters.branchA.id,

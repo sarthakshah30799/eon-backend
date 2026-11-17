@@ -31,7 +31,9 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
 
   it('3B.1 should create CM multi-currency card stock receipt', async () => {
     const cmCurrencyId = registry.masters.currencyCmStocking?.id || registry.masters.currencyUsd?.id;
-    if (!registry.masters.branchA?.id || !registry.masters.cardIssuerPartyId || !cmCurrencyId) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+    expect(cmCurrencyId).toBeDefined();
 
     const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
     const receiptDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);
@@ -77,7 +79,9 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
   });
 
   it('3B.2 should issue multi-currency sale with USD and EUR items on same card', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.currencyEur?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.currencyEur?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -117,30 +121,28 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      const txnId = res.data?.id || res.data?.transaction?.id;
-      if (txnId) {
-        const getRes = await client.get(`/transactions/${txnId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(txnId);
-        TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for CM sale`);
-      }
+    expect([200, 201]).toContain(res.status);
+    const txnId = res.data?.id || res.data?.transaction?.id;
+    expect(txnId).toBeDefined();
 
-      reconciler.recordOperationDelta({
-        usdStockDelta: -1000,
-        eurStockDelta: -500,
-        bankDelta: 136000,
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success('CM multi-currency issuance succeeded across USD and EUR wallets');
-    } else {
-      TestLogger.info(`CM multi-currency issuance returned ${res.status}`);
-    }
+    const getRes = await client.get(`/transactions/${txnId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data).toBeDefined();
+    expect(getRes.data.id).toBe(txnId);
+    TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for CM sale`);
+
+    reconciler.recordOperationDelta({
+      usdStockDelta: -1000,
+      eurStockDelta: -500,
+      bankDelta: 136000,
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success('CM multi-currency issuance succeeded across USD and EUR wallets');
   });
 
   it('3B.3 should reject sale with duplicate currency items for the same card', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -177,7 +179,8 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
   });
 
   it('3B.5 should reject CM transaction with non-existent card kit number', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,

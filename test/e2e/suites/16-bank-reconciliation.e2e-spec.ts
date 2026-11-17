@@ -24,7 +24,7 @@ describe('Module 11: Bank Reconciliation, Cheque In-Transit & Dishonour (Bounce)
   };
 
   it('11.1 should query bank reconciliation uncleared cheque entries', async () => {
-    if (!registry.masters.bankAccountId) return;
+    expect(registry.masters.bankAccountId).toBeDefined();
 
     const res = await client.get('/bank-reconciliation', {
       bankAccountId: registry.masters.bankAccountId,
@@ -36,12 +36,13 @@ describe('Module 11: Bank Reconciliation, Cheque In-Transit & Dishonour (Bounce)
   });
 
   it('11.2 should clear a cheque entry with bank realization date when items exist', async () => {
-    if (!registry.masters.bankAccountId) return;
+    expect(registry.masters.bankAccountId).toBeDefined();
 
     const res = await client.get('/bank-reconciliation', {
       bankAccountId: registry.masters.bankAccountId,
       ...defaultDateRange,
     });
+    expect(res.status).toBe(200);
 
     const items = [
       ...(res.data?.receivedNotDeposited || []),

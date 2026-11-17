@@ -78,17 +78,16 @@ describe('Module 35: Post-Operations Financial Reconciliation & Reports Accuracy
       endDate: '2026-12-31',
       scope: 'consolidated',
     });
-    expect([200, 304]).toContain(res.status);
-    if (res.status === 200 && Array.isArray(res.data?.sections)) {
-      for (const section of res.data.sections) {
-        const opening = Number(section.opening?.total || 0);
-        const additions = Number(section.additions?.total?.total || 0);
-        const inter = Number(section.interBranch?.total?.total || 0);
-        const deductions = Number(section.deductions?.total?.total || 0);
-        const closing = Number(section.closing?.total || 0);
-        const calculated = opening + additions + inter - deductions;
-        expect(Math.abs(calculated - closing)).toBeLessThanOrEqual(0.02);
-      }
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.data?.sections)).toBe(true);
+    for (const section of res.data.sections) {
+      const opening = Number(section.opening?.total || 0);
+      const additions = Number(section.additions?.total?.total || 0);
+      const inter = Number(section.interBranch?.total?.total || 0);
+      const deductions = Number(section.deductions?.total?.total || 0);
+      const closing = Number(section.closing?.total || 0);
+      const calculated = opening + additions + inter - deductions;
+      expect(Math.abs(calculated - closing)).toBeLessThanOrEqual(0.02);
     }
     TestLogger.success('Cash Flow Report post-operation consistency verified');
   });

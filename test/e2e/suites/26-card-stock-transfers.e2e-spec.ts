@@ -19,7 +19,9 @@ describe('Module 26: CARD Stock Inter-Branch Transfers', () => {
   });
 
   it('26.1 should query available CARD stock for transfer', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.productCc?.id || !registry.masters.cardIssuerPartyId) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.productCc?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
     const res = await client.get('/card-stock/transfers/available-cards', {
       sourceBranchId: registry.masters.branchA.id,
@@ -43,7 +45,7 @@ describe('Module 26: CARD Stock Inter-Branch Transfers', () => {
   });
 
   it('26.3 should reject CARD transfer when source and destination branches are identical', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
     const txDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);
@@ -60,7 +62,8 @@ describe('Module 26: CARD Stock Inter-Branch Transfers', () => {
   });
 
   it('26.4 should reject CARD transfer request with empty items array', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.branchB?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.branchB?.id).toBeDefined();
 
     const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
     const txDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);
@@ -84,7 +87,10 @@ describe('Module 26: CARD Stock Inter-Branch Transfers', () => {
   });
 
   it('26.6 should reject card transfer with non-existent card ID (negative test)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.branchB?.id || !registry.masters.currencyUsd?.id || !registry.masters.productCc?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.branchB?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productCc?.id).toBeDefined();
     const fakeCardId = '00000000-0000-0000-0000-000000000001';
     const txDate = new Date().toISOString().slice(0, 10);
 

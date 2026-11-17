@@ -175,3 +175,4 @@ export const REPORT_SCHEMAS: Record<string, ReportColumnSpec[]> = {
     { key: 'grossProfit', label: 'Gross Profit', numeric: true },
   ],
 };
+

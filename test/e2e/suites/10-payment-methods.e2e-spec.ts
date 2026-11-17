@@ -53,7 +53,8 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
   });
 
   it('5.3 should accept electronic payment methods (UPI, NEFT, RTGS, IMPS)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -84,25 +85,23 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
 
     let testTxId: string | undefined;
 
-    if (res.status === 201 || res.status === 200) {
-      testTxId = res.data?.id;
-      TestLogger.success('NEFT electronic payment accepted');
-    } else {
-      TestLogger.info(`Electronic payment returned ${res.status}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    testTxId = res.data.id;
+    TestLogger.success('NEFT electronic payment accepted');
 
-    if (testTxId) {
-      const getRes = await client.get(`/transactions/${testTxId}`);
-      expect(getRes.status).toBe(200);
-      expect(getRes.data?.id).toBe(testTxId);
-      expect(Array.isArray(getRes.data?.payments)).toBe(true);
-      expect(getRes.data?.payments[0]?.paymentMethod).toBe('NEFT');
-      TestLogger.success('Electronic payment transaction re-opened cleanly via GET /transactions/:id');
-    }
+    const getRes = await client.get(`/transactions/${testTxId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data?.id).toBe(testTxId);
+    expect(Array.isArray(getRes.data?.payments)).toBe(true);
+    expect(getRes.data?.payments[0]?.paymentMethod).toBe('NEFT');
+    TestLogger.success('Electronic payment transaction re-opened cleanly via GET /transactions/:id');
   });
 
   it('5.4 should reject cash payment when accountId points to a non-cash ledger (negative test)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.advanceControlAccountId) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.advanceControlAccountId).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -130,7 +129,8 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
   });
 
   it('5.5 should reject cheque payment missing cheque date or number (negative test)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -158,7 +158,8 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
   });
 
   it('5.6 should support multi-method payment (split cash + bank) and re-open cleanly', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -191,17 +192,16 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      const splitTxId = res.data?.id;
-      expect(splitTxId).toBeDefined();
+    expect([200, 201]).toContain(res.status);
+    const splitTxId = res.data?.id;
+    expect(splitTxId).toBeDefined();
 
-      const getRes = await client.get(`/transactions/${splitTxId}`);
-      expect(getRes.status).toBe(200);
-      expect(getRes.data?.id).toBe(splitTxId);
-      expect(Array.isArray(getRes.data?.payments)).toBe(true);
-      expect(getRes.data.payments.length).toBe(2);
-      TestLogger.success('Multi-method split transaction verified and re-opened cleanly');
-    }
+    const getRes = await client.get(`/transactions/${splitTxId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data?.id).toBe(splitTxId);
+    expect(Array.isArray(getRes.data?.payments)).toBe(true);
+    expect(getRes.data.payments.length).toBe(2);
+    TestLogger.success('Multi-method split transaction verified and re-opened cleanly');
   });
 });
 

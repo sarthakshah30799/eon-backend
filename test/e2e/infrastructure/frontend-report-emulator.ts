@@ -115,3 +115,4 @@ export class FrontendReportEmulator {
     return numericKeywords.some(keyword => lowerKey.includes(keyword));
   }
 }
+

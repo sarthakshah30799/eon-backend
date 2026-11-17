@@ -33,7 +33,7 @@ describe('Module 6: AD1 / Remittance Transactions', () => {
   });
 
   it('6.3 should create an AD1 transaction draft when required details provided', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const res = await client.post('/transactions/ad1', {
       branchId: registry.masters.branchA.id,
@@ -43,16 +43,14 @@ describe('Module 6: AD1 / Remittance Transactions', () => {
       amount: 10000,
     });
 
-    if (res.status === 201 || res.status === 200) {
-      testAd1Id = res.data?.id;
-      TestLogger.success(`AD1 Transaction created: ${testAd1Id}`);
-    } else {
-      TestLogger.info(`AD1 creation returned ${res.status}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    testAd1Id = res.data.id;
+    TestLogger.success(`AD1 Transaction created: ${testAd1Id}`);
   });
 
   it('6.3B should fetch created AD1 transaction by ID (GET /transactions/ad1/:id) without 500 error', async () => {
-    if (!testAd1Id) return;
+    expect(testAd1Id).toBeDefined();
 
     const res = await client.get(`/transactions/ad1/${testAd1Id}`);
     expect(res.status).toBe(200);
@@ -61,7 +59,7 @@ describe('Module 6: AD1 / Remittance Transactions', () => {
   });
 
   it('6.4 should fetch AD1 print output if record exists', async () => {
-    if (!testAd1Id) return;
+    expect(testAd1Id).toBeDefined();
 
     const res = await client.post(`/transactions/ad1/${testAd1Id}/print`);
     expect([200, 201]).toContain(res.status);

@@ -39,7 +39,7 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
   });
 
   it('25.3 should reject advance refund creation with missing mandatory items', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
     const txDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);
@@ -73,7 +73,7 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
   });
 
   it('25.5 should reject advance refund creation with non-existent advance voucher ID', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
     const fakeVoucherId = '00000000-0000-0000-0000-000000000001';
     const txDate = new Date().toISOString().slice(0, 10);
 

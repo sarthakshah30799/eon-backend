@@ -19,7 +19,8 @@ describe('Module 27: Product Settlement Lifecycle & State Machine', () => {
   });
 
   it('27.1 should query unsettled product items endpoint', async () => {
-    if (!registry.masters.cardIssuerPartyId || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.get('/product-settlements/unsettled', {
       kind: 'HO_ISSUER',
@@ -43,7 +44,8 @@ describe('Module 27: Product Settlement Lifecycle & State Machine', () => {
   });
 
   it('27.3 should reject settlement creation when items array is empty', async () => {
-    if (!registry.masters.cardIssuerPartyId || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA?.id}`);
     const txDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);

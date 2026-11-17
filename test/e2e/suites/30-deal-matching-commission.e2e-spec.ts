@@ -43,7 +43,9 @@ describe('Module 30: Deal Cover Matching & Agent Commission', () => {
   });
 
   it('30.3 should validate deal cover creation rejects missing bank account profile', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.productTt?.id || !registry.masters.cardIssuerPartyId) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.productTt?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
     const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
     const txDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);

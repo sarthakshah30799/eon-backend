@@ -20,7 +20,8 @@ describe('Module 1: Day End / Day Start (BOD/EOD) & Policy Locks', () => {
   });
 
   it('1.1 should execute Day Start (BOD) successfully for active branch/counter', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.counterA1?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.counterA1?.id).toBeDefined();
 
     const res = await client.post('/day-end-start-process/start', {
       branchId: registry.masters.branchA.id,
@@ -32,6 +33,7 @@ describe('Module 1: Day End / Day Start (BOD/EOD) & Policy Locks', () => {
 
     // Either 201 Created (newly started) or 400 (already started today) are valid operational states
     expect([201, 200, 400]).toContain(res.status);
+    expect(res.status).not.toBe(500);
     if (res.status === 201 || res.status === 200) {
       TestLogger.success('BOD Day Start initiated successfully');
     } else {
@@ -40,7 +42,7 @@ describe('Module 1: Day End / Day Start (BOD/EOD) & Policy Locks', () => {
   });
 
   it('1.2 should reject duplicate Day Start when already started', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const res = await client.post('/day-end-start-process/start', {
       branchId: registry.masters.branchA.id,
@@ -50,11 +52,10 @@ describe('Module 1: Day End / Day Start (BOD/EOD) & Policy Locks', () => {
       },
     });
 
-    if (res.status === 400) {
-      const msg = Array.isArray(res.data?.message) ? res.data.message.join(' ') : (res.data?.message || JSON.stringify(res.data));
-      expect(msg).toMatch(/already|started|active|Complete EOD/i);
-      TestLogger.success('Duplicate Day Start correctly blocked');
-    }
+    expect(res.status).toBe(400);
+    const msg = Array.isArray(res.data?.message) ? res.data.message.join(' ') : (res.data?.message || JSON.stringify(res.data));
+    expect(msg).toMatch(/already|started|active|Complete EOD/i);
+    TestLogger.success('Duplicate Day Start correctly blocked');
   });
 
   it('1.3 should reject cross-branch BOD start by non-HO user', async () => {

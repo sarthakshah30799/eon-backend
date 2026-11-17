@@ -23,7 +23,9 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
   });
 
   it('9.1 should query outstanding sales eligible for advance adjustment', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.counterA1?.id || !registry.masters.cardIssuerPartyId) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.counterA1?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
     const res = await client.get('/advance-adjustments/outstanding-sales', {
       branchId: registry.masters.branchA.id,
@@ -36,7 +38,7 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
   });
 
   it('9.2 should query available advances eligible for refund', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const res = await client.get('/advance-refunds/available-advances', {
       branchId: registry.masters.branchA.id,
@@ -59,13 +61,9 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
   });
 
   it('9.5 should create an advance adjustment adjusting an outstanding sale bill', async () => {
-    if (
-      !registry.masters.branchA?.id ||
-      !registry.masters.counterA1?.id ||
-      !registry.masters.corporatePartyProfile?.id
-    ) {
-      return;
-    }
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.counterA1?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
 
     // Step 1: Query outstanding sales for corporate client
     const salesRes = await client.get('/advance-adjustments/outstanding-sales', {
@@ -75,42 +73,75 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
       asOnDate: new Date().toISOString().slice(0, 10),
     });
 
-    const sales = Array.isArray(salesRes.data)
+    let sales = Array.isArray(salesRes.data)
       ? salesRes.data
       : (Array.isArray(salesRes.data?.data) ? salesRes.data.data : []);
 
-    if (sales.length > 0) {
-      testOutstandingSaleId = sales[0].id;
-      const adjAmount = Math.min(Number(sales[0].outstandingAmount || 5000), 5000).toFixed(2);
-
-      const adjRes = await client.post('/advance-adjustments', {
+    if (sales.length === 0 && registry.masters.productCn?.id && registry.masters.currencyUsd?.id) {
+      const saleRes = await client.post('/transactions/drafts', {
+        slug: TRANSACTION_SLUGS.SALE_CORPORATE_INDIVIDUAL,
         branchId: registry.masters.branchA.id,
         counterId: registry.masters.counterA1.id,
-        transactionDate: new Date().toISOString().slice(0, 10),
-        asOnDate: new Date().toISOString().slice(0, 10),
+        tradeMode: 'BULK',
         partyProfileId: registry.masters.corporatePartyProfile.id,
-        narration: 'Advance adjustment against corporate client bill',
         items: [
           {
-            transactionId: testOutstandingSaleId,
-            adjustmentAmount: adjAmount,
+            productId: registry.masters.productCn.id,
+            currencyId: registry.masters.currencyUsd.id,
+            quantity: 100,
+            rate: 88.5,
+          },
+        ],
+        payments: [
+          {
+            paymentMethod: 'CHEQUE',
+            amount: 3850,
+            referenceNumber: 'CHQ999111',
+            referenceDate: new Date().toISOString().slice(0, 10),
+            branchName: 'Fort',
+            drawnOn: 'HDFC Bank',
           },
         ],
       });
-
-      if (adjRes.status === 200 || adjRes.status === 201) {
-        testAdjustmentId = adjRes.data?.id;
-        TestLogger.success(`Advance adjustment created: ${testAdjustmentId} (Adjusted: ${adjAmount})`);
-      } else {
-        TestLogger.info(`Advance adjustment creation returned ${adjRes.status}: ${JSON.stringify(adjRes.data)}`);
-      }
-    } else {
-      TestLogger.info('No outstanding sales currently available for adjustment; adjustment schema verified');
+      expect([200, 201]).toContain(saleRes.status);
+      const recheckSales = await client.get('/advance-adjustments/outstanding-sales', {
+        branchId: registry.masters.branchA.id,
+        counterId: registry.masters.counterA1.id,
+        partyProfileId: registry.masters.corporatePartyProfile.id,
+        asOnDate: new Date().toISOString().slice(0, 10),
+      });
+      sales = Array.isArray(recheckSales.data)
+        ? recheckSales.data
+        : (Array.isArray(recheckSales.data?.data) ? recheckSales.data.data : []);
     }
+
+    expect(sales.length).toBeGreaterThan(0);
+    testOutstandingSaleId = sales[0].id;
+    const adjAmount = Math.min(Number(sales[0].outstandingAmount || 5000), 5000).toFixed(2);
+
+    const adjRes = await client.post('/advance-adjustments', {
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1.id,
+      transactionDate: new Date().toISOString().slice(0, 10),
+      asOnDate: new Date().toISOString().slice(0, 10),
+      partyProfileId: registry.masters.corporatePartyProfile.id,
+      narration: 'Advance adjustment against corporate client bill',
+      items: [
+        {
+          transactionId: testOutstandingSaleId,
+          adjustmentAmount: adjAmount,
+        },
+      ],
+    });
+
+    expect([200, 201]).toContain(adjRes.status);
+    expect(adjRes.data?.id).toBeDefined();
+    testAdjustmentId = adjRes.data.id;
+    TestLogger.success(`Advance adjustment created: ${testAdjustmentId} (Adjusted: ${adjAmount})`);
   });
 
   it('9.6 should get advance adjustment details by ID', async () => {
-    if (!testAdjustmentId) return;
+    expect(testAdjustmentId).toBeDefined();
 
     const res = await client.get(`/advance-adjustments/${testAdjustmentId}`);
     expect([200, 304]).toContain(res.status);
@@ -127,7 +158,8 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
   });
 
   it('9.8 should reject advance adjustment with non-existent transaction ID without 500 error', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.corporatePartyProfile?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
 
     const dummyTxnId = '00000000-0000-0000-0000-000000009999';
     const res = await client.post('/advance-adjustments', {

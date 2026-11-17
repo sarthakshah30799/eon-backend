@@ -25,7 +25,8 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
   });
 
   it('3C.1 should purchase currency notes from passenger (retail encashment surrender)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -55,20 +56,19 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      reconciler.recordOperationDelta({
-        usdStockDelta: 800,
-        cashDelta: -69600,
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success('CN retail purchase (encashment surrender) completed successfully');
-    } else {
-      TestLogger.info(`CN retail purchase returned ${res.status}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    reconciler.recordOperationDelta({
+      usdStockDelta: 800,
+      cashDelta: -69600,
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success('CN retail purchase (encashment surrender) completed successfully');
   });
 
   it('3C.2 should execute retail sale of currency notes to passenger', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -100,34 +100,30 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      saleTxId = res.data?.id;
-      reconciler.recordOperationDelta({
-        usdStockDelta: -500,
-        cashDelta: 44250,
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success('CN retail sale completed successfully');
-    } else {
-      TestLogger.info(`CN retail sale returned ${res.status}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    saleTxId = res.data.id;
+    reconciler.recordOperationDelta({
+      usdStockDelta: -500,
+      cashDelta: 44250,
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success('CN retail sale completed successfully');
 
-    if (saleTxId) {
-      const getRes = await client.get(`/transactions/${saleTxId}`);
-      expect(getRes.status).toBe(200);
-      expect(getRes.data?.id).toBe(saleTxId);
-      expect(Array.isArray(getRes.data?.items)).toBe(true);
-      expect(getRes.data.items[0]?.quantity).toBe(500);
-      TestLogger.success('CN retail sale transaction re-opened cleanly via GET /transactions/:id');
-    }
+    const getRes = await client.get(`/transactions/${saleTxId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data?.id).toBe(saleTxId);
+    expect(Array.isArray(getRes.data?.items)).toBe(true);
+    expect(getRes.data.items[0]?.quantity).toBe(500);
+    TestLogger.success('CN retail sale transaction re-opened cleanly via GET /transactions/:id');
   });
 
   it('3C.2B should verify retail CN sale renders accurately on Sale/Purchase frontend report table', async () => {
-    if (!saleTxId) return;
+    expect(saleTxId).toBeDefined();
 
     const txRes = await client.get(`/transactions/${saleTxId}`);
     const txNum = txRes.data?.number || txRes.data?.transactionNumber;
-    if (!txNum) return;
+    expect(txNum).toBeDefined();
 
     const spRes = await client.get('/reports/sale-purchase', {
       limit: 100,
@@ -135,22 +131,22 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       endDate: '2026-12-31',
     });
 
-    if (spRes.status === 200) {
-      ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
-      ReportAccuracyValidator.verifyTransactionOnFrontend('sale-purchase', spRes.data, {
-        transactionNumber: txNum,
-        currencyCode: 'USD',
-        quantity: 500,
-        rate: 88.5,
-        grossAmount: 44250,
-        netAmount: 44250,
-      });
-      TestLogger.success('Retail CN sale verified on Sale/Purchase frontend table');
-    }
+    expect(spRes.status).toBe(200);
+    ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
+    ReportAccuracyValidator.verifyTransactionOnFrontend('sale-purchase', spRes.data, {
+      transactionNumber: txNum,
+      currencyCode: 'USD',
+      quantity: 500,
+      rate: 88.5,
+      grossAmount: 44250,
+      netAmount: 44250,
+    });
+    TestLogger.success('Retail CN sale verified on Sale/Purchase frontend table');
   });
 
   it('3C.3 should execute wholesale purchase of currency notes from FFMC with cheque', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyEur?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyEur?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_BULK_FFMC,
@@ -175,19 +171,18 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      reconciler.recordOperationDelta({
-        eurStockDelta: 25000,
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success('Wholesale EUR currency purchase from FFMC completed');
-    } else {
-      TestLogger.info(`Wholesale purchase returned ${res.status}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    reconciler.recordOperationDelta({
+      eurStockDelta: 25000,
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success('Wholesale EUR currency purchase from FFMC completed');
   });
 
   it('3C.4 should reject retail sale of currency notes when requested quantity exceeds available counter stock (negative stock prevention)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -226,11 +221,11 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
   });
 
   it('3C.5 should reject sale of currency notes when counter stock is 0 (negative stock prevention)', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     // Use an unstocked currency or currency with 0 counter balance
     const unstockedCurrencyId = registry.masters.currencyCmStocking?.id || registry.masters.currencyEur?.id || registry.masters.currencyGbp?.id;
-    if (!unstockedCurrencyId) return;
+    expect(unstockedCurrencyId).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,

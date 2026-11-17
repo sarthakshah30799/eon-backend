@@ -20,7 +20,8 @@ describe('Module 29: GST Rule 32 Slabs, Inter-State IGST & Additional Charges', 
   });
 
   it('29.1 should calculate GST and split correctly for retail currency sale', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -56,7 +57,8 @@ describe('Module 29: GST Rule 32 Slabs, Inter-State IGST & Additional Charges', 
   });
 
   it('29.2 should support additional charges on transaction draft', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,

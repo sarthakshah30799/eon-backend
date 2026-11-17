@@ -30,7 +30,9 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   });
 
   it('7.2 should initiate inter-branch currency stock transfer (Branch A to Branch B)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.branchB?.id || !registry.masters.currencyEur?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.branchB?.id).toBeDefined();
+    expect(registry.masters.currencyEur?.id).toBeDefined();
 
     const res = await client.post('/transfers/branch', {
       fromBranchId: registry.masters.branchA.id,
@@ -45,16 +47,14 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
       remarks: 'Transfer surplus EUR to Branch B',
     });
 
-    if (res.status === 201 || res.status === 200) {
-      testTransferId = res.data?.id;
-      TestLogger.success(`Branch transfer created: ${testTransferId} (status: ${res.data?.status})`);
-    } else {
-      TestLogger.info(`Branch transfer returned ${res.status}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    testTransferId = res.data.id;
+    TestLogger.success(`Branch transfer created: ${testTransferId} (status: ${res.data?.status})`);
   });
 
   it('7.3 should accept pending branch transfer by destination branch', async () => {
-    if (!testTransferId) return;
+    expect(testTransferId).toBeDefined();
 
     const res = await client.post(`/transfers/${testTransferId}/accept`);
     expect([200, 201]).toContain(res.status);
@@ -62,7 +62,7 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   });
 
   it('7.3B should fetch transfer by ID (GET /transfers/:id) and verify status and transfer items without 500 error', async () => {
-    if (!testTransferId) return;
+    expect(testTransferId).toBeDefined();
 
     const res = await client.get(`/transfers/${testTransferId}`);
     expect(res.status).toBe(200);
@@ -73,7 +73,7 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   });
 
   it('7.4 should generate transfer voucher print', async () => {
-    if (!testTransferId) return;
+    expect(testTransferId).toBeDefined();
 
     const res = await client.post(`/transfers/${testTransferId}/print`);
     expect([200, 201]).toContain(res.status);
@@ -81,7 +81,8 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   });
 
   it('7.5 should reject branch transfer with non-existent destination branch ID (negative test)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyEur?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyEur?.id).toBeDefined();
     const fakeBranchId = '00000000-0000-0000-0000-000000000000';
 
     const res = await client.post('/transfers/branch', {
@@ -102,7 +103,10 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   });
 
   it('7.6 should reject branch transfer when requested quantity exceeds available counter stock (negative stock prevention)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.branchB?.id || !registry.masters.counterB1?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.branchB?.id).toBeDefined();
+    expect(registry.masters.counterB1?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transfers/branch', {
       sourceBranchId: registry.masters.branchA.id,
@@ -128,14 +132,16 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   });
 
   it('7.7 should reject counter transfer when requested quantity exceeds available counter stock', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.counterA1?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.counterA1?.id).toBeDefined();
     const testCurrency = registry.masters.currencyCmStocking?.id || registry.masters.currencyEur?.id || registry.masters.currencyGbp?.id || registry.masters.currencyUsd?.id;
-    if (!testCurrency) return;
+    expect(testCurrency).toBeDefined();
 
     const destCounterId = registry.masters.counterA2?.id && registry.masters.counterA2.id !== registry.masters.counterA1.id
       ? registry.masters.counterA2.id
       : registry.masters.counterB1?.id;
-    if (!destCounterId || destCounterId === registry.masters.counterA1.id) return;
+    expect(destCounterId).toBeDefined();
+    expect(destCounterId).not.toBe(registry.masters.counterA1.id);
 
     const res = await client.post('/transfers/counter', {
       sourceBranchId: registry.masters.branchA.id,
