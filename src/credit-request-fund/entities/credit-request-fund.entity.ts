@@ -95,7 +95,11 @@ export class CreditRequestFund extends BaseEntity {
   paidByPanName: string | null;
   @Column({ type: "date", name: "paid_by_pan_dob", nullable: true })
   paidByPanDob: string | null;
-  @Column({ type: "uuid", name: "pan_holder_relation_option_id", nullable: true })
+  @Column({
+    type: "uuid",
+    name: "pan_holder_relation_option_id",
+    nullable: true,
+  })
   panHolderRelationOptionId: string | null;
   @Column({
     type: "jsonb",
@@ -134,7 +138,11 @@ export class CreditRequestFund extends BaseEntity {
   @Column({ type: "timestamptz", name: "cancelled_at", nullable: true })
   cancelledAt: Date | null;
 
-  @Column({ type: "uuid", name: "destination_receipt_voucher_id", nullable: true })
+  @Column({
+    type: "uuid",
+    name: "destination_receipt_voucher_id",
+    nullable: true,
+  })
   destinationReceiptVoucherId: string | null;
   @Column({
     type: "jsonb",
@@ -142,7 +150,11 @@ export class CreditRequestFund extends BaseEntity {
     nullable: true,
   })
   destinationReceiptVoucherSnapshot: TransactionReferenceSnapshotValue | null;
-  @Column({ type: "uuid", name: "requesting_receipt_voucher_id", nullable: true })
+  @Column({
+    type: "uuid",
+    name: "requesting_receipt_voucher_id",
+    nullable: true,
+  })
   requestingReceiptVoucherId: string | null;
   @Column({
     type: "jsonb",
@@ -150,7 +162,11 @@ export class CreditRequestFund extends BaseEntity {
     nullable: true,
   })
   requestingReceiptVoucherSnapshot: TransactionReferenceSnapshotValue | null;
-  @Column({ type: "uuid", name: "requesting_payment_voucher_id", nullable: true })
+  @Column({
+    type: "uuid",
+    name: "requesting_payment_voucher_id",
+    nullable: true,
+  })
   requestingPaymentVoucherId: string | null;
   @Column({
     type: "jsonb",
@@ -158,9 +174,6 @@ export class CreditRequestFund extends BaseEntity {
     nullable: true,
   })
   requestingPaymentVoucherSnapshot: TransactionReferenceSnapshotValue | null;
-
-  @Column({ type: "integer", name: "print_count", default: 0 })
-  printCount: number;
 
   @OneToMany(() => CreditRequestFundItem, (item) => item.creditRequestFund, {
     cascade: false,
