@@ -109,6 +109,7 @@ export class AdvanceRefundResponseDto {
   @ApiProperty({ nullable: true }) paymentVoucherId: string | null;
   @ApiProperty({ nullable: true }) adviceVoucherId: string | null;
   @ApiProperty({ nullable: true }) hoPaymentVoucherId: string | null;
+  @ApiProperty() printCount: number;
   @ApiProperty({ type: [AdvanceRefundLogResponseDto] })
   logs: AdvanceRefundLogResponseDto[];
   @ApiProperty({ type: [AdvanceRefundItemResponseDto] }) items: AdvanceRefundItemResponseDto[];
@@ -153,6 +154,9 @@ export class AdvanceRefundResponseDto {
     dto.paymentVoucherId = entity.paymentVoucherId;
     dto.adviceVoucherId = entity.adviceVoucherId;
     dto.hoPaymentVoucherId = entity.hoPaymentVoucherId;
+    dto.printCount = Array.isArray(entity.logs)
+      ? entity.logs.filter((log) => log.action === AdvanceRefundLogAction.PRINT).length
+      : 0;
     dto.logs = Array.isArray(entity.logs)
       ? entity.logs.map((log) => AdvanceRefundLogResponseDto.fromEntity(log))
       : [];

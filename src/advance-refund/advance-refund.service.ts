@@ -880,6 +880,7 @@ export class AdvanceRefundService {
   ): Promise<{
     message: string;
     copyType: AdvanceRefundPrintCopyType;
+    printCount: number;
   }> {
     const actorId = this.getActor(session);
     const advanceRefund = await this.advanceRefundRepository.findOne({
@@ -950,6 +951,7 @@ export class AdvanceRefundService {
     return {
       message,
       copyType,
+      printCount: existingPrintCount + 1,
     };
   }
 

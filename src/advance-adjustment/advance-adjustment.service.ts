@@ -648,6 +648,7 @@ export class AdvanceAdjustmentService {
   ): Promise<{
     message: string;
     copyType: AdvanceAdjustmentPrintCopyType;
+    printCount: number;
   }> {
     const actorId = this.getActor(session);
     const record = await this.advanceAdjustmentRepository.findOne({
@@ -718,6 +719,7 @@ export class AdvanceAdjustmentService {
     return {
       message,
       copyType,
+      printCount: existingPrintCount + 1,
     };
   }
 

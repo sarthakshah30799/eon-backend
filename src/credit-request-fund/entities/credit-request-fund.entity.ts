@@ -182,4 +182,6 @@ export class CreditRequestFund extends BaseEntity {
 
   @OneToMany(() => CreditRequestFundLog, (log) => log.creditRequestFund)
   logs: CreditRequestFundLog[];
+
+  printCount?: number;
 }

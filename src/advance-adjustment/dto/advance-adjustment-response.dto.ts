@@ -94,6 +94,7 @@ export class AdvanceAdjustmentResponseDto {
   @ApiProperty({ nullable: true })
   receiptVoucherSnapshot: Record<string, any> | null;
   @ApiProperty() journalVoucherId: string;
+  @ApiProperty() printCount: number;
   @ApiProperty({ type: [AdvanceAdjustmentLogResponseDto] })
   logs: AdvanceAdjustmentLogResponseDto[];
   @ApiProperty({ type: [AdvanceAdjustmentItemResponseDto] })
@@ -122,6 +123,9 @@ export class AdvanceAdjustmentResponseDto {
     dto.receiptVoucherId = entity.receiptVoucherId;
     dto.receiptVoucherSnapshot = entity.receiptVoucherSnapshot;
     dto.journalVoucherId = entity.journalVoucherId;
+    dto.printCount = Array.isArray(entity.logs)
+      ? entity.logs.filter((log) => log.action === AdvanceAdjustmentLogAction.PRINT).length
+      : 0;
     dto.logs = Array.isArray(entity.logs)
       ? entity.logs.map((log) =>
           AdvanceAdjustmentLogResponseDto.fromEntity(log),
