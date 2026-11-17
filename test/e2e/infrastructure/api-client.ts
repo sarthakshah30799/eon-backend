@@ -185,16 +185,28 @@ export class ApiClient {
     };
   }
 
-  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
-    try {
-      return await fetch(url, init);
-    } catch (err: any) {
-      if (err?.cause?.code === 'ECONNRESET' || err?.message?.includes('fetch failed')) {
-        await new Promise((r) => setTimeout(r, 600));
+  private async fetchWithRetry(url: string, init: RequestInit, retries: number = 2): Promise<Response> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
         return await fetch(url, init);
+      } catch (err: any) {
+        const isNetworkErr =
+          err?.cause?.code === 'ECONNRESET' ||
+          err?.cause?.code === 'ECONNREFUSED' ||
+          err?.message?.includes('fetch failed');
+        if (isNetworkErr && attempt < retries) {
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 500));
+          continue;
+        }
+        if (isNetworkErr) {
+          throw new Error(
+            `Cannot connect to backend at ${url}. Please ensure the backend server is running on ${this.baseUrl} (e.g. 'pnpm start:dev'). Root cause: ${err?.message || err}`,
+          );
+        }
+        throw err;
       }
-      throw err;
     }
+    throw new Error(`Failed to fetch ${url} after ${retries} attempts`);
   }
 
   private async sendWithBody<T = any>(method: string, endpoint: string, body?: any): Promise<ApiResponse<T>> {
