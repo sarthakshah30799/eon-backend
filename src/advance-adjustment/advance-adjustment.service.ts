@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
+import { randomUUID } from "crypto";
 import { DataSource, Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { Branch } from "../branches/branch.entity";
@@ -28,14 +29,18 @@ import {
   TransactionType,
 } from "../transactions/transactions.enums";
 import { User } from "../users/user.entity";
-import { VoucherSession } from "../vouchers/voucher.service";
+import { AccountingVoucher } from "../vouchers/entities/accounting-voucher.entity";
+import { VoucherType } from "../vouchers/voucher.enums";
+import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_ADJUSTMENT_NUMBER_SERIES,
+  AdvanceAdjustmentLogAction,
   AdvanceAdjustmentPrintCopyType,
   AdvanceAdjustmentStatus,
 } from "./advance-adjustment.enums";
 import {
   AdvanceAdjustmentQueryDto,
+  AvailableAdvanceForAdjustmentQueryDto,
   OutstandingSalesForAdjustmentQueryDto,
 } from "./dto/advance-adjustment-query.dto";
 import {
@@ -46,7 +51,7 @@ import { CreateAdvanceAdjustmentDto } from "./dto/create-advance-adjustment.dto"
 import { RecordAdvanceAdjustmentPrintDto } from "./dto/record-advance-adjustment-print.dto";
 import { AdvanceAdjustment } from "./entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "./entities/advance-adjustment-item.entity";
-import { AdvanceAdjustmentPrintLog } from "./entities/advance-adjustment-print-log.entity";
+import { AdvanceAdjustmentLog } from "./entities/advance-adjustment-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -81,8 +86,8 @@ export class AdvanceAdjustmentService {
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(AdvanceAdjustment, "database2")
     private readonly advanceAdjustmentRepository: Repository<AdvanceAdjustment>,
-    @InjectRepository(AdvanceAdjustmentPrintLog, "database2")
-    private readonly printLogRepository: Repository<AdvanceAdjustmentPrintLog>,
+    @InjectRepository(AdvanceAdjustmentLog, "database2")
+    private readonly logRepository: Repository<AdvanceAdjustmentLog>,
     @InjectRepository(Transaction, "database2")
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(PartyProfile)
@@ -98,6 +103,7 @@ export class AdvanceAdjustmentService {
     private readonly additionalSettings: AdditionalSettingService,
     private readonly dayPolicy: DayEndStartProcessService,
     private readonly partyProfileService: PartyProfileService,
+    private readonly voucherService: VoucherService,
   ) {}
 
   private getActor(session: VoucherSession) {
@@ -225,6 +231,12 @@ export class AdvanceAdjustmentService {
           : null;
     }
 
+    if (individual && !panNumber) {
+      throw new BadRequestException(
+        "PAN card number is required for individual advance adjustment",
+      );
+    }
+
     if (!Array.isArray(dto.items) || dto.items.length === 0) {
       throw new BadRequestException(
         "At least one outstanding sale must be selected for adjustment",
@@ -237,6 +249,7 @@ export class AdvanceAdjustmentService {
     }
 
     const asOnDate = dto.asOnDate.slice(0, 10);
+    const transactionDate = dto.transactionDate.slice(0, 10);
     const narration = normalize(dto.narration);
     if (!narration) {
       throw new BadRequestException("Narration is required");
@@ -255,6 +268,7 @@ export class AdvanceAdjustmentService {
       new Date(dto.transactionDate),
     );
 
+    const headerId = randomUUID();
     const queryRunner2 = this.database2.createQueryRunner();
     await queryRunner2.connect();
     await queryRunner2.startTransaction();
@@ -263,34 +277,71 @@ export class AdvanceAdjustmentService {
       const headerRepo2 = queryRunner2.manager.getRepository(AdvanceAdjustment);
       const itemRepo2 =
         queryRunner2.manager.getRepository(AdvanceAdjustmentItem);
+      const logRepo2 = queryRunner2.manager.getRepository(AdvanceAdjustmentLog);
       const txRepo2 = queryRunner2.manager.getRepository(Transaction);
+      const voucherRepo2 =
+        queryRunner2.manager.getRepository(AccountingVoucher);
 
-      const header = headerRepo2.create({
-        createdBy: actorId,
-        updatedBy: actorId,
-        number,
-        branchId: branch.id,
-        branchSnapshot,
-        counterId: counter.id,
-        counterSnapshot,
-        transactionDate: dto.transactionDate.slice(0, 10),
-        asOnDate,
-        partyProfileId: party.id,
-        partyProfileSnapshot,
-        panNumber,
-        panName,
-        panDob,
-        status: AdvanceAdjustmentStatus.DRAFT,
-        totalAdjustmentAmount: "0.00",
-        narration,
-        printCount: 0,
+      const receipt = await voucherRepo2.findOne({
+        where: { id: dto.receiptVoucherId },
+        lock: { mode: "pessimistic_write" },
       });
+      if (!receipt) {
+        throw new NotFoundException("Advance receipt voucher not found");
+      }
+      if (receipt.voucherType !== VoucherType.RECEIPT) {
+        throw new BadRequestException(
+          "Selected voucher is not a receipt voucher",
+        );
+      }
+      if (receipt.branchId !== branch.id) {
+        throw new BadRequestException(
+          "Advance receipt branch does not match selected branch",
+        );
+      }
+      if (receipt.partyProfileId && receipt.partyProfileId !== party.id) {
+        throw new BadRequestException(
+          "Advance receipt party does not match selected party",
+        );
+      }
 
-      const savedHeader = await headerRepo2.save(header);
+      const receiptDate = toDateOnly(receipt.transactionDate) ?? "";
+      if (transactionDate < receiptDate) {
+        throw new BadRequestException(
+          `Adjustment date ${transactionDate} cannot be before receipt date ${receiptDate}`,
+        );
+      }
+
+      const availableRows =
+        await this.voucherService.getAvailableAdvancesForRefund({
+          panNumber: panNumber || normalize(receipt.panNumber),
+          partyProfileId: party.id,
+          branchId: branch.id,
+          asOnDate,
+        });
+      const availableRow = availableRows.find((row) => row.id === receipt.id);
+      const availableCents = cents(availableRow?.availableAmount ?? 0);
+      if (availableCents <= 0) {
+        throw new BadRequestException(
+          `Advance receipt ${receipt.number} has no available balance`,
+        );
+      }
+
+      const receiptVoucherSnapshot = {
+        id: receipt.id,
+        number: receipt.number,
+        finalAmount: receipt.finalAmount,
+        transactionDate: toDateOnly(receipt.transactionDate),
+      };
 
       let totalCents = 0;
       let lineNo = 1;
-      const createdItems: AdvanceAdjustmentItem[] = [];
+      const preparedItems: Array<{
+        locked: Transaction;
+        outstandingCents: number;
+        adjustmentCents: number;
+        lineNo: number;
+      }> = [];
 
       for (const item of dto.items) {
         const locked = await txRepo2.findOne({
@@ -334,6 +385,11 @@ export class AdvanceAdjustmentService {
             `Sale ${locked.number} date ${saleDate} is after as-on date ${asOnDate}`,
           );
         }
+        if (transactionDate < saleDate) {
+          throw new BadRequestException(
+            `Adjustment date ${transactionDate} cannot be before sale date ${saleDate}`,
+          );
+        }
 
         const outstandingCents = this.billOutstandingCents(locked);
         if (outstandingCents <= 0) {
@@ -354,43 +410,136 @@ export class AdvanceAdjustmentService {
           );
         }
 
-        locked.byOther = money(
-          cents(locked.byOther ?? 0) + adjustmentCents,
-        );
-        locked.updatedBy = actorId;
-        await txRepo2.save(locked);
-
         totalCents += adjustmentCents;
-
-        const itemEntity = itemRepo2.create({
-          createdBy: actorId,
-          updatedBy: actorId,
-          advanceAdjustmentId: savedHeader.id,
+        preparedItems.push({
+          locked,
+          outstandingCents,
+          adjustmentCents,
           lineNo: lineNo++,
-          transactionId: locked.id,
-          transactionSnapshot: {
-            id: locked.id,
-            number: locked.number,
-            transactionDate: toDateOnly(locked.transactionDate),
-            transactionType: locked.transactionType,
-            slug: locked.slug,
-            finalAmount: locked.finalAmount,
-            partyProfileId: locked.partyProfileId,
-            partyProfileSnapshot: locked.partyProfileSnapshot ?? null,
-            agentProfileSnapshot: locked.agentProfileSnapshot ?? null,
-            passengerSnapshot: locked.passengerSnapshot ?? null,
-          },
-          finalAmount: money(cents(locked.finalAmount)),
-          outstandingAmount: money(outstandingCents),
-          adjustmentAmount: money(adjustmentCents),
         });
-        createdItems.push(await itemRepo2.save(itemEntity));
       }
 
-      savedHeader.totalAdjustmentAmount = money(totalCents);
-      savedHeader.status = AdvanceAdjustmentStatus.COMPLETED;
-      savedHeader.updatedBy = actorId;
-      await headerRepo2.save(savedHeader);
+      if (totalCents > availableCents) {
+        throw new BadRequestException(
+          `Total adjustment ${money(totalCents)} exceeds available advance ${money(availableCents)} on receipt ${receipt.number}`,
+        );
+      }
+
+      const totalAdjustmentAmount = money(totalCents);
+      const jv = await this.voucherService.createAdvanceAdjustmentJournalVoucher(
+        {
+          advanceAdjustmentId: headerId,
+          branchId: branch.id,
+          counterId: counter.id,
+          transactionDate,
+          narration,
+          party,
+          pan: { panNumber, panName, panDob },
+          items: preparedItems.map((row) => ({
+            transactionId: row.locked.id,
+            amount: money(row.adjustmentCents),
+            transactionNumber: row.locked.number,
+            transactionSnapshot: {
+              id: row.locked.id,
+              number: row.locked.number,
+              transactionDate: toDateOnly(row.locked.transactionDate),
+              transactionType: row.locked.transactionType,
+              slug: row.locked.slug,
+              finalAmount: row.locked.finalAmount,
+            },
+          })),
+          totalAmount: totalAdjustmentAmount,
+          actorId,
+        },
+        queryRunner2.manager,
+      );
+
+      const header = headerRepo2.create({
+        id: headerId,
+        createdBy: actorId,
+        updatedBy: actorId,
+        number,
+        branchId: branch.id,
+        branchSnapshot,
+        counterId: counter.id,
+        counterSnapshot,
+        transactionDate,
+        asOnDate,
+        partyProfileId: party.id,
+        partyProfileSnapshot,
+        panNumber,
+        panName,
+        panDob,
+        status: AdvanceAdjustmentStatus.COMPLETED,
+        totalAdjustmentAmount,
+        narration,
+        receiptVoucherId: receipt.id,
+        receiptVoucherSnapshot,
+        journalVoucherId: jv.id,
+      });
+      const savedHeader = await headerRepo2.save(header);
+
+      const createdItems: AdvanceAdjustmentItem[] = [];
+      for (const row of preparedItems) {
+        row.locked.byOther = money(
+          cents(row.locked.byOther ?? 0) + row.adjustmentCents,
+        );
+        row.locked.updatedBy = actorId;
+        await txRepo2.save(row.locked);
+
+        createdItems.push(
+          await itemRepo2.save(
+            itemRepo2.create({
+              createdBy: actorId,
+              updatedBy: actorId,
+              advanceAdjustmentId: savedHeader.id,
+              lineNo: row.lineNo,
+              transactionId: row.locked.id,
+              transactionSnapshot: {
+                id: row.locked.id,
+                number: row.locked.number,
+                transactionDate: toDateOnly(row.locked.transactionDate),
+                transactionType: row.locked.transactionType,
+                slug: row.locked.slug,
+                finalAmount: row.locked.finalAmount,
+                partyProfileId: row.locked.partyProfileId,
+                partyProfileSnapshot: row.locked.partyProfileSnapshot ?? null,
+                agentProfileSnapshot: row.locked.agentProfileSnapshot ?? null,
+                passengerSnapshot: row.locked.passengerSnapshot ?? null,
+              },
+              finalAmount: money(cents(row.locked.finalAmount)),
+              outstandingAmount: money(row.outstandingCents),
+              adjustmentAmount: money(row.adjustmentCents),
+            }),
+          ),
+        );
+      }
+
+      const performedByName = await this.resolveActorName(actorId);
+      await logRepo2.save(
+        logRepo2.create({
+          advanceAdjustmentId: savedHeader.id,
+          action: AdvanceAdjustmentLogAction.CREATE,
+          message: "Advance adjustment created",
+          afterSnapshot: {
+            id: savedHeader.id,
+            number: savedHeader.number,
+            status: savedHeader.status,
+            totalAdjustmentAmount: savedHeader.totalAdjustmentAmount,
+            receiptVoucherId: savedHeader.receiptVoucherId,
+            journalVoucherId: savedHeader.journalVoucherId,
+          },
+          metadata: {
+            itemCount: createdItems.length,
+            receiptVoucherNumber: receipt.number,
+            journalVoucherNumber: jv.number,
+          },
+          performedById: actorId,
+          performedByName,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
 
       await queryRunner2.commitTransaction();
 
@@ -470,8 +619,8 @@ export class AdvanceAdjustmentService {
   ): Promise<AdvanceAdjustmentResponseDto> {
     const record = await this.advanceAdjustmentRepository.findOne({
       where: { id },
-      relations: ["items", "printLogs"],
-      order: { printLogs: { performedAt: "DESC" } },
+      relations: ["items", "logs"],
+      order: { logs: { performedAt: "DESC" } },
     });
 
     if (!record) {
@@ -499,7 +648,6 @@ export class AdvanceAdjustmentService {
   ): Promise<{
     message: string;
     copyType: AdvanceAdjustmentPrintCopyType;
-    printCount: number;
   }> {
     const actorId = this.getActor(session);
     const record = await this.advanceAdjustmentRepository.findOne({
@@ -533,26 +681,26 @@ export class AdvanceAdjustmentService {
       );
     }
 
-    const existingPrintCount = record.printCount ?? 0;
+    const existingPrintCount = await this.logRepository.count({
+      where: {
+        advanceAdjustmentId: id,
+        action: AdvanceAdjustmentLogAction.PRINT,
+      },
+    });
     const copyType =
       existingPrintCount === 0
         ? AdvanceAdjustmentPrintCopyType.CUSTOMER_COPY
         : AdvanceAdjustmentPrintCopyType.DUPLICATE_COPY;
-    const printCount = existingPrintCount + 1;
     const message =
       copyType === AdvanceAdjustmentPrintCopyType.DUPLICATE_COPY
         ? "Duplicate copy printed"
         : "Original copy printed";
     const performedByName = await this.resolveActorName(actorId);
 
-    await this.advanceAdjustmentRepository.update(id, {
-      printCount,
-      updatedBy: actorId,
-    });
-    await this.printLogRepository.save(
-      this.printLogRepository.create({
+    await this.logRepository.save(
+      this.logRepository.create({
         advanceAdjustmentId: id,
-        copyType,
+        action: AdvanceAdjustmentLogAction.PRINT,
         message,
         metadata: {
           copyType,
@@ -570,8 +718,36 @@ export class AdvanceAdjustmentService {
     return {
       message,
       copyType,
-      printCount,
     };
+  }
+
+  async getAvailableAdvances(
+    query: AvailableAdvanceForAdjustmentQueryDto,
+    session: VoucherSession,
+  ) {
+    const isHo = await this.isHoApprover(session);
+    const branchId = isHo
+      ? query.branchId || normalize(session.activeBranchId)
+      : normalize(session.activeBranchId) || query.branchId;
+
+    if (!branchId) {
+      throw new BadRequestException("Branch ID is required");
+    }
+
+    const normalizedPan = normalizeUpper(query.panNumber);
+    if (!normalizedPan) {
+      throw new BadRequestException(
+        "PAN card number is required to find available advances",
+      );
+    }
+
+    return this.voucherService.getAvailableAdvancesForRefund({
+      panNumber: normalizedPan,
+      partyProfileId: query.partyProfileId,
+      branchId,
+      asOnDate: query.asOnDate || new Date().toISOString().slice(0, 10),
+      search: query.search,
+    });
   }
 
   async getOutstandingSales(

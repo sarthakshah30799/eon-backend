@@ -15,6 +15,7 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { AdvanceAdjustmentService } from "./advance-adjustment.service";
 import {
   AdvanceAdjustmentQueryDto,
+  AvailableAdvanceForAdjustmentQueryDto,
   OutstandingSalesForAdjustmentQueryDto,
 } from "./dto/advance-adjustment-query.dto";
 import { CreateAdvanceAdjustmentDto } from "./dto/create-advance-adjustment.dto";
@@ -59,6 +60,15 @@ export class AdvanceAdjustmentController {
     @Session() session: any,
   ) {
     return this.service.getOutstandingSales(query, session);
+  }
+
+  @Get("available-advances")
+  @ApiOperation({ summary: "List available advance receipts for adjustment" })
+  getAvailableAdvances(
+    @Query() query: AvailableAdvanceForAdjustmentQueryDto,
+    @Session() session: any,
+  ) {
+    return this.service.getAvailableAdvances(query, session);
   }
 
   @Get(":id")

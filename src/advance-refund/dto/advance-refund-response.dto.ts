@@ -1,20 +1,22 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
+  AdvanceRefundLogAction,
   AdvanceRefundPayoutSource,
-  AdvanceRefundPrintCopyType,
   AdvanceRefundStatus,
   AdvanceRefundType,
 } from "../advance-refund.enums";
 import { AdvanceRefund } from "../entities/advance-refund.entity";
 import { AdvanceRefundItem } from "../entities/advance-refund-item.entity";
-import { AdvanceRefundPrintLog } from "../entities/advance-refund-print-log.entity";
+import { AdvanceRefundLog } from "../entities/advance-refund-log.entity";
 
-export class AdvanceRefundPrintLogResponseDto {
+export class AdvanceRefundLogResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() advanceRefundId: string;
-  @ApiProperty({ enum: AdvanceRefundPrintCopyType })
-  copyType: AdvanceRefundPrintCopyType;
+  @ApiProperty({ enum: AdvanceRefundLogAction })
+  action: AdvanceRefundLogAction;
   @ApiProperty() message: string;
+  @ApiProperty({ nullable: true }) beforeSnapshot: Record<string, unknown> | null;
+  @ApiProperty({ nullable: true }) afterSnapshot: Record<string, unknown> | null;
   @ApiProperty({ nullable: true }) metadata: Record<string, unknown> | null;
   @ApiProperty({ nullable: true }) performedById: string | null;
   @ApiProperty({ nullable: true }) performedByName: string | null;
@@ -22,14 +24,14 @@ export class AdvanceRefundPrintLogResponseDto {
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
 
-  static fromEntity(
-    entity: AdvanceRefundPrintLog,
-  ): AdvanceRefundPrintLogResponseDto {
-    const dto = new AdvanceRefundPrintLogResponseDto();
+  static fromEntity(entity: AdvanceRefundLog): AdvanceRefundLogResponseDto {
+    const dto = new AdvanceRefundLogResponseDto();
     dto.id = entity.id;
     dto.advanceRefundId = entity.advanceRefundId;
-    dto.copyType = entity.copyType;
+    dto.action = entity.action;
     dto.message = entity.message;
+    dto.beforeSnapshot = entity.beforeSnapshot;
+    dto.afterSnapshot = entity.afterSnapshot;
     dto.metadata = entity.metadata;
     dto.performedById = entity.performedById;
     dto.performedByName = entity.performedByName;
@@ -107,9 +109,8 @@ export class AdvanceRefundResponseDto {
   @ApiProperty({ nullable: true }) paymentVoucherId: string | null;
   @ApiProperty({ nullable: true }) adviceVoucherId: string | null;
   @ApiProperty({ nullable: true }) hoPaymentVoucherId: string | null;
-  @ApiProperty() printCount: number;
-  @ApiProperty({ type: [AdvanceRefundPrintLogResponseDto] })
-  printLogs: AdvanceRefundPrintLogResponseDto[];
+  @ApiProperty({ type: [AdvanceRefundLogResponseDto] })
+  logs: AdvanceRefundLogResponseDto[];
   @ApiProperty({ type: [AdvanceRefundItemResponseDto] }) items: AdvanceRefundItemResponseDto[];
   @ApiProperty() createdAt: Date;
   @ApiProperty() updatedAt: Date;
@@ -152,11 +153,8 @@ export class AdvanceRefundResponseDto {
     dto.paymentVoucherId = entity.paymentVoucherId;
     dto.adviceVoucherId = entity.adviceVoucherId;
     dto.hoPaymentVoucherId = entity.hoPaymentVoucherId;
-    dto.printCount = entity.printCount ?? 0;
-    dto.printLogs = Array.isArray(entity.printLogs)
-      ? entity.printLogs.map((log) =>
-          AdvanceRefundPrintLogResponseDto.fromEntity(log),
-        )
+    dto.logs = Array.isArray(entity.logs)
+      ? entity.logs.map((log) => AdvanceRefundLogResponseDto.fromEntity(log))
       : [];
     dto.items = Array.isArray(entity.items)
       ? entity.items.map((i) => AdvanceRefundItemResponseDto.fromEntity(i))

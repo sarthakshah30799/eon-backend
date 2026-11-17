@@ -71,3 +71,30 @@ export class OutstandingSalesForAdjustmentQueryDto extends PaginationQueryDto {
   @IsOptional()
   search?: string;
 }
+
+export class AvailableAdvanceForAdjustmentQueryDto {
+  @ApiProperty({ description: "PAN Card Number" })
+  @IsString()
+  @IsNotEmpty()
+  panNumber: string;
+
+  @ApiPropertyOptional({ description: "Branch ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: "Party Profile ID (UUID)" })
+  @IsUUID()
+  @IsOptional()
+  partyProfileId?: string;
+
+  @ApiPropertyOptional({ description: "As-on Date (YYYY-MM-DD)" })
+  @IsDateString()
+  @IsOptional()
+  asOnDate?: string;
+
+  @ApiPropertyOptional({ description: "Search term" })
+  @IsString()
+  @IsOptional()
+  search?: string;
+}

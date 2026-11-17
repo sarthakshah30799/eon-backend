@@ -3069,6 +3069,27 @@ export class VoucherService implements OnModuleInit {
       // Table may not exist yet
     }
 
+    const adjustmentConsumedMap = new Map<string, number>();
+    try {
+      const adjustmentRows = await this.database2
+        .createQueryBuilder()
+        .select("aa.receipt_voucher_id", "voucherId")
+        .addSelect(
+          "COALESCE(SUM(aa.total_adjustment_amount), 0)",
+          "totalAdjusted",
+        )
+        .from("advance_adjustment", "aa")
+        .where("aa.receipt_voucher_id IN (:...receiptIds)", { receiptIds })
+        .andWhere("aa.status != 'CANCELLED'")
+        .groupBy("aa.receipt_voucher_id")
+        .getRawMany();
+      adjustmentRows.forEach((r) => {
+        adjustmentConsumedMap.set(r.voucherId, cents(r.totalAdjusted ?? 0));
+      });
+    } catch {
+      // Column/table may not exist yet
+    }
+
     const result = [];
     for (const voucher of receipts) {
       if (
@@ -3080,7 +3101,10 @@ export class VoucherService implements OnModuleInit {
       const totalCents = cents(voucher.finalAmount);
       const consumedBillsCents = billConsumedMap.get(voucher.id) ?? 0;
       const consumedRefundsCents = refundConsumedMap.get(voucher.id) ?? 0;
-      const totalConsumedCents = consumedBillsCents + consumedRefundsCents;
+      const consumedAdjustmentsCents =
+        adjustmentConsumedMap.get(voucher.id) ?? 0;
+      const totalConsumedCents =
+        consumedBillsCents + consumedRefundsCents + consumedAdjustmentsCents;
       const availableCents = Math.max(0, totalCents - totalConsumedCents);
 
       if (availableCents > 0) {
@@ -3096,6 +3120,7 @@ export class VoucherService implements OnModuleInit {
           originalAmount: voucher.finalAmount,
           consumedBillsAmount: money(consumedBillsCents),
           consumedRefundsAmount: money(consumedRefundsCents),
+          consumedAdjustmentsAmount: money(consumedAdjustmentsCents),
           consumedAmount: money(totalConsumedCents),
           availableAmount: money(availableCents),
         });
@@ -3249,6 +3274,165 @@ export class VoucherService implements OnModuleInit {
         updatedBy: input.actorId,
       }),
     );
+
+    return voucherRepo.findOneOrFail({
+      where: { id: voucher.id },
+      relations: ["items"],
+    });
+  }
+
+  async createAdvanceAdjustmentJournalVoucher(
+    input: {
+      advanceAdjustmentId?: string;
+      idempotencyKey?: string;
+      branchId: string;
+      counterId: string;
+      transactionDate: string;
+      narration: string;
+      party: PartyProfile;
+      pan?: {
+        panNumber?: string | null;
+        panName?: string | null;
+        panDob?: string | null;
+      };
+      items: Array<{
+        transactionId: string;
+        amount: string;
+        transactionNumber: string;
+        transactionSnapshot?: Record<string, unknown> | null;
+      }>;
+      totalAmount: string;
+      actorId: string;
+    },
+    manager: EntityManager,
+  ): Promise<AccountingVoucher> {
+    const advanceAccount = await this.resolveAdvanceAccount();
+    const salesControlAccount = await this.resolveBillControlAccount(
+      VoucherItemTypeValue.SALE_CORPORATE_INDIVIDUAL,
+    );
+    const itemType = await this.optionByValue(
+      "VOUCHER_ITEM_TYPE",
+      VoucherItemTypeValue.ACCOUNT,
+    );
+    const branch = await this.branchRepository.findOneOrFail({
+      where: { id: input.branchId },
+    });
+    const counter = await this.counterRepository.findOneOrFail({
+      where: { id: input.counterId },
+    });
+    const [
+      branchSnapshot,
+      counterSnapshot,
+      partySnapshot,
+      advanceAccountSnapshot,
+      salesControlSnapshot,
+      itemTypeSnapshot,
+    ] = await Promise.all([
+      this.snapshot(this.branchRepository, branch.id),
+      this.snapshot(this.counterRepository, counter.id),
+      this.snapshot(this.partyRepository, input.party.id),
+      this.snapshot(this.accountRepository, advanceAccount.id),
+      this.snapshot(this.accountRepository, salesControlAccount.id),
+      this.snapshot(this.optionRepository, itemType.id),
+    ]);
+
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[VoucherType.JOURNAL],
+      branch.code,
+      new Date(input.transactionDate),
+    );
+
+    const idempotencyKey =
+      input.idempotencyKey ||
+      (input.advanceAdjustmentId
+        ? `advance-adjustment:jv:${input.advanceAdjustmentId}`
+        : `advance-adjustment:jv:${randomUUID()}`);
+    const payloadHash = this.payloadHash(VoucherType.JOURNAL, {
+      advanceAdjustmentId: input.advanceAdjustmentId,
+      branchId: input.branchId,
+      counterId: input.counterId,
+      transactionDate: input.transactionDate,
+      totalAmount: input.totalAmount,
+      items: input.items,
+    });
+
+    const voucherRepo = manager.getRepository(AccountingVoucher);
+    const itemRepo = manager.getRepository(AccountingVoucherItem);
+
+    const voucher = await voucherRepo.save(
+      voucherRepo.create({
+        voucherType: VoucherType.JOURNAL,
+        number,
+        idempotencyKey,
+        payloadHash,
+        transactionDate: input.transactionDate.slice(0, 10),
+        branchId: branch.id,
+        branchSnapshot,
+        counterId: counter.id,
+        counterSnapshot,
+        partyProfileId: input.party.id,
+        partyProfileSnapshot: partySnapshot,
+        panNumber: input.pan?.panNumber || null,
+        panName: input.pan?.panName || null,
+        panDob: input.pan?.panDob ? toDateOnly(input.pan.panDob) : null,
+        narration: normalize(input.narration),
+        totalDebit: input.totalAmount,
+        totalCredit: input.totalAmount,
+        finalAmount: input.totalAmount,
+        headerAccountId: null,
+        accountMode: null,
+        advanceControlAccountId: null,
+        advanceControlAccountSnapshot: null,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    let lineNo = 1;
+    await itemRepo.save(
+      itemRepo.create({
+        voucherId: voucher.id,
+        voucher,
+        lineNo: lineNo++,
+        itemTypeOptionId: itemType.id,
+        itemTypeSnapshot,
+        accountId: advanceAccount.id,
+        accountSnapshot: advanceAccountSnapshot,
+        direction: VoucherEntryDirection.DEBIT,
+        amount: money(cents(input.totalAmount)),
+        subledgerPartyProfileId: input.party.id,
+        subledgerPartyProfileSnapshot: partySnapshot,
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }),
+    );
+
+    for (const item of input.items) {
+      await itemRepo.save(
+        itemRepo.create({
+          voucherId: voucher.id,
+          voucher,
+          lineNo: lineNo++,
+          itemTypeOptionId: itemType.id,
+          itemTypeSnapshot,
+          accountId: salesControlAccount.id,
+          accountSnapshot: salesControlSnapshot,
+          direction: VoucherEntryDirection.CREDIT,
+          amount: money(cents(item.amount)),
+          subledgerPartyProfileId: input.party.id,
+          subledgerPartyProfileSnapshot: partySnapshot,
+          settledTransactionId: item.transactionId,
+          settledTransactionSnapshot:
+            item.transactionSnapshot ??
+            ({
+              id: item.transactionId,
+              number: item.transactionNumber,
+            } as TransactionReferenceSnapshotValue),
+          createdBy: input.actorId,
+          updatedBy: input.actorId,
+        }),
+      );
+    }
 
     return voucherRepo.findOneOrFail({
       where: { id: voucher.id },

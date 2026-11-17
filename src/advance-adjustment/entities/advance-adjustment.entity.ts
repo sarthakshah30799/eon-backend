@@ -2,13 +2,15 @@ import { Column, Entity, Index, OneToMany } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { AdvanceAdjustmentStatus } from "../advance-adjustment.enums";
 import { AdvanceAdjustmentItem } from "./advance-adjustment-item.entity";
-import { AdvanceAdjustmentPrintLog } from "./advance-adjustment-print-log.entity";
+import { AdvanceAdjustmentLog } from "./advance-adjustment-log.entity";
 
 @Entity("advance_adjustment")
 @Index("UQ_advance_adjustment_number", ["number"], { unique: true })
 @Index("IDX_advance_adjustment_branch_date", ["branchId", "transactionDate"])
 @Index("IDX_advance_adjustment_party", ["partyProfileId"])
 @Index("IDX_advance_adjustment_status", ["status"])
+@Index("IDX_advance_adjustment_receipt_voucher_id", ["receiptVoucherId"])
+@Index("IDX_advance_adjustment_journal_voucher_id", ["journalVoucherId"])
 export class AdvanceAdjustment extends BaseEntity {
   @Column({ type: "citext" })
   number: string;
@@ -64,14 +66,20 @@ export class AdvanceAdjustment extends BaseEntity {
   @Column({ type: "text" })
   narration: string;
 
-  @Column({ type: "integer", name: "print_count", default: 0 })
-  printCount: number;
+  @Column({ type: "uuid", name: "receipt_voucher_id" })
+  receiptVoucherId: string;
+
+  @Column({ type: "jsonb", name: "receipt_voucher_snapshot", nullable: true })
+  receiptVoucherSnapshot: Record<string, any> | null;
+
+  @Column({ type: "uuid", name: "journal_voucher_id" })
+  journalVoucherId: string;
 
   @OneToMany(() => AdvanceAdjustmentItem, (item) => item.advanceAdjustment, {
     cascade: true,
   })
   items: AdvanceAdjustmentItem[];
 
-  @OneToMany(() => AdvanceAdjustmentPrintLog, (log) => log.advanceAdjustment)
-  printLogs: AdvanceAdjustmentPrintLog[];
+  @OneToMany(() => AdvanceAdjustmentLog, (log) => log.advanceAdjustment)
+  logs: AdvanceAdjustmentLog[];
 }

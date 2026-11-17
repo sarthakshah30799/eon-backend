@@ -17,7 +17,7 @@ import { CreditRequestFundService } from "./credit-request-fund.service";
 import {
   CreditRequestFund,
   CreditRequestFundItem,
-  CreditRequestFundPrintLog,
+  CreditRequestFundLog,
 } from "./entities";
 
 @Module({
@@ -37,7 +37,7 @@ import {
       User,
     ]),
     TypeOrmModule.forFeature(
-      [CreditRequestFund, CreditRequestFundItem, CreditRequestFundPrintLog],
+      [CreditRequestFund, CreditRequestFundItem, CreditRequestFundLog],
       "database2",
     ),
   ],

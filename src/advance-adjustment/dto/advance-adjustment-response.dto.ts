@@ -1,18 +1,20 @@
 import { ApiProperty } from "@nestjs/swagger";
 import {
-  AdvanceAdjustmentPrintCopyType,
+  AdvanceAdjustmentLogAction,
   AdvanceAdjustmentStatus,
 } from "../advance-adjustment.enums";
 import { AdvanceAdjustment } from "../entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "../entities/advance-adjustment-item.entity";
-import { AdvanceAdjustmentPrintLog } from "../entities/advance-adjustment-print-log.entity";
+import { AdvanceAdjustmentLog } from "../entities/advance-adjustment-log.entity";
 
-export class AdvanceAdjustmentPrintLogResponseDto {
+export class AdvanceAdjustmentLogResponseDto {
   @ApiProperty() id: string;
   @ApiProperty() advanceAdjustmentId: string;
-  @ApiProperty({ enum: AdvanceAdjustmentPrintCopyType })
-  copyType: AdvanceAdjustmentPrintCopyType;
+  @ApiProperty({ enum: AdvanceAdjustmentLogAction })
+  action: AdvanceAdjustmentLogAction;
   @ApiProperty() message: string;
+  @ApiProperty({ nullable: true }) beforeSnapshot: Record<string, unknown> | null;
+  @ApiProperty({ nullable: true }) afterSnapshot: Record<string, unknown> | null;
   @ApiProperty({ nullable: true }) metadata: Record<string, unknown> | null;
   @ApiProperty({ nullable: true }) performedById: string | null;
   @ApiProperty({ nullable: true }) performedByName: string | null;
@@ -21,13 +23,15 @@ export class AdvanceAdjustmentPrintLogResponseDto {
   @ApiProperty() updatedAt: Date;
 
   static fromEntity(
-    entity: AdvanceAdjustmentPrintLog,
-  ): AdvanceAdjustmentPrintLogResponseDto {
-    const dto = new AdvanceAdjustmentPrintLogResponseDto();
+    entity: AdvanceAdjustmentLog,
+  ): AdvanceAdjustmentLogResponseDto {
+    const dto = new AdvanceAdjustmentLogResponseDto();
     dto.id = entity.id;
     dto.advanceAdjustmentId = entity.advanceAdjustmentId;
-    dto.copyType = entity.copyType;
+    dto.action = entity.action;
     dto.message = entity.message;
+    dto.beforeSnapshot = entity.beforeSnapshot;
+    dto.afterSnapshot = entity.afterSnapshot;
     dto.metadata = entity.metadata;
     dto.performedById = entity.performedById;
     dto.performedByName = entity.performedByName;
@@ -86,9 +90,12 @@ export class AdvanceAdjustmentResponseDto {
   status: AdvanceAdjustmentStatus;
   @ApiProperty() totalAdjustmentAmount: string;
   @ApiProperty() narration: string;
-  @ApiProperty() printCount: number;
-  @ApiProperty({ type: [AdvanceAdjustmentPrintLogResponseDto] })
-  printLogs: AdvanceAdjustmentPrintLogResponseDto[];
+  @ApiProperty() receiptVoucherId: string;
+  @ApiProperty({ nullable: true })
+  receiptVoucherSnapshot: Record<string, any> | null;
+  @ApiProperty() journalVoucherId: string;
+  @ApiProperty({ type: [AdvanceAdjustmentLogResponseDto] })
+  logs: AdvanceAdjustmentLogResponseDto[];
   @ApiProperty({ type: [AdvanceAdjustmentItemResponseDto] })
   items: AdvanceAdjustmentItemResponseDto[];
   @ApiProperty() createdAt: Date;
@@ -112,10 +119,12 @@ export class AdvanceAdjustmentResponseDto {
     dto.status = entity.status;
     dto.totalAdjustmentAmount = entity.totalAdjustmentAmount;
     dto.narration = entity.narration;
-    dto.printCount = entity.printCount ?? 0;
-    dto.printLogs = Array.isArray(entity.printLogs)
-      ? entity.printLogs.map((log) =>
-          AdvanceAdjustmentPrintLogResponseDto.fromEntity(log),
+    dto.receiptVoucherId = entity.receiptVoucherId;
+    dto.receiptVoucherSnapshot = entity.receiptVoucherSnapshot;
+    dto.journalVoucherId = entity.journalVoucherId;
+    dto.logs = Array.isArray(entity.logs)
+      ? entity.logs.map((log) =>
+          AdvanceAdjustmentLogResponseDto.fromEntity(log),
         )
       : [];
     dto.items = Array.isArray(entity.items)
