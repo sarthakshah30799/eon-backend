@@ -134,30 +134,55 @@ export class CfrAdvAdjustLogs1794912214665 implements MigrationInterface {
     await queryRunner.query(`
       DO $$
       DECLARE
-        v_adj_id uuid := 'a819ebca-9df5-4a3f-b750-f7c28a738c3a';
-        v_receipt_id uuid := 'c4741765-c24c-4b46-b429-6e58d5b9bdf3';
-        v_receipt_snap jsonb;
-        v_jv_id uuid := uuid_generate_v4();
         rec RECORD;
+        v_receipt RECORD;
+        v_receipt_snap jsonb;
+        v_jv_id uuid;
+        v_missing text;
       BEGIN
-        SELECT * INTO rec FROM "advance_adjustment" WHERE "id" = v_adj_id;
-        IF FOUND THEN
-          SELECT jsonb_build_object(
-            'id', id,
-            'number', number,
-            'finalAmount', final_amount,
-            'transactionDate', transaction_date
-          )
-          INTO v_receipt_snap
-          FROM "accounting_vouchers"
-          WHERE "id" = v_receipt_id;
+        FOR rec IN
+          SELECT *
+          FROM "advance_adjustment"
+          WHERE "receipt_voucher_id" IS NULL
+             OR "journal_voucher_id" IS NULL
+          ORDER BY "created_at" ASC, "number" ASC
+        LOOP
+          SELECT av.*
+          INTO v_receipt
+          FROM "accounting_vouchers" av
+          WHERE av."voucher_type" = 'RECEIPT'
+            AND av."branch_id" = rec.branch_id
+            AND av."party_profile_id" = rec.party_profile_id
+            AND av."transaction_date" <= rec.transaction_date
+            AND (
+              rec.pan_number IS NULL
+              OR av."pan_number" IS NULL
+              OR av."pan_number" = rec.pan_number
+            )
+            AND av."final_amount" >= rec.total_adjustment_amount
+          ORDER BY
+            av."transaction_date" ASC,
+            av."number" ASC
+          LIMIT 1;
 
-          IF v_receipt_snap IS NULL THEN
+          IF NOT FOUND THEN
             RAISE EXCEPTION
-              'Backfill receipt voucher % not found for advance adjustment %',
-              v_receipt_id,
-              v_adj_id;
+              'No matching advance RECEIPT found to backfill adjustment % (%) branch=% party=% pan=% amount=%',
+              rec.id,
+              rec.number,
+              rec.branch_id,
+              rec.party_profile_id,
+              rec.pan_number,
+              rec.total_adjustment_amount;
           END IF;
+
+          v_receipt_snap := jsonb_build_object(
+            'id', v_receipt.id,
+            'number', v_receipt.number,
+            'finalAmount', v_receipt.final_amount,
+            'transactionDate', v_receipt.transaction_date
+          );
+          v_jv_id := uuid_generate_v4();
 
           INSERT INTO "accounting_vouchers" (
             "id",
@@ -207,10 +232,10 @@ export class CfrAdvAdjustLogs1794912214665 implements MigrationInterface {
 
           UPDATE "advance_adjustment"
           SET
-            "receipt_voucher_id" = v_receipt_id,
+            "receipt_voucher_id" = v_receipt.id,
             "receipt_voucher_snapshot" = v_receipt_snap,
             "journal_voucher_id" = v_jv_id
-          WHERE "id" = v_adj_id;
+          WHERE "id" = rec.id;
 
           INSERT INTO "advance_adjustment_logs" (
             "id",
@@ -233,16 +258,18 @@ export class CfrAdvAdjustLogs1794912214665 implements MigrationInterface {
             rec.created_by,
             COALESCE(rec.created_at, now())
           );
-        END IF;
+        END LOOP;
 
-        IF EXISTS (
-          SELECT 1
-          FROM "advance_adjustment"
-          WHERE "receipt_voucher_id" IS NULL
-             OR "journal_voucher_id" IS NULL
-        ) THEN
+        SELECT string_agg(number::text, ', ' ORDER BY number)
+        INTO v_missing
+        FROM "advance_adjustment"
+        WHERE "receipt_voucher_id" IS NULL
+           OR "journal_voucher_id" IS NULL;
+
+        IF v_missing IS NOT NULL THEN
           RAISE EXCEPTION
-            'advance_adjustment still has rows without receipt_voucher_id / journal_voucher_id after backfill';
+            'advance_adjustment still missing voucher links after backfill: %',
+            v_missing;
         END IF;
       END $$;
     `);
