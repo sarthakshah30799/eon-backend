@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { AccountProfileBranch } from "../account-profiles/entities/account-profile-branch.entity";
 import { Product } from "../products/product.entity";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { TransactionItem } from "../transactions/entities/transaction-item.entity";
@@ -30,6 +31,8 @@ import { CashReportController } from "./cash-report.controller";
 import { CashReportService } from "./cash-report.service";
 import { CashFlowReportController } from "./cash-flow-report.controller";
 import { CashFlowReportService } from "./cash-flow-report.service";
+import { CashLedgerReportController } from "./cash-ledger-report.controller";
+import { CashLedgerReportService } from "./cash-ledger-report.service";
 import { GenerateLedgerController } from "./generate-ledger.controller";
 import { GenerateLedgerService } from "./generate-ledger.service";
 import { CardUnsettledReportController } from "./card-unsettled-report.controller";
@@ -89,6 +92,7 @@ import { UserRole } from "../user-roles/user-role.entity";
       UserRole,
       Currency,
       AccountProfile,
+      AccountProfileBranch,
       Product,
     ]),
     TypeOrmModule.forFeature(
@@ -115,6 +119,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     BankReconciliationReportController,
     CashReportController,
     CashFlowReportController,
+    CashLedgerReportController,
     GenerateLedgerController,
     CardUnsettledReportController,
     CardSettledReportController,
@@ -146,6 +151,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     BankReconciliationReportService,
     CashReportService,
     CashFlowReportService,
+    CashLedgerReportService,
     GenerateLedgerService,
     CardUnsettledReportService,
     CardSettledReportService,

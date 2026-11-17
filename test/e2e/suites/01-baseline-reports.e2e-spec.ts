@@ -22,9 +22,17 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     await reconciler.captureBaseline(client);
   }, 180000);
 
+  // Bound report queries — unbounded sale-purchase/export on a large remote DB
+  // exceeds the default 120s Jest timeout (seen on tests 1.7 / 1.8).
+  const defaultDateRange = {
+    startDate: '2026-01-01',
+    endDate: '2026-12-31',
+  };
+
   describe('Report Suite 1: Sale & Purchase Report', () => {
     it('1.1 should fetch sale-purchase report grouped by code', async () => {
       const res = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         groupBy: 'code',
         layout: 'grouped',
       });
@@ -35,6 +43,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     it('1.2 should filter sale-purchase report by single branch', async () => {
       if (!registry.masters.branchA?.id) return;
       const res = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         branchIds: [registry.masters.branchA.id],
       });
       expect(res.status).toBe(200);
@@ -49,6 +58,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     it('1.3 should filter sale-purchase report by single counter', async () => {
       if (!registry.masters.counterA1?.id) return;
       const res = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         counterIds: [registry.masters.counterA1.id],
       });
       expect(res.status).toBe(200);
@@ -56,6 +66,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
 
     it('1.4 should filter sale-purchase report with party profile filter', async () => {
       const res = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         partyProfileIds: registry.masters.cardIssuerPartyId ? [registry.masters.cardIssuerPartyId] : undefined,
       });
       expect(res.status).toBe(200);
@@ -63,6 +74,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
 
     it('1.5 should filter sale-purchase report by transaction type SALE', async () => {
       const res = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         transactionTypes: ['SALE'],
       });
       expect(res.status).toBe(200);
@@ -70,24 +82,30 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
 
     it('1.6 should filter sale-purchase report by transaction type PURCHASE', async () => {
       const res = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         transactionTypes: ['PURCHASE'],
       });
       expect(res.status).toBe(200);
     });
 
     it('1.7 should support export for sale-purchase report', async () => {
-      const res = await client.get('/reports/sale-purchase/export', { format: 'xlsx' });
+      const res = await client.get('/reports/sale-purchase/export', {
+        ...defaultDateRange,
+        format: 'xlsx',
+      });
       expect([200, 304]).toContain(res.status);
     });
 
     it('1.8 should fetch sale-purchase report with flat layout and short/long detail', async () => {
       const flatRes = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         layout: 'flat',
         detail: 'short',
       });
       expect(flatRes.status).toBe(200);
 
       const longRes = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         layout: 'flat',
         detail: 'long',
       });
@@ -96,12 +114,14 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
 
     it('1.9 should fetch sale-purchase report grouped by date and branch', async () => {
       const dateRes = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         layout: 'grouped',
         groupBy: 'date',
       });
       expect(dateRes.status).toBe(200);
 
       const branchRes = await client.get('/reports/sale-purchase', {
+        ...defaultDateRange,
         layout: 'grouped',
         groupBy: 'branch',
       });
@@ -129,11 +149,6 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
       expect([200, 304]).toContain(res.status);
     });
   });
-
-  const defaultDateRange = {
-    startDate: '2026-01-01',
-    endDate: '2026-12-31',
-  };
 
   describe('Report Suite 3: Cash Book & Bank Book Reports', () => {
     it('3.1 should fetch cash report', async () => {
