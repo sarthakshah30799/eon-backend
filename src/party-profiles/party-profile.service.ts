@@ -458,6 +458,16 @@ export class PartyProfileService {
     );
   }
 
+  private isHoStaff(user: User | null | undefined) {
+    if (!user) {
+      return false;
+    }
+
+    return (
+      user.userRoles?.some((userRole) => userRole.role?.isHoStaff) || false
+    );
+  }
+
   private isBranchManager(user: User | null | undefined) {
     if (!user) {
       return false;
@@ -1152,14 +1162,16 @@ export class PartyProfileService {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
 
-    if (!user?.isAdmin) {
+    if (!user?.isAdmin && !this.isHoStaff(user)) {
       const branchIds = this.getReviewerBranchIds(user);
       const assignedBranchIds = this.getAssignedBranchIds(client);
-      if (
-        !branchIds.length ||
-        !assignedBranchIds.length ||
-        !assignedBranchIds.some((branchId) => branchIds.includes(branchId))
-      ) {
+      if (branchIds.length > 0) {
+        if (!assignedBranchIds.some((branchId) => branchIds.includes(branchId))) {
+          throw new ForbiddenException(
+            "You are not allowed to review this party profile",
+          );
+        }
+      } else {
         throw new ForbiddenException(
           "You are not allowed to review this party profile",
         );
@@ -1218,12 +1230,12 @@ export class PartyProfileService {
       .leftJoinAndSelect("pp.commissionRules", "commissionRules")
       .where("pp.status = :status", { status: WorkflowStatus.PENDING });
 
-    if (!user?.isAdmin) {
-      if (branchIds.length === 0) {
+    if (!user?.isAdmin && !this.isHoStaff(user)) {
+      if (branchIds.length > 0) {
+        this.applyAssignedBranchFilter(qb, branchIds);
+      } else {
         return [];
       }
-
-      this.applyAssignedBranchFilter(qb, branchIds);
     }
 
     qb.orderBy("pp.createdAt", "ASC");

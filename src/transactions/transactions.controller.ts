@@ -101,6 +101,7 @@ export class TransactionsController {
     @Query("currencyId") currencyId?: string,
     @Query("productId") productId?: string,
     @Query("excludeTransactionId") excludeTransactionId?: string,
+    @Query("excludeTransferId") excludeTransferId?: string,
   ): Promise<{
     branchId: string;
     counterId: string;
@@ -108,6 +109,8 @@ export class TransactionsController {
     productId: string;
     purchasedQuantity: string;
     soldQuantity: string;
+    draftSaleQuantity?: string;
+    heldTransferQuantity?: string;
     availableQuantity: string;
   }> {
     const effectiveBranchId =
@@ -132,6 +135,7 @@ export class TransactionsController {
       String(currencyId ?? ""),
       String(productId ?? ""),
       excludeTransactionId ?? undefined,
+      excludeTransferId ?? undefined,
     );
   }
 

@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
 import { SessionContext } from "../auth/types/session-context";
 import { Branch } from "../branches/branch.entity";
+import { Product } from "../products/product.entity";
 import { TransactionPostingDirection } from "../transactions/transactions.enums";
 import { UserRole } from "../user-roles/user-role.entity";
 import { CardSettlementReportFormat } from "./dto/card-settlement-report-query.dto";
@@ -13,6 +14,11 @@ import {
   TrialBalanceReportScope,
 } from "./dto/trial-balance-report-query.dto";
 import { resolveFlmAccessibleBranchIds } from "./flm-report-access.helpers";
+import {
+  applyCodeBasedProfitMergeTargets,
+  applyProfitMergeToBuckets,
+  resolveProfitMergeTargetsFromProducts,
+} from "./profit-merge.util";
 
 type ReportColumn = { key: string; label: string };
 
@@ -65,15 +71,13 @@ const COLUMNS: ReportColumn[] = [
   { key: "closingCr", label: "Closingbal Credit" },
 ];
 
+// Stock/transfer plumbing only — keep settlement (PUR*/PRO*) for merge profit.
 const TECHNICAL_SLUGS = [
   "CARD_STOCK",
   "CARD_TRANSFER_OUT",
   "CARD_TRANSFER_IN",
   "CARD_STOCK_LOAD",
   "CARD_SELL",
-  "CARD_SETTLE",
-  "CM_SETTLE",
-  "TT_SETTLE",
   "CARD_RETURN",
   "CARD_VOID",
 ];
@@ -136,6 +140,8 @@ export class TrialBalanceReportService {
     private readonly branchRepository: Repository<Branch>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   async buildReport(
@@ -153,6 +159,7 @@ export class TrialBalanceReportService {
 
     const scope = query.scope ?? TrialBalanceReportScope.BRANCH;
     const groupBy = Boolean(query.groupBy);
+    const mergeProfit = query.mergeProfit === true;
     const branchIds = await resolveFlmAccessibleBranchIds(
       this.userRoleRepository,
       query.branchIds ?? [],
@@ -161,14 +168,14 @@ export class TrialBalanceReportService {
 
     const accounts = await this.resolveAccounts();
     if (!accounts.length) {
-      return this.emptyResponse(startDate, endDate, scope, groupBy);
+      return this.emptyResponse(startDate, endDate, scope, groupBy, mergeProfit);
     }
 
     const accountById = new Map(accounts.map((account) => [account.id, account]));
     const accountIds = accounts.map((account) => account.id);
     const branchMetaById = await this.resolveBranchMeta(branchIds);
 
-    const [openingRows, periodRows] = await Promise.all([
+    const [openingRows, periodRows, productMergeMap] = await Promise.all([
       this.collectAggregates({
         accountIds,
         branchIds,
@@ -180,14 +187,38 @@ export class TrialBalanceReportService {
         startDate,
         endDate,
       }),
+      mergeProfit
+        ? resolveProfitMergeTargetsFromProducts({
+            productRepository: this.productRepository,
+            database2: this.database2,
+            branchIds,
+            startDate,
+            endDate,
+            accountById,
+            technicalSlugs: TECHNICAL_SLUGS,
+          })
+        : Promise.resolve(new Map<string, string>()),
     ]);
 
-    const buckets = this.mergeBuckets({
+    const profitMergeMap = mergeProfit
+      ? applyCodeBasedProfitMergeTargets(accountById, productMergeMap)
+      : productMergeMap;
+
+    let buckets = this.mergeBuckets({
       scope,
       openingRows,
       periodRows,
       branchMetaById,
     });
+
+    if (mergeProfit && profitMergeMap.size) {
+      buckets = applyProfitMergeToBuckets({
+        buckets,
+        profitMergeMap,
+        branchMetaById,
+        accountById,
+      });
+    }
 
     const rows = this.buildRows({
       scope,
@@ -202,6 +233,7 @@ export class TrialBalanceReportService {
       endDate,
       scope,
       groupBy,
+      mergeProfit,
       message: rows.length
         ? ""
         : "No trial balance rows for the selected filters.",
@@ -237,12 +269,14 @@ export class TrialBalanceReportService {
     endDate: string,
     scope: TrialBalanceReportScope,
     groupBy: boolean,
+    mergeProfit: boolean,
   ) {
     return {
       startDate,
       endDate,
       scope,
       groupBy,
+      mergeProfit,
       message: "No accounts available for the selected filters.",
       columns: COLUMNS.map((column) => ({ ...column })),
       rows: [] as TrialBalanceRow[],

@@ -55,6 +55,15 @@ export class TrialBalanceReportQueryDto {
   groupBy?: boolean;
 
   @ApiPropertyOptional({
+    description:
+      "When true, fold PRO* profit accounts into SAL*/SELL* (sale-time) or PUR* (purchase-time settlement) lines using product snapshots/masters.",
+  })
+  @BooleanQuery()
+  @IsBoolean()
+  @IsOptional()
+  mergeProfit?: boolean;
+
+  @ApiPropertyOptional({
     description: "Export format",
     enum: CardSettlementReportFormat,
   })

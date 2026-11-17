@@ -238,14 +238,19 @@ export async function loadEntitySnapshot<T extends ObjectLiteral>(
   repository: Repository<T>,
   entityId: string | null | undefined,
 ): Promise<Record<string, unknown> | null> {
-  if (!entityId) {
+  const normalizedId = typeof entityId === "string" ? entityId.trim() : "";
+  if (
+    !normalizedId ||
+    normalizedId === "undefined" ||
+    normalizedId === "null"
+  ) {
     return null;
   }
 
   try {
     const relations = buildRelationTree(repository.metadata);
     const entity = await repository.findOne({
-      where: { id: entityId } as any,
+      where: { id: normalizedId } as any,
       relations: Object.keys(relations).length ? (relations as any) : undefined,
     });
 
@@ -258,23 +263,27 @@ export async function loadEntitySnapshot<T extends ObjectLiteral>(
       repository.metadata as any,
     );
   } catch (error) {
-    const fallbackEntity = await repository.findOne({
-      where: { id: entityId } as any,
-    });
+    try {
+      const fallbackEntity = await repository.findOne({
+        where: { id: normalizedId } as any,
+      });
 
-    if (!fallbackEntity) {
+      if (!fallbackEntity) {
+        return null;
+      }
+
+      return serializeEntityColumns(
+        Object.fromEntries(
+          repository.metadata.columns.map((column) => [
+            column.propertyName,
+            (fallbackEntity as SnapshotEntity)[column.propertyName],
+          ]),
+        ),
+        repository.metadata.name,
+      );
+    } catch {
       return null;
     }
-
-    return serializeEntityColumns(
-      Object.fromEntries(
-        repository.metadata.columns.map((column) => [
-          column.propertyName,
-          (fallbackEntity as SnapshotEntity)[column.propertyName],
-        ]),
-      ),
-      repository.metadata.name,
-    );
   }
 }
 

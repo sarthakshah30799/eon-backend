@@ -490,17 +490,21 @@ export class AccountProfileService {
     }
 
     if (query.accountType) {
-      const normalizedAccountType = normalizeAccountTypeFilter(
-        query.accountType,
-      );
       if (isUuidLike(query.accountType)) {
         qb.andWhere("accountType.id = :accountTypeId", {
           accountTypeId: query.accountType,
         });
       } else {
-        qb.andWhere("UPPER(accountType.label) = :accountTypeLabel", {
-          accountTypeLabel: normalizedAccountType,
-        });
+        const raw = query.accountType.trim().toUpperCase();
+        const withSpace = raw.replace(/_/g, " ");
+        const withUnderscore = raw.replace(/\s+/g, "_");
+        qb.andWhere(
+          "(UPPER(accountType.label) IN (:...accountTypeLabels) OR UPPER(accountType.value) IN (:...accountTypeValues))",
+          {
+            accountTypeLabels: [raw, withSpace, withUnderscore],
+            accountTypeValues: [raw, withSpace, withUnderscore],
+          },
+        );
       }
     }
 

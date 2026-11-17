@@ -1012,6 +1012,20 @@ const FRONTEND_MENU_SEEDS: MenuSeedDefinition[] = [
     sortOrder: 2,
   },
   {
+    path: "/reports/cash-flow-report",
+    name: "Cash Flow Report",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
+    path: "/reports/cash-ledger-report",
+    name: "Cash Ledger Report",
+    parentPath: "/reports",
+    isAdmin: false,
+    sortOrder: 2,
+  },
+  {
     path: "/reports/generate-ledger",
     name: "Generate Ledger",
     parentPath: "/reports",

@@ -494,8 +494,12 @@ export class UserService {
       return null;
     }
 
-    if (user.isLocked) {
+    if (user.isLocked && !user.isAdmin) {
       throw this.passwordPolicyService.lockedAccountException();
+    }
+
+    if (!user.password) {
+      return null;
     }
 
     const policy = await this.passwordPolicyService.getPasswordPolicy();
@@ -517,15 +521,18 @@ export class UserService {
         policy.maxInvalidAttempts > 0 &&
         user.failedPasswordAttempts >= policy.maxInvalidAttempts
       ) {
-        user.isLocked = true;
-        await this.userRepository.save(user);
-        throw this.passwordPolicyService.lockedAccountException();
+        if (!user.isAdmin) {
+          user.isLocked = true;
+          await this.userRepository.save(user);
+          throw this.passwordPolicyService.lockedAccountException();
+        }
       }
 
       await this.userRepository.save(user);
       return null;
     }
 
+    user.isLocked = false;
     user.failedPasswordAttempts = 0;
     user.lastLoginDate = new Date();
     await this.userRepository.save(user);
@@ -551,7 +558,10 @@ export class UserService {
     });
 
     if (!user) {
-      throw new UnauthorizedException("User not found");
+      if (currentUserId && id === currentUserId) {
+        throw new UnauthorizedException("User not found");
+      }
+      throw new NotFoundException("User not found");
     }
 
     if (user.isAdmin && !(await this.isRequesterAdmin(currentUserId))) {
