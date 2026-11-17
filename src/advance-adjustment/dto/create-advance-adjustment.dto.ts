@@ -53,6 +53,11 @@ export class CreateAdvanceAdjustmentDto {
   @IsNotEmpty()
   partyProfileId: string;
 
+  @ApiProperty({ description: "Advance Receipt Voucher ID (UUID)" })
+  @IsUUID()
+  @IsNotEmpty()
+  receiptVoucherId: string;
+
   @ApiPropertyOptional({ description: "PAN Card Number" })
   @IsString()
   @IsOptional()

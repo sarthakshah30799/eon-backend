@@ -5,7 +5,7 @@ import { TransactionPaymentMethod } from "../../transactions/transactions.enums"
 import { VoucherAccountMode } from "../../vouchers/voucher.enums";
 import { CreditRequestFundStatus } from "../credit-request-fund.enums";
 import { CreditRequestFundItem } from "./credit-request-fund-item.entity";
-import { CreditRequestFundPrintLog } from "./credit-request-fund-print-log.entity";
+import { CreditRequestFundLog } from "./credit-request-fund-log.entity";
 
 @Entity("credit_request_funds")
 @Index("IDX_credit_request_funds_number", ["number"], { unique: true })
@@ -175,14 +175,11 @@ export class CreditRequestFund extends BaseEntity {
   })
   requestingPaymentVoucherSnapshot: TransactionReferenceSnapshotValue | null;
 
-  @Column({ type: "integer", name: "print_count", default: 0 })
-  printCount: number;
-
   @OneToMany(() => CreditRequestFundItem, (item) => item.creditRequestFund, {
     cascade: false,
   })
   items: CreditRequestFundItem[];
 
-  @OneToMany(() => CreditRequestFundPrintLog, (log) => log.creditRequestFund)
-  printLogs: CreditRequestFundPrintLog[];
+  @OneToMany(() => CreditRequestFundLog, (log) => log.creditRequestFund)
+  logs: CreditRequestFundLog[];
 }

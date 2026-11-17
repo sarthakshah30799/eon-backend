@@ -28,6 +28,7 @@ import { User } from "../users/user.entity";
 import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import {
   ADVANCE_REFUND_NUMBER_SERIES,
+  AdvanceRefundLogAction,
   AdvanceRefundPayoutSource,
   AdvanceRefundPrintCopyType,
   AdvanceRefundStatus,
@@ -45,7 +46,7 @@ import { HonourAdvanceRefundDto } from "./dto/honour-advance-refund.dto";
 import { RecordAdvanceRefundPrintDto } from "./dto/record-advance-refund-print.dto";
 import { AdvanceRefund } from "./entities/advance-refund.entity";
 import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
-import { AdvanceRefundPrintLog } from "./entities/advance-refund-print-log.entity";
+import { AdvanceRefundLog } from "./entities/advance-refund-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -83,8 +84,8 @@ export class AdvanceRefundService {
     private readonly advanceRefundRepository: Repository<AdvanceRefund>,
     @InjectRepository(AdvanceRefundItem, "database2")
     private readonly itemRepository: Repository<AdvanceRefundItem>,
-    @InjectRepository(AdvanceRefundPrintLog, "database2")
-    private readonly printLogRepository: Repository<AdvanceRefundPrintLog>,
+    @InjectRepository(AdvanceRefundLog, "database2")
+    private readonly logRepository: Repository<AdvanceRefundLog>,
     @InjectRepository(AccountProfile)
     private readonly accountRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
@@ -463,7 +464,6 @@ export class AdvanceRefundService {
         paymentVoucherId: null,
         adviceVoucherId: null,
         hoPaymentVoucherId: null,
-        printCount: 0,
       });
 
       const savedAdvanceRefund = await headerRepo2.save(advanceRefund);
@@ -586,6 +586,33 @@ export class AdvanceRefundService {
 
       savedAdvanceRefund.updatedBy = actorId;
       await headerRepo2.save(savedAdvanceRefund);
+
+      const logRepo2 = queryRunner2.manager.getRepository(AdvanceRefundLog);
+      const performedByName = await this.resolveActorName(actorId);
+      await logRepo2.save(
+        logRepo2.create({
+          advanceRefundId: savedAdvanceRefund.id,
+          action: AdvanceRefundLogAction.CREATE,
+          message: "Advance refund created",
+          afterSnapshot: {
+            id: savedAdvanceRefund.id,
+            number: savedAdvanceRefund.number,
+            status: savedAdvanceRefund.status,
+            refundType: savedAdvanceRefund.refundType,
+            totalRefundAmount: savedAdvanceRefund.totalRefundAmount,
+          },
+          metadata: {
+            itemCount: createdItems.length,
+            journalVoucherId: savedAdvanceRefund.journalVoucherId,
+            paymentVoucherId: savedAdvanceRefund.paymentVoucherId,
+            adviceVoucherId: savedAdvanceRefund.adviceVoucherId,
+          },
+          performedById: actorId,
+          performedByName,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
 
       await queryRunner2.commitTransaction();
 
@@ -717,6 +744,30 @@ export class AdvanceRefundService {
 
       await headerRepo2.save(advanceRefund);
 
+      const logRepo2 = queryRunner2.manager.getRepository(AdvanceRefundLog);
+      const performedByName = await this.resolveActorName(actorId);
+      await logRepo2.save(
+        logRepo2.create({
+          advanceRefundId: advanceRefund.id,
+          action: AdvanceRefundLogAction.HONOUR,
+          message: "Advance refund honoured by Head Office",
+          afterSnapshot: {
+            id: advanceRefund.id,
+            number: advanceRefund.number,
+            status: advanceRefund.status,
+            hoPaymentVoucherId: advanceRefund.hoPaymentVoucherId,
+          },
+          metadata: {
+            hoPaymentVoucherId: hoPt.id,
+            hoPaymentVoucherNumber: hoPt.number,
+          },
+          performedById: actorId,
+          performedByName,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+
       await queryRunner2.commitTransaction();
 
       return AdvanceRefundResponseDto.fromEntity(advanceRefund);
@@ -800,8 +851,8 @@ export class AdvanceRefundService {
   ): Promise<AdvanceRefundResponseDto> {
     const advanceRefund = await this.advanceRefundRepository.findOne({
       where: { id },
-      relations: ["items", "printLogs"],
-      order: { printLogs: { performedAt: "DESC" } },
+      relations: ["items", "logs"],
+      order: { logs: { performedAt: "DESC" } },
     });
 
     if (!advanceRefund) {
@@ -829,7 +880,6 @@ export class AdvanceRefundService {
   ): Promise<{
     message: string;
     copyType: AdvanceRefundPrintCopyType;
-    printCount: number;
   }> {
     const actorId = this.getActor(session);
     const advanceRefund = await this.advanceRefundRepository.findOne({
@@ -863,26 +913,26 @@ export class AdvanceRefundService {
       );
     }
 
-    const existingPrintCount = advanceRefund.printCount ?? 0;
+    const existingPrintCount = await this.logRepository.count({
+      where: {
+        advanceRefundId: id,
+        action: AdvanceRefundLogAction.PRINT,
+      },
+    });
     const copyType =
       existingPrintCount === 0
         ? AdvanceRefundPrintCopyType.CUSTOMER_COPY
         : AdvanceRefundPrintCopyType.DUPLICATE_COPY;
-    const printCount = existingPrintCount + 1;
     const message =
       copyType === AdvanceRefundPrintCopyType.DUPLICATE_COPY
         ? "Duplicate copy printed"
         : "Original copy printed";
     const performedByName = await this.resolveActorName(actorId);
 
-    await this.advanceRefundRepository.update(id, {
-      printCount,
-      updatedBy: actorId,
-    });
-    await this.printLogRepository.save(
-      this.printLogRepository.create({
+    await this.logRepository.save(
+      this.logRepository.create({
         advanceRefundId: id,
-        copyType,
+        action: AdvanceRefundLogAction.PRINT,
         message,
         metadata: {
           copyType,
@@ -900,7 +950,6 @@ export class AdvanceRefundService {
     return {
       message,
       copyType,
-      printCount,
     };
   }
 

@@ -20,4 +20,13 @@ export enum AdvanceRefundPrintCopyType {
   DUPLICATE_COPY = "DUPLICATE_COPY",
 }
 
+export const AdvanceRefundLogAction = {
+  CREATE: "CREATE",
+  HONOUR: "HONOUR",
+  PRINT: "PRINT",
+} as const;
+
+export type AdvanceRefundLogAction =
+  (typeof AdvanceRefundLogAction)[keyof typeof AdvanceRefundLogAction];
+
 export const ADVANCE_REFUND_NUMBER_SERIES = "ADVANCE_REFUND";

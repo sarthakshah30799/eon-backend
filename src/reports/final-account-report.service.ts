@@ -65,6 +65,43 @@ const CREDIT_COLUMNS: ReportColumn[] = [
   { key: "creditAmount", label: "Amount" },
 ];
 
+const EXPENSE_COLUMNS: ReportColumn[] = [
+  { key: "debitCode", label: "Code" },
+  { key: "debitName", label: "Expense" },
+  { key: "debitAmount", label: "Amount" },
+];
+
+const INCOME_COLUMNS: ReportColumn[] = [
+  { key: "creditCode", label: "Code" },
+  { key: "creditName", label: "Income" },
+  { key: "creditAmount", label: "Amount" },
+];
+
+const ASSET_COLUMNS: ReportColumn[] = [
+  { key: "debitCode", label: "Code" },
+  { key: "debitName", label: "Asset" },
+  { key: "debitAmount", label: "Amount" },
+];
+
+const LIABILITY_COLUMNS: ReportColumn[] = [
+  { key: "creditCode", label: "Code" },
+  { key: "creditName", label: "Liability" },
+  { key: "creditAmount", label: "Amount" },
+];
+
+type PeriodSideLine = {
+  code: string;
+  name: string;
+  amountCents: number;
+};
+
+type PeriodBranchSides = {
+  branchId: string | null;
+  branchLabel: string;
+  debit: PeriodSideLine[];
+  credit: PeriodSideLine[];
+};
+
 // Stock/transfer plumbing only — keep settlement (PUR*/PRO*) on the Trading statement.
 const TECHNICAL_SLUGS = [
   "CARD_STOCK",
@@ -109,7 +146,40 @@ const isTradingType = (label: string, value: string) => {
   );
 };
 
+const isProfitAndLossType = (label: string, value: string) => {
+  const normalizedLabel = normalizeUpper(label).replace(/&/g, "AND");
+  const normalizedValue = normalizeUpper(value);
+  return (
+    normalizedValue === "P" ||
+    normalizedLabel === "PROFIT_AND_LOSS" ||
+    normalizedLabel === "PROFITANDLOSS" ||
+    (normalizedLabel.includes("PROFIT") && normalizedLabel.includes("LOSS"))
+  );
+};
+
+const isBalanceSheetType = (label: string, value: string) => {
+  const normalizedLabel = normalizeUpper(label).replace(/&/g, "AND");
+  const normalizedValue = normalizeUpper(value);
+  return (
+    normalizedValue === "B" ||
+    normalizedLabel === "BALANCE_SHEET" ||
+    normalizedLabel === "BALANCESHEET" ||
+    normalizedLabel.includes("BALANCE_SHEET") ||
+    (normalizedLabel.includes("BALANCE") && normalizedLabel.includes("SHEET"))
+  );
+};
+
 const emptySideRow = (): SideRow => ({ code: "", name: "", amount: "" });
+
+const padSideRows = (debitRows: SideRow[], creditRows: SideRow[]) => {
+  const rowCount = Math.max(debitRows.length, creditRows.length);
+  while (debitRows.length < rowCount) {
+    debitRows.push(emptySideRow());
+  }
+  while (creditRows.length < rowCount) {
+    creditRows.push(emptySideRow());
+  }
+};
 
 @Injectable()
 export class FinalAccountReportService {
@@ -149,6 +219,26 @@ export class FinalAccountReportService {
       session,
     );
 
+    if (statementType === FinalAccountStatementType.PROFIT_AND_LOSS) {
+      return this.buildProfitAndLossReport({
+        startDate,
+        endDate,
+        scope,
+        mergeProfit,
+        branchIds,
+      });
+    }
+
+    if (statementType === FinalAccountStatementType.BALANCE_SHEET) {
+      return this.buildBalanceSheetReport({
+        startDate,
+        endDate,
+        scope,
+        mergeProfit,
+        branchIds,
+      });
+    }
+
     if (statementType !== FinalAccountStatementType.TRADING) {
       return this.stubResponse(
         startDate,
@@ -159,85 +249,13 @@ export class FinalAccountReportService {
       );
     }
 
-    const accounts = await this.resolveTradingAccounts();
-    if (!accounts.length) {
-      return this.emptyTradingResponse(
-        startDate,
-        endDate,
-        scope,
-        mergeProfit,
-        "No TRADING accounts available for the selected filters.",
-      );
-    }
-
-    const accountById = new Map(accounts.map((account) => [account.id, account]));
-    const accountIds = accounts.map((account) => account.id);
-    const branchMetaById = await this.resolveBranchMeta(branchIds);
-
-    const [openingRows, periodRows, productMergeMap] = await Promise.all([
-      this.collectAggregates({
-        accountIds,
-        branchIds,
-        beforeDate: startDate,
-      }),
-      this.collectAggregates({
-        accountIds,
-        branchIds,
-        startDate,
-        endDate,
-      }),
-      mergeProfit
-        ? resolveProfitMergeTargetsFromProducts({
-            productRepository: this.productRepository,
-            database2: this.database2,
-            branchIds,
-            startDate,
-            endDate,
-            accountById,
-            technicalSlugs: TECHNICAL_SLUGS,
-          })
-        : Promise.resolve(new Map<string, string>()),
-    ]);
-
-    const profitMergeMap = mergeProfit
-      ? applyCodeBasedProfitMergeTargets(accountById, productMergeMap)
-      : productMergeMap;
-
-    let buckets = this.mergeBuckets({
-      scope,
-      openingRows,
-      periodRows,
-      branchMetaById,
-    });
-
-    if (mergeProfit && profitMergeMap.size) {
-      buckets = applyProfitMergeToBuckets({
-        buckets,
-        profitMergeMap,
-        branchMetaById,
-        accountById,
-      });
-    }
-
-    const sections = this.buildTradingSections({
-      scope,
-      buckets,
-      accountById,
-    });
-
-    return {
+    return this.buildTradingReport({
       startDate,
       endDate,
       scope,
-      statementType,
       mergeProfit,
-      message: sections.length
-        ? ""
-        : "No trading account rows for the selected filters.",
-      debitColumns: DEBIT_COLUMNS.map((column) => ({ ...column })),
-      creditColumns: CREDIT_COLUMNS.map((column) => ({ ...column })),
-      sections,
-    };
+      branchIds,
+    });
   }
 
   async buildExport(
@@ -334,6 +352,248 @@ export class FinalAccountReportService {
     };
   }
 
+  private emptyProfitAndLossResponse(
+    startDate: string,
+    endDate: string,
+    scope: FinalAccountReportScope,
+    mergeProfit: boolean,
+    message: string,
+  ) {
+    return {
+      startDate,
+      endDate,
+      scope,
+      statementType: FinalAccountStatementType.PROFIT_AND_LOSS,
+      mergeProfit,
+      message,
+      debitColumns: EXPENSE_COLUMNS.map((column) => ({ ...column })),
+      creditColumns: INCOME_COLUMNS.map((column) => ({ ...column })),
+      sections: [] as TradingSection[],
+    };
+  }
+
+  private async buildTradingReport(input: {
+    startDate: string;
+    endDate: string;
+    scope: FinalAccountReportScope;
+    mergeProfit: boolean;
+    branchIds: string[];
+  }) {
+    const accounts = await this.resolveTradingAccounts();
+    if (!accounts.length) {
+      return this.emptyTradingResponse(
+        input.startDate,
+        input.endDate,
+        input.scope,
+        input.mergeProfit,
+        "No TRADING accounts available for the selected filters.",
+      );
+    }
+
+    const accountById = new Map(
+      accounts.map((account) => [account.id, account]),
+    );
+    const buckets = await this.loadStatementBuckets({
+      accounts,
+      accountById,
+      branchIds: input.branchIds,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      scope: input.scope,
+      mergeProfit: input.mergeProfit,
+    });
+
+    const sections = this.buildTradingSections({
+      scope: input.scope,
+      buckets,
+      accountById,
+    });
+
+    return {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      scope: input.scope,
+      statementType: FinalAccountStatementType.TRADING,
+      mergeProfit: input.mergeProfit,
+      message: sections.length
+        ? ""
+        : "No trading account rows for the selected filters.",
+      debitColumns: DEBIT_COLUMNS.map((column) => ({ ...column })),
+      creditColumns: CREDIT_COLUMNS.map((column) => ({ ...column })),
+      sections,
+    };
+  }
+
+  private async buildProfitAndLossReport(input: {
+    startDate: string;
+    endDate: string;
+    scope: FinalAccountReportScope;
+    mergeProfit: boolean;
+    branchIds: string[];
+  }) {
+    const pnlAccounts = await this.resolveProfitAndLossAccounts();
+    const pnlAccountById = new Map(
+      pnlAccounts.map((account) => [account.id, account]),
+    );
+
+    const [pnlBuckets, tradingGrossByBranch] = await Promise.all([
+      pnlAccounts.length
+        ? this.loadStatementBuckets({
+            accounts: pnlAccounts,
+            accountById: pnlAccountById,
+            branchIds: input.branchIds,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            scope: input.scope,
+            mergeProfit: false,
+          })
+        : Promise.resolve([] as AggregateBucket[]),
+      this.computeTradingGrossByBranch({
+        branchIds: input.branchIds,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        scope: input.scope,
+        mergeProfit: input.mergeProfit,
+      }),
+    ]);
+
+    const sections = this.buildProfitAndLossSections({
+      scope: input.scope,
+      buckets: pnlBuckets,
+      accountById: pnlAccountById,
+      tradingGrossByBranch,
+    });
+
+    return {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      scope: input.scope,
+      statementType: FinalAccountStatementType.PROFIT_AND_LOSS,
+      mergeProfit: input.mergeProfit,
+      message: sections.length
+        ? ""
+        : "No profit and loss account rows for the selected filters.",
+      debitColumns: EXPENSE_COLUMNS.map((column) => ({ ...column })),
+      creditColumns: INCOME_COLUMNS.map((column) => ({ ...column })),
+      sections,
+    };
+  }
+
+  private async buildBalanceSheetReport(input: {
+    startDate: string;
+    endDate: string;
+    scope: FinalAccountReportScope;
+    mergeProfit: boolean;
+    branchIds: string[];
+  }) {
+    const bsAccounts = await this.resolveBalanceSheetAccounts();
+    const bsAccountById = new Map(
+      bsAccounts.map((account) => [account.id, account]),
+    );
+
+    const [bsBuckets, pnlNetByBranch] = await Promise.all([
+      bsAccounts.length
+        ? this.loadStatementBuckets({
+            accounts: bsAccounts,
+            accountById: bsAccountById,
+            branchIds: input.branchIds,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            scope: input.scope,
+            mergeProfit: false,
+          })
+        : Promise.resolve([] as AggregateBucket[]),
+      this.computeProfitAndLossNetByBranch({
+        branchIds: input.branchIds,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        scope: input.scope,
+        mergeProfit: input.mergeProfit,
+      }),
+    ]);
+
+    const sections = this.buildBalanceSheetSections({
+      scope: input.scope,
+      buckets: bsBuckets,
+      accountById: bsAccountById,
+      pnlNetByBranch,
+    });
+
+    return {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      scope: input.scope,
+      statementType: FinalAccountStatementType.BALANCE_SHEET,
+      mergeProfit: input.mergeProfit,
+      message: sections.length
+        ? ""
+        : "No balance sheet account rows for the selected filters.",
+      debitColumns: ASSET_COLUMNS.map((column) => ({ ...column })),
+      creditColumns: LIABILITY_COLUMNS.map((column) => ({ ...column })),
+      sections,
+    };
+  }
+
+  private async loadStatementBuckets(input: {
+    accounts: AccountMeta[];
+    accountById: Map<string, AccountMeta>;
+    branchIds: string[];
+    startDate: string;
+    endDate: string;
+    scope: FinalAccountReportScope;
+    mergeProfit: boolean;
+  }) {
+    const accountIds = input.accounts.map((account) => account.id);
+    const branchMetaById = await this.resolveBranchMeta(input.branchIds);
+
+    const [openingRows, periodRows, productMergeMap] = await Promise.all([
+      this.collectAggregates({
+        accountIds,
+        branchIds: input.branchIds,
+        beforeDate: input.startDate,
+      }),
+      this.collectAggregates({
+        accountIds,
+        branchIds: input.branchIds,
+        startDate: input.startDate,
+        endDate: input.endDate,
+      }),
+      input.mergeProfit
+        ? resolveProfitMergeTargetsFromProducts({
+            productRepository: this.productRepository,
+            database2: this.database2,
+            branchIds: input.branchIds,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            accountById: input.accountById,
+            technicalSlugs: TECHNICAL_SLUGS,
+          })
+        : Promise.resolve(new Map<string, string>()),
+    ]);
+
+    const profitMergeMap = input.mergeProfit
+      ? applyCodeBasedProfitMergeTargets(input.accountById, productMergeMap)
+      : productMergeMap;
+
+    let buckets = this.mergeBuckets({
+      scope: input.scope,
+      openingRows,
+      periodRows,
+      branchMetaById,
+    });
+
+    if (input.mergeProfit && profitMergeMap.size) {
+      buckets = applyProfitMergeToBuckets({
+        buckets,
+        profitMergeMap,
+        branchMetaById,
+        accountById: input.accountById,
+      });
+    }
+
+    return buckets;
+  }
+
   private async resolveTradingAccounts(): Promise<AccountMeta[]> {
     const [accounts, products] = await Promise.all([
       this.accountRepository
@@ -383,6 +643,72 @@ export class FinalAccountReportService {
       selected.set(account.id, {
         id: account.id,
         accountCode,
+        accountName: toText(account.accountName),
+      });
+    }
+
+    return Array.from(selected.values()).sort((left, right) =>
+      left.accountCode.localeCompare(right.accountCode),
+    );
+  }
+
+  private async resolveProfitAndLossAccounts(): Promise<AccountMeta[]> {
+    // P&L statement: only accounts whose financial type is Profit & Loss.
+    const accounts = await this.accountRepository.find({
+      where: { active: true },
+      relations: ["financialCode", "financialCode.financialType"],
+      order: { accountCode: "ASC" },
+    });
+
+    const selected = new Map<string, AccountMeta>();
+    for (const account of accounts) {
+      const financialType = account.financialCode?.financialType;
+      if (
+        !financialType ||
+        !isProfitAndLossType(
+          toText(financialType.label),
+          toText(financialType.value),
+        )
+      ) {
+        continue;
+      }
+
+      selected.set(account.id, {
+        id: account.id,
+        accountCode: toText(account.accountCode),
+        accountName: toText(account.accountName),
+      });
+    }
+
+    return Array.from(selected.values()).sort((left, right) =>
+      left.accountCode.localeCompare(right.accountCode),
+    );
+  }
+
+  private async resolveBalanceSheetAccounts(): Promise<AccountMeta[]> {
+    // Balance Sheet: only accounts whose financial type is Balance Sheet.
+    const accounts = await this.accountRepository.find({
+      where: { active: true },
+      relations: ["financialCode", "financialCode.financialType"],
+      order: { accountCode: "ASC" },
+    });
+
+    const selected = new Map<string, AccountMeta>();
+    for (const account of accounts) {
+      const financialType = account.financialCode?.financialType;
+      if (
+        !financialType ||
+        !isBalanceSheetType(
+          toText(financialType.label),
+          toText(financialType.value),
+        )
+      ) {
+        continue;
+      }
+
+      selected.set(account.id, {
+        id: account.id,
+        accountCode: toText(account.accountCode),
         accountName: toText(account.accountName),
       });
     }
@@ -566,26 +892,20 @@ export class FinalAccountReportService {
     });
   }
 
-  private buildTradingSections(input: {
+  /**
+   * Group period nets into debit/credit sides per branch.
+   * Trading statement is period-scoped: From/To must change line amounts.
+   */
+  private collectTradingPeriodSides(input: {
     scope: FinalAccountReportScope;
     buckets: AggregateBucket[];
     accountById: Map<string, AccountMeta>;
-  }): TradingSection[] {
-    const byBranch = new Map<
-      string,
-      {
-        branchId: string | null;
-        branchLabel: string;
-        debit: Array<{ code: string; name: string; amountCents: number }>;
-        credit: Array<{ code: string; name: string; amountCents: number }>;
-      }
-    >();
+  }) {
+    const byBranch = new Map<string, PeriodBranchSides>();
 
     for (const bucket of input.buckets) {
       const account = input.accountById.get(bucket.accountId);
       if (!account) continue;
-      // Trading statement is period-scoped: From/To must change line amounts.
-      // Lifetime closing-as-of-endDate made most date presets look identical.
       const periodNetCents =
         bucket.periodDebitCents - bucket.periodCreditCents;
       if (periodNetCents === 0) continue;
@@ -604,7 +924,7 @@ export class FinalAccountReportService {
         byBranch.set(branchKey, section);
       }
 
-      const line = {
+      const line: PeriodSideLine = {
         code: account.accountCode,
         name: account.accountName,
         amountCents: Math.abs(periodNetCents),
@@ -616,13 +936,90 @@ export class FinalAccountReportService {
       }
     }
 
+    for (const section of byBranch.values()) {
+      section.debit.sort((left, right) => left.code.localeCompare(right.code));
+      section.credit.sort((left, right) => left.code.localeCompare(right.code));
+    }
+
+    return byBranch;
+  }
+
+  /**
+   * Gross = credit side − debit side before PL balancing.
+   * Positive => GROSS PROFIT, negative => GROSS LOSS, zero => balanced.
+   */
+  private computeTradingGrossFromSides(
+    sidesByBranch: Map<string, PeriodBranchSides>,
+  ) {
+    const grossByBranch = new Map<
+      string,
+      { branchId: string | null; branchLabel: string; grossCents: number }
+    >();
+
+    for (const [branchKey, section] of sidesByBranch.entries()) {
+      const debitTotalCents = section.debit.reduce(
+        (sum, row) => sum + row.amountCents,
+        0,
+      );
+      const creditTotalCents = section.credit.reduce(
+        (sum, row) => sum + row.amountCents,
+        0,
+      );
+      grossByBranch.set(branchKey, {
+        branchId: section.branchId,
+        branchLabel: section.branchLabel,
+        grossCents: creditTotalCents - debitTotalCents,
+      });
+    }
+
+    return grossByBranch;
+  }
+
+  private async computeTradingGrossByBranch(input: {
+    branchIds: string[];
+    startDate: string;
+    endDate: string;
+    scope: FinalAccountReportScope;
+    mergeProfit: boolean;
+  }) {
+    const accounts = await this.resolveTradingAccounts();
+    if (!accounts.length) {
+      return new Map<
+        string,
+        { branchId: string | null; branchLabel: string; grossCents: number }
+      >();
+    }
+
+    const accountById = new Map(
+      accounts.map((account) => [account.id, account]),
+    );
+    const buckets = await this.loadStatementBuckets({
+      accounts,
+      accountById,
+      branchIds: input.branchIds,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      scope: input.scope,
+      mergeProfit: input.mergeProfit,
+    });
+
+    const sides = this.collectTradingPeriodSides({
+      scope: input.scope,
+      buckets,
+      accountById,
+    });
+    return this.computeTradingGrossFromSides(sides);
+  }
+
+  private buildTradingSections(input: {
+    scope: FinalAccountReportScope;
+    buckets: AggregateBucket[];
+    accountById: Map<string, AccountMeta>;
+  }): TradingSection[] {
+    const byBranch = this.collectTradingPeriodSides(input);
+
     const sections = Array.from(byBranch.values())
       .map((section) => {
-        section.debit.sort((left, right) => left.code.localeCompare(right.code));
-        section.credit.sort((left, right) =>
-          left.code.localeCompare(right.code),
-        );
-
         let debitTotalCents = section.debit.reduce(
           (sum, row) => sum + row.amountCents,
           0,
@@ -632,9 +1029,12 @@ export class FinalAccountReportService {
           0,
         );
 
+        const debit = [...section.debit];
+        const credit = [...section.credit];
+
         if (creditTotalCents > debitTotalCents) {
           const profitCents = creditTotalCents - debitTotalCents;
-          section.debit.push({
+          debit.push({
             code: "PL",
             name: "GROSS PROFIT",
             amountCents: profitCents,
@@ -642,7 +1042,7 @@ export class FinalAccountReportService {
           debitTotalCents += profitCents;
         } else if (debitTotalCents > creditTotalCents) {
           const lossCents = debitTotalCents - creditTotalCents;
-          section.credit.push({
+          credit.push({
             code: "PL",
             name: "GROSS LOSS",
             amountCents: lossCents,
@@ -650,24 +1050,17 @@ export class FinalAccountReportService {
           creditTotalCents += lossCents;
         }
 
-        const debitRows = section.debit.map((row) => ({
+        const debitRows = debit.map((row) => ({
           code: row.code,
           name: row.name,
           amount: money(row.amountCents),
         }));
-        const creditRows = section.credit.map((row) => ({
+        const creditRows = credit.map((row) => ({
           code: row.code,
           name: row.name,
           amount: money(row.amountCents),
         }));
-
-        const rowCount = Math.max(debitRows.length, creditRows.length);
-        while (debitRows.length < rowCount) {
-          debitRows.push(emptySideRow());
-        }
-        while (creditRows.length < rowCount) {
-          creditRows.push(emptySideRow());
-        }
+        padSideRows(debitRows, creditRows);
 
         return {
           branchId: section.branchId,
@@ -676,6 +1069,376 @@ export class FinalAccountReportService {
           creditRows,
           debitTotal: money(debitTotalCents),
           creditTotal: money(creditTotalCents),
+        };
+      })
+      .filter(
+        (section) =>
+          section.debitRows.some((row) => row.code || row.name || row.amount) ||
+          section.creditRows.some((row) => row.code || row.name || row.amount),
+      )
+      .sort((left, right) => left.branchLabel.localeCompare(right.branchLabel));
+
+    return sections;
+  }
+
+  private buildProfitAndLossSections(input: {
+    scope: FinalAccountReportScope;
+    buckets: AggregateBucket[];
+    accountById: Map<string, AccountMeta>;
+    tradingGrossByBranch: Map<
+      string,
+      { branchId: string | null; branchLabel: string; grossCents: number }
+    >;
+  }): TradingSection[] {
+    const byBranch = this.collectTradingPeriodSides({
+      scope: input.scope,
+      buckets: input.buckets,
+      accountById: input.accountById,
+    });
+
+    // Ensure branches that only have trading gross still appear.
+    for (const [branchKey, gross] of input.tradingGrossByBranch.entries()) {
+      if (gross.grossCents === 0 || byBranch.has(branchKey)) continue;
+      byBranch.set(branchKey, {
+        branchId: gross.branchId,
+        branchLabel: gross.branchLabel,
+        debit: [],
+        credit: [],
+      });
+    }
+
+    const sections = Array.from(byBranch.entries())
+      .map(([branchKey, section]) => {
+        const expense = [...section.debit].sort((left, right) =>
+          left.code.localeCompare(right.code),
+        );
+        const income = [...section.credit].sort((left, right) =>
+          left.code.localeCompare(right.code),
+        );
+
+        const tradingGross =
+          input.tradingGrossByBranch.get(branchKey)?.grossCents ?? 0;
+        if (tradingGross > 0) {
+          income.push({
+            code: "PL",
+            name: "GROSS PROFIT",
+            amountCents: tradingGross,
+          });
+        } else if (tradingGross < 0) {
+          expense.push({
+            code: "PL",
+            name: "GROSS LOSS",
+            amountCents: Math.abs(tradingGross),
+          });
+        }
+
+        let expenseTotalCents = expense.reduce(
+          (sum, row) => sum + row.amountCents,
+          0,
+        );
+        let incomeTotalCents = income.reduce(
+          (sum, row) => sum + row.amountCents,
+          0,
+        );
+
+        if (incomeTotalCents > expenseTotalCents) {
+          const netProfitCents = incomeTotalCents - expenseTotalCents;
+          expense.push({
+            code: "PL",
+            name: "NET PROFIT",
+            amountCents: netProfitCents,
+          });
+          expenseTotalCents += netProfitCents;
+        } else if (expenseTotalCents > incomeTotalCents) {
+          const netLossCents = expenseTotalCents - incomeTotalCents;
+          income.push({
+            code: "PL",
+            name: "NET LOSS",
+            amountCents: netLossCents,
+          });
+          incomeTotalCents += netLossCents;
+        }
+
+        const debitRows = expense.map((row) => ({
+          code: row.code,
+          name: row.name,
+          amount: money(row.amountCents),
+        }));
+        const creditRows = income.map((row) => ({
+          code: row.code,
+          name: row.name,
+          amount: money(row.amountCents),
+        }));
+        padSideRows(debitRows, creditRows);
+
+        return {
+          branchId: section.branchId,
+          branchLabel: section.branchLabel,
+          debitRows,
+          creditRows,
+          debitTotal: money(expenseTotalCents),
+          creditTotal: money(incomeTotalCents),
+        };
+      })
+      .filter(
+        (section) =>
+          section.debitRows.some((row) => row.code || row.name || row.amount) ||
+          section.creditRows.some((row) => row.code || row.name || row.amount),
+      )
+      .sort((left, right) => left.branchLabel.localeCompare(right.branchLabel));
+
+    return sections;
+  }
+
+  /**
+   * Closing balance as of end date: opening (before start) + period net.
+   * Debit closing → Asset side; credit closing → Liability side.
+   */
+  private collectClosingSides(input: {
+    scope: FinalAccountReportScope;
+    buckets: AggregateBucket[];
+    accountById: Map<string, AccountMeta>;
+  }) {
+    const byBranch = new Map<string, PeriodBranchSides>();
+
+    for (const bucket of input.buckets) {
+      const account = input.accountById.get(bucket.accountId);
+      if (!account) continue;
+      const closingCents =
+        bucket.openingCents +
+        bucket.periodDebitCents -
+        bucket.periodCreditCents;
+      if (closingCents === 0) continue;
+
+      const branchKey = bucket.branchId ?? "ALL";
+      let section = byBranch.get(branchKey);
+      if (!section) {
+        section = {
+          branchId: bucket.branchId,
+          branchLabel:
+            input.scope === FinalAccountReportScope.CONSOLIDATED
+              ? "ALL"
+              : bucket.branchCode,
+          debit: [],
+          credit: [],
+        };
+        byBranch.set(branchKey, section);
+      }
+
+      const line: PeriodSideLine = {
+        code: account.accountCode,
+        name: account.accountName,
+        amountCents: Math.abs(closingCents),
+      };
+      if (closingCents > 0) {
+        section.debit.push(line);
+      } else {
+        section.credit.push(line);
+      }
+    }
+
+    for (const section of byBranch.values()) {
+      section.debit.sort((left, right) => left.code.localeCompare(right.code));
+      section.credit.sort((left, right) => left.code.localeCompare(right.code));
+    }
+
+    return byBranch;
+  }
+
+  /**
+   * P&L net after gross bring-down, before the NET PROFIT/LOSS balancing line.
+   * Positive => net profit, negative => net loss.
+   */
+  private async computeProfitAndLossNetByBranch(input: {
+    branchIds: string[];
+    startDate: string;
+    endDate: string;
+    scope: FinalAccountReportScope;
+    mergeProfit: boolean;
+  }) {
+    const pnlAccounts = await this.resolveProfitAndLossAccounts();
+    const pnlAccountById = new Map(
+      pnlAccounts.map((account) => [account.id, account]),
+    );
+
+    const [pnlBuckets, tradingGrossByBranch] = await Promise.all([
+      pnlAccounts.length
+        ? this.loadStatementBuckets({
+            accounts: pnlAccounts,
+            accountById: pnlAccountById,
+            branchIds: input.branchIds,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            scope: input.scope,
+            mergeProfit: false,
+          })
+        : Promise.resolve([] as AggregateBucket[]),
+      this.computeTradingGrossByBranch({
+        branchIds: input.branchIds,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        scope: input.scope,
+        mergeProfit: input.mergeProfit,
+      }),
+    ]);
+
+    const sides = this.collectTradingPeriodSides({
+      scope: input.scope,
+      buckets: pnlBuckets,
+      accountById: pnlAccountById,
+    });
+
+    for (const [branchKey, gross] of tradingGrossByBranch.entries()) {
+      if (gross.grossCents === 0 || sides.has(branchKey)) continue;
+      sides.set(branchKey, {
+        branchId: gross.branchId,
+        branchLabel: gross.branchLabel,
+        debit: [],
+        credit: [],
+      });
+    }
+
+    const netByBranch = new Map<
+      string,
+      { branchId: string | null; branchLabel: string; netCents: number }
+    >();
+
+    const branchKeys = new Set([
+      ...sides.keys(),
+      ...tradingGrossByBranch.keys(),
+    ]);
+
+    for (const branchKey of branchKeys) {
+      const section = sides.get(branchKey) ?? {
+        branchId: tradingGrossByBranch.get(branchKey)?.branchId ?? null,
+        branchLabel:
+          tradingGrossByBranch.get(branchKey)?.branchLabel ?? branchKey,
+        debit: [] as PeriodSideLine[],
+        credit: [] as PeriodSideLine[],
+      };
+
+      let expenseCents = section.debit.reduce(
+        (sum, row) => sum + row.amountCents,
+        0,
+      );
+      let incomeCents = section.credit.reduce(
+        (sum, row) => sum + row.amountCents,
+        0,
+      );
+
+      const tradingGross =
+        tradingGrossByBranch.get(branchKey)?.grossCents ?? 0;
+      if (tradingGross > 0) {
+        incomeCents += tradingGross;
+      } else if (tradingGross < 0) {
+        expenseCents += Math.abs(tradingGross);
+      }
+
+      netByBranch.set(branchKey, {
+        branchId: section.branchId,
+        branchLabel: section.branchLabel,
+        netCents: incomeCents - expenseCents,
+      });
+    }
+
+    return netByBranch;
+  }
+
+  private buildBalanceSheetSections(input: {
+    scope: FinalAccountReportScope;
+    buckets: AggregateBucket[];
+    accountById: Map<string, AccountMeta>;
+    pnlNetByBranch: Map<
+      string,
+      { branchId: string | null; branchLabel: string; netCents: number }
+    >;
+  }): TradingSection[] {
+    const byBranch = this.collectClosingSides({
+      scope: input.scope,
+      buckets: input.buckets,
+      accountById: input.accountById,
+    });
+
+    for (const [branchKey, pnlNet] of input.pnlNetByBranch.entries()) {
+      if (pnlNet.netCents === 0 || byBranch.has(branchKey)) continue;
+      byBranch.set(branchKey, {
+        branchId: pnlNet.branchId,
+        branchLabel: pnlNet.branchLabel,
+        debit: [],
+        credit: [],
+      });
+    }
+
+    const sections = Array.from(byBranch.entries())
+      .map(([branchKey, section]) => {
+        const assets = [...section.debit].sort((left, right) =>
+          left.code.localeCompare(right.code),
+        );
+        const liabilities = [...section.credit].sort((left, right) =>
+          left.code.localeCompare(right.code),
+        );
+
+        const pnlNet = input.pnlNetByBranch.get(branchKey)?.netCents ?? 0;
+        if (pnlNet > 0) {
+          liabilities.push({
+            code: "PL",
+            name: "NET PROFIT",
+            amountCents: pnlNet,
+          });
+        } else if (pnlNet < 0) {
+          assets.push({
+            code: "PL",
+            name: "NET LOSS",
+            amountCents: Math.abs(pnlNet),
+          });
+        }
+
+        let assetTotalCents = assets.reduce(
+          (sum, row) => sum + row.amountCents,
+          0,
+        );
+        let liabilityTotalCents = liabilities.reduce(
+          (sum, row) => sum + row.amountCents,
+          0,
+        );
+
+        if (liabilityTotalCents > assetTotalCents) {
+          const balanceCents = liabilityTotalCents - assetTotalCents;
+          assets.push({
+            code: "PL",
+            name: "BALANCE",
+            amountCents: balanceCents,
+          });
+          assetTotalCents += balanceCents;
+        } else if (assetTotalCents > liabilityTotalCents) {
+          const balanceCents = assetTotalCents - liabilityTotalCents;
+          liabilities.push({
+            code: "PL",
+            name: "BALANCE",
+            amountCents: balanceCents,
+          });
+          liabilityTotalCents += balanceCents;
+        }
+
+        const debitRows = assets.map((row) => ({
+          code: row.code,
+          name: row.name,
+          amount: money(row.amountCents),
+        }));
+        const creditRows = liabilities.map((row) => ({
+          code: row.code,
+          name: row.name,
+          amount: money(row.amountCents),
+        }));
+        padSideRows(debitRows, creditRows);
+
+        return {
+          branchId: section.branchId,
+          branchLabel: section.branchLabel,
+          debitRows,
+          creditRows,
+          debitTotal: money(assetTotalCents),
+          creditTotal: money(liabilityTotalCents),
         };
       })
       .filter(

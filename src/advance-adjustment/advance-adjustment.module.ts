@@ -10,11 +10,13 @@ import { PartyProfileModule } from "../party-profiles/party-profile.module";
 import { Transaction } from "../transactions/entities/transaction.entity";
 import { User } from "../users/user.entity";
 import { UserModule } from "../users/user.module";
+import { AccountingVoucher } from "../vouchers/entities/accounting-voucher.entity";
+import { VoucherModule } from "../vouchers/voucher.module";
 import { AdvanceAdjustmentController } from "./advance-adjustment.controller";
 import { AdvanceAdjustmentService } from "./advance-adjustment.service";
 import { AdvanceAdjustment } from "./entities/advance-adjustment.entity";
 import { AdvanceAdjustmentItem } from "./entities/advance-adjustment-item.entity";
-import { AdvanceAdjustmentPrintLog } from "./entities/advance-adjustment-print-log.entity";
+import { AdvanceAdjustmentLog } from "./entities/advance-adjustment-log.entity";
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { AdvanceAdjustmentPrintLog } from "./entities/advance-adjustment-print-l
     DayEndStartProcessModule,
     PartyProfileModule,
     UserModule,
+    VoucherModule,
     TypeOrmModule.forFeature([
       PartyProfile,
       Branch,
@@ -33,7 +36,8 @@ import { AdvanceAdjustmentPrintLog } from "./entities/advance-adjustment-print-l
       [
         AdvanceAdjustment,
         AdvanceAdjustmentItem,
-        AdvanceAdjustmentPrintLog,
+        AdvanceAdjustmentLog,
+        AccountingVoucher,
         Transaction,
       ],
       "database2",
