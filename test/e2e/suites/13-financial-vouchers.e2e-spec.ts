@@ -50,18 +50,13 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.2 should create an advance receipt voucher with advance control account', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeBankId ||
-        !registry.masters.bankAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId ||
-        !registry.masters.advanceControlAccountId
-      ) {
-        TestLogger.warn('Skipping 8.2: Required masters for advance receipt voucher not available');
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+      expect(registry.masters.bankAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
+      expect(registry.masters.advanceControlAccountId).toBeDefined();
 
       const res = await client.post('/receipts', {
         transactionDate: getTxDate(),
@@ -151,18 +146,14 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.5 should enforce payment method and account type constraints on vouchers', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.voucherAccountTypeBankId ||
-        !registry.masters.cashAccountId ||
-        !registry.masters.bankAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.bankAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       // 8.5A: Cash voucher rejecting non-cash payment method
       const invalidCashMethodRes = await client.post('/receipts', {
@@ -243,16 +234,12 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.6 should create a payment voucher with cash ledger and cash account type', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.cashAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       const res = await client.post('/payments', {
         transactionDate: getTxDate(),
@@ -313,16 +300,12 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.6C should reject payment voucher submission with a non-cash/bank account as header (negative test)', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.advanceControlAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.advanceControlAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       // advanceControlAccountId is a liability/control account, NOT a CASH_LEDGER
       const res = await client.post('/payments', {
@@ -352,15 +335,11 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.6D should reject payment voucher when party entity type does not match entityTypeOptionId (negative test)', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.cashAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       const dummyEntityTypeId = '00000000-0000-0000-0000-000000000001';
       const res = await client.post('/payments', {

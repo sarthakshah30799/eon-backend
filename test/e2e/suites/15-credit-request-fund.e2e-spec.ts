@@ -58,11 +58,20 @@ describe('Module 10: Credit Request Fund & HO Approval Workflow', () => {
         {
           itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
           accountId: registry.masters.advanceControlAccountId!,
-          direction: VoucherEntryDirection.DEBIT,
+          subledgerPartyProfileId: registry.masters.corporatePartyProfile!.id,
+          direction: VoucherEntryDirection.CREDIT,
           amount: '100000.00',
         },
       ],
+      paidByPanNumber: 'ABCDE1234F',
+      paidByPanName: 'Corporate Representative',
+      paidByPanDob: '1985-05-15',
+      panHolderRelationOptionId: registry.masters.relationSelfOptionId,
     });
+
+    if (![200, 201].includes(res.status)) {
+      TestLogger.warn(`Credit Request Fund creation returned ${res.status}: ${JSON.stringify(res.data)}`);
+    }
 
     // Hard assertion: Any failure (500, 400, etc.) will FAIL the test immediately
     expect([200, 201]).toContain(res.status);
@@ -78,8 +87,12 @@ describe('Module 10: Credit Request Fund & HO Approval Workflow', () => {
 
     await workplaceManager.asHoStaff();
     const res = await client.post(`/credit-request-fund/${testCreditReqId}/approve`, {});
+    if (![200, 201].includes(res.status)) {
+      TestLogger.warn(`Credit Request Fund approval returned ${res.status}: ${JSON.stringify(res.data)}`);
+    }
 
     expect([200, 201]).toContain(res.status);
+    await workplaceManager.asAdmin();
     TestLogger.success(`Credit Request Fund approved: ${testCreditReqId}`);
   });
 
@@ -99,6 +112,9 @@ describe('Module 10: Credit Request Fund & HO Approval Workflow', () => {
     const res = await client.post(`/credit-request-fund/${testCreditReqId}/print`, {
       copyType: 'CUSTOMER_COPY',
     });
+    if (![200, 201].includes(res.status)) {
+      TestLogger.warn(`Credit Request Fund print returned ${res.status}: ${JSON.stringify(res.data)}`);
+    }
 
     expect([200, 201]).toContain(res.status);
     expect(res.data).toBeDefined();

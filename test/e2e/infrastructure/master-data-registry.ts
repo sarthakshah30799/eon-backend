@@ -1,5 +1,6 @@
 import { ApiClient } from './api-client';
 import { TestLogger } from './test-logger';
+import { envConfig } from '../config/env.config';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
 export interface DiscoveredMasters {
@@ -28,6 +29,7 @@ export interface DiscoveredMasters {
   voucherAccountTypeBankId?: string;
   voucherItemTypeAccountId?: string;
   fakeReasonId?: string;
+  relationSelfOptionId?: string;
   transactionDate?: string;
 }
 
@@ -308,7 +310,9 @@ export class MasterDataRegistry {
       };
       if (chosen.status !== 'APPROVE') {
         try {
-          await adminClient.post(`/party-profiles/${chosen.id}/review`, {
+          const hoClient = new ApiClient();
+          await hoClient.login(envConfig.hoStaff.email, envConfig.hoStaff.password);
+          await hoClient.post(`/party-profiles/${chosen.id}/review`, {
             status: 'APPROVE',
             active: true,
           });
@@ -333,6 +337,14 @@ export class MasterDataRegistry {
           name: createCorpRes.data.name,
           entityTypeId: createCorpRes.data.entityType?.id,
         };
+        try {
+          const hoClient = new ApiClient();
+          await hoClient.login(envConfig.hoStaff.email, envConfig.hoStaff.password);
+          await hoClient.post(`/party-profiles/${createCorpRes.data.id}/review`, {
+            status: 'APPROVE',
+            active: true,
+          });
+        } catch {}
         TestLogger.info(`Created Corporate Client Party Profile: (${this.masters.corporatePartyProfile.id})`);
       }
     }
@@ -344,7 +356,10 @@ export class MasterDataRegistry {
         ? entityTypeRes.data
         : (Array.isArray(entityTypeRes.data?.data) ? entityTypeRes.data.data : []);
       if (entityTypes.length > 0) {
-        const selectedOpt = entityTypes[0];
+        const selectedOpt = entityTypes.find((opt: any) => {
+          const val = String(opt.value || opt.code || opt.label || '').toUpperCase();
+          return val.includes('CORP') || (!val.includes('INDIV') && val !== 'INDIVIDUAL');
+        }) || entityTypes[0];
         await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}`, {
           entityType: selectedOpt.id,
         });
@@ -429,6 +444,14 @@ export class MasterDataRegistry {
       const val = String(opt.value || '').toUpperCase();
       if (val === 'ACCOUNT') this.masters.voucherItemTypeAccountId = opt.id;
     }
+
+    const relRes = await adminClient.get('/select-options/RELATION');
+    const relList = Array.isArray(relRes.data) ? relRes.data : (Array.isArray(relRes.data?.data) ? relRes.data.data : []);
+    const selfOpt = relList.find((opt: any) => String(opt.value || opt.label || '').toUpperCase() === 'SELF') || relList[0];
+    if (selfOpt) {
+      this.masters.relationSelfOptionId = selfOpt.id;
+    }
+
     TestLogger.info(`Voucher Options: CashType=${this.masters.voucherAccountTypeCashId}, BankType=${this.masters.voucherAccountTypeBankId}, AccountItem=${this.masters.voucherItemTypeAccountId}`);
 
     // 5. Fake Currency Reason Option
@@ -477,6 +500,12 @@ export class MasterDataRegistry {
             counterId: this.masters.counterA1.id,
             partyProfileId,
             tradeMode: 'BULK',
+            passenger: {
+              firstName: 'Stock',
+              lastName: 'Provisioner',
+              nationalityType: 'INDIAN',
+              pan: 'ABCDE1234F',
+            },
             items: [
               {
                 productId: this.masters.productCn.id,

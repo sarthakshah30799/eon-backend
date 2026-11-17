@@ -36,27 +36,23 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
   });
 
   it('28.2 should create a Credit Request Fund in PENDING status', async () => {
-    if (
-      !registry.masters.branchA?.id ||
-      !registry.masters.voucherAccountTypeBankId ||
-      !registry.masters.bankAccountId ||
-      !registry.masters.corporatePartyProfile?.id ||
-      !registry.masters.corporatePartyProfile?.entityTypeId ||
-      !registry.masters.voucherItemTypeAccountId
-    ) {
-      return;
-    }
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+    expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
     const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/credit-request-fund', {
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
+      branchId: registry.masters.branchA!.id,
       counterId: registry.masters.counterA1?.id,
-      destinationBranchId: registry.masters.branchB?.id || registry.masters.branchA.id,
-      accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
-      headerAccountId: registry.masters.bankAccountId,
-      entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
-      partyProfileId: registry.masters.corporatePartyProfile.id,
+      destinationBranchId: registry.masters.branchB?.id || registry.masters.branchA!.id,
+      accountTypeOptionId: registry.masters.voucherAccountTypeBankId!,
+      headerAccountId: registry.masters.bankAccountId!,
+      entityTypeOptionId: registry.masters.corporatePartyProfile!.entityTypeId!,
+      partyProfileId: registry.masters.corporatePartyProfile!.id,
       chequeNumber: 'CHQ-CRF-1234',
       chequeDate: txDate,
       chequeBranch: 'Mumbai',
@@ -65,13 +61,17 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
       idempotencyKey: randomUUID(),
       items: [
         {
-          itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
-          accountId: registry.masters.advanceControlAccountId || registry.masters.bankAccountId,
-          subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
+          itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
+          accountId: registry.masters.advanceControlAccountId || registry.masters.bankAccountId!,
+          subledgerPartyProfileId: registry.masters.corporatePartyProfile!.id,
           direction: 'CREDIT',
           amount: '250000.00',
         },
       ],
+      paidByPanNumber: 'ABCDE1234F',
+      paidByPanName: 'Corporate Representative',
+      paidByPanDob: '1985-05-15',
+      panHolderRelationOptionId: registry.masters.relationSelfOptionId,
     });
 
     expect([200, 201]).toContain(res.status);
@@ -96,28 +96,24 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
   });
 
   it('28.3 should allow cancellation of pending Credit Request Fund by creator', async () => {
-    if (
-      !registry.masters.branchA?.id ||
-      !registry.masters.voucherAccountTypeBankId ||
-      !registry.masters.bankAccountId ||
-      !registry.masters.corporatePartyProfile?.id ||
-      !registry.masters.corporatePartyProfile?.entityTypeId ||
-      !registry.masters.voucherItemTypeAccountId
-    ) {
-      return;
-    }
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+    expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
     await workplaceManager.asAdmin();
     const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/credit-request-fund', {
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
+      branchId: registry.masters.branchA!.id,
       counterId: registry.masters.counterA1?.id,
-      destinationBranchId: registry.masters.branchB?.id || registry.masters.branchA.id,
-      accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
-      headerAccountId: registry.masters.bankAccountId,
-      entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
-      partyProfileId: registry.masters.corporatePartyProfile.id,
+      destinationBranchId: registry.masters.branchB?.id || registry.masters.branchA!.id,
+      accountTypeOptionId: registry.masters.voucherAccountTypeBankId!,
+      headerAccountId: registry.masters.bankAccountId!,
+      entityTypeOptionId: registry.masters.corporatePartyProfile!.entityTypeId!,
+      partyProfileId: registry.masters.corporatePartyProfile!.id,
       chequeNumber: 'CHQ-CRF-5678',
       chequeDate: txDate,
       chequeBranch: 'Mumbai',
@@ -126,20 +122,24 @@ describe('Module 28: Party Credit Limits & Credit Request Fund Enforcement', () 
       idempotencyKey: randomUUID(),
       items: [
         {
-          itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
-          accountId: registry.masters.advanceControlAccountId || registry.masters.bankAccountId,
-          subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
+          itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
+          accountId: registry.masters.advanceControlAccountId || registry.masters.bankAccountId!,
+          subledgerPartyProfileId: registry.masters.corporatePartyProfile!.id,
           direction: 'CREDIT',
           amount: '150000.00',
         },
       ],
+      paidByPanNumber: 'ABCDE1234F',
+      paidByPanName: 'Corporate Representative',
+      paidByPanDob: '1985-05-15',
+      panHolderRelationOptionId: registry.masters.relationSelfOptionId,
     });
 
-    if (res.ok) {
-      const cancelRes = await client.post(`/credit-request-fund/${res.data?.id}/cancel`, {});
-      expect([200, 201]).toContain(cancelRes.status);
-      TestLogger.success('Credit Request Fund cancelled successfully');
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    const cancelRes = await client.post(`/credit-request-fund/${res.data.id}/cancel`, {});
+    expect([200, 201]).toContain(cancelRes.status);
+    TestLogger.success('Credit Request Fund cancelled successfully');
   });
 
   it('28.4 should reject partial payment with outstanding balance when credit is not approved', async () => {
