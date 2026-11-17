@@ -32,10 +32,7 @@ describe('Module 36: 18-Report Frontend Display & Data Accuracy Comprehensive Au
   it('36.1 should audit Sale/Purchase Report for frontend display accuracy, subtotal invariants, and draft exclusion', async () => {
     TestLogger.step('36.1', 'Auditing Sale/Purchase Report frontend display model and mathematical subtotals');
 
-    const res = await client.get('/reports/sale-purchase', {
-      limit: 100,
-      ...defaultDateRange,
-    });
+    const res = await client.get('/reports/sale-purchase', defaultDateRange);
     expect([200, 304]).toContain(res.status);
 
     // 1. Verify Frontend Column Contract
@@ -186,7 +183,10 @@ describe('Module 36: 18-Report Frontend Display & Data Accuracy Comprehensive Au
     expect([200, 304]).toContain(tpRes.status);
     ReportAccuracyValidator.verifyFrontendContract('tour-pax', tpRes.data);
 
-    const lrsRes = await client.get('/reports/lrs-daily-report', defaultDateRange);
+    const lrsRes = await client.get('/reports/lrs-daily-report', {
+      ...defaultDateRange,
+      usdRate: 87.0,
+    });
     expect([200, 304]).toContain(lrsRes.status);
     ReportAccuracyValidator.verifyFrontendContract('lrs-daily', lrsRes.data);
 
@@ -200,7 +200,10 @@ describe('Module 36: 18-Report Frontend Display & Data Accuracy Comprehensive Au
   it('36.11 should audit Outstanding Transactions and Ageing Report for credit control balances', async () => {
     TestLogger.step('36.11', 'Auditing Outstanding Transactions & Ageing Report');
 
-    const otRes = await client.get('/reports/outstanding-transaction-report', defaultDateRange);
+    const otRes = await client.get('/reports/outstanding-transaction-report', {
+      ...defaultDateRange,
+      accountingDate: '2026-12-31',
+    });
     expect([200, 304]).toContain(otRes.status);
     ReportAccuracyValidator.verifyFrontendContract('outstanding-transactions', otRes.data);
 
@@ -229,7 +232,10 @@ describe('Module 36: 18-Report Frontend Display & Data Accuracy Comprehensive Au
   it('36.13 should audit Advance Funds AFC Reconciliation Report for advances, adjusted amounts, and balances', async () => {
     TestLogger.step('36.13', 'Auditing Advance Funds AFC Reconciliation Report');
 
-    const afcRes = await client.get('/reports/afc-reconciliation-report', defaultDateRange);
+    const afcRes = await client.get('/reports/afc-reconciliation-report', {
+      ...defaultDateRange,
+      accountingDate: '2026-12-31',
+    });
     expect([200, 304]).toContain(afcRes.status);
     ReportAccuracyValidator.verifyFrontendContract('afc-reconciliation', afcRes.data);
 

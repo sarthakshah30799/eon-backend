@@ -32,19 +32,25 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
   it('7.2 should initiate inter-branch currency stock transfer (Branch A to Branch B)', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.branchB?.id).toBeDefined();
-    expect(registry.masters.currencyEur?.id).toBeDefined();
+    expect(registry.masters.counterA1?.id).toBeDefined();
+    expect(registry.masters.counterB1?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transfers/branch', {
-      fromBranchId: registry.masters.branchA.id,
-      toBranchId: registry.masters.branchB.id,
+      sourceBranchId: registry.masters.branchA.id,
+      sourceCounterId: registry.masters.counterA1!.id,
+      destinationBranchId: registry.masters.branchB.id,
+      destinationCounterId: registry.masters.counterB1!.id,
       items: [
         {
           productId: registry.masters.productCn?.id,
-          currencyId: registry.masters.currencyEur.id,
-          quantity: 5000,
+          currencyId: registry.masters.currencyUsd.id,
+          quantity: 100,
+          per: 1,
+          rate: 87.0,
         },
       ],
-      remarks: 'Transfer surplus EUR to Branch B',
+      remarks: 'Transfer surplus USD to Branch B',
     });
 
     expect([200, 201]).toContain(res.status);
@@ -82,17 +88,21 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
 
   it('7.5 should reject branch transfer with non-existent destination branch ID (negative test)', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
-    expect(registry.masters.currencyEur?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
     const fakeBranchId = '00000000-0000-0000-0000-000000000000';
 
     const res = await client.post('/transfers/branch', {
-      fromBranchId: registry.masters.branchA.id,
-      toBranchId: fakeBranchId,
+      sourceBranchId: registry.masters.branchA.id,
+      sourceCounterId: registry.masters.counterA1?.id,
+      destinationBranchId: fakeBranchId,
+      destinationCounterId: registry.masters.counterB1?.id,
       items: [
         {
           productId: registry.masters.productCn?.id,
-          currencyId: registry.masters.currencyEur.id,
+          currencyId: registry.masters.currencyUsd.id,
           quantity: 100,
+          per: 1,
+          rate: 87.0,
         },
       ],
       remarks: 'Invalid destination branch test',

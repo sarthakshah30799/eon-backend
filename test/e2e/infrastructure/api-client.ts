@@ -1,5 +1,5 @@
-import { envConfig } from '../config/env.config';
-import { TestLogger } from './test-logger';
+import { envConfig } from "../config/env.config";
+import { TestLogger } from "./test-logger";
 
 export interface ApiResponse<T = any> {
   status: number;
@@ -12,23 +12,29 @@ export interface ApiResponse<T = any> {
 export class ApiClient {
   public baseUrl: string;
   private cookies: Map<string, string> = new Map();
-  public currentUser: { email?: string; userId?: string; role?: string; label?: string } = {};
+  public currentUser: {
+    email?: string;
+    userId?: string;
+    role?: string;
+    label?: string;
+  } = {};
 
   constructor(baseUrl: string = envConfig.backendUrl) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
   private updateCookies(responseHeaders: Headers) {
     // In Node fetch, getSetCookie() returns all set-cookie header strings
-    const setCookieHeaders: string[] = typeof (responseHeaders as any).getSetCookie === 'function'
-      ? (responseHeaders as any).getSetCookie()
-      : [responseHeaders.get('set-cookie')].filter(Boolean) as string[];
+    const setCookieHeaders: string[] =
+      typeof (responseHeaders as any).getSetCookie === "function"
+        ? (responseHeaders as any).getSetCookie()
+        : ([responseHeaders.get("set-cookie")].filter(Boolean) as string[]);
 
     for (const cookieHeader of setCookieHeaders) {
       if (!cookieHeader) continue;
-      const parts = cookieHeader.split(';');
+      const parts = cookieHeader.split(";");
       const [keyVal] = parts;
-      const eqIdx = keyVal.indexOf('=');
+      const eqIdx = keyVal.indexOf("=");
       if (eqIdx !== -1) {
         const key = keyVal.slice(0, eqIdx).trim();
         const val = keyVal.slice(eqIdx + 1).trim();
@@ -40,7 +46,7 @@ export class ApiClient {
   public getCookieHeader(): string {
     const list: string[] = [];
     this.cookies.forEach((val, key) => list.push(`${key}=${val}`));
-    return list.join('; ');
+    return list.join("; ");
   }
 
   public setCookie(key: string, val: string) {
@@ -52,8 +58,12 @@ export class ApiClient {
     this.currentUser = {};
   }
 
-  public async login(email: string, password: string, label: string = 'User'): Promise<ApiResponse> {
-    const res = await this.post('/auth/login', { email, password });
+  public async login(
+    email: string,
+    password: string,
+    label: string = "User",
+  ): Promise<ApiResponse> {
+    const res = await this.post("/auth/login", { email, password });
     if (res.ok) {
       this.currentUser = {
         email,
@@ -63,19 +73,24 @@ export class ApiClient {
       };
       TestLogger.info(`Logged in as [${label}] (${email})`);
     } else {
-      TestLogger.warn(`Login failed for [${label}] (${email}): ${res.status} ${JSON.stringify(res.data)}`);
+      TestLogger.warn(
+        `Login failed for [${label}] (${email}): ${res.status} ${JSON.stringify(res.data)}`,
+      );
     }
     return res;
   }
 
   public async logout(): Promise<ApiResponse> {
-    const res = await this.post('/auth/logout', {});
+    const res = await this.post("/auth/logout", {});
     this.clearCookies();
     return res;
   }
 
-  public async get<T = any>(endpoint: string, query?: Record<string, any>): Promise<ApiResponse<T>> {
-    let url = `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  public async get<T = any>(
+    endpoint: string,
+    query?: Record<string, any>,
+  ): Promise<ApiResponse<T>> {
+    let url = `${this.baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
     if (query && Object.keys(query).length > 0) {
       const searchParams = new URLSearchParams();
       for (const [k, v] of Object.entries(query)) {
@@ -88,22 +103,22 @@ export class ApiClient {
       }
       const qs = searchParams.toString();
       if (qs) {
-        url += (url.includes('?') ? '&' : '?') + qs;
+        url += (url.includes("?") ? "&" : "?") + qs;
       }
     }
 
     const headers: Record<string, string> = {
-      Accept: 'application/json',
+      Accept: "application/json",
     };
     const cookieStr = this.getCookieHeader();
-    if (cookieStr) headers['Cookie'] = cookieStr;
+    if (cookieStr) headers["Cookie"] = cookieStr;
 
-    const res = await this.fetchWithRetry(url, { method: 'GET', headers });
+    const res = await this.fetchWithRetry(url, { method: "GET", headers });
     this.updateCookies(res.headers);
 
     let data: any = null;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       data = await res.json().catch(() => null);
     } else {
       data = await res.text().catch(() => null);
@@ -117,32 +132,41 @@ export class ApiClient {
     };
   }
 
-  public async post<T = any>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.sendWithBody('POST', endpoint, body);
+  public async post<T = any>(
+    endpoint: string,
+    body?: any,
+  ): Promise<ApiResponse<T>> {
+    return this.sendWithBody("POST", endpoint, body);
   }
 
-  public async put<T = any>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.sendWithBody('PUT', endpoint, body);
+  public async put<T = any>(
+    endpoint: string,
+    body?: any,
+  ): Promise<ApiResponse<T>> {
+    return this.sendWithBody("PUT", endpoint, body);
   }
 
-  public async patch<T = any>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    return this.sendWithBody('PATCH', endpoint, body);
+  public async patch<T = any>(
+    endpoint: string,
+    body?: any,
+  ): Promise<ApiResponse<T>> {
+    return this.sendWithBody("PATCH", endpoint, body);
   }
 
   public async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    const url = `${this.baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
     const headers: Record<string, string> = {
-      Accept: 'application/json',
+      Accept: "application/json",
     };
     const cookieStr = this.getCookieHeader();
-    if (cookieStr) headers['Cookie'] = cookieStr;
+    if (cookieStr) headers["Cookie"] = cookieStr;
 
-    const res = await this.fetchWithRetry(url, { method: 'DELETE', headers });
+    const res = await this.fetchWithRetry(url, { method: "DELETE", headers });
     this.updateCookies(res.headers);
 
     let data: any = null;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       data = await res.json().catch(() => null);
     } else {
       data = await res.text().catch(() => null);
@@ -156,22 +180,25 @@ export class ApiClient {
     };
   }
 
-  public async postMultipart<T = any>(endpoint: string, formData: FormData): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  public async postMultipart<T = any>(
+    endpoint: string,
+    formData: FormData,
+  ): Promise<ApiResponse<T>> {
+    const url = `${this.baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
     const headers: Record<string, string> = {};
     const cookieStr = this.getCookieHeader();
-    if (cookieStr) headers['Cookie'] = cookieStr;
+    if (cookieStr) headers["Cookie"] = cookieStr;
 
     const res = await this.fetchWithRetry(url, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: formData,
     });
     this.updateCookies(res.headers);
 
     let data: any = null;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       data = await res.json().catch(() => null);
     } else {
       data = await res.text().catch(() => null);
@@ -185,15 +212,19 @@ export class ApiClient {
     };
   }
 
-  private async fetchWithRetry(url: string, init: RequestInit, retries: number = 2): Promise<Response> {
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    retries: number = 2,
+  ): Promise<Response> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         return await fetch(url, init);
       } catch (err: any) {
         const isNetworkErr =
-          err?.cause?.code === 'ECONNRESET' ||
-          err?.cause?.code === 'ECONNREFUSED' ||
-          err?.message?.includes('fetch failed');
+          err?.cause?.code === "ECONNRESET" ||
+          err?.cause?.code === "ECONNREFUSED" ||
+          err?.message?.includes("fetch failed");
         if (isNetworkErr && attempt < retries) {
           await new Promise((r) => setTimeout(r, (attempt + 1) * 500));
           continue;
@@ -209,14 +240,18 @@ export class ApiClient {
     throw new Error(`Failed to fetch ${url} after ${retries} attempts`);
   }
 
-  private async sendWithBody<T = any>(method: string, endpoint: string, body?: any): Promise<ApiResponse<T>> {
-    const url = `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  private async sendWithBody<T = any>(
+    method: string,
+    endpoint: string,
+    body?: any,
+  ): Promise<ApiResponse<T>> {
+    const url = `${this.baseUrl}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
     const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+      Accept: "application/json",
+      "Content-Type": "application/json",
     };
     const cookieStr = this.getCookieHeader();
-    if (cookieStr) headers['Cookie'] = cookieStr;
+    if (cookieStr) headers["Cookie"] = cookieStr;
 
     const res = await this.fetchWithRetry(url, {
       method,
@@ -226,8 +261,8 @@ export class ApiClient {
     this.updateCookies(res.headers);
 
     let data: any = null;
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       data = await res.json().catch(() => null);
     } else {
       data = await res.text().catch(() => null);
@@ -241,4 +276,3 @@ export class ApiClient {
     };
   }
 }
-

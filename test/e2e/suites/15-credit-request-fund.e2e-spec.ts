@@ -57,7 +57,7 @@ describe('Module 10: Credit Request Fund & HO Approval Workflow', () => {
       items: [
         {
           itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
-          accountId: registry.masters.advanceControlAccountId!,
+          accountId: registry.masters.advanceControlAccountId || registry.masters.cashAccountId!,
           subledgerPartyProfileId: registry.masters.corporatePartyProfile!.id,
           direction: VoucherEntryDirection.CREDIT,
           amount: '100000.00',

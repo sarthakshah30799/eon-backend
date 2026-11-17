@@ -90,7 +90,7 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
 
   it('2.3 should reject duplicate party profile code', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
-    const dupCode = `DUP_${Date.now().toString().slice(-6)}`;
+    const dupCode = `DUP_${Date.now().toString().slice(-4)}${Math.floor(1000 + Math.random() * 9000)}`;
     // Attempting to create first
     const res = await client.post('/party-profiles', {
       type: 'CORPORATE_CLIENT',

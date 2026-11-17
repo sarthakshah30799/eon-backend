@@ -13,6 +13,7 @@ export interface DiscoveredMasters {
   currencyUsd?: { id: string; code: string; name: string };
   currencyEur?: { id: string; code: string; name: string };
   currencyGbp?: { id: string; code: string; name: string };
+  currencyInr?: { id: string; code: string; name: string };
   currencyCmStocking?: { id: string; code: string; name: string };
   productCn?: { id: string; code: string; description: string };
   productCc?: { id: string; code: string; description: string };
@@ -24,6 +25,10 @@ export interface DiscoveredMasters {
   corporatePartyProfile?: { id: string; name: string; entityTypeId?: string };
   cashAccountId?: string;
   bankAccountId?: string;
+  paymentItemAccountId?: string;
+  receiptItemAccountId?: string;
+  journalDebitAccountId?: string;
+  journalCreditAccountId?: string;
   advanceControlAccountId?: string;
   voucherAccountTypeCashId?: string;
   voucherAccountTypeBankId?: string;
@@ -170,7 +175,7 @@ export class MasterDataRegistry {
       TestLogger.info(`Counter B1: ${this.masters.counterB1.name} (${this.masters.counterB1.id}) for Branch B`);
     }
 
-    // 2. Currencies (USD, EUR, GBP)
+    // 2. Currencies (USD, EUR, GBP, INR)
     const currRes = await adminClient.get('/currencies', { limit: 100 });
     const currencies = Array.isArray(currRes.data?.data) ? currRes.data.data : (Array.isArray(currRes.data?.items) ? currRes.data.items : (Array.isArray(currRes.data) ? currRes.data : []));
     for (const c of currencies) {
@@ -181,6 +186,84 @@ export class MasterDataRegistry {
         this.masters.currencyEur = { id: c.id, code: 'EUR', name: c.name || c.currencyName || 'Euro' };
       } else if (code === 'GBP' && !this.masters.currencyGbp) {
         this.masters.currencyGbp = { id: c.id, code: 'GBP', name: c.name || c.currencyName || 'British Pound' };
+      } else if (code === 'INR' && !this.masters.currencyInr) {
+        this.masters.currencyInr = { id: c.id, code: 'INR', name: c.name || c.currencyName || 'Indian Rupee' };
+      }
+    }
+
+    // Ensure EUR currency exists and is active
+    if (!this.masters.currencyEur) {
+      const eurSearchRes = await adminClient.get('/currencies', { search: 'EUR', limit: 10 });
+      const eurList = Array.isArray(eurSearchRes.data?.data) ? eurSearchRes.data.data : (Array.isArray(eurSearchRes.data?.items) ? eurSearchRes.data.items : (Array.isArray(eurSearchRes.data) ? eurSearchRes.data : []));
+      const foundEur = eurList.find((c: any) => String(c.code || c.currencyCode || '').toUpperCase() === 'EUR');
+      if (foundEur) {
+        this.masters.currencyEur = { id: foundEur.id, code: 'EUR', name: foundEur.name || foundEur.currencyName || 'Euro' };
+      } else {
+        const countryRes = await adminClient.get('/countries', { limit: 1 });
+        const countries = Array.isArray(countryRes.data?.data) ? countryRes.data.data : (Array.isArray(countryRes.data?.items) ? countryRes.data.items : (Array.isArray(countryRes.data) ? countryRes.data : []));
+        const countryId = countries?.[0]?.id;
+        if (countryId) {
+          const createEurRes = await adminClient.post('/currencies', {
+            countryId,
+            currencyCode: 'EUR',
+            currencyName: 'Euro',
+            priority: '2',
+            ratePer: '1',
+            defaultMinRate: '80',
+            defaultMaxRate: '100',
+            calculationMethod: 'MULTIPLICATION',
+            openRatePremium: '0',
+            gulfDiscFactor: '0',
+            amexMapCode: 'EUR',
+            group: 'EUROPE',
+            active: true,
+          });
+          if (createEurRes.ok && createEurRes.data?.id) {
+            this.masters.currencyEur = {
+              id: createEurRes.data.id,
+              code: createEurRes.data.currencyCode || 'EUR',
+              name: createEurRes.data.currencyName || 'Euro',
+            };
+          }
+        }
+      }
+    }
+
+    // Ensure INR currency exists and is active
+    if (!this.masters.currencyInr) {
+      const inrSearchRes = await adminClient.get('/currencies', { search: 'INR', limit: 10 });
+      const inrList = Array.isArray(inrSearchRes.data?.data) ? inrSearchRes.data.data : (Array.isArray(inrSearchRes.data?.items) ? inrSearchRes.data.items : (Array.isArray(inrSearchRes.data) ? inrSearchRes.data : []));
+      const foundInr = inrList.find((c: any) => String(c.code || c.currencyCode || '').toUpperCase() === 'INR');
+      if (foundInr) {
+        this.masters.currencyInr = { id: foundInr.id, code: 'INR', name: foundInr.name || foundInr.currencyName || 'Indian Rupee' };
+      } else {
+        const countryRes = await adminClient.get('/countries', { limit: 1 });
+        const countries = Array.isArray(countryRes.data?.data) ? countryRes.data.data : (Array.isArray(countryRes.data?.items) ? countryRes.data.items : (Array.isArray(countryRes.data) ? countryRes.data : []));
+        const countryId = countries?.[0]?.id;
+        if (countryId) {
+          const createInrRes = await adminClient.post('/currencies', {
+            countryId,
+            currencyCode: 'INR',
+            currencyName: 'Indian Rupee',
+            priority: '1',
+            ratePer: '1',
+            defaultMinRate: '1',
+            defaultMaxRate: '1',
+            calculationMethod: 'MULTIPLICATION',
+            openRatePremium: '0',
+            gulfDiscFactor: '0',
+            amexMapCode: 'INR',
+            group: 'ASIA',
+            active: true,
+          });
+          if (createInrRes.ok && createInrRes.data?.id) {
+            this.masters.currencyInr = {
+              id: createInrRes.data.id,
+              code: createInrRes.data.currencyCode || 'INR',
+              name: createInrRes.data.currencyName || 'Indian Rupee',
+            };
+          }
+        }
       }
     }
 
@@ -224,7 +307,7 @@ export class MasterDataRegistry {
       }
     }
 
-    TestLogger.info(`Currencies: USD=${this.masters.currencyUsd?.id}, EUR=${this.masters.currencyEur?.id}, CMS=${this.masters.currencyCmStocking?.id}`);
+    TestLogger.info(`Currencies: USD=${this.masters.currencyUsd?.id}, EUR=${this.masters.currencyEur?.id}, INR=${this.masters.currencyInr?.id}, CMS=${this.masters.currencyCmStocking?.id}`);
 
     // 3. Products (CC, CM, CN, TT, TP)
     const prodRes = await adminClient.get('/products', { limit: 100 });
@@ -375,7 +458,7 @@ export class MasterDataRegistry {
       });
     }
 
-    // 4. Accounts (Cash Ledger, Bank Accounts)
+    // 4. Accounts (Cash Ledger, Bank Accounts, INR Accounts)
     const accRes = await adminClient.get('/account-profiles', { limit: 100 });
     const accounts = Array.isArray(accRes.data?.data) ? accRes.data.data : (Array.isArray(accRes.data?.items) ? accRes.data.items : (Array.isArray(accRes.data) ? accRes.data : []));
     for (const a of accounts) {
@@ -393,6 +476,33 @@ export class MasterDataRegistry {
     if (!this.masters.cashAccountId && accounts.length > 0) {
       this.masters.cashAccountId = accounts[0].id;
     }
+
+    // Ensure Cash and Bank accounts have INR currency and voucher usage flags enabled
+    const inrCurrencyId = this.masters.currencyInr?.id;
+    if (inrCurrencyId) {
+      if (this.masters.cashAccountId) {
+        await adminClient.put(`/account-profiles/${this.masters.cashAccountId}`, {
+          currencyId: inrCurrencyId,
+          receipt: true,
+          payment: true,
+          journalVoucher: true,
+          active: true,
+        });
+      }
+      if (this.masters.bankAccountId && this.masters.bankAccountId !== this.masters.cashAccountId) {
+        await adminClient.put(`/account-profiles/${this.masters.bankAccountId}`, {
+          currencyId: inrCurrencyId,
+          receipt: true,
+          payment: true,
+          journalVoucher: true,
+          active: true,
+        });
+      }
+    }
+    this.masters.paymentItemAccountId = this.masters.cashAccountId;
+    this.masters.receiptItemAccountId = this.masters.cashAccountId;
+    this.masters.journalDebitAccountId = this.masters.cashAccountId;
+    this.masters.journalCreditAccountId = this.masters.bankAccountId;
     TestLogger.info(`Accounts: Cash=${this.masters.cashAccountId}, Bank=${this.masters.bankAccountId}`);
 
     // Discover / configure ADVANCE_CONTROL_ACCOUNT
@@ -401,15 +511,29 @@ export class MasterDataRegistry {
     const txnAccounting = categories.find((c: any) => String(c.code).toUpperCase() === 'TRANSACTION_ACCOUNTING');
     if (txnAccounting) {
       const advSetting = (txnAccounting.subcategories || []).find((s: any) => String(s.code).toUpperCase() === 'ADVANCE_CONTROL_ACCOUNT');
+      let targetAccId = this.masters.cashAccountId;
       if (advSetting?.value && advSetting.value.trim() !== '') {
-        this.masters.advanceControlAccountId = advSetting.value.trim();
-      } else if (this.masters.cashAccountId && advSetting) {
-        const targetAccId = this.masters.cashAccountId;
+        const rawVal = advSetting.value.trim();
+        const matched = accounts.find((a: any) => a.id === rawVal || a.accountCode === rawVal);
+        if (matched) {
+          targetAccId = matched.id;
+          if (inrCurrencyId) {
+            await adminClient.put(`/account-profiles/${matched.id}`, {
+              currencyId: inrCurrencyId,
+              receipt: true,
+              payment: true,
+              journalVoucher: true,
+              active: true,
+            });
+          }
+        }
+      }
+      if (targetAccId && advSetting && advSetting.value !== targetAccId) {
         await adminClient.put(`/additional-settings/${txnAccounting.id}/subcategories/${advSetting.id}`, {
           value: targetAccId,
         });
-        this.masters.advanceControlAccountId = targetAccId;
       }
+      this.masters.advanceControlAccountId = targetAccId;
     }
     if (this.masters.advanceControlAccountId) {
       TestLogger.info(`Advance Control Account ID: ${this.masters.advanceControlAccountId}`);
@@ -455,8 +579,10 @@ export class MasterDataRegistry {
     TestLogger.info(`Voucher Options: CashType=${this.masters.voucherAccountTypeCashId}, BankType=${this.masters.voucherAccountTypeBankId}, AccountItem=${this.masters.voucherItemTypeAccountId}`);
 
     // 5. Fake Currency Reason Option
-    const fakeReasonRes = await adminClient.get('/category-options/FAKECURRENCYREASON');
-    const fakeList = Array.isArray(fakeReasonRes.data?.data) ? fakeReasonRes.data.data : (Array.isArray(fakeReasonRes.data) ? fakeReasonRes.data : []);
+    const fakeReasonRes = await adminClient.get('/select-options/FAKE_CURRENCY_REASON');
+    const fakeList = Array.isArray(fakeReasonRes.data)
+      ? fakeReasonRes.data
+      : (Array.isArray(fakeReasonRes.data?.data) ? fakeReasonRes.data.data : (Array.isArray(fakeReasonRes.data?.items) ? fakeReasonRes.data.items : []));
     if (fakeList.length > 0) {
       this.masters.fakeReasonId = fakeList[0].id;
       TestLogger.info(`Fake Currency Reason ID: ${this.masters.fakeReasonId}`);
@@ -499,12 +625,14 @@ export class MasterDataRegistry {
             branchId: this.masters.branchA.id,
             counterId: this.masters.counterA1.id,
             partyProfileId,
-            tradeMode: 'BULK',
+            tradeMode: 'RETAIL',
             passenger: {
               firstName: 'Stock',
               lastName: 'Provisioner',
               nationalityType: 'INDIAN',
-              pan: 'ABCDE1234F',
+              panNumber: 'ABCDE1234F',
+              panHolderName: 'Stock Provisioner',
+              panDob: '1985-05-15',
             },
             items: [
               {
@@ -516,9 +644,10 @@ export class MasterDataRegistry {
             ],
             payments: [
               {
-                paymentMethod: 'CHEQUE',
+                paymentMethod: 'NEFT',
                 amount: purchaseQty * purchaseRate,
-                referenceNumber: 'CHQ-BASE-1001',
+                referenceDate: this.masters.transactionDate || new Date().toISOString().slice(0, 10),
+                accountId: this.masters.bankAccountId,
               },
             ],
           });
@@ -536,6 +665,70 @@ export class MasterDataRegistry {
         }
       } catch (err: any) {
         TestLogger.info(`Counter stock provisioning note: ${err?.message}`);
+      }
+    }
+
+    // Ensure Counter A1 has baseline EUR currency notes stock for transfers and sales
+    if (
+      this.masters.branchA?.id &&
+      this.masters.counterA1?.id &&
+      this.masters.currencyEur?.id &&
+      this.masters.productCn?.id
+    ) {
+      try {
+        const availRes = await adminClient.get('/transactions/quantity-availability', {
+          branchId: this.masters.branchA.id,
+          counterId: this.masters.counterA1.id,
+          currencyId: this.masters.currencyEur.id,
+          productId: this.masters.productCn.id,
+        });
+        const currentAvail = Number(availRes.data?.availableQuantity ?? 0);
+        if (currentAvail < 10000) {
+          const purchaseQty = 50000;
+          const purchaseRate = 95.0;
+          const partyProfileId = this.masters.corporatePartyProfile?.id || this.masters.cardIssuerPartyId;
+          const pDraftRes = await adminClient.post('/transactions/drafts', {
+            slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
+            transactionDate: this.masters.transactionDate,
+            branchId: this.masters.branchA.id,
+            counterId: this.masters.counterA1.id,
+            partyProfileId,
+            tradeMode: 'RETAIL',
+            passenger: {
+              firstName: 'Stock',
+              lastName: 'EURProvisioner',
+              nationalityType: 'INDIAN',
+              panNumber: 'ABCDE1234F',
+              panHolderName: 'Stock Provisioner',
+              panDob: '1985-05-15',
+            },
+            items: [
+              {
+                productId: this.masters.productCn.id,
+                currencyId: this.masters.currencyEur.id,
+                quantity: purchaseQty,
+                rate: purchaseRate,
+              },
+            ],
+            payments: [
+              {
+                paymentMethod: 'NEFT',
+                amount: purchaseQty * purchaseRate,
+                referenceDate: this.masters.transactionDate || new Date().toISOString().slice(0, 10),
+                accountId: this.masters.bankAccountId,
+              },
+            ],
+          });
+          const draftId = pDraftRes.data?.id;
+          if (draftId) {
+            const approveRes = await adminClient.post(`/transactions/${draftId}/approve`, {});
+            if (approveRes.ok || approveRes.status === 200 || approveRes.status === 201) {
+              TestLogger.info(`Provisioned ${purchaseQty} EUR CN approved stock on Counter A1`);
+            }
+          }
+        }
+      } catch (err: any) {
+        TestLogger.info(`EUR counter stock provisioning note: ${err?.message}`);
       }
     }
 

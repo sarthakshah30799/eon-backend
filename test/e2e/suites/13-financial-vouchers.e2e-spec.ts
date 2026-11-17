@@ -67,7 +67,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
         partyProfileId: registry.masters.corporatePartyProfile.id,
         paymentMethod: 'CHEQUE',
-        chequeNumber: '112233',
+        chequeNumber: String(Math.floor(100000 + Math.random() * 900000)),
         chequeDate: new Date().toISOString().slice(0, 10),
         chequeBranch: 'Fort',
         drawnOn: 'HDFC Bank',
@@ -255,7 +255,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         items: [
           {
             itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
-            accountId: registry.masters.cashAccountId,
+            accountId: registry.masters.paymentItemAccountId || registry.masters.cashAccountId,
             subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
             direction: 'DEBIT',
             amount: '5000.00',
@@ -451,7 +451,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
         partyProfileId: registry.masters.corporatePartyProfile.id,
         paymentMethod: 'CHEQUE',
-        chequeNumber: 'CHQ888444',
+        chequeNumber: `CHQ${Math.floor(100000 + Math.random() * 900000)}`,
         chequeDate: new Date().toISOString().slice(0, 10),
         chequeBranch: 'Fort',
         drawnOn: 'HDFC Bank',
@@ -533,13 +533,13 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         items: [
           {
             itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
-            accountId: registry.masters.cashAccountId!,
+            accountId: registry.masters.journalDebitAccountId || registry.masters.cashAccountId!,
             direction: 'DEBIT',
             amount: '5000.00',
           },
           {
             itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
-            accountId: registry.masters.bankAccountId!,
+            accountId: registry.masters.journalCreditAccountId || registry.masters.bankAccountId!,
             direction: 'CREDIT',
             amount: '5000.00',
           },
