@@ -933,9 +933,6 @@ export class CreditRequestFundService {
       )
         throw new ForbiddenException("Credit Request Fund not visible");
     }
-    header.printCount = Array.isArray(header.logs)
-      ? header.logs.filter((l) => l.action === CreditRequestFundLogAction.PRINT).length
-      : 0;
     return header;
   }
 
@@ -951,7 +948,6 @@ export class CreditRequestFundService {
   ): Promise<{
     message: string;
     copyType: CreditRequestFundPrintCopyType;
-    printCount: number;
   }> {
     const actorId = this.getActor(session);
     const header = await this.findEntity(id, session);
@@ -1005,7 +1001,6 @@ export class CreditRequestFundService {
     return {
       message,
       copyType,
-      printCount: existingPrintCount + 1,
     };
   }
 

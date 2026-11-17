@@ -174,8 +174,19 @@ describe('Module 17: Document Print Audits & Content Schema Verification', () =>
     expect(crfId).toBeDefined();
     const printRes = await client.post(`/credit-request-fund/${crfId}/print`, {});
     expect([200, 201]).toContain(printRes.status);
-    expect(printRes.data?.printCount).toBeGreaterThanOrEqual(1);
-    TestLogger.success(`Credit Request Fund print verified: printCount=${printRes.data?.printCount}`);
+    expect(printRes.data?.copyType).toBeDefined();
+    TestLogger.success(`Credit Request Fund 1st print verified: copyType=${printRes.data?.copyType}`);
+
+    const print2Res = await client.post(`/credit-request-fund/${crfId}/print`, {});
+    expect([200, 201]).toContain(print2Res.status);
+    expect(print2Res.data?.copyType).toBe('DUPLICATE_COPY');
+    TestLogger.success(`Credit Request Fund 2nd print verified: copyType=${print2Res.data?.copyType}`);
+
+    const detailRes = await client.get(`/credit-request-fund/${crfId}`);
+    expect(detailRes.status).toBe(200);
+    const printLogs = (detailRes.data?.logs || []).filter((l: any) => l.action === 'PRINT');
+    expect(printLogs.length).toBeGreaterThanOrEqual(2);
+    TestLogger.success(`Credit Request Fund audit logs verified: ${printLogs.length} PRINT log entries`);
   });
 
   it('17.5 should record print on Stock Transfer', async () => {

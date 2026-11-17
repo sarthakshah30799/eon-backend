@@ -118,8 +118,19 @@ describe('Module 10: Credit Request Fund & HO Approval Workflow', () => {
 
     expect([200, 201]).toContain(res.status);
     expect(res.data).toBeDefined();
-    expect(Number(res.data?.printCount ?? 0)).toBeGreaterThanOrEqual(1);
-    TestLogger.success(`Credit Request Fund print recorded successfully (printCount: ${res.data?.printCount})`);
+    expect(res.data?.copyType).toBe('CUSTOMER_COPY');
+    TestLogger.success(`Credit Request Fund 1st print recorded (copyType: ${res.data?.copyType})`);
+
+    const res2 = await client.post(`/credit-request-fund/${testCreditReqId}/print`, {});
+    expect([200, 201]).toContain(res2.status);
+    expect(res2.data?.copyType).toBe('DUPLICATE_COPY');
+    TestLogger.success(`Credit Request Fund 2nd print recorded (copyType: ${res2.data?.copyType})`);
+
+    const detailRes = await client.get(`/credit-request-fund/${testCreditReqId}`);
+    expect(detailRes.status).toBe(200);
+    const printLogs = (detailRes.data?.logs || []).filter((l: any) => l.action === 'PRINT');
+    expect(printLogs.length).toBeGreaterThanOrEqual(2);
+    TestLogger.success(`Credit Request Fund audit logs verified: ${printLogs.length} PRINT log entries`);
   });
 
   it('10.4 should reject credit request fund with empty items array (negative test)', async () => {
