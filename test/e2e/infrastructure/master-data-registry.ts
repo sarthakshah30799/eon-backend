@@ -36,6 +36,8 @@ export interface DiscoveredMasters {
   fakeReasonId?: string;
   relationSelfOptionId?: string;
   transactionDate?: string;
+  purposeId?: string;
+  ttMaturityOptionId?: string;
 }
 
 export class MasterDataRegistry {
@@ -459,12 +461,32 @@ export class MasterDataRegistry {
     }
 
     // 4. Accounts (Cash Ledger, Bank Accounts, INR Accounts)
+    let cashLedgerOptionId: string | undefined;
+    let bankLedgerOptionId: string | undefined;
+    try {
+      const accTypeOptRes = await adminClient.get('/select-options/ACCOUNTTYPE');
+      const accTypeOpts = Array.isArray(accTypeOptRes.data)
+        ? accTypeOptRes.data
+        : (Array.isArray(accTypeOptRes.data?.data) ? accTypeOptRes.data.data : []);
+      for (const opt of accTypeOpts) {
+        const val = String(opt.value || opt.label || '').toUpperCase().replace(/[\s-]+/g, '_');
+        if (val === 'CASH_LEDGER') cashLedgerOptionId = opt.id;
+        if (val === 'BANK_LEDGER') bankLedgerOptionId = opt.id;
+      }
+    } catch {}
+
     const accRes = await adminClient.get('/account-profiles', { limit: 100 });
     const accounts = Array.isArray(accRes.data?.data) ? accRes.data.data : (Array.isArray(accRes.data?.items) ? accRes.data.items : (Array.isArray(accRes.data) ? accRes.data : []));
     for (const a of accounts) {
+      const typeVal = String(a.accountType?.value || a.accountType?.label || '').toUpperCase().replace(/[\s-]+/g, '_');
       const name = String(a.accountName || a.name || '').toLowerCase();
       const code = String(a.accountCode || a.code || '').toLowerCase();
-      if ((name.includes('cash') || code.includes('cash')) && !this.masters.cashAccountId) {
+
+      if (typeVal === 'CASH_LEDGER' && !this.masters.cashAccountId) {
+        this.masters.cashAccountId = a.id;
+      } else if (typeVal === 'BANK_LEDGER' && !this.masters.bankAccountId) {
+        this.masters.bankAccountId = a.id;
+      } else if ((name.includes('cash') || code.includes('cash')) && !this.masters.cashAccountId) {
         this.masters.cashAccountId = a.id;
       } else if ((name.includes('bank') || name.includes('hdfc') || name.includes('sbi')) && !this.masters.bankAccountId) {
         this.masters.bankAccountId = a.id;
@@ -477,12 +499,13 @@ export class MasterDataRegistry {
       this.masters.cashAccountId = accounts[0].id;
     }
 
-    // Ensure Cash and Bank accounts have INR currency and voucher usage flags enabled
+    // Ensure Cash and Bank accounts have INR currency, correct account type, and voucher usage flags enabled
     const inrCurrencyId = this.masters.currencyInr?.id;
     if (inrCurrencyId) {
       if (this.masters.cashAccountId) {
         await adminClient.put(`/account-profiles/${this.masters.cashAccountId}`, {
           currencyId: inrCurrencyId,
+          ...(cashLedgerOptionId ? { accountType: cashLedgerOptionId } : {}),
           receipt: true,
           payment: true,
           journalVoucher: true,
@@ -492,6 +515,7 @@ export class MasterDataRegistry {
       if (this.masters.bankAccountId && this.masters.bankAccountId !== this.masters.cashAccountId) {
         await adminClient.put(`/account-profiles/${this.masters.bankAccountId}`, {
           currencyId: inrCurrencyId,
+          ...(bankLedgerOptionId ? { accountType: bankLedgerOptionId } : {}),
           receipt: true,
           payment: true,
           journalVoucher: true,
@@ -599,6 +623,36 @@ export class MasterDataRegistry {
         TestLogger.info(`Policy Transaction Date: ${this.masters.transactionDate}`);
       }
     }
+
+    // 6B. Ensure Branch B has BOD active if separate from Branch A
+    if (this.masters.branchB?.id && this.masters.branchB.id !== this.masters.branchA?.id) {
+      try {
+        await adminClient.post('/day-end-start-process/start', {
+          branchId: this.masters.branchB.id,
+          answers: { ratesVerified: true, cashVerified: true },
+        });
+      } catch {}
+    }
+
+    // 6C. Discover Purpose Master
+    try {
+      const purpRes = await adminClient.get('/purpose', { limit: 10 });
+      const purposes = Array.isArray(purpRes.data?.data) ? purpRes.data.data : (Array.isArray(purpRes.data?.items) ? purpRes.data.items : (Array.isArray(purpRes.data) ? purpRes.data : []));
+      if (purposes.length > 0) {
+        this.masters.purposeId = purposes[0].id;
+        TestLogger.info(`Discovered Purpose ID: ${this.masters.purposeId}`);
+      }
+    } catch {}
+
+    // 6D. Discover TT Maturity Option
+    try {
+      const matRes = await adminClient.get('/select-options/TTMATURITY');
+      const matList = Array.isArray(matRes.data) ? matRes.data : (Array.isArray(matRes.data?.data) ? matRes.data.data : []);
+      if (matList.length > 0) {
+        this.masters.ttMaturityOptionId = matList[0].id;
+        TestLogger.info(`Discovered TT Maturity Option ID: ${this.masters.ttMaturityOptionId}`);
+      }
+    } catch {}
 
     // 7. Ensure Counter A1 has baseline USD currency notes stock for sales testing
     if (

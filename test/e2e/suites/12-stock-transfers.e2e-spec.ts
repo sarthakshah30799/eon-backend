@@ -36,7 +36,18 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
     expect(registry.masters.counterB1?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
+    if (registry.masters.branchB?.id && registry.masters.branchB.id !== registry.masters.branchA?.id) {
+      try {
+        await client.post('/day-end-start-process/start', {
+          branchId: registry.masters.branchB.id,
+          answers: { ratesVerified: true, cashVerified: true },
+        });
+      } catch {}
+    }
+
+    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/transfers/branch', {
+      transactionDate: txDate,
       sourceBranchId: registry.masters.branchA.id,
       sourceCounterId: registry.masters.counterA1!.id,
       destinationBranchId: registry.masters.branchB.id,

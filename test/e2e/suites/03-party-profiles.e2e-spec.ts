@@ -90,12 +90,13 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
 
   it('2.3 should reject duplicate party profile code', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
-    const dupCode = `DUP_${Date.now().toString().slice(-4)}${Math.floor(1000 + Math.random() * 9000)}`;
+    const uniqueSuffix = `${Date.now().toString().slice(-4)}${Math.floor(1000 + Math.random() * 9000)}`;
+    const dupCode = `DUP_${uniqueSuffix}`;
     // Attempting to create first
     const res = await client.post('/party-profiles', {
       type: 'CORPORATE_CLIENT',
       code: dupCode,
-      name: 'Duplicate 1',
+      name: `Duplicate One ${uniqueSuffix}`,
       address1: '789 Business Ave',
       city: 'Mumbai',
       pinCode: '400051',
@@ -106,7 +107,7 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
     const resDup = await client.post('/party-profiles', {
       type: 'CORPORATE_CLIENT',
       code: dupCode,
-      name: 'Duplicate 2',
+      name: `Duplicate Two ${uniqueSuffix}`,
       address1: '789 Business Ave',
       city: 'Mumbai',
       pinCode: '400051',

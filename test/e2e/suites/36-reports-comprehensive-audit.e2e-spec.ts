@@ -32,7 +32,10 @@ describe('Module 36: 18-Report Frontend Display & Data Accuracy Comprehensive Au
   it('36.1 should audit Sale/Purchase Report for frontend display accuracy, subtotal invariants, and draft exclusion', async () => {
     TestLogger.step('36.1', 'Auditing Sale/Purchase Report frontend display model and mathematical subtotals');
 
-    const res = await client.get('/reports/sale-purchase', defaultDateRange);
+    const res = await client.get('/reports/sale-purchase', {
+      ...defaultDateRange,
+      detail: 'long',
+    });
     expect([200, 304]).toContain(res.status);
 
     // 1. Verify Frontend Column Contract

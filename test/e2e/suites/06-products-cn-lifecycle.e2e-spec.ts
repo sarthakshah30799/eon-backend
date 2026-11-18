@@ -114,7 +114,7 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
     expect(getRes.status).toBe(200);
     expect(getRes.data?.id).toBe(saleTxId);
     expect(Array.isArray(getRes.data?.items)).toBe(true);
-    expect(getRes.data.items[0]?.quantity).toBe(500);
+    expect(Number(getRes.data.items[0]?.quantity)).toBe(500);
     TestLogger.success('CN retail sale transaction re-opened cleanly via GET /transactions/:id');
   });
 
@@ -126,9 +126,9 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
     expect(txNum).toBeDefined();
 
     const spRes = await client.get('/reports/sale-purchase', {
-      limit: 100,
       startDate: '2026-01-01',
       endDate: '2026-12-31',
+      detail: 'long',
     });
 
     expect(spRes.status).toBe(200);

@@ -27,14 +27,28 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
   it('3D.1 should book a Deal Cover for TT Remittance in PENDING status', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productTt?.id).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const purposeId = registry.masters.purposeId;
+    const maturityOptionId = registry.masters.ttMaturityOptionId;
 
     const res = await client.post('/deal-covers', {
       branchId: registry.masters.branchA.id,
+      transactionDate: txDate,
+      bankAccountProfileId: registry.masters.bankAccountId,
+      productId: registry.masters.productTt!.id,
+      partyProfileType: 'CORPORATE_CLIENT',
+      partyProfileId: registry.masters.corporatePartyProfile!.id,
+      purposeId,
       currencyId: registry.masters.currencyUsd.id,
-      productId: registry.masters.productTt?.id,
-      feAmount: 50000,
-      dealRate: 88.2,
-      bookingRate: 88.0,
+      issuerPartyProfileId: registry.masters.cardIssuerPartyId,
+      feAmount: '50000.00',
+      maturityOptionId,
       passengerPan: testPan,
       passengerPassport: testPassport,
     });
@@ -171,9 +185,9 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
 
   it('3D.5B should verify TT Remittance transaction renders accurately on Sale/Purchase and TT report frontend tables', async () => {
     const spRes = await client.get('/reports/sale-purchase', {
-      limit: 100,
       startDate: '2026-01-01',
       endDate: '2026-12-31',
+      detail: 'long',
     });
     expect(spRes.status).toBe(200);
     ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);

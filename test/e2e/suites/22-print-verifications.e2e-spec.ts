@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
@@ -136,27 +137,29 @@ describe('Module 17: Document Print Audits & Content Schema Verification', () =>
       const requestNumber = nextNumRes.data?.requestNumber || nextNumRes.data?.number || `CRF-${Date.now()}`;
 
       const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
-      const txDate = policyRes.data?.transactionDate || new Date().toISOString().slice(0, 10);
+      const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
 
+      const partyId = registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId!;
       const createRes = await client.post('/credit-request-fund', {
-        requestNumber,
         transactionDate: txDate,
-        requestBranchId: registry.masters.branchA.id,
+        branchId: registry.masters.branchA.id,
+        counterId: registry.masters.counterA1?.id,
         destinationBranchId: registry.masters.branchB?.id || registry.masters.branchA.id,
-        temporaryAmount: 50000,
-        currencyId: registry.masters.currencyUsd?.id,
         accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
         headerAccountId: registry.masters.bankAccountId,
         entityTypeOptionId: registry.masters.corporatePartyProfile?.entityTypeId,
-        partyProfileId: registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId,
+        partyProfileId: partyId,
+        paymentMethod: 'NEFT',
+        chequeDate: txDate,
         narration: 'Print audit test credit request fund',
+        idempotencyKey: `CRF_PRINT_${randomUUID()}`,
         items: [
           {
             itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
-            accountId: registry.masters.cashAccountId || registry.masters.bankAccountId,
-            currencyId: registry.masters.currencyUsd?.id,
-            direction: 'DEBIT',
-            amount: 50000,
+            accountId: registry.masters.advanceControlAccountId || registry.masters.cashAccountId,
+            subledgerPartyProfileId: partyId,
+            direction: 'CREDIT',
+            amount: '50000.00',
             narration: 'Print audit line',
           },
         ],

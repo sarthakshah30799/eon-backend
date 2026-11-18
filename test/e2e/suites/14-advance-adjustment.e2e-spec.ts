@@ -81,8 +81,7 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
       partyProfileId: registry.masters.corporatePartyProfile.id,
       panNumber: testPan,
       paymentMethod: 'NEFT',
-      referenceNumber: `NEFT-${Date.now()}`,
-      referenceDate: new Date().toISOString().slice(0, 10),
+      chequeDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
       narration: 'Advance receipt for adjustment and refund testing',
       idempotencyKey: randomUUID(),
       items: [

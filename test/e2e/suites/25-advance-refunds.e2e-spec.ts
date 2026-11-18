@@ -61,8 +61,7 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
       partyProfileId: registry.masters.corporatePartyProfile.id,
       panNumber: testPan,
       paymentMethod: 'NEFT',
-      referenceNumber: `NEFT-REF-${Date.now()}`,
-      referenceDate: new Date().toISOString().slice(0, 10),
+      chequeDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
       narration: 'Advance receipt for refund testing',
       idempotencyKey: randomUUID(),
       items: [

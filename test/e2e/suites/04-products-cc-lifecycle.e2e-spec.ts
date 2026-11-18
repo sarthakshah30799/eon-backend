@@ -47,8 +47,11 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
     expect(registry.masters.currencyUsd?.id).toBeDefined();
     expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const receiptDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+
     const res = await client.post('/card-stock/receipts', {
-      receiptDate: new Date().toISOString().slice(0, 10),
+      receiptDate,
       issuerPartyProfileId: registry.masters.cardIssuerPartyId,
       branchId: registry.masters.branchA.id,
       totalFeAmount: '1000',
