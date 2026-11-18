@@ -20,7 +20,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.1 should detect CDF mandatory requirement when note purchase exceeds threshold', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // Discover the exact configured CDF threshold amount
     const preview = await client.post('/transactions/purchase-rule-preview', {
@@ -84,7 +85,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.2 should enforce CORPORATE_CHEQUE_ONLY rule on corporate purchase in preview', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/purchase-rule-preview', {
       transactionType: 'PURCHASE',
@@ -119,7 +121,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.3 should reject corporate purchase transaction draft when cash payment is used', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_CORPORATE_INDIVIDUAL,
@@ -154,7 +157,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.4 should reject foreigner sell transaction when settled in non-cash mode', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -196,7 +200,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.5 should allow compliant Indian resident purchase with valid PAN and cheque', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/purchase-rule-preview', {
       transactionType: 'PURCHASE',
@@ -231,7 +236,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.6 should allow foreigner sell transaction when settled in cash', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -279,7 +285,8 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.7 should allow corporate purchase transaction when settled via cheque', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // Statutory preview check: Corporate purchase settled via cheque is compliant
     const previewRes = await client.post('/transactions/purchase-rule-preview', {
@@ -349,27 +356,24 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
 
     if (page?.id) {
       expect([200, 201]).toContain(res.status);
+      const corpTxnId = res.data?.id || res.data?.transaction?.id;
+      expect(corpTxnId).toBeDefined();
+
+      const getRes = await client.get(`/transactions/${corpTxnId}`);
+      expect(getRes.status).toBe(200);
+      expect(getRes.data).toBeDefined();
+      expect(getRes.data.id).toBe(corpTxnId);
+      TestLogger.success(`Verified GET /transactions/${corpTxnId} round-trip (200 OK) for corporate purchase`);
     } else {
       expect([200, 201, 400]).toContain(res.status);
       const msg = Array.isArray(res.data?.message) ? res.data.message.join(' ') : (res.data?.message || '');
       expect(msg).not.toMatch(/CORPORATE_CHEQUE_ONLY/i);
     }
-
-    if (res.status === 200 || res.status === 201) {
-      const corpTxnId = res.data?.id || res.data?.transaction?.id;
-      if (corpTxnId) {
-        const getRes = await client.get(`/transactions/${corpTxnId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(corpTxnId);
-        TestLogger.success(`Verified GET /transactions/${corpTxnId} round-trip (200 OK) for corporate purchase`);
-      }
-    }
     TestLogger.success('Corporate purchase settled via cheque accepted');
   });
 
   it('24.8 should evaluate 30-day rolling window cash limits for returning passenger', async () => {
-    if (!registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // Day 1 purchase within limits (400 CN + 400 Cash = 800 < 1000)
     const day1Res = await client.post('/transactions/purchase-rule-preview', {
@@ -434,7 +438,7 @@ describe('Module 24: Statutory FEMA/RBI Purchase Rules & Restrictions', () => {
   });
 
   it('24.9 should enforce NRI statutory cash purchase limits', async () => {
-    if (!registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // NRI within $3,000 limit (1200 CN + 1200 Cash = 2400 < 3000)
     const nriOkRes = await client.post('/transactions/purchase-rule-preview', {

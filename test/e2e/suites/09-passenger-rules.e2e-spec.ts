@@ -20,7 +20,8 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
   });
 
   it('4.1 should reject Indian passenger cash purchase exceeding $1,000 limit', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -54,7 +55,8 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
   });
 
   it('4.2 should reject NRI passenger cash purchase exceeding $3,000 limit', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -269,7 +271,8 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
   });
 
   it('4.14 should support Third-Party Payer (Paid By PAN) with relationship on transaction', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -310,7 +313,8 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
   });
 
   it('4.15 should support travel itinerary details (PassengerTravel) on transaction', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -364,7 +368,8 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
   });
 
   it('4.16 should reject foreign passenger transaction with incomplete passport details', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -396,7 +401,8 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
   });
 
   it('4.17 should validate tour passenger manifest quantity balancing', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // Tour passenger manifest where sum of fcnAmount (450) does not match sale quantity (500)
     const res = await client.post('/transactions/drafts', {

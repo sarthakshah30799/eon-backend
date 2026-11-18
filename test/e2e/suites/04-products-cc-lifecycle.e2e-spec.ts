@@ -2,6 +2,7 @@ import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
 import { ReportReconciler } from '../infrastructure/report-reconciler';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -42,10 +43,15 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.2 should create CC card stock receipt for Branch A', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.cardIssuerPartyId) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const receiptDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
 
     const res = await client.post('/card-stock/receipts', {
-      receiptDate: new Date().toISOString().slice(0, 10),
+      receiptDate,
       issuerPartyProfileId: registry.masters.cardIssuerPartyId,
       branchId: registry.masters.branchA.id,
       totalFeAmount: '1000',
@@ -71,12 +77,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      testCardReceiptId = res.data?.id;
-      TestLogger.success(`CC Card Receipt created: ${testCardKitNo} (${testCardReceiptId})`);
-    } else {
-      TestLogger.info(`Card stock create returned ${res.status}: ${JSON.stringify(res.data)}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    testCardReceiptId = res.data.id;
+    TestLogger.success(`CC Card Receipt created: ${testCardKitNo} (${testCardReceiptId})`);
   });
 
   it('3A.3 should query available blank cards for issuance', async () => {
@@ -90,7 +94,8 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.4 should issue (sell) CC card to a passenger', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -123,22 +128,20 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      testSoldTransactionId = res.data?.id;
-      testPassengerId = res.data?.passengerId || res.data?.passenger?.id;
-      reconciler.recordOperationDelta({
-        usdStockDelta: -1000,
-        cashDelta: 88500,
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success(`CC Card sold successfully: Trn ID ${testSoldTransactionId}`);
-    } else {
-      TestLogger.warn(`CC Card sale returned ${res.status}: ${JSON.stringify(res.data)}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    testSoldTransactionId = res.data.id;
+    testPassengerId = res.data?.passengerId || res.data?.passenger?.id;
+    reconciler.recordOperationDelta({
+      usdStockDelta: -1000,
+      cashDelta: 88500,
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success(`CC Card sold successfully: Trn ID ${testSoldTransactionId}`);
   });
 
   it('3A.4B should fetch sold CC transaction by ID (GET /transactions/:id) and verify relations without 500 error', async () => {
-    if (!testSoldTransactionId) return;
+    expect(testSoldTransactionId).toBeDefined();
 
     const res = await client.get(`/transactions/${testSoldTransactionId}`);
     expect(res.status).toBe(200);
@@ -150,8 +153,34 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
     TestLogger.success('Sold CC transaction re-opened cleanly via GET /transactions/:id');
   });
 
+  it('3A.4C should verify sold CC card transaction renders accurately on Sale/Purchase frontend report table', async () => {
+    expect(testSoldTransactionId).toBeDefined();
+
+    const txRes = await client.get(`/transactions/${testSoldTransactionId}`);
+    const txNum = txRes.data?.number || txRes.data?.transactionNumber;
+    expect(txNum).toBeDefined();
+
+    const spRes = await client.get('/reports/sale-purchase', {
+      limit: 100,
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    });
+
+    expect(spRes.status).toBe(200);
+    ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
+    ReportAccuracyValidator.verifyTransactionOnFrontend('sale-purchase', spRes.data, {
+      transactionNumber: txNum,
+      currencyCode: 'USD',
+      quantity: 1000,
+      rate: baseSaleRate,
+      grossAmount: 1000 * baseSaleRate,
+      netAmount: 1000 * baseSaleRate,
+    });
+    TestLogger.success('Sold CC card transaction verified on Sale/Purchase frontend table');
+  });
+
   it('3A.5 should reject CC card reload to a different passenger', async () => {
-    if (!testCardKitNo) return;
+    expect(testCardKitNo).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -205,7 +234,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.6A should reject retail surrender purchase when rate exceeds base sale price', async () => {
-    if (!testSoldCardId || !registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.productEm?.id) return;
+    expect(testSoldCardId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -244,7 +276,9 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.6B should reject surrender purchase using a blank-stock product (CC)', async () => {
-    if (!testSoldCardId || !registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(testSoldCardId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -281,7 +315,9 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.6C should reject surrender purchase with an unassigned card ID', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.productEm?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -318,7 +354,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.6D should execute retail surrender purchase of the sold CC card and transition unit to RESERVED', async () => {
-    if (!testSoldCardId || !registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.productEm?.id) return;
+    expect(testSoldCardId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const surrenderRate = Math.min(baseSaleRate, 88.0);
     const res = await client.post('/transactions/drafts', {
@@ -351,20 +390,19 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
       ],
     });
 
-    if (res.status === 200 || res.status === 201) {
-      reconciler.recordOperationDelta({
-        usdStockDelta: 1000,
-        cashDelta: -(1000 * surrenderRate),
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success(`Retail surrender purchase executed successfully: ${res.data?.id}`);
-    } else {
-      TestLogger.info(`Surrender purchase returned ${res.status}: ${JSON.stringify(res.data)}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    reconciler.recordOperationDelta({
+      usdStockDelta: 1000,
+      cashDelta: -(1000 * surrenderRate),
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success(`Retail surrender purchase executed successfully: ${res.data?.id}`);
   });
 
   it('3A.6E should list the surrendered unit in reserved cards available for HO bulk sale', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.productEm?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const res = await client.get('/card-stock/receipts/cards/em-units', {
       branchId: registry.masters.branchA.id,
@@ -377,16 +415,17 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
     const units = Array.isArray(res.data)
       ? res.data
       : (Array.isArray(res.data?.data) ? res.data.data : []);
-    if (units.length > 0) {
-      testReservedCardId = units[0].id;
-      TestLogger.success(`Found RESERVED unit available for bulk sale: ${testReservedCardId}`);
-    } else {
-      TestLogger.info('Reserved EM units list queried successfully');
-    }
+    expect(units.length).toBeGreaterThan(0);
+    testReservedCardId = units[0].id;
+    expect(testReservedCardId).toBeDefined();
+    TestLogger.success(`Found RESERVED unit available for bulk sale: ${testReservedCardId}`);
   });
 
   it('3A.6F should reject surrender bulk sale if tradeMode is not BULK', async () => {
-    if (!testReservedCardId || !registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.productEm?.id) return;
+    expect(testReservedCardId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_BULK,
@@ -423,7 +462,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.6G should reject surrender bulk sale if FE amount does not match EM unit amount', async () => {
-    if (!testReservedCardId || !registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.productEm?.id) return;
+    expect(testReservedCardId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_BULK,
@@ -460,7 +502,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
   });
 
   it('3A.6H should execute HO bulk issuer sale of the reserved card back to the Card Issuer Profile', async () => {
-    if (!testReservedCardId || !registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.productEm?.id) return;
+    expect(testReservedCardId).toBeDefined();
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productEm?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_BULK,
@@ -490,19 +535,18 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
       ],
     });
 
-    if (res.status === 200 || res.status === 201) {
-      reconciler.recordOperationDelta({
-        usdStockDelta: -1000,
-        transactionsCountDelta: 1,
-      });
-      TestLogger.success(`HO Bulk Issuer sale executed successfully: ${res.data?.id}`);
-    } else {
-      TestLogger.info(`HO Bulk Issuer sale returned ${res.status}: ${JSON.stringify(res.data)}`);
-    }
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    reconciler.recordOperationDelta({
+      usdStockDelta: -1000,
+      transactionsCountDelta: 1,
+    });
+    TestLogger.success(`HO Bulk Issuer sale executed successfully: ${res.data?.id}`);
   });
 
   it('3A.7 should query unsettled CARD items and create settlement document', async () => {
-    if (!registry.masters.cardIssuerPartyId || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     // As Admin / HO Staff (settles HO -> Issuer)
     await workplaceManager.asAdmin();

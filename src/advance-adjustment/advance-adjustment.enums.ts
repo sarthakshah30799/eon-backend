@@ -9,4 +9,13 @@ export enum AdvanceAdjustmentPrintCopyType {
   DUPLICATE_COPY = "DUPLICATE_COPY",
 }
 
+export const AdvanceAdjustmentLogAction = {
+  CREATE: "CREATE",
+  UPDATE: "UPDATE",
+  PRINT: "PRINT",
+} as const;
+
+export type AdvanceAdjustmentLogAction =
+  (typeof AdvanceAdjustmentLogAction)[keyof typeof AdvanceAdjustmentLogAction];
+
 export const ADVANCE_ADJUSTMENT_NUMBER_SERIES = "ADVANCE_ADJUSTMENT";

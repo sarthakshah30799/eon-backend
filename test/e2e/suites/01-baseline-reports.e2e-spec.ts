@@ -41,7 +41,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     });
 
     it('1.2 should filter sale-purchase report by single branch', async () => {
-      if (!registry.masters.branchA?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
       const res = await client.get('/reports/sale-purchase', {
         ...defaultDateRange,
         branchIds: [registry.masters.branchA.id],
@@ -56,7 +56,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     });
 
     it('1.3 should filter sale-purchase report by single counter', async () => {
-      if (!registry.masters.counterA1?.id) return;
+      expect(registry.masters.counterA1?.id).toBeDefined();
       const res = await client.get('/reports/sale-purchase', {
         ...defaultDateRange,
         counterIds: [registry.masters.counterA1.id],
@@ -137,7 +137,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     });
 
     it('2.2 should filter currency balance by branch', async () => {
-      if (!registry.masters.branchA?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
       const res = await client.get('/reports/currency-balance', {
         branchIds: [registry.masters.branchA.id],
       });
@@ -390,7 +390,7 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
     });
 
     it('7.7 should fetch Special Report with branch filter', async () => {
-      if (!registry.masters.branchA?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
       const res = await client.get('/reports/special-report', {
         branchIds: [registry.masters.branchA.id],
       });

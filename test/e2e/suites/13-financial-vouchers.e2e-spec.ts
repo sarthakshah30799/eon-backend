@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -49,18 +50,13 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.2 should create an advance receipt voucher with advance control account', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeBankId ||
-        !registry.masters.bankAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId ||
-        !registry.masters.advanceControlAccountId
-      ) {
-        TestLogger.warn('Skipping 8.2: Required masters for advance receipt voucher not available');
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+      expect(registry.masters.bankAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
+      expect(registry.masters.advanceControlAccountId).toBeDefined();
 
       const res = await client.post('/receipts', {
         transactionDate: getTxDate(),
@@ -71,7 +67,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
         partyProfileId: registry.masters.corporatePartyProfile.id,
         paymentMethod: 'CHEQUE',
-        chequeNumber: '112233',
+        chequeNumber: String(Math.floor(100000 + Math.random() * 900000)),
         chequeDate: new Date().toISOString().slice(0, 10),
         chequeBranch: 'Fort',
         drawnOn: 'HDFC Bank',
@@ -88,17 +84,15 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         ],
       });
 
-      if (res.status === 201 || res.status === 200) {
-        testReceiptId = res.data?.id;
-        expect(res.data?.advanceControlAccountId).toBe(registry.masters.advanceControlAccountId);
-        TestLogger.success(`Advance Receipt voucher created: ${testReceiptId} (Advance A/C: ${res.data?.advanceControlAccountId})`);
-      } else {
-        TestLogger.info(`Receipt creation returned ${res.status}: ${JSON.stringify(res.data)}`);
-      }
+      expect([200, 201]).toContain(res.status);
+      expect(res.data?.id).toBeDefined();
+      testReceiptId = res.data.id;
+      expect(res.data?.advanceControlAccountId).toBe(registry.masters.advanceControlAccountId);
+      TestLogger.success(`Advance Receipt voucher created: ${testReceiptId} (Advance A/C: ${res.data?.advanceControlAccountId})`);
     });
 
     it('8.2B should fetch created advance receipt voucher by ID (GET /receipts/:id) and verify relations without 500 error', async () => {
-      if (!testReceiptId) return;
+      expect(testReceiptId).toBeDefined();
 
       const res = await client.get(`/receipts/${testReceiptId}`);
       expect(res.status).toBe(200);
@@ -112,7 +106,8 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.3 should query available advances for party and verify advance receipt appears', async () => {
-      if (!registry.masters.branchA?.id || !registry.masters.corporatePartyProfile?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
 
       const res = await client.get('/receipts/available-advances', {
         partyProfileId: registry.masters.corporatePartyProfile.id,
@@ -126,18 +121,17 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       const advances = Array.isArray(res.data)
         ? res.data
         : (Array.isArray(res.data?.data) ? res.data.data : []);
-      if (testReceiptId) {
-        const matching = advances.find((adv: any) => adv.id === testReceiptId);
-        if (matching) {
-          expect(Number(matching.availableAmount)).toBeGreaterThan(0);
-          TestLogger.success(`Advance receipt voucher verified in available advances: Amount=${matching.availableAmount}`);
-        }
-      }
+      expect(testReceiptId).toBeDefined();
+      const matching = advances.find((adv: any) => adv.id === testReceiptId);
+      expect(matching).toBeDefined();
+      expect(Number(matching.availableAmount)).toBeGreaterThan(0);
+      TestLogger.success(`Advance receipt voucher verified in available advances: Amount=${matching.availableAmount}`);
       TestLogger.success(`Queried available advances (${advances.length} active advances found)`);
     });
 
     it('8.4 should query available advances for payments (/payments/available-advances)', async () => {
-      if (!registry.masters.branchA?.id || !registry.masters.corporatePartyProfile?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
 
       const res = await client.get('/payments/available-advances', {
         partyProfileId: registry.masters.corporatePartyProfile.id,
@@ -152,18 +146,14 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.5 should enforce payment method and account type constraints on vouchers', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.voucherAccountTypeBankId ||
-        !registry.masters.cashAccountId ||
-        !registry.masters.bankAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.bankAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       // 8.5A: Cash voucher rejecting non-cash payment method
       const invalidCashMethodRes = await client.post('/receipts', {
@@ -244,16 +234,12 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.6 should create a payment voucher with cash ledger and cash account type', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.cashAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       const res = await client.post('/payments', {
         transactionDate: getTxDate(),
@@ -269,7 +255,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         items: [
           {
             itemTypeOptionId: registry.masters.voucherItemTypeAccountId,
-            accountId: registry.masters.cashAccountId,
+            accountId: registry.masters.paymentItemAccountId || registry.masters.cashAccountId,
             subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
             direction: 'DEBIT',
             amount: '5000.00',
@@ -277,16 +263,14 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         ],
       });
 
-      if (res.status === 201 || res.status === 200) {
-        testPaymentId = res.data?.id;
-        TestLogger.success(`Payment voucher created: ${testPaymentId}`);
-      } else {
-        TestLogger.info(`Payment voucher creation returned ${res.status}: ${JSON.stringify(res.data)}`);
-      }
+      expect([200, 201]).toContain(res.status);
+      expect(res.data?.id).toBeDefined();
+      testPaymentId = res.data.id;
+      TestLogger.success(`Payment voucher created: ${testPaymentId}`);
     });
 
     it('8.6B should fetch created payment voucher by ID (GET /payments/:id) and verify relations without 500 error', async () => {
-      if (!testPaymentId) return;
+      expect(testPaymentId).toBeDefined();
 
       const res = await client.get(`/payments/${testPaymentId}`);
       expect(res.status).toBe(200);
@@ -298,17 +282,30 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       TestLogger.success(`Payment voucher re-opened cleanly via GET /payments/:id without 500 errors`);
     });
 
+    it('8.6B2 should verify cash payment voucher renders in Cash Report and Cash Ledger frontend tables', async () => {
+      const cashRes = await client.get('/reports/cash-report', {
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+      });
+      expect(cashRes.status).toBe(200);
+      ReportAccuracyValidator.verifyFrontendContract('cash-report', cashRes.data);
+
+      const ledgerRes = await client.get('/reports/cash-ledger-report', {
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+      });
+      expect(ledgerRes.status).toBe(200);
+      ReportAccuracyValidator.verifyFrontendContract('cash-ledger', ledgerRes.data);
+      TestLogger.success('Cash payment voucher verified on Cash Ledger frontend table');
+    });
+
     it('8.6C should reject payment voucher submission with a non-cash/bank account as header (negative test)', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.advanceControlAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.advanceControlAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       // advanceControlAccountId is a liability/control account, NOT a CASH_LEDGER
       const res = await client.post('/payments', {
@@ -338,15 +335,11 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.6D should reject payment voucher when party entity type does not match entityTypeOptionId (negative test)', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.voucherAccountTypeCashId ||
-        !registry.masters.cashAccountId ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.voucherItemTypeAccountId
-      ) {
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherAccountTypeCashId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
 
       const dummyEntityTypeId = '00000000-0000-0000-0000-000000000001';
       const res = await client.post('/payments', {
@@ -389,16 +382,13 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
     });
 
     it('8.8 should create transaction with partial payment, query outstanding bills, and clear outstanding via Receipt bill voucher', async () => {
-      if (
-        !registry.masters.branchA?.id ||
-        !registry.masters.currencyUsd?.id ||
-        !registry.masters.corporatePartyProfile?.id ||
-        !registry.masters.corporatePartyProfile?.entityTypeId ||
-        !saleBillOptionId
-      ) {
-        TestLogger.warn('Skipping 8.8: Required masters for bill settlement not available');
-        return;
-      }
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.currencyUsd?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+      expect(registry.masters.corporatePartyProfile?.entityTypeId).toBeDefined();
+      expect(registry.masters.voucherAccountTypeBankId).toBeDefined();
+      expect(registry.masters.bankAccountId).toBeDefined();
+      expect(saleBillOptionId).toBeDefined();
 
       // Step 1: Create transaction with partial payment leaving an outstanding balance
       const saleRes = await client.post('/transactions/drafts', {
@@ -427,93 +417,88 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         ],
       });
 
-      if (saleRes.status === 200 || saleRes.status === 201) {
-        testOutstandingTransactionId = saleRes.data?.id;
-        TestLogger.success(`Transaction with outstanding balance created: ${testOutstandingTransactionId}`);
+      expect([200, 201]).toContain(saleRes.status);
+      testOutstandingTransactionId = saleRes.data?.id;
+      expect(testOutstandingTransactionId).toBeDefined();
+      TestLogger.success(`Transaction with outstanding balance created: ${testOutstandingTransactionId}`);
 
-        // Step 2: Query outstanding bills for this corporate party
-        const billsRes = await client.get('/receipts/outstanding-bills', {
-          partyProfileId: registry.masters.corporatePartyProfile.id,
-          slug: 'SALE_CORPORATE_INDIVIDUAL',
-          branchId: registry.masters.branchA.id,
-          counterId: registry.masters.counterA1?.id,
-          transactionDate: getTxDate(),
-        });
+      // Step 2: Query outstanding bills for this corporate party
+      const billsRes = await client.get('/receipts/outstanding-bills', {
+        partyProfileId: registry.masters.corporatePartyProfile.id,
+        slug: 'SALE_CORPORATE_INDIVIDUAL',
+        branchId: registry.masters.branchA.id,
+        counterId: registry.masters.counterA1?.id,
+        transactionDate: getTxDate(),
+      });
 
-        expect([200, 304]).toContain(billsRes.status);
-        const bills = Array.isArray(billsRes.data)
-          ? billsRes.data
-          : (Array.isArray(billsRes.data?.data) ? billsRes.data.data : []);
-        const matchingBill = bills.find((b: any) => b.id === testOutstandingTransactionId);
+      expect([200, 304]).toContain(billsRes.status);
+      const bills = Array.isArray(billsRes.data)
+        ? billsRes.data
+        : (Array.isArray(billsRes.data?.data) ? billsRes.data.data : []);
+      const matchingBill = bills.find((b: any) => b.id === testOutstandingTransactionId);
+      expect(matchingBill).toBeDefined();
 
-        if (matchingBill) {
-          const outstandingAmount = matchingBill.outstanding || matchingBill.outstandingAmount || '12700.00';
-          TestLogger.success(`Found outstanding bill ${testOutstandingTransactionId} with balance: ${outstandingAmount}`);
+      const outstandingAmount = matchingBill.outstanding || matchingBill.outstandingAmount || '12700.00';
+      TestLogger.success(`Found outstanding bill ${testOutstandingTransactionId} with balance: ${outstandingAmount}`);
 
-          // Step 3: Clear the outstanding bill via Receipt Voucher with BILL item
-          const billReceiptRes = await client.post('/receipts', {
-            transactionDate: getTxDate(),
-            branchId: registry.masters.branchA.id,
-            counterId: registry.masters.counterA1?.id,
-            accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
-            headerAccountId: registry.masters.bankAccountId,
-            entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
-            partyProfileId: registry.masters.corporatePartyProfile.id,
-            paymentMethod: 'CHEQUE',
-            chequeNumber: 'CHQ888444',
-            chequeDate: new Date().toISOString().slice(0, 10),
-            chequeBranch: 'Fort',
-            drawnOn: 'HDFC Bank',
-            narration: 'Settling outstanding bill from corporate travel booking',
-            idempotencyKey: randomUUID(),
-            items: [
-              {
-                itemTypeOptionId: saleBillOptionId,
-                subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
-                settledTransactionId: testOutstandingTransactionId,
-                direction: 'CREDIT',
-                amount: String(outstandingAmount),
-              },
-            ],
-          });
+      // Step 3: Clear the outstanding bill via Receipt Voucher with BILL item
+      const billReceiptRes = await client.post('/receipts', {
+        transactionDate: getTxDate(),
+        branchId: registry.masters.branchA.id,
+        counterId: registry.masters.counterA1?.id,
+        accountTypeOptionId: registry.masters.voucherAccountTypeBankId,
+        headerAccountId: registry.masters.bankAccountId,
+        entityTypeOptionId: registry.masters.corporatePartyProfile.entityTypeId,
+        partyProfileId: registry.masters.corporatePartyProfile.id,
+        paymentMethod: 'CHEQUE',
+        chequeNumber: `CHQ${Math.floor(100000 + Math.random() * 900000)}`,
+        chequeDate: new Date().toISOString().slice(0, 10),
+        chequeBranch: 'Fort',
+        drawnOn: 'HDFC Bank',
+        narration: 'Settling outstanding bill from corporate travel booking',
+        idempotencyKey: randomUUID(),
+        items: [
+          {
+            itemTypeOptionId: saleBillOptionId,
+            subledgerPartyProfileId: registry.masters.corporatePartyProfile.id,
+            settledTransactionId: testOutstandingTransactionId,
+            direction: 'CREDIT',
+            amount: String(outstandingAmount),
+          },
+        ],
+      });
 
-          if (billReceiptRes.status === 200 || billReceiptRes.status === 201) {
-            TestLogger.success(`Bill settlement Receipt voucher created: ${billReceiptRes.data?.id}`);
+      expect([200, 201]).toContain(billReceiptRes.status);
+      expect(billReceiptRes.data?.id).toBeDefined();
+      TestLogger.success(`Bill settlement Receipt voucher created: ${billReceiptRes.data?.id}`);
 
-            // Step 4: Verify outstanding bill is cleared
-            const afterBillsRes = await client.get('/receipts/outstanding-bills', {
-              partyProfileId: registry.masters.corporatePartyProfile.id,
-              slug: 'SALE_CORPORATE_INDIVIDUAL',
-              branchId: registry.masters.branchA.id,
-              counterId: registry.masters.counterA1?.id,
-              transactionDate: getTxDate(),
-            });
-            const remainingBills = Array.isArray(afterBillsRes.data)
-              ? afterBillsRes.data
-              : (Array.isArray(afterBillsRes.data?.data) ? afterBillsRes.data.data : []);
-            const stillListed = remainingBills.some((b: any) => b.id === testOutstandingTransactionId);
-            expect(stillListed).toBe(false);
-            TestLogger.success('Outstanding bill successfully cleared and no longer listed');
+      // Step 4: Verify outstanding bill is cleared
+      const afterBillsRes = await client.get('/receipts/outstanding-bills', {
+        partyProfileId: registry.masters.corporatePartyProfile.id,
+        slug: 'SALE_CORPORATE_INDIVIDUAL',
+        branchId: registry.masters.branchA.id,
+        counterId: registry.masters.counterA1?.id,
+        transactionDate: getTxDate(),
+      });
+      const remainingBills = Array.isArray(afterBillsRes.data)
+        ? afterBillsRes.data
+        : (Array.isArray(afterBillsRes.data?.data) ? afterBillsRes.data.data : []);
+      const stillListed = remainingBills.some((b: any) => b.id === testOutstandingTransactionId);
+      expect(stillListed).toBe(false);
+      TestLogger.success('Outstanding bill successfully cleared and no longer listed');
 
-            // Round-trip check: Re-open transaction by ID to verify no 500 error
-            const txDetail = await client.get(`/transactions/${testOutstandingTransactionId}`);
-            expect(txDetail.status).toBe(200);
-            expect(txDetail.data?.id).toBe(testOutstandingTransactionId);
-            expect(Array.isArray(txDetail.data?.items)).toBe(true);
-            TestLogger.success('Settled transaction re-opened cleanly via GET /transactions/:id');
+      // Round-trip check: Re-open transaction by ID to verify no 500 error
+      const txDetail = await client.get(`/transactions/${testOutstandingTransactionId}`);
+      expect(txDetail.status).toBe(200);
+      expect(txDetail.data?.id).toBe(testOutstandingTransactionId);
+      expect(Array.isArray(txDetail.data?.items)).toBe(true);
+      TestLogger.success('Settled transaction re-opened cleanly via GET /transactions/:id');
 
-            // Round-trip check: Re-open bill settlement voucher by ID
-            const voucherDetail = await client.get(`/receipts/${billReceiptRes.data.id}`);
-            expect(voucherDetail.status).toBe(200);
-            expect(voucherDetail.data?.id).toBe(billReceiptRes.data.id);
-            TestLogger.success('Bill settlement voucher re-opened cleanly via GET /receipts/:id');
-          } else {
-            TestLogger.info(`Bill settlement returned ${billReceiptRes.status}: ${JSON.stringify(billReceiptRes.data)}`);
-          }
-        }
-      } else {
-        TestLogger.info(`Partial payment transaction returned ${saleRes.status}: ${JSON.stringify(saleRes.data)}`);
-      }
+      // Round-trip check: Re-open bill settlement voucher by ID
+      const voucherDetail = await client.get(`/receipts/${billReceiptRes.data.id}`);
+      expect(voucherDetail.status).toBe(200);
+      expect(voucherDetail.data?.id).toBe(billReceiptRes.data.id);
+      TestLogger.success('Bill settlement voucher re-opened cleanly via GET /receipts/:id');
     });
   });
 
@@ -530,6 +515,69 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       const res = await client.get('/journal-vouchers');
       expect([200, 304]).toContain(res.status);
       TestLogger.success('Journal vouchers history queried');
+    });
+
+    it('8.10B should post a balanced Journal Voucher (Debit == Credit) and verify creation', async () => {
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.voucherItemTypeAccountId).toBeDefined();
+      expect(registry.masters.cashAccountId).toBeDefined();
+      expect(registry.masters.bankAccountId).toBeDefined();
+
+      const idempotencyKey = `JV_${randomUUID()}`;
+      const res = await client.post('/journal-vouchers', {
+        transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+        branchId: registry.masters.branchA!.id,
+        counterId: registry.masters.counterA1?.id,
+        narration: 'Balanced Journal Voucher for inter-account reclassification',
+        idempotencyKey,
+        items: [
+          {
+            itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
+            accountId: registry.masters.journalDebitAccountId || registry.masters.cashAccountId!,
+            direction: 'DEBIT',
+            amount: '5000.00',
+          },
+          {
+            itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
+            accountId: registry.masters.journalCreditAccountId || registry.masters.bankAccountId!,
+            direction: 'CREDIT',
+            amount: '5000.00',
+          },
+        ],
+      });
+
+      expect([200, 201]).toContain(res.status);
+      expect(res.data?.id).toBeDefined();
+      expect(res.data?.voucherType).toBe('JOURNAL');
+      TestLogger.success(`Balanced Journal Voucher posted successfully: ${res.data?.id}`);
+    });
+
+    it('8.10C should reject unbalanced Journal Voucher where Debit != Credit (negative test)', async () => {
+      expect(registry.masters.branchA?.id).toBeDefined();
+
+      const res = await client.post('/journal-vouchers', {
+        transactionDate: registry.masters.transactionDate || new Date().toISOString().slice(0, 10),
+        branchId: registry.masters.branchA!.id,
+        narration: 'Unbalanced JV test',
+        idempotencyKey: `JV_FAIL_${randomUUID()}`,
+        items: [
+          {
+            itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
+            accountId: registry.masters.cashAccountId!,
+            direction: 'DEBIT',
+            amount: '5000.00',
+          },
+          {
+            itemTypeOptionId: registry.masters.voucherItemTypeAccountId!,
+            accountId: registry.masters.bankAccountId!,
+            direction: 'CREDIT',
+            amount: '4000.00',
+          },
+        ],
+      });
+
+      expect([400, 422]).toContain(res.status);
+      TestLogger.success('Unbalanced Journal Voucher cleanly rejected with 400 Bad Request');
     });
   });
 

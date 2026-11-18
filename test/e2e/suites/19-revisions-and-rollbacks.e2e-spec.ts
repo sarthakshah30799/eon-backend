@@ -22,7 +22,8 @@ describe('Module 14: Transaction Revisions, Draft Workflow & Rollbacks', () => {
   });
 
   it('14.1 should create a transaction draft', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -38,24 +39,20 @@ describe('Module 14: Transaction Revisions, Draft Workflow & Rollbacks', () => {
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      testDraftId = res.data?.id;
-      TestLogger.success(`Draft transaction created: ${testDraftId}`);
+    expect([200, 201]).toContain(res.status);
+    expect(res.data?.id).toBeDefined();
+    testDraftId = res.data.id;
+    TestLogger.success(`Draft transaction created: ${testDraftId}`);
 
-      if (testDraftId) {
-        const getRes = await client.get(`/transactions/${testDraftId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(testDraftId);
-        TestLogger.success(`Verified GET /transactions/${testDraftId} round-trip (200 OK) for draft`);
-      }
-    } else {
-      TestLogger.info(`Draft creation returned ${res.status}`);
-    }
+    const getRes = await client.get(`/transactions/${testDraftId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data).toBeDefined();
+    expect(getRes.data.id).toBe(testDraftId);
+    TestLogger.success(`Verified GET /transactions/${testDraftId} round-trip (200 OK) for draft`);
   });
 
   it('14.2 should reject a transaction draft and trigger rollback', async () => {
-    if (!testDraftId) return;
+    expect(testDraftId).toBeDefined();
 
     const res = await client.post(`/transactions/${testDraftId}/reject`, {
       rejectionReason: 'Customer requested cancellation',

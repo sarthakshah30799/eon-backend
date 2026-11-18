@@ -40,6 +40,7 @@ import { VoucherService, VoucherSession } from "../vouchers/voucher.service";
 import { VoucherType } from "../vouchers/voucher.enums";
 import {
   CREDIT_REQUEST_FUND_NUMBER_SERIES,
+  CreditRequestFundLogAction,
   CreditRequestFundPrintCopyType,
   CreditRequestFundStatus,
 } from "./credit-request-fund.enums";
@@ -54,7 +55,7 @@ import {
 } from "./dto/credit-request-fund.dto";
 import { CreditRequestFund } from "./entities/credit-request-fund.entity";
 import { CreditRequestFundItem } from "./entities/credit-request-fund-item.entity";
-import { CreditRequestFundPrintLog } from "./entities/credit-request-fund-print-log.entity";
+import { CreditRequestFundLog } from "./entities/credit-request-fund-log.entity";
 
 const normalize = (value: unknown) => String(value ?? "").trim();
 const normalizeUpper = (value: unknown) =>
@@ -97,8 +98,8 @@ export class CreditRequestFundService {
     @InjectDataSource("database2") private readonly database2: DataSource,
     @InjectRepository(CreditRequestFund, "database2")
     private readonly headerRepository: Repository<CreditRequestFund>,
-    @InjectRepository(CreditRequestFundPrintLog, "database2")
-    private readonly printLogRepository: Repository<CreditRequestFundPrintLog>,
+    @InjectRepository(CreditRequestFundLog, "database2")
+    private readonly logRepository: Repository<CreditRequestFundLog>,
     @InjectRepository(AccountProfile)
     private readonly accountRepository: Repository<AccountProfile>,
     @InjectRepository(PartyProfile)
@@ -727,7 +728,6 @@ export class CreditRequestFundService {
           travelerPanName: resolved.travelerPanName,
           travelerPanDob: resolved.travelerPanDob,
           ...resolved.totals,
-          printCount: 0,
           createdBy: resolved.actorId,
           updatedBy: resolved.actorId,
         }),
@@ -764,6 +764,26 @@ export class CreditRequestFundService {
           }),
         );
       }
+
+      const logRepo = manager.getRepository(CreditRequestFundLog);
+      const performedByName = await this.resolveActorName(resolved.actorId);
+      await logRepo.save(
+        logRepo.create({
+          creditRequestFundId: header.id,
+          action: CreditRequestFundLogAction.CREATE,
+          message: "Credit request fund created",
+          afterSnapshot: {
+            id: header.id,
+            number: header.number,
+            status: header.status,
+            finalAmount: header.finalAmount,
+          },
+          performedById: resolved.actorId,
+          performedByName,
+          createdBy: resolved.actorId,
+          updatedBy: resolved.actorId,
+        }),
+      );
 
       return headerRepo.findOneOrFail({
         where: { id: header.id },
@@ -902,8 +922,8 @@ export class CreditRequestFundService {
   private async findEntity(id: string, session: VoucherSession) {
     const header = await this.headerRepository.findOne({
       where: { id },
-      relations: ["items", "printLogs"],
-      order: { printLogs: { performedAt: "DESC" } },
+      relations: ["items", "logs"],
+      order: { logs: { performedAt: "DESC" } },
     });
     if (!header) throw new NotFoundException("Credit Request Fund not found");
     if (!this.isPrivileged(session)) {
@@ -928,7 +948,6 @@ export class CreditRequestFundService {
   ): Promise<{
     message: string;
     copyType: CreditRequestFundPrintCopyType;
-    printCount: number;
   }> {
     const actorId = this.getActor(session);
     const header = await this.findEntity(id, session);
@@ -945,26 +964,26 @@ export class CreditRequestFundService {
       );
     }
 
-    const existingPrintCount = header.printCount ?? 0;
+    const existingPrintCount = await this.logRepository.count({
+      where: {
+        creditRequestFundId: id,
+        action: CreditRequestFundLogAction.PRINT,
+      },
+    });
     const copyType =
       existingPrintCount === 0
         ? CreditRequestFundPrintCopyType.CUSTOMER_COPY
         : CreditRequestFundPrintCopyType.DUPLICATE_COPY;
-    const printCount = existingPrintCount + 1;
     const message =
       copyType === CreditRequestFundPrintCopyType.DUPLICATE_COPY
         ? "Duplicate copy printed"
         : "Original copy printed";
     const performedByName = await this.resolveActorName(actorId);
 
-    await this.headerRepository.update(id, {
-      printCount,
-      updatedBy: actorId,
-    });
-    await this.printLogRepository.save(
-      this.printLogRepository.create({
+    await this.logRepository.save(
+      this.logRepository.create({
         creditRequestFundId: id,
-        copyType,
+        action: CreditRequestFundLogAction.PRINT,
         message,
         metadata: {
           copyType,
@@ -982,7 +1001,6 @@ export class CreditRequestFundService {
     return {
       message,
       copyType,
-      printCount,
     };
   }
 
@@ -1057,7 +1075,25 @@ export class CreditRequestFundService {
     header.cancelledBy = actorId;
     header.cancelledAt = new Date();
     header.updatedBy = actorId;
-    return this.headerRepository.save(header);
+    const saved = await this.headerRepository.save(header);
+    const performedByName = await this.resolveActorName(actorId);
+    await this.logRepository.save(
+      this.logRepository.create({
+        creditRequestFundId: saved.id,
+        action: CreditRequestFundLogAction.CANCEL,
+        message: "Credit request fund cancelled",
+        afterSnapshot: {
+          id: saved.id,
+          number: saved.number,
+          status: saved.status,
+        },
+        performedById: actorId,
+        performedByName,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    return saved;
   }
 
   async reject(
@@ -1078,7 +1114,26 @@ export class CreditRequestFundService {
     header.rejectedAt = new Date();
     header.rejectionRemarks = normalize(dto.remarks);
     header.updatedBy = actorId;
-    return this.headerRepository.save(header);
+    const saved = await this.headerRepository.save(header);
+    const performedByName = await this.resolveActorName(actorId);
+    await this.logRepository.save(
+      this.logRepository.create({
+        creditRequestFundId: saved.id,
+        action: CreditRequestFundLogAction.REJECT,
+        message: "Credit request fund rejected",
+        afterSnapshot: {
+          id: saved.id,
+          number: saved.number,
+          status: saved.status,
+          rejectionRemarks: saved.rejectionRemarks,
+        },
+        performedById: actorId,
+        performedByName,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+    return saved;
   }
 
   async approve(
@@ -1216,6 +1271,29 @@ export class CreditRequestFundService {
       };
       header.updatedBy = actorId;
       await headerRepo.save(header);
+
+      const logRepo = manager.getRepository(CreditRequestFundLog);
+      const performedByName = await this.resolveActorName(actorId);
+      await logRepo.save(
+        logRepo.create({
+          creditRequestFundId: header.id,
+          action: CreditRequestFundLogAction.APPROVE,
+          message: "Credit request fund approved",
+          afterSnapshot: {
+            id: header.id,
+            number: header.number,
+            status: header.status,
+            approvedTransactionDate: header.approvedTransactionDate,
+            destinationReceiptVoucherId: header.destinationReceiptVoucherId,
+            requestingReceiptVoucherId: header.requestingReceiptVoucherId,
+            requestingPaymentVoucherId: header.requestingPaymentVoucherId,
+          },
+          performedById: actorId,
+          performedByName,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
 
       return headerRepo.findOneOrFail({
         where: { id: header.id },

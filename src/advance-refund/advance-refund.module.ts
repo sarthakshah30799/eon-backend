@@ -16,7 +16,7 @@ import { AdvanceRefundService } from "./advance-refund.service";
 import { User } from "../users/user.entity";
 import { AdvanceRefund } from "./entities/advance-refund.entity";
 import { AdvanceRefundItem } from "./entities/advance-refund-item.entity";
-import { AdvanceRefundPrintLog } from "./entities/advance-refund-print-log.entity";
+import { AdvanceRefundLog } from "./entities/advance-refund-log.entity";
 
 @Module({
   imports: [
@@ -35,7 +35,7 @@ import { AdvanceRefundPrintLog } from "./entities/advance-refund-print-log.entit
       User,
     ]),
     TypeOrmModule.forFeature(
-      [AdvanceRefund, AdvanceRefundItem, AdvanceRefundPrintLog],
+      [AdvanceRefund, AdvanceRefundItem, AdvanceRefundLog],
       "database2",
     ),
   ],

@@ -20,7 +20,8 @@ describe('Module 3E: Travellers Cheque (TP) Issuance, Encashment Surrender & Set
   });
 
   it('3E.1 should execute retail sale of Travellers Cheques (TP) to passenger', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -51,24 +52,21 @@ describe('Module 3E: Travellers Cheque (TP) Issuance, Encashment Surrender & Set
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      const txnId = res.data?.id || res.data?.transaction?.id;
-      if (txnId) {
-        const getRes = await client.get(`/transactions/${txnId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(txnId);
-        TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for TP retail sale`);
-      }
+    expect([200, 201]).toContain(res.status);
+    const txnId = res.data?.id || res.data?.transaction?.id;
+    expect(txnId).toBeDefined();
 
-      TestLogger.success('TP retail sale processed successfully');
-    } else {
-      TestLogger.info(`TP retail sale returned ${res.status}`);
-    }
+    const getRes = await client.get(`/transactions/${txnId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data).toBeDefined();
+    expect(getRes.data.id).toBe(txnId);
+    TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for TP retail sale`);
+    TestLogger.success('TP retail sale processed successfully');
   });
 
   it('3E.2 should execute customer encashment surrender of TP cheques', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -99,24 +97,21 @@ describe('Module 3E: Travellers Cheque (TP) Issuance, Encashment Surrender & Set
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      const txnId = res.data?.id || res.data?.transaction?.id;
-      if (txnId) {
-        const getRes = await client.get(`/transactions/${txnId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(txnId);
-        TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for TP encashment`);
-      }
+    expect([200, 201]).toContain(res.status);
+    const txnId = res.data?.id || res.data?.transaction?.id;
+    expect(txnId).toBeDefined();
 
-      TestLogger.success('TP encashment surrender purchase processed successfully');
-    } else {
-      TestLogger.info(`TP surrender returned ${res.status}`);
-    }
+    const getRes = await client.get(`/transactions/${txnId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data).toBeDefined();
+    expect(getRes.data.id).toBe(txnId);
+    TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for TP encashment`);
+    TestLogger.success('TP encashment surrender purchase processed successfully');
   });
 
   it('3E.3 should reject TP encashment surrender exceeding cash limit ($1,000 for Indian)', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
@@ -150,7 +145,7 @@ describe('Module 3E: Travellers Cheque (TP) Issuance, Encashment Surrender & Set
   });
 
   it('3E.4 should reject TP transaction with non-existent currency ID', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     const dummyCurrencyId = '00000000-0000-0000-0000-000000009999';
     const res = await client.post('/transactions/drafts', {

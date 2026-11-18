@@ -69,7 +69,8 @@ describe('Module 12: Chequebook & Manual Bill Book Operations', () => {
     });
 
     it('12.6 should reject invalid manual book page id on transaction draft with 404', async () => {
-      if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.currencyUsd?.id).toBeDefined();
 
       const fakePageId = randomUUID();
       const res = await client.post('/transactions/drafts', {
@@ -109,7 +110,8 @@ describe('Module 12: Chequebook & Manual Bill Book Operations', () => {
     });
 
     it('12.7 should enforce manual bill book requirement when ALLOW_NULL_MANUAL_BOOK_IN_SELL is false and allow when true', async () => {
-      if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.currencyUsd?.id).toBeDefined();
 
       await workplaceManager.asAdmin();
 

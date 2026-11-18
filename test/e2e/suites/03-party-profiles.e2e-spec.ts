@@ -24,7 +24,7 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
   });
 
   it('2.1 should create a new Corporate Client party profile in PENDING status', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
     const timestamp = Date.now().toString().slice(-6);
     const code = `CORP_${timestamp}`;
 
@@ -58,7 +58,7 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
   });
 
   it('2.2 should create a new FFMC party profile', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
     const timestamp = Date.now().toString().slice(-6);
     const code = `FFMC_${timestamp}`;
 
@@ -89,34 +89,36 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
   });
 
   it('2.3 should reject duplicate party profile code', async () => {
-    if (!registry.masters.branchA?.id) return;
-    // Attempting to create again with duplicate code
+    expect(registry.masters.branchA?.id).toBeDefined();
+    const uniqueSuffix = `${Date.now().toString().slice(-4)}${Math.floor(1000 + Math.random() * 9000)}`;
+    const dupCode = `DUP_${uniqueSuffix}`;
+    // Attempting to create first
     const res = await client.post('/party-profiles', {
       type: 'CORPORATE_CLIENT',
-      code: 'CORP_DUPLICATE_TEST',
-      name: 'Duplicate 1',
+      code: dupCode,
+      name: `Duplicate One ${uniqueSuffix}`,
       address1: '789 Business Ave',
       city: 'Mumbai',
       pinCode: '400051',
       branchIds: [registry.masters.branchA.id],
     });
-    if (res.ok) {
-      const resDup = await client.post('/party-profiles', {
-        type: 'CORPORATE_CLIENT',
-        code: 'CORP_DUPLICATE_TEST',
-        name: 'Duplicate 2',
-        address1: '789 Business Ave',
-        city: 'Mumbai',
-        pinCode: '400051',
-        branchIds: [registry.masters.branchA.id],
-      });
-      expect([400, 409]).toContain(resDup.status);
-      TestLogger.success('Duplicate party code rejected');
-    }
+    expect([201, 200]).toContain(res.status);
+
+    const resDup = await client.post('/party-profiles', {
+      type: 'CORPORATE_CLIENT',
+      code: dupCode,
+      name: `Duplicate Two ${uniqueSuffix}`,
+      address1: '789 Business Ave',
+      city: 'Mumbai',
+      pinCode: '400051',
+      branchIds: [registry.masters.branchA.id],
+    });
+    expect([400, 409]).toContain(resDup.status);
+    TestLogger.success('Duplicate party code rejected');
   });
 
   it('2.4 should approve party profile by Head Office (HO)', async () => {
-    if (!testCorporatePartyId) return;
+    expect(testCorporatePartyId).toBeDefined();
 
     await workplaceManager.asHoStaff();
     const res = await client.post(`/party-profiles/${testCorporatePartyId}/review`, {
@@ -130,7 +132,7 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
   });
 
   it('2.5 should reject a party profile by HO and verify transaction block', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
     const timestamp = Date.now().toString().slice(-6);
     await workplaceManager.asAdmin();
     const createRes = await client.post('/party-profiles', {
@@ -176,7 +178,7 @@ describe('Module 2: Party Profiles Lifecycle, Approvals & Limits (All Client Typ
   });
 
   it('2.6 should block transaction when party profile is marked inactive', async () => {
-    if (!testFfmcPartyId) return;
+    expect(testFfmcPartyId).toBeDefined();
 
     await workplaceManager.asAdmin();
     await client.put(`/party-profiles/${testFfmcPartyId}`, {

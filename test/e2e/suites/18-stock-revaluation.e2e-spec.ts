@@ -25,7 +25,8 @@ describe('Module 13: Stock Revaluation (Mark-to-Market Inventory & Gain/Loss)', 
   });
 
   it('13.2 should query current holding stock for revaluation', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.counterA1?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.counterA1?.id).toBeDefined();
 
     const targets = JSON.stringify([
       {

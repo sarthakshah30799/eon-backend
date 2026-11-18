@@ -19,7 +19,7 @@ describe('Module 16: Role-Based Access Control (RBAC) & Workplace Isolation', ()
   });
 
   it('16.1 should allow Admin & HO staff to freely switch workplaces across branches', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
 
     await workplaceManager.asAdmin();
     const switchedA = await workplaceManager.switchWorkplace(
@@ -57,7 +57,7 @@ describe('Module 16: Role-Based Access Control (RBAC) & Workplace Isolation', ()
   });
 
   it('16.4 should reject switching workplace to non-existent counter ID without 500 error', async () => {
-    if (!registry.masters.branchA?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
     const dummyCounterId = '00000000-0000-0000-0000-000000009999';
     const res = await client.post('/auth/switch-workplace', {
       branchId: registry.masters.branchA.id,

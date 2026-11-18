@@ -50,7 +50,9 @@ describe('Module 18: Executive Dashboard KPIs & Counterfeit Currency Management'
 
   describe('Counterfeit / Fake Currency Confiscation', () => {
     it('18.5 should execute fake currency write-off transaction', async () => {
-      if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id || !registry.masters.fakeReasonId) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.currencyUsd?.id).toBeDefined();
+      expect(registry.masters.fakeReasonId).toBeDefined();
 
       const res = await client.post('/transactions/drafts', {
         slug: TRANSACTION_SLUGS.FAKE_CURRENCY,
@@ -67,24 +69,21 @@ describe('Module 18: Executive Dashboard KPIs & Counterfeit Currency Management'
         ],
       });
 
-      if (res.status === 201 || res.status === 200) {
-        const txnId = res.data?.id || res.data?.transaction?.id;
-        if (txnId) {
-          const getRes = await client.get(`/transactions/${txnId}`);
-          expect(getRes.status).toBe(200);
-          expect(getRes.data).toBeDefined();
-          expect(getRes.data.id).toBe(txnId);
-          TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for fake currency`);
-        }
+      expect([200, 201]).toContain(res.status);
+      const txnId = res.data?.id || res.data?.transaction?.id;
+      expect(txnId).toBeDefined();
 
-        reconciler.recordOperationDelta({
-          usdStockDelta: -100, // Stock written off
-          transactionsCountDelta: 1,
-        });
-        TestLogger.success('Fake currency confiscation transaction processed');
-      } else {
-        TestLogger.info(`Fake currency transaction returned ${res.status}`);
-      }
+      const getRes = await client.get(`/transactions/${txnId}`);
+      expect(getRes.status).toBe(200);
+      expect(getRes.data).toBeDefined();
+      expect(getRes.data.id).toBe(txnId);
+      TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for fake currency`);
+
+      reconciler.recordOperationDelta({
+        usdStockDelta: -100, // Stock written off
+        transactionsCountDelta: 1,
+      });
+      TestLogger.success('Fake currency confiscation transaction processed');
     });
 
     it('18.6 should reject fake currency transaction when reason is missing or quantity is invalid', async () => {
@@ -107,7 +106,8 @@ describe('Module 18: Executive Dashboard KPIs & Counterfeit Currency Management'
     });
 
     it('18.7 should reject fake currency transaction with non-existent currency ID without 500 error', async () => {
-      if (!registry.masters.branchA?.id || !registry.masters.fakeReasonId) return;
+      expect(registry.masters.branchA?.id).toBeDefined();
+      expect(registry.masters.fakeReasonId).toBeDefined();
 
       const dummyCurrencyId = '00000000-0000-0000-0000-000000009999';
       const res = await client.post('/transactions/drafts', {

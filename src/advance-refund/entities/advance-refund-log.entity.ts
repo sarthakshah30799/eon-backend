@@ -1,32 +1,38 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
-import { AdvanceRefundPrintCopyType } from "../advance-refund.enums";
+import { AdvanceRefundLogAction } from "../advance-refund.enums";
 import { AdvanceRefund } from "./advance-refund.entity";
 
-@Entity("advance_refund_print_logs")
-@Index("IDX_advance_refund_print_logs_header", ["advanceRefundId"])
-export class AdvanceRefundPrintLog extends BaseEntity {
+@Index("IDX_advance_refund_logs_header_id", ["advanceRefundId"])
+@Entity("advance_refund_logs")
+export class AdvanceRefundLog extends BaseEntity {
   @Column({ type: "uuid", name: "advance_refund_id" })
   advanceRefundId: string;
 
-  @ManyToOne(() => AdvanceRefund, (header) => header.printLogs, {
+  @ManyToOne(() => AdvanceRefund, (header) => header.logs, {
     onDelete: "CASCADE",
   })
   @JoinColumn({
     name: "advance_refund_id",
-    foreignKeyConstraintName: "FK_advance_refund_print_logs_header",
+    foreignKeyConstraintName: "FK_advance_refund_logs_header",
   })
   advanceRefund: AdvanceRefund;
 
   @Column({
     type: "enum",
-    enum: AdvanceRefundPrintCopyType,
-    name: "copy_type",
+    enum: AdvanceRefundLogAction,
+    enumName: "advance_refund_logs_action_enum",
   })
-  copyType: AdvanceRefundPrintCopyType;
+  action: AdvanceRefundLogAction;
 
   @Column({ type: "text" })
   message: string;
+
+  @Column({ type: "jsonb", name: "before_snapshot", nullable: true })
+  beforeSnapshot: Record<string, unknown> | null;
+
+  @Column({ type: "jsonb", name: "after_snapshot", nullable: true })
+  afterSnapshot: Record<string, unknown> | null;
 
   @Column({ type: "jsonb", nullable: true })
   metadata: Record<string, unknown> | null;

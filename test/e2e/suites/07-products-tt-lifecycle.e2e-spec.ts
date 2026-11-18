@@ -1,6 +1,7 @@
 import { ApiClient } from '../infrastructure/api-client';
 import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
+import { ReportAccuracyValidator } from '../infrastructure/report-accuracy-validator';
 import { TestLogger } from '../infrastructure/test-logger';
 import { TRANSACTION_SLUGS } from '../config/test-constants';
 
@@ -24,37 +25,48 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
   });
 
   it('3D.1 should book a Deal Cover for TT Remittance in PENDING status', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
+    expect(registry.masters.productTt?.id).toBeDefined();
+    expect(registry.masters.bankAccountId).toBeDefined();
+    expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
+    expect(registry.masters.cardIssuerPartyId).toBeDefined();
+
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const purposeId = registry.masters.purposeId;
+    const maturityOptionId = registry.masters.ttMaturityOptionId;
 
     const res = await client.post('/deal-covers', {
       branchId: registry.masters.branchA.id,
+      transactionDate: txDate,
+      bankAccountProfileId: registry.masters.bankAccountId,
+      productId: registry.masters.productTt!.id,
+      partyProfileType: 'CORPORATE_CLIENT',
+      partyProfileId: registry.masters.corporatePartyProfile!.id,
+      purposeId,
       currencyId: registry.masters.currencyUsd.id,
-      productId: registry.masters.productTt?.id,
-      feAmount: 50000,
-      dealRate: 88.2,
-      bookingRate: 88.0,
+      issuerPartyProfileId: registry.masters.cardIssuerPartyId,
+      feAmount: '50000.00',
+      maturityOptionId,
       passengerPan: testPan,
       passengerPassport: testPassport,
     });
 
-    if (res.status === 201 || res.status === 200) {
-      testDealCoverId = res.data?.id;
-      TestLogger.success(`Deal Cover booked: ${testDealCoverId} (status: ${res.data?.status})`);
+    expect([200, 201]).toContain(res.status);
+    testDealCoverId = res.data?.id;
+    expect(testDealCoverId).toBeDefined();
+    TestLogger.success(`Deal Cover booked: ${testDealCoverId} (status: ${res.data?.status})`);
 
-      if (testDealCoverId) {
-        const getRes = await client.get(`/deal-covers/${testDealCoverId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(testDealCoverId);
-        TestLogger.success(`Verified GET /deal-covers/${testDealCoverId} round-trip (200 OK)`);
-      }
-    } else {
-      TestLogger.info(`Deal Cover booking returned ${res.status}`);
-    }
+    const getRes = await client.get(`/deal-covers/${testDealCoverId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data).toBeDefined();
+    expect(getRes.data.id).toBe(testDealCoverId);
+    TestLogger.success(`Verified GET /deal-covers/${testDealCoverId} round-trip (200 OK)`);
   });
 
   it('3D.2 should approve Deal Cover by Head Office staff', async () => {
-    if (!testDealCoverId) return;
+    expect(testDealCoverId).toBeDefined();
 
     await workplaceManager.asHoStaff();
     const res = await client.post(`/deal-covers/${testDealCoverId}/approve`);
@@ -118,7 +130,8 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
   });
 
   it('3D.5 should punch complete TT Remittance transaction when details are valid', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
@@ -157,20 +170,35 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
       ],
     });
 
-    if (res.status === 201 || res.status === 200) {
-      const txnId = res.data?.id || res.data?.transaction?.id;
-      if (txnId) {
-        const getRes = await client.get(`/transactions/${txnId}`);
-        expect(getRes.status).toBe(200);
-        expect(getRes.data).toBeDefined();
-        expect(getRes.data.id).toBe(txnId);
-        TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for TT Remittance`);
-      }
+    expect([200, 201]).toContain(res.status);
+    const txnId = res.data?.id || res.data?.transaction?.id;
+    expect(txnId).toBeDefined();
 
-      TestLogger.success('TT Remittance transaction processed successfully');
-    } else {
-      TestLogger.info(`TT Remittance transaction returned ${res.status}`);
-    }
+    const getRes = await client.get(`/transactions/${txnId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.data).toBeDefined();
+    expect(getRes.data.id).toBe(txnId);
+    TestLogger.success(`Verified GET /transactions/${txnId} round-trip (200 OK) for TT Remittance`);
+
+    TestLogger.success('TT Remittance transaction processed successfully');
+  });
+
+  it('3D.5B should verify TT Remittance transaction renders accurately on Sale/Purchase and TT report frontend tables', async () => {
+    const spRes = await client.get('/reports/sale-purchase', {
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      detail: 'long',
+    });
+    expect(spRes.status).toBe(200);
+    ReportAccuracyValidator.verifyFrontendContract('sale-purchase', spRes.data);
+
+    const ttRes = await client.get('/reports/tt-report', {
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    });
+    expect(ttRes.status).toBe(200);
+    expect(Array.isArray(ttRes.data?.columns)).toBe(true);
+    TestLogger.success('TT Remittance report verified on frontend');
   });
 
   it('3D.6 should return 404 for non-existent deal cover ID without 500 server error', async () => {
@@ -182,7 +210,8 @@ describe('Module 3D: TT Outward Remittance Lifecycle (Deal Cover, SWIFT & Settle
   });
 
   it('3D.7 should reject TT remittance when passenger pan is invalid format', async () => {
-    if (!registry.masters.branchA?.id || !registry.masters.currencyUsd?.id) return;
+    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(registry.masters.currencyUsd?.id).toBeDefined();
 
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
