@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
 import {
   IsArray,
@@ -13,9 +13,14 @@ export enum CashReportFormat {
   XLSX = "xlsx",
 }
 
+export enum CashReportScope {
+  BRANCH = "branch",
+  CONSOLIDATED = "consolidated",
+}
+
 export enum CashReportLayout {
-  BRANCH_WISE = "BRANCH_WISE",
-  CONSOLIDATED = "CONSOLIDATED",
+  LEDGER = "LEDGER",
+  COLUMNAR = "COLUMNAR",
 }
 
 const parseArrayQuery = ({ value }: { value: unknown }) => {
@@ -28,21 +33,13 @@ const parseArrayQuery = ({ value }: { value: unknown }) => {
 };
 
 export class CashReportQueryDto {
-  @ApiPropertyOptional({ description: "Start date in YYYY-MM-DD format" })
+  @ApiProperty({ description: "Start date in YYYY-MM-DD format" })
   @IsDateString()
-  startDate: string;
+  startDate!: string;
 
-  @ApiPropertyOptional({ description: "End date in YYYY-MM-DD format" })
+  @ApiProperty({ description: "End date in YYYY-MM-DD format" })
   @IsDateString()
-  endDate: string;
-
-  @ApiPropertyOptional({
-    description: "BRANCH_WISE or CONSOLIDATED",
-    enum: CashReportLayout,
-  })
-  @IsEnum(CashReportLayout)
-  @IsOptional()
-  layout?: CashReportLayout;
+  endDate!: string;
 
   @ApiPropertyOptional({ description: "Filter by branch ids", isArray: true })
   @Transform(parseArrayQuery)
@@ -60,6 +57,32 @@ export class CashReportQueryDto {
   @IsString({ each: true })
   @IsOptional()
   accountIds?: string[];
+
+  @ApiPropertyOptional({
+    description: "Filter by counter ids",
+    isArray: true,
+  })
+  @Transform(parseArrayQuery)
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  counterIds?: string[];
+
+  @ApiPropertyOptional({
+    description: "branch or consolidated",
+    enum: CashReportScope,
+  })
+  @IsEnum(CashReportScope)
+  @IsOptional()
+  scope?: CashReportScope;
+
+  @ApiPropertyOptional({
+    description: "LEDGER or COLUMNAR",
+    enum: CashReportLayout,
+  })
+  @IsEnum(CashReportLayout)
+  @IsOptional()
+  layout?: CashReportLayout;
 
   @ApiPropertyOptional({
     description: "Export format",

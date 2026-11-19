@@ -15,39 +15,41 @@ import {
 import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { SessionContext } from "../auth/types/session-context";
-import { CardSettlementReportFormat } from "./dto/card-settlement-report-query.dto";
-import { CashLedgerReportQueryDto } from "./dto/cash-ledger-report-query.dto";
-import { CashLedgerReportService } from "./cash-ledger-report.service";
+import {
+  TradingSummaryReportFormat,
+  TradingSummaryReportQueryDto,
+} from "./dto/trading-summary-report-query.dto";
+import { TradingSummaryReportService } from "./trading-summary-report.service";
 
 @ApiTags("reports")
 @ApiCookieAuth("sessionId")
 @UseGuards(AuthenticatedGuard)
 @Controller("reports")
-export class CashLedgerReportController {
-  constructor(private readonly reportService: CashLedgerReportService) {}
+export class TradingSummaryReportController {
+  constructor(private readonly reportService: TradingSummaryReportService) {}
 
-  @Get("cash-ledger-report")
-  @ApiOperation({ summary: "Get Cash Ledger Report" })
-  @ApiResponse({ status: 200, description: "Cash ledger report" })
-  getCashLedgerReport(
-    @Query() query: CashLedgerReportQueryDto,
+  @Get("trading-summary-report")
+  @ApiOperation({ summary: "Get Trading Summary report" })
+  @ApiResponse({ status: 200, description: "Trading Summary report" })
+  getTradingSummaryReport(
+    @Query() query: TradingSummaryReportQueryDto,
     @Session() session: SessionContext,
   ) {
     return this.reportService.buildReport(query, session);
   }
 
-  @Get("cash-ledger-report/export")
+  @Get("trading-summary-report/export")
   @ApiOperation({
-    summary: "Download Cash Ledger Report as CSV or Excel",
+    summary: "Download Trading Summary report as CSV or Excel",
   })
-  async exportCashLedgerReport(
-    @Query() query: CashLedgerReportQueryDto,
+  async exportTradingSummaryReport(
+    @Query() query: TradingSummaryReportQueryDto,
     @Session() session: SessionContext,
     @Res() res: Response,
   ) {
     const payload = await this.reportService.buildExport(
       query,
-      query.format ?? CardSettlementReportFormat.XLSX,
+      query.format ?? TradingSummaryReportFormat.XLSX,
       session,
     );
     res.status(200);
