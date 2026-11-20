@@ -399,6 +399,15 @@ export class EmSurrenderService {
       (item.productSnapshot as ProductCodeSnapshot | null) ??
       buildSurrenderProductSnapshot(emProduct);
 
+    const issuerSnapshot =
+      item.issuerPartyProfileSnapshot ??
+      (source.receiptItem?.issuerPartyProfileSnapshot as TransactionReferenceSnapshotValue) ??
+      ({
+        id: item.issuerPartyProfileId,
+        code: "ISSUER",
+        name: "Card Issuer",
+      } as TransactionReferenceSnapshotValue);
+
     const entry = (await manager
       .getRepository(CardStockTransactionEntry)
       .save(
@@ -415,7 +424,7 @@ export class EmSurrenderService {
           productId: emProduct.id,
           productSnapshot,
           issuerPartyProfileId: item.issuerPartyProfileId!,
-          issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot,
+          issuerPartyProfileSnapshot: issuerSnapshot,
           series: emCard.series,
           date: new Date(transaction.transactionDate),
           rate: buyRate.toFixed(7),
@@ -440,7 +449,7 @@ export class EmSurrenderService {
         productId: emProduct.id,
         productSnapshot,
         issuerPartyProfileId: item.issuerPartyProfileId!,
-        issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot,
+        issuerPartyProfileSnapshot: issuerSnapshot,
         series: emCard.series,
         receiveDate: new Date(transaction.transactionDate),
         receiveRate: buyRate.toFixed(7),
@@ -460,7 +469,7 @@ export class EmSurrenderService {
           productId: emProduct.id,
           productSnapshot,
           issuerPartyProfileId: item.issuerPartyProfileId!,
-          issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot,
+          issuerPartyProfileSnapshot: issuerSnapshot,
           series: emCard.series,
           receiveDate: new Date(transaction.transactionDate),
           receiveRate: buyRate.toFixed(7),
@@ -546,7 +555,14 @@ export class EmSurrenderService {
           label: `${ho.code} - ${ho.name}`,
         },
         issuerPartyProfileId: item.issuerPartyProfileId!,
-        issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot,
+        issuerPartyProfileSnapshot:
+          item.issuerPartyProfileSnapshot ??
+          ((emCard as any).receiptItem?.issuerPartyProfileSnapshot as TransactionReferenceSnapshotValue) ??
+          ({
+            id: item.issuerPartyProfileId,
+            code: "ISSUER",
+            name: "Card Issuer",
+          } as TransactionReferenceSnapshotValue),
         currencyId: item.currencyId,
         currencySnapshot: item.currencySnapshot,
         productId: emProduct.id,

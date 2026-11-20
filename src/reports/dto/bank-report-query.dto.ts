@@ -18,6 +18,11 @@ export enum BankReportLayout {
   CONSOLIDATED = "CONSOLIDATED",
 }
 
+export enum BankReportScope {
+  BRANCH = "branch",
+  CONSOLIDATED = "consolidated",
+}
+
 const parseArrayQuery = ({ value }: { value: unknown }) => {
   if (value === undefined || value === null || value === "") {
     return undefined;
@@ -44,6 +49,14 @@ export class BankReportQueryDto {
   @IsOptional()
   layout?: BankReportLayout;
 
+  @ApiPropertyOptional({
+    description: "branch or consolidated (alias for layout)",
+    enum: BankReportScope,
+  })
+  @IsEnum(BankReportScope)
+  @IsOptional()
+  scope?: BankReportScope;
+
   @ApiPropertyOptional({ description: "Filter by branch ids", isArray: true })
   @Transform(parseArrayQuery)
   @IsArray()
@@ -60,6 +73,16 @@ export class BankReportQueryDto {
   @IsString({ each: true })
   @IsOptional()
   accountIds?: string[];
+
+  @ApiPropertyOptional({
+    description: "Filter by counter ids",
+    isArray: true,
+  })
+  @Transform(parseArrayQuery)
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  counterIds?: string[];
 
   @ApiPropertyOptional({
     description: "Export format",

@@ -25,16 +25,34 @@ describe('Module 14: Transaction Revisions, Draft Workflow & Rollbacks', () => {
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
+    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      requiresApproval: true,
+      transactionDate: txDate,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.corporatePartyProfile?.id,
+      tradeMode: 'RETAIL',
+      passenger: {
+        firstName: 'Draft',
+        lastName: 'Buyer',
+        nationalityType: 'INDIAN',
+        pan: 'ABCDE1234F',
+      },
       items: [
         {
           productId: registry.masters.productCn?.id,
           currencyId: registry.masters.currencyUsd.id,
           quantity: 200,
           rate: 88.5,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: 'CASH',
+          accountId: registry.masters.cashAccountId,
+          amount: 17700,
         },
       ],
     });

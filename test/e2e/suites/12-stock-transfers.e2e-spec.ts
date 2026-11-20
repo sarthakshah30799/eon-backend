@@ -45,9 +45,11 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
       } catch {}
     }
 
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/transfers/branch', {
       transactionDate: txDate,
+      billReference: `TRF_${Date.now().toString().slice(-6)}`,
       sourceBranchId: registry.masters.branchA.id,
       sourceCounterId: registry.masters.counterA1!.id,
       destinationBranchId: registry.masters.branchB.id,
@@ -102,7 +104,11 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
     expect(registry.masters.currencyUsd?.id).toBeDefined();
     const fakeBranchId = '00000000-0000-0000-0000-000000000000';
 
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+
     const res = await client.post('/transfers/branch', {
+      transactionDate: txDate,
       sourceBranchId: registry.masters.branchA.id,
       sourceCounterId: registry.masters.counterA1?.id,
       destinationBranchId: fakeBranchId,
@@ -129,7 +135,11 @@ describe('Module 7: Currency Stock Transfers (Inter-Counter & Inter-Branch)', ()
     expect(registry.masters.counterB1?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
+    const policyRes = await client.get(`/auth/policy-context?branchId=${registry.masters.branchA.id}`);
+    const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+
     const res = await client.post('/transfers/branch', {
+      transactionDate: txDate,
       sourceBranchId: registry.masters.branchA.id,
       sourceCounterId: registry.masters.counterA1?.id,
       destinationBranchId: registry.masters.branchB.id,

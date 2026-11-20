@@ -1611,6 +1611,12 @@ export class TransactionsService {
         transactionPayload.transactionType = TransactionType.SALE;
       }
     }
+    if (!transactionPayload.tradeMode) {
+      const slugUpper = String(transactionPayload.slug ?? "").toUpperCase();
+      transactionPayload.tradeMode = slugUpper.includes("RETAIL")
+        ? TradeMode.RETAIL
+        : TradeMode.BULK;
+    }
     const attachments = this.parseJsonField<
       Array<{ documentProfileId: string; fileName?: string }>
     >(body?.attachments, []);
@@ -1643,6 +1649,15 @@ export class TransactionsService {
       String(transactionPayload.slug ?? "")
         .trim()
         .toUpperCase() === "FAKE_CURRENCY";
+
+    if (isFakeCurrency) {
+      if (!transactionPayload.transactionType) {
+        transactionPayload.transactionType = TransactionType.SALE;
+      }
+      if (!transactionPayload.tradeMode) {
+        transactionPayload.tradeMode = TradeMode.RETAIL;
+      }
+    }
 
     if (
       !resolvedBranchId ||
@@ -2914,14 +2929,49 @@ export class TransactionsService {
           tradeMode: transactionPayload.tradeMode ?? TradeMode.BULK,
         });
         const isCardItem = isCardProductCode(productEntity.productCode);
+        const isTpItem =
+          String(productEntity.productCode ?? "").trim().toUpperCase() === "TP";
         const isEmItem =
-          transactionPayload.transactionType === TransactionType.PURCHASE
+          !isTpItem &&
+          (transactionPayload.transactionType === TransactionType.PURCHASE
             ? isSurrenderBuyingProduct(productEntity)
-            : isSurrenderBulkSaleProduct(productEntity);
+            : isSurrenderBulkSaleProduct(productEntity));
         const isTtItem = isTtProductCode(productEntity.productCode);
         const isMultiCurrencyCard = isMultiCurrencyCardProduct(
           productEntity.productCode,
         );
+        if (isTpItem) {
+          if (
+            transactionPayload.transactionType === TransactionType.PURCHASE
+          ) {
+            if (!row.issuerPartyProfileId) {
+              throw new BadRequestException(
+                `TP item ${index + 1} requires an issuer selection`,
+              );
+            }
+            const hasIssuers =
+              (productEntity.issuerLinks?.length ?? 0) > 0;
+            if (hasIssuers && row.issuerPartyProfileId) {
+              const issuerLink = await this.productIssuerRepository.findOne({
+                where: {
+                  productId: String(product.id),
+                  partyProfileId: String(row.issuerPartyProfileId),
+                },
+              });
+              if (!issuerLink) {
+                throw new BadRequestException(
+                  `Issuer is not linked to TP product for item ${index + 1}`,
+                );
+              }
+            }
+            const feAmount = Number(row.quantity);
+            if (!Number.isFinite(feAmount) || feAmount <= 0) {
+              throw new BadRequestException(
+                `TP item ${index + 1} FE amount must be greater than 0`,
+              );
+            }
+          }
+        }
         if (isEmItem) {
           if (
             transactionPayload.transactionType === TransactionType.PURCHASE
@@ -3253,14 +3303,17 @@ export class TransactionsService {
               : null
             : isFakeCurrency
               ? productEntity.fakeAccount
-              : resolveProductTransactionAccount(
+              : (resolveProductTransactionAccount(
                   productEntity,
                   transactionPayload.transactionType,
                   transactionPayload.tradeMode,
                   transactionPayload.transactionType === TransactionType.SALE
                     ? "sale"
                     : "purchase",
-                );
+                ) ||
+                (transactionPayload.transactionType === TransactionType.PURCHASE
+                  ? productEntity.purchaseAc || productEntity.bulkPurAc
+                  : productEntity.saleAc || productEntity.bulkSaleAc));
 
         if (!itemAccount) {
           throw new NotFoundException(
@@ -3272,6 +3325,40 @@ export class TransactionsService {
           this.accountProfileRepository,
           itemAccount.id,
         );
+
+        const resolvedIssuerPartyProfileId = isTtItem
+          ? String(resolvedTtDeal!.issuerPartyProfileId)
+          : (row.issuerPartyProfileId ?? null);
+        let resolvedIssuerPartyProfileSnapshot = isTtItem
+          ? ((resolvedTtDeal!.issuerPartyProfileSnapshot as TransactionReferenceSnapshotValue) ?? null)
+          : (row.issuerPartyProfileSnapshot ?? null);
+
+        if (resolvedIssuerPartyProfileId && !resolvedIssuerPartyProfileSnapshot) {
+          const issuerParty = await this.partyProfileRepository.findOne({
+            where: { id: resolvedIssuerPartyProfileId },
+          });
+          if (issuerParty) {
+            resolvedIssuerPartyProfileSnapshot = (await loadEntitySnapshot(
+              this.partyProfileRepository,
+              issuerParty.id,
+            )) as TransactionReferenceSnapshotValue;
+          }
+        }
+
+        let resolvedCardSnapshot = row.cardSnapshot ?? null;
+        if (!resolvedCardSnapshot && row.cardId) {
+          const cardEntity = await this.cardStockCardRepository.findOne({
+            where: { id: String(row.cardId) },
+          });
+          if (cardEntity) {
+            resolvedCardSnapshot = {
+              id: cardEntity.id,
+              kitNumber: cardEntity.kitNumber,
+              cardNumber: cardEntity.cardNumber,
+              status: cardEntity.status,
+            };
+          }
+        }
 
         const transactionItemToSave: DeepPartial<TransactionItem> = {
           transactionId: transaction.id,
@@ -3291,17 +3378,21 @@ export class TransactionsService {
           productSnapshot: product as TransactionReferenceSnapshotValue,
           currencyRateSnapshot: row.currencyRateSnapshot ?? null,
           productCurrencyRateSnapshot: row.productCurrencyRateSnapshot ?? null,
-          pricingRuleSnapshot: row.pricingRuleSnapshot ?? null,
+          pricingRuleSnapshot:
+            row.pricingRuleSnapshot ??
+            (row.rate
+              ? {
+                  buy: {
+                    finalRate: Number(row.rate),
+                    appliedFinalRate: Number(row.rate),
+                  },
+                }
+              : null),
           commissionSnapshot: row.commissionSnapshot ?? null,
           cardId: row.cardId ?? null,
-          issuerPartyProfileId: isTtItem
-            ? String(resolvedTtDeal!.issuerPartyProfileId)
-            : (row.issuerPartyProfileId ?? null),
-          issuerPartyProfileSnapshot: isTtItem
-            ? ((resolvedTtDeal!.issuerPartyProfileSnapshot as TransactionReferenceSnapshotValue) ??
-              null)
-            : (row.issuerPartyProfileSnapshot ?? null),
-          cardSnapshot: row.cardSnapshot ?? null,
+          issuerPartyProfileId: resolvedIssuerPartyProfileId,
+          issuerPartyProfileSnapshot: resolvedIssuerPartyProfileSnapshot,
+          cardSnapshot: resolvedCardSnapshot,
           isReload: Boolean(row.isReload),
           dealCoverId: resolvedTtDeal?.id ?? null,
           dealCoverSnapshot: resolvedTtDeal
@@ -3330,6 +3421,20 @@ export class TransactionsService {
             actorId: performedById,
             lineNo: index + 1,
             autoSurrender: row.autoSurrender !== false,
+          });
+        }
+        if (
+          isTpItem &&
+          transaction.transactionType === TransactionType.PURCHASE &&
+          row.autoSurrender !== false
+        ) {
+          await this.productSettlementService.createForApprovedTpItem({
+            manager,
+            transaction,
+            item: savedItem,
+            productEntity,
+            actorId: performedById,
+            lineNo: index + 1,
           });
         }
         if (
@@ -4278,6 +4383,11 @@ export class TransactionsService {
         throw new BadRequestException("Only draft transactions can be rejected");
       }
       await this.emSurrenderService.cleanupEmPurchase(
+        manager,
+        locked.id,
+        performedById,
+      );
+      await this.productSettlementService.cleanupTpPurchase(
         manager,
         locked.id,
         performedById,

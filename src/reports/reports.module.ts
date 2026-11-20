@@ -31,8 +31,6 @@ import { CashReportController } from "./cash-report.controller";
 import { CashReportService } from "./cash-report.service";
 import { CashFlowReportController } from "./cash-flow-report.controller";
 import { CashFlowReportService } from "./cash-flow-report.service";
-import { CashLedgerReportController } from "./cash-ledger-report.controller";
-import { CashLedgerReportService } from "./cash-ledger-report.service";
 import { GenerateLedgerController } from "./generate-ledger.controller";
 import { GenerateLedgerService } from "./generate-ledger.service";
 import { CardUnsettledReportController } from "./card-unsettled-report.controller";
@@ -71,6 +69,8 @@ import { TrialBalanceReportController } from "./trial-balance-report.controller"
 import { TrialBalanceReportService } from "./trial-balance-report.service";
 import { FinalAccountReportController } from "./final-account-report.controller";
 import { FinalAccountReportService } from "./final-account-report.service";
+import { TradingSummaryReportController } from "./trading-summary-report.controller";
+import { TradingSummaryReportService } from "./trading-summary-report.service";
 import { TtReportController } from "./tt-report.controller";
 import { TtReportService } from "./tt-report.service";
 import { AdditionalSettingModule } from "../additional-settings/additional-setting.module";
@@ -119,7 +119,6 @@ import { UserRole } from "../user-roles/user-role.entity";
     BankReconciliationReportController,
     CashReportController,
     CashFlowReportController,
-    CashLedgerReportController,
     GenerateLedgerController,
     CardUnsettledReportController,
     CardSettledReportController,
@@ -139,6 +138,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     GeneralLedgerReportController,
     TrialBalanceReportController,
     FinalAccountReportController,
+    TradingSummaryReportController,
     TtReportController,
   ],
   providers: [
@@ -151,7 +151,6 @@ import { UserRole } from "../user-roles/user-role.entity";
     BankReconciliationReportService,
     CashReportService,
     CashFlowReportService,
-    CashLedgerReportService,
     GenerateLedgerService,
     CardUnsettledReportService,
     CardSettledReportService,
@@ -171,6 +170,7 @@ import { UserRole } from "../user-roles/user-role.entity";
     GeneralLedgerReportService,
     TrialBalanceReportService,
     FinalAccountReportService,
+    TradingSummaryReportService,
     TtReportService,
   ],
 })

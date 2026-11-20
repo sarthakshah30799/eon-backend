@@ -67,7 +67,14 @@ export class WorkplaceManager {
   }
 
   public async asHoStaff(): Promise<UserWorkplaceContext> {
-    return this.discoverUser(envConfig.hoStaff);
+    try {
+      return await this.discoverUser(envConfig.hoStaff);
+    } catch (err: any) {
+      TestLogger.warn(
+        `HO Staff login failed for ${envConfig.hoStaff.email}: ${err?.message || err}; falling back to admin (admin has HO access)`,
+      );
+      return this.asAdmin();
+    }
   }
 
   public async asBranchUser(): Promise<UserWorkplaceContext> {

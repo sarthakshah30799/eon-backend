@@ -4,6 +4,7 @@ import { WorkplaceManager } from '../infrastructure/workplace-manager';
 import { MasterDataRegistry } from '../infrastructure/master-data-registry';
 import { PrintHtmlValidator } from '../infrastructure/print-html-validator';
 import { TestLogger } from '../infrastructure/test-logger';
+import { TRANSACTION_SLUGS } from '../config/test-constants';
 
 describe('Module 17: Document Print Audits & Content Schema Verification', () => {
   let client: ApiClient;
@@ -30,9 +31,10 @@ describe('Module 17: Document Print Audits & Content Schema Verification', () =>
       expect(registry.masters.branchA?.id).toBeDefined();
       expect(registry.masters.currencyUsd?.id).toBeDefined();
       const draftRes = await client.post('/transactions/drafts', {
-        slug: 'SALE_RETAIL',
+        slug: TRANSACTION_SLUGS.SALE_RETAIL,
         branchId: registry.masters.branchA!.id,
         counterId: registry.masters.counterA1?.id,
+        partyProfileId: registry.masters.corporatePartyProfile?.id,
         tradeMode: 'RETAIL',
         passenger: {
           firstName: 'Print',
@@ -53,6 +55,7 @@ describe('Module 17: Document Print Audits & Content Schema Verification', () =>
           {
             paymentMethod: 'CASH',
             amount: 8850,
+            accountId: registry.masters.cashAccountId,
           },
         ],
       });
@@ -61,17 +64,17 @@ describe('Module 17: Document Print Audits & Content Schema Verification', () =>
     }
     expect(txId).toBeDefined();
 
-    // 1st Print
+    // 1st Print (Original Copy)
     const print1Res = await client.post(`/transactions/${txId}/print`);
     expect([200, 201]).toContain(print1Res.status);
-    expect(print1Res.data?.printCount).toBeGreaterThanOrEqual(1);
-    TestLogger.success(`1st Transaction Print recorded for ID: ${txId} (printCount: ${print1Res.data?.printCount})`);
+    expect(print1Res.data?.message).toMatch(/original|customer/i);
+    TestLogger.success(`1st Transaction Print recorded for ID: ${txId} (${print1Res.data?.message})`);
 
     // 2nd Print (Duplicate Copy)
     const print2Res = await client.post(`/transactions/${txId}/print`);
     expect([200, 201]).toContain(print2Res.status);
-    expect(print2Res.data?.printCount).toBeGreaterThanOrEqual(2);
-    TestLogger.success(`2nd Transaction Print recorded (Duplicate Copy) for ID: ${txId} (printCount: ${print2Res.data?.printCount})`);
+    expect(print2Res.data?.message).toMatch(/duplicate/i);
+    TestLogger.success(`2nd Transaction Print recorded (Duplicate Copy) for ID: ${txId} (${print2Res.data?.message})`);
 
     // Round-trip read-back after print
     const getRes = await client.get(`/transactions/${txId}`);
@@ -193,14 +196,19 @@ describe('Module 17: Document Print Audits & Content Schema Verification', () =>
   });
 
   it('17.5 should record print on Stock Transfer', async () => {
-    const listRes = await client.get('/transfers', { limit: 5 });
+    const listRes = await client.get('/transfers', { limit: 20 });
     expect([200, 304]).toContain(listRes.status);
     const transferItems = Array.isArray(listRes.data?.data) ? listRes.data.data : (Array.isArray(listRes.data) ? listRes.data : []);
-    if (transferItems.length > 0) {
-      const transferId = transferItems[0].id;
-      const printRes = await client.post(`/transfers/${transferId}/print`);
+    let acceptedTransfer = transferItems.find((t: any) => t.status === 'ACCEPTED');
+    if (!acceptedTransfer && transferItems.length > 0) {
+      const pending = transferItems.find((t: any) => t.status === 'PENDING') || transferItems[0];
+      await client.post(`/transfers/${pending.id}/accept`);
+      acceptedTransfer = pending;
+    }
+    if (acceptedTransfer) {
+      const printRes = await client.post(`/transfers/${acceptedTransfer.id}/print`);
       expect([200, 201]).toContain(printRes.status);
-      TestLogger.success(`Stock Transfer print verified for ID: ${transferId}`);
+      TestLogger.success(`Stock Transfer print verified for ID: ${acceptedTransfer.id}`);
     }
   });
 

@@ -56,10 +56,14 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
+    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      transactionDate: txDate,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.corporatePartyProfile?.id,
+      tradeMode: 'RETAIL',
       passenger: {
         firstName: 'Digi',
         lastName: 'Payer',
@@ -78,7 +82,8 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
         {
           paymentMethod: 'NEFT',
           amount: 17700,
-          referenceNumber: 'NEFT-AXIS-998877',
+          accountId: registry.masters.bankAccountId,
+          referenceDate: txDate,
         },
       ],
     });
@@ -157,14 +162,20 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
     TestLogger.success('Cheque payment missing mandatory details correctly rejected with 400');
   });
 
-  it('5.6 should support multi-method payment (split cash + bank) and re-open cleanly', async () => {
+  it('5.6 should support split multi-row payment with same method and reject incompatible mixed modes', async () => {
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
-    const res = await client.post('/transactions/drafts', {
+    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+
+    // Negative: Cash and Bank cannot be mixed in one transaction
+    const mixedRes = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      transactionDate: txDate,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.corporatePartyProfile?.id,
+      tradeMode: 'RETAIL',
       passenger: {
         firstName: 'Multi',
         lastName: 'Payer',
@@ -183,11 +194,53 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
         {
           paymentMethod: 'CASH',
           amount: 8850,
+          accountId: registry.masters.cashAccountId,
         },
         {
           paymentMethod: 'NEFT',
           amount: 8850,
-          referenceNumber: 'NEFT-SPLIT-1234',
+          accountId: registry.masters.bankAccountId,
+          referenceDate: txDate,
+        },
+      ],
+    });
+    expect([400, 422]).toContain(mixedRes.status);
+    TestLogger.success('Incompatible payment method mixture (Cash + NEFT) correctly rejected with 400 Bad Request');
+
+    // Positive: Split payment across two bank transfer rows of the same allowed method
+    const res = await client.post('/transactions/drafts', {
+      slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      transactionDate: txDate,
+      branchId: registry.masters.branchA.id,
+      counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.corporatePartyProfile?.id,
+      tradeMode: 'RETAIL',
+      passenger: {
+        firstName: 'Multi',
+        lastName: 'Payer',
+        nationalityType: 'INDIAN',
+        pan: 'ABCDE5678M',
+      },
+      items: [
+        {
+          productId: registry.masters.productCn?.id,
+          currencyId: registry.masters.currencyUsd.id,
+          quantity: 200,
+          rate: 88.5,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: 'NEFT',
+          amount: 8850,
+          accountId: registry.masters.bankAccountId,
+          referenceDate: txDate,
+        },
+        {
+          paymentMethod: 'NEFT',
+          amount: 8850,
+          accountId: registry.masters.bankAccountId,
+          referenceDate: txDate,
         },
       ],
     });
@@ -201,7 +254,7 @@ describe('Module 5: Payment Methods, Multi-Method Compatibility & Limits', () =>
     expect(getRes.data?.id).toBe(splitTxId);
     expect(Array.isArray(getRes.data?.payments)).toBe(true);
     expect(getRes.data.payments.length).toBe(2);
-    TestLogger.success('Multi-method split transaction verified and re-opened cleanly');
+    TestLogger.success('Multi-row split transaction verified and re-opened cleanly');
   });
 });
 

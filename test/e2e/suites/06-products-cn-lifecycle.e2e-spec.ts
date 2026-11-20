@@ -44,14 +44,15 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
         {
           productId: registry.masters.productCn?.id,
           currencyId: registry.masters.currencyUsd.id,
-          quantity: 800,
+          quantity: 300,
           rate: 87.0,
         },
       ],
       payments: [
         {
           paymentMethod: 'CASH',
-          amount: 69600,
+          amount: 26100,
+          accountId: registry.masters.cashAccountId,
         },
       ],
     });
@@ -59,8 +60,8 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
     expect([200, 201]).toContain(res.status);
     expect(res.data?.id).toBeDefined();
     reconciler.recordOperationDelta({
-      usdStockDelta: 800,
-      cashDelta: -69600,
+      usdStockDelta: 300,
+      cashDelta: -26100,
       transactionsCountDelta: 1,
     });
     TestLogger.success('CN retail purchase (encashment surrender) completed successfully');
@@ -96,6 +97,7 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
         {
           paymentMethod: 'CASH',
           amount: 44250,
+          accountId: registry.masters.cashAccountId,
         },
       ],
     });
@@ -164,9 +166,10 @@ describe('Module 3C: Currency Notes (CN) Purchase, Sale, Wholesale & Encashment'
       ],
       payments: [
         {
-          paymentMethod: 'CHEQUE',
+          paymentMethod: 'BANK_TRANSFER',
           amount: 25000 * 94.5,
-          referenceNumber: 'CHQ-990123',
+          accountId: registry.masters.bankAccountId,
+          referenceDate: new Date().toISOString().slice(0, 10),
         },
       ],
     });

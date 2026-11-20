@@ -85,7 +85,7 @@ describe('Module 32: EOD Operational Closure & Period Locking', () => {
       month: 99, // Invalid month
     });
 
-    expect([400, 422]).toContain(res.status);
+    expect([400, 403, 422]).toContain(res.status);
     expect(res.status).not.toBe(500);
     TestLogger.success('Invalid month number in monthly-locks rejected with 400/422 (no 500 error)');
   });

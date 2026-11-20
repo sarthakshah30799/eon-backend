@@ -171,18 +171,26 @@ describe('Phase 1: Baseline Reports Accuracy & Filter Verification', () => {
       TestLogger.success('Cash Flow Report baseline schema verified');
     });
 
-    it('3.4 should fetch Cash Report across BRANCH_WISE and CONSOLIDATED layouts', async () => {
-      const branchRes = await client.get('/reports/cash-report', {
+    it('3.4 should fetch Cash Report across LEDGER and COLUMNAR layouts', async () => {
+      const ledgerRes = await client.get('/reports/cash-report', {
         ...defaultDateRange,
-        layout: 'BRANCH_WISE',
+        layout: 'LEDGER',
+        scope: 'branch',
       });
-      expect(branchRes.status).toBe(200);
+      expect(ledgerRes.status).toBe(200);
 
-      const consolRes = await client.get('/reports/cash-report', {
+      const columnarRes = await client.get('/reports/cash-report', {
         ...defaultDateRange,
-        layout: 'CONSOLIDATED',
+        layout: 'COLUMNAR',
       });
-      expect(consolRes.status).toBe(200);
+      expect(columnarRes.status).toBe(200);
+
+      const consolidatedRes = await client.get('/reports/cash-report', {
+        ...defaultDateRange,
+        layout: 'LEDGER',
+        scope: 'consolidated',
+      });
+      expect(consolidatedRes.status).toBe(200);
     });
 
     it('3.5 should fetch Bank Report across BRANCH_WISE and CONSOLIDATED layouts', async () => {

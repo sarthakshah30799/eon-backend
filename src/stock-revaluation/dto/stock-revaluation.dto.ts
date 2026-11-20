@@ -3,6 +3,8 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumberString,
+  IsOptional,
+  IsString,
   IsUUID,
   Matches,
   ValidateNested,
@@ -43,6 +45,23 @@ export class UploadStockRevaluationDto {
   @ArrayMinSize(1)
   @IsUUID("4", { each: true })
   branchIds: string[];
+
+  @IsEnum(StockRevaluationFrequency)
+  frequency: StockRevaluationFrequency;
+}
+
+export class ProcessStockRevaluationRequestDto {
+  @IsOptional()
+  @IsString()
+  targets?: string;
+
+  @IsEnum(StockRevaluationFrequency)
+  frequency: StockRevaluationFrequency;
+}
+
+export class UploadStockRevaluationRequestDto {
+  @IsString()
+  targets: string;
 
   @IsEnum(StockRevaluationFrequency)
   frequency: StockRevaluationFrequency;

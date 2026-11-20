@@ -7,6 +7,7 @@ export interface DiscoveredMasters {
   companyId?: string;
   branchA?: { id: string; name: string; code: string };
   branchB?: { id: string; name: string; code: string };
+  hoBranch?: { id: string; name: string; code: string; isHeadOffice?: boolean };
   counterA1?: { id: string; name: string; branchId: string };
   counterA2?: { id: string; name: string; branchId: string };
   counterB1?: { id: string; name: string; branchId: string };
@@ -22,7 +23,7 @@ export interface DiscoveredMasters {
   productTp?: { id: string; code: string; description: string };
   productEm?: { id: string; code: string; description: string };
   cardIssuerPartyId?: string;
-  corporatePartyProfile?: { id: string; name: string; entityTypeId?: string };
+  corporatePartyProfile?: { id: string; name: string; entityTypeId?: string; panNo?: string };
   cashAccountId?: string;
   bankAccountId?: string;
   paymentItemAccountId?: string;
@@ -37,12 +38,14 @@ export interface DiscoveredMasters {
   relationSelfOptionId?: string;
   transactionDate?: string;
   purposeId?: string;
+  countryId?: string;
   ttMaturityOptionId?: string;
 }
 
 export class MasterDataRegistry {
   private static instance: MasterDataRegistry;
   public masters: DiscoveredMasters = {};
+  private initialized = false;
 
   private constructor() {}
 
@@ -54,6 +57,22 @@ export class MasterDataRegistry {
   }
 
   public async initialize(adminClient: ApiClient): Promise<DiscoveredMasters> {
+    if (this.initialized) {
+      if (this.masters.branchA?.id) {
+        try {
+          const policyRes = await adminClient.get('/auth/policy-context', {
+            branchId: this.masters.branchA.id,
+            counterId: this.masters.counterA1?.id,
+          });
+          if (policyRes.ok && policyRes.data) {
+            this.masters.transactionDate =
+              policyRes.data.transactionDate || policyRes.data.openBusinessDate || this.masters.transactionDate;
+          }
+        } catch {}
+      }
+      return this.masters;
+    }
+
     TestLogger.subHeader('Discovering Master Entities via API');
 
     // 1. Branches & Counters
@@ -123,24 +142,41 @@ export class MasterDataRegistry {
           name: counterForB.name || counterForB.counterName,
           branchId: branchWithCounter.id,
         };
-      } else if (remainingBranches.length > 0 && counters.length > 0) {
+      } else if (remainingBranches.length > 0) {
         const targetBranch = remainingBranches[0];
-        const counterToLink = counters.find((c: any) => c.id !== matchedCounterA.id) || counters[0];
-        try {
-          await adminClient.put(`/branches/${targetBranch.id}`, {
-            counterIds: [counterToLink.id],
+        let counterToLink = counters.find((c: any) => c.id !== matchedCounterA.id);
+        if (!counterToLink) {
+          const createCounterRes = await adminClient.post('/counters', {
+            counterNo: Math.floor(Math.random() * 8000) + 1000,
+            name: `Wholesale Counter B`,
+            isRetail: true,
+            isBulk: true,
+            isActive: true,
           });
-        } catch {}
-        this.masters.branchB = {
-          id: targetBranch.id,
-          name: targetBranch.name || targetBranch.branchName,
-          code: targetBranch.code || targetBranch.branchCode,
-        };
-        this.masters.counterB1 = {
-          id: counterToLink.id,
-          name: counterToLink.name || counterToLink.counterName,
-          branchId: targetBranch.id,
-        };
+          if (createCounterRes.ok && createCounterRes.data?.id) {
+            counterToLink = createCounterRes.data;
+          }
+        }
+        if (counterToLink) {
+          try {
+            await adminClient.put(`/branches/${targetBranch.id}`, {
+              counterIds: [counterToLink.id],
+            });
+          } catch {}
+          this.masters.branchB = {
+            id: targetBranch.id,
+            name: targetBranch.name || targetBranch.branchName,
+            code: targetBranch.code || targetBranch.branchCode,
+          };
+          this.masters.counterB1 = {
+            id: counterToLink.id,
+            name: counterToLink.name || counterToLink.counterName,
+            branchId: targetBranch.id,
+          };
+        } else {
+          this.masters.branchB = this.masters.branchA;
+          this.masters.counterB1 = this.masters.counterA1;
+        }
       } else {
         this.masters.branchB = this.masters.branchA;
         this.masters.counterB1 = this.masters.counterA1;
@@ -164,6 +200,18 @@ export class MasterDataRegistry {
       }
     }
 
+    const foundHo = branches.find((b: any) => b.isHeadOffice);
+    if (foundHo) {
+      this.masters.hoBranch = {
+        id: foundHo.id,
+        name: foundHo.name || foundHo.branchName,
+        code: foundHo.code || foundHo.branchCode,
+        isHeadOffice: true,
+      };
+    } else if (this.masters.branchA) {
+      this.masters.hoBranch = this.masters.branchA;
+    }
+
     if (this.masters.branchA) {
       TestLogger.info(`Branch A: ${this.masters.branchA.name} (${this.masters.branchA.id})`);
     }
@@ -176,6 +224,15 @@ export class MasterDataRegistry {
     if (this.masters.counterB1) {
       TestLogger.info(`Counter B1: ${this.masters.counterB1.name} (${this.masters.counterB1.id}) for Branch B`);
     }
+
+    // Discover country
+    try {
+      const countryRes = await adminClient.get('/countries', { limit: 1 });
+      const countries = Array.isArray(countryRes.data?.data) ? countryRes.data.data : (Array.isArray(countryRes.data?.items) ? countryRes.data.items : (Array.isArray(countryRes.data) ? countryRes.data : []));
+      if (countries?.[0]?.id) {
+        this.masters.countryId = countries[0].id;
+      }
+    } catch {}
 
     // 2. Currencies (USD, EUR, GBP, INR)
     const currRes = await adminClient.get('/currencies', { limit: 100 });
@@ -311,33 +368,137 @@ export class MasterDataRegistry {
 
     TestLogger.info(`Currencies: USD=${this.masters.currencyUsd?.id}, EUR=${this.masters.currencyEur?.id}, INR=${this.masters.currencyInr?.id}, CMS=${this.masters.currencyCmStocking?.id}`);
 
-    // 3. Products (CC, CM, CN, TT, TP)
-    const prodRes = await adminClient.get('/products', { limit: 100 });
+    // Ensure active currency rates exist for USD and EUR
+    if (this.masters.currencyUsd?.id) {
+      try {
+        const rates = await adminClient.get('/currency-rates/rates/latest', { currencyId: this.masters.currencyUsd.id });
+        const rateList = Array.isArray(rates.data) ? rates.data : [];
+        if (rateList.length === 0 || !rateList[0]?.baseSaleRate) {
+          await adminClient.post('/currency-rates/rates', {
+            currencyId: this.masters.currencyUsd.id,
+            provider: 'MANUAL',
+            baseBuyRate: '88.00',
+            baseSaleRate: '88.50',
+            isActive: true,
+          });
+          TestLogger.info('Created active currency rate for USD');
+        }
+      } catch {}
+    }
+    if (this.masters.currencyEur?.id) {
+      try {
+        const rates = await adminClient.get('/currency-rates/rates/latest', { currencyId: this.masters.currencyEur.id });
+        const rateList = Array.isArray(rates.data) ? rates.data : [];
+        if (rateList.length === 0 || !rateList[0]?.baseSaleRate) {
+          await adminClient.post('/currency-rates/rates', {
+            currencyId: this.masters.currencyEur.id,
+            provider: 'MANUAL',
+            baseBuyRate: '94.00',
+            baseSaleRate: '95.00',
+            isActive: true,
+          });
+          TestLogger.info('Created active currency rate for EUR');
+        }
+      } catch {}
+    }
+
+    // 3. Products (CC, CM, CN, TT, TP, EM)
+    const prodRes = await adminClient.get('/products', { limit: 100, activeOnly: false });
     const products = Array.isArray(prodRes.data?.data) ? prodRes.data.data : (Array.isArray(prodRes.data?.items) ? prodRes.data.items : (Array.isArray(prodRes.data) ? prodRes.data : []));
     for (const p of products) {
       const pCode = String(p.code || p.productCode || '').toUpperCase();
+      const pDesc = String(p.description || p.productDescription || '').toLowerCase();
       if (pCode === 'CN' && !this.masters.productCn) {
-        this.masters.productCn = { id: p.id, code: 'CN', description: p.description || p.productDescription || 'Currency Notes' };
+        this.masters.productCn = { id: p.id, code: 'CN', description: p.productDescription || p.description || 'Currency Notes' };
       } else if (pCode === 'CC' && !this.masters.productCc) {
-        this.masters.productCc = { id: p.id, code: 'CC', description: p.description || p.productDescription || 'Single Currency Card' };
+        this.masters.productCc = { id: p.id, code: 'CC', description: p.productDescription || p.description || 'Single Currency Card' };
       } else if (pCode === 'CM' && !this.masters.productCm) {
-        this.masters.productCm = { id: p.id, code: 'CM', description: p.description || p.productDescription || 'Multi Currency Card' };
+        this.masters.productCm = { id: p.id, code: 'CM', description: p.productDescription || p.description || 'Multi Currency Card' };
       } else if (pCode === 'TT' && !this.masters.productTt) {
-        this.masters.productTt = { id: p.id, code: 'TT', description: p.description || p.productDescription || 'Telegraphic Transfer' };
-      } else if (pCode === 'TP' && !this.masters.productTp) {
-        this.masters.productTp = { id: p.id, code: 'TP', description: p.description || p.productDescription || 'Travellers Cheque' };
+        this.masters.productTt = { id: p.id, code: 'TT', description: p.productDescription || p.description || 'Telegraphic Transfer' };
+      } else if ((pCode === 'TP' || pCode === 'TC' || pDesc.includes('traveller') || pDesc.includes('cheque')) && !this.masters.productTp) {
+        this.masters.productTp = { id: p.id, code: p.productCode || p.code || 'TP', description: p.productDescription || p.description || 'Travellers Cheque' };
       } else if (pCode === 'EM' && !this.masters.productEm) {
-        this.masters.productEm = { id: p.id, code: 'EM', description: p.description || p.productDescription || 'Encashment / Surrender' };
+        this.masters.productEm = { id: p.id, code: 'EM', description: p.productDescription || p.description || 'Encashment / Surrender' };
       }
     }
+
+    if (!this.masters.productTp) {
+      try {
+        const tpSearchRes = await adminClient.get('/products', { search: 'TP', activeOnly: false, limit: 10 });
+        const tpList = Array.isArray(tpSearchRes.data?.data)
+          ? tpSearchRes.data.data
+          : (Array.isArray(tpSearchRes.data?.items) ? tpSearchRes.data.items : (Array.isArray(tpSearchRes.data) ? tpSearchRes.data : []));
+        const foundTp = tpList.find((p: any) => {
+          const c = String(p.code || p.productCode || '').toUpperCase();
+          const d = String(p.description || p.productDescription || '').toLowerCase();
+          return c === 'TP' || c === 'TC' || d.includes('traveller') || d.includes('cheque');
+        });
+        if (foundTp) {
+          this.masters.productTp = {
+            id: foundTp.id,
+            code: foundTp.productCode || foundTp.code || 'TP',
+            description: foundTp.productDescription || foundTp.description || 'Travellers Cheque',
+          };
+          TestLogger.info(`Discovered existing TP Travellers Cheque product: ${this.masters.productTp.id}`);
+        }
+      } catch {}
+    }
+
+    if (!this.masters.productTp) {
+      const createTpRes = await adminClient.post('/products', {
+        productCode: 'TP',
+        productDescription: 'Travellers Cheque',
+        availableInRetailBuying: true,
+        availableInRetailSelling: true,
+        availableInBulkBuying: true,
+        availableInBulkSelling: true,
+        isActiveProduct: true,
+      });
+      if (createTpRes.ok && createTpRes.data?.id) {
+        this.masters.productTp = {
+          id: createTpRes.data.id,
+          code: createTpRes.data.productCode || 'TP',
+          description: createTpRes.data.productDescription || 'Travellers Cheque',
+        };
+        TestLogger.info(`Created TP Travellers Cheque product: ${this.masters.productTp.id}`);
+      }
+    }
+
+    // Ensure all discovered products are active and configured with required availability
+    for (const prod of [this.masters.productCn, this.masters.productCc, this.masters.productCm, this.masters.productTt, this.masters.productTp, this.masters.productEm]) {
+      if (prod?.id) {
+        try {
+          const isTp = prod.id === this.masters.productTp?.id;
+          await adminClient.patch(`/products/${prod.id}`, {
+            isActiveProduct: true,
+            availableInRetailBuying: true,
+            availableInRetailSelling: !isTp,
+            availableInBulkBuying: true,
+            availableInBulkSelling: true,
+          });
+        } catch {}
+      }
+    }
+
     TestLogger.info(`Products: CN=${this.masters.productCn?.id}, CC=${this.masters.productCc?.id}, CM=${this.masters.productCm?.id}, TT=${this.masters.productTt?.id}, TP=${this.masters.productTp?.id}, EM=${this.masters.productEm?.id}`);
 
     // Discover Card Issuer Party Profile
     const issuerRes = await adminClient.get('/party-profiles', { type: 'CARD_ISSUER_PROFILE', limit: 10 });
     const issuers = Array.isArray(issuerRes.data?.data) ? issuerRes.data.data : (Array.isArray(issuerRes.data?.items) ? issuerRes.data.items : (Array.isArray(issuerRes.data) ? issuerRes.data : []));
     if (issuers.length > 0) {
-      this.masters.cardIssuerPartyId = issuers[0].id;
-      TestLogger.info(`Card Issuer Party Profile: ${issuers[0].name} (${this.masters.cardIssuerPartyId})`);
+      const approvedIssuer = issuers.find((i: any) => (i.status === 'APPROVE' || i.status === 'APPROVED') && i.active);
+      const chosen = approvedIssuer || issuers[0];
+      this.masters.cardIssuerPartyId = chosen.id;
+      if (chosen.status !== 'APPROVE') {
+        try {
+          await adminClient.post(`/party-profiles/${chosen.id}/review`, {
+            status: 'APPROVE',
+            active: true,
+          });
+        } catch {}
+      }
+      TestLogger.info(`Card Issuer Party Profile: ${chosen.name} (${this.masters.cardIssuerPartyId})`);
     } else {
       // Create a test card issuer if none exists
       const createIssuerRes = await adminClient.post('/party-profiles', {
@@ -350,35 +511,85 @@ export class MasterDataRegistry {
       });
       if (createIssuerRes.ok) {
         this.masters.cardIssuerPartyId = createIssuerRes.data?.id;
+        try {
+          await adminClient.post(`/party-profiles/${this.masters.cardIssuerPartyId}/review`, {
+            status: 'APPROVE',
+            active: true,
+          });
+        } catch {}
         TestLogger.info(`Created Card Issuer Party Profile: (${this.masters.cardIssuerPartyId})`);
       }
     }
 
-    // Ensure Surrender Product (EM) exists and is linked to Card Issuer
-    if (this.masters.productEm && this.masters.cardIssuerPartyId) {
-      await adminClient.put(`/products/${this.masters.productEm.id}`, {
-        issuerProfileIds: [this.masters.cardIssuerPartyId],
-        maintainBlankStockOfProduct: false,
-        availableInRetailBuying: true,
-        availableInBulkSelling: true,
-      });
-    } else if (!this.masters.productEm && this.masters.cardIssuerPartyId) {
-      const createEmRes = await adminClient.post('/products', {
-        productCode: 'EM',
-        productDescription: 'Encashment / Surrender',
-        maintainBlankStockOfProduct: false,
-        availableInRetailBuying: true,
-        availableInBulkSelling: true,
-        retailSale: false,
-        issuerProfileIds: [this.masters.cardIssuerPartyId],
-      });
-      if (createEmRes.ok && createEmRes.data?.id) {
-        this.masters.productEm = {
-          id: createEmRes.data.id,
-          code: 'EM',
-          description: 'Encashment / Surrender',
-        };
-        TestLogger.info(`Created and linked EM Surrender product: ${this.masters.productEm.id}`);
+    // Ensure Card Issuer is assigned to branches and linked to products CC, CM, TT, and EM
+    if (this.masters.cardIssuerPartyId && this.masters.branchA?.id) {
+      try {
+        await adminClient.put(`/party-profiles/${this.masters.cardIssuerPartyId}/branches`, {
+          branchIds: [this.masters.branchA.id, ...(this.masters.branchB?.id ? [this.masters.branchB.id] : [])],
+        });
+      } catch {}
+    }
+
+    // Ensure Card Issuer is linked to products CC, CM, TT, and EM
+    if (this.masters.cardIssuerPartyId) {
+      if (this.masters.productCc) {
+        await adminClient.put(`/products/${this.masters.productCc.id}`, {
+          issuerProfileIds: [this.masters.cardIssuerPartyId],
+        });
+      }
+      if (this.masters.productCm) {
+        await adminClient.put(`/products/${this.masters.productCm.id}`, {
+          issuerProfileIds: [this.masters.cardIssuerPartyId],
+        });
+      }
+      if (this.masters.productTt) {
+        await adminClient.put(`/products/${this.masters.productTt.id}`, {
+          issuerProfileIds: [this.masters.cardIssuerPartyId],
+          availableInDealCover: true,
+          availableInOtherTransaction: true,
+        });
+
+        // Ensure product currency rule exists for TT + USD so resolveDealRate succeeds
+        if (this.masters.currencyUsd?.id) {
+          try {
+            const rulesRes = await adminClient.get('/currency-rates/product-rules', {
+              productId: this.masters.productTt.id,
+              currencyId: this.masters.currencyUsd.id,
+            });
+            const rules = Array.isArray(rulesRes.data) ? rulesRes.data : (Array.isArray(rulesRes.data?.data) ? rulesRes.data.data : []);
+            if (rules.length === 0) {
+              await adminClient.post('/currency-rates/product-rules', {
+                productId: this.masters.productTt.id,
+                currencyId: this.masters.currencyUsd.id,
+                buyMarginType: 'FIXED',
+                buyMarginValue: '0.00',
+                saleMarginType: 'FIXED',
+                saleMarginValue: '0.00',
+                isActive: true,
+              });
+              TestLogger.info('Created product currency rule for TT + USD');
+            }
+          } catch (err: any) {
+            TestLogger.info(`Product-rule creation check note: ${err?.message || err}`);
+          }
+        }
+      }
+      if (this.masters.productTp) {
+        await adminClient.put(`/products/${this.masters.productTp.id}`, {
+          issuerProfileIds: [this.masters.cardIssuerPartyId],
+          availableInRetailBuying: true,
+          availableInRetailSelling: false,
+          availableInBulkBuying: true,
+          availableInBulkSelling: true,
+        });
+      }
+      if (this.masters.productEm) {
+        await adminClient.put(`/products/${this.masters.productEm.id}`, {
+          issuerProfileIds: [this.masters.cardIssuerPartyId],
+          maintainBlankStockOfProduct: false,
+          availableInRetailBuying: true,
+          availableInBulkSelling: true,
+        });
       }
     }
 
@@ -388,22 +599,29 @@ export class MasterDataRegistry {
     if (corps.length > 0) {
       const approvedCorp = corps.find((c: any) => (c.status === 'APPROVE' || c.status === 'APPROVED') && c.active);
       const chosen = approvedCorp || corps[0];
+      const panNo = chosen.panNo || 'AAACT1234F';
+      try {
+        await adminClient.put(`/party-profiles/${chosen.id}`, {
+          panNo,
+          permanentCreditLimit: 50000000,
+          permanentCreditDays: 90,
+        });
+      } catch {}
       this.masters.corporatePartyProfile = {
         id: chosen.id,
         name: chosen.name,
         entityTypeId: chosen.entityType?.id,
+        panNo,
       };
       if (chosen.status !== 'APPROVE') {
         try {
-          const hoClient = new ApiClient();
-          await hoClient.login(envConfig.hoStaff.email, envConfig.hoStaff.password);
-          await hoClient.post(`/party-profiles/${chosen.id}/review`, {
+          await adminClient.post(`/party-profiles/${chosen.id}/review`, {
             status: 'APPROVE',
             active: true,
           });
         } catch {}
       }
-      TestLogger.info(`Corporate Client Party Profile: ${chosen.name} (${this.masters.corporatePartyProfile.id})`);
+      TestLogger.info(`Corporate Client Party Profile: ${chosen.name} (${this.masters.corporatePartyProfile.id}, PAN: ${panNo})`);
     } else {
       const createCorpRes = await adminClient.post('/party-profiles', {
         type: 'CORPORATE_CLIENT',
@@ -421,11 +639,10 @@ export class MasterDataRegistry {
           id: createCorpRes.data.id,
           name: createCorpRes.data.name,
           entityTypeId: createCorpRes.data.entityType?.id,
+          panNo: 'AAACT1234F',
         };
         try {
-          const hoClient = new ApiClient();
-          await hoClient.login(envConfig.hoStaff.email, envConfig.hoStaff.password);
-          await hoClient.post(`/party-profiles/${createCorpRes.data.id}/review`, {
+          await adminClient.post(`/party-profiles/${createCorpRes.data.id}/review`, {
             status: 'APPROVE',
             active: true,
           });
@@ -435,7 +652,7 @@ export class MasterDataRegistry {
     }
 
     // Ensure Corporate Party Profile has a valid entityType option assigned
-    if (this.masters.corporatePartyProfile && !this.masters.corporatePartyProfile.entityTypeId) {
+    if (this.masters.corporatePartyProfile) {
       const entityTypeRes = await adminClient.get('/select-options/ENTITYTYPE');
       const entityTypes = Array.isArray(entityTypeRes.data)
         ? entityTypeRes.data
@@ -445,19 +662,30 @@ export class MasterDataRegistry {
           const val = String(opt.value || opt.code || opt.label || '').toUpperCase();
           return val.includes('CORP') || (!val.includes('INDIV') && val !== 'INDIVIDUAL');
         }) || entityTypes[0];
-        await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}`, {
-          entityType: selectedOpt.id,
-        });
-        this.masters.corporatePartyProfile.entityTypeId = selectedOpt.id;
-        TestLogger.info(`Assigned EntityType (${selectedOpt.value || selectedOpt.id}) to Corporate Party Profile`);
+        if (!this.masters.corporatePartyProfile.entityTypeId) {
+          await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}`, {
+            entityType: selectedOpt.id,
+          });
+          this.masters.corporatePartyProfile.entityTypeId = selectedOpt.id;
+          TestLogger.info(`Assigned EntityType (${selectedOpt.value || selectedOpt.id}) to Corporate Party Profile`);
+        }
       }
     }
 
-    // Ensure Corporate Party Profile is assigned to test branches (Branch A & Branch B)
+    // Ensure Corporate Party Profile is assigned to test branches (Branch A & Branch B) and has credit limits configured
     if (this.masters.corporatePartyProfile && this.masters.branchA?.id) {
       await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}/branches`, {
         branchIds: [this.masters.branchA.id, ...(this.masters.branchB?.id ? [this.masters.branchB.id] : [])],
       });
+      try {
+        await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}`, {
+          entityType: this.masters.corporatePartyProfile.entityTypeId,
+        });
+        await adminClient.post(`/party-profiles/${this.masters.corporatePartyProfile.id}/credit-policy`, {
+          permanentCreditLimit: 1000000,
+          permanentCreditDays: 30,
+        });
+      } catch {}
     }
 
     // 4. Accounts (Cash Ledger, Bank Accounts, INR Accounts)
@@ -529,6 +757,63 @@ export class MasterDataRegistry {
     this.masters.journalCreditAccountId = this.masters.bankAccountId;
     TestLogger.info(`Accounts: Cash=${this.masters.cashAccountId}, Bank=${this.masters.bankAccountId}`);
 
+    // Ensure productTp has valid purchase and sale accounts configured
+    if (this.masters.productTp?.id) {
+      try {
+        const tpDetailRes = await adminClient.get(`/products/${this.masters.productTp.id}`);
+        const tpData = tpDetailRes.data;
+        if (!tpData?.purchaseAc && !tpData?.bulkPurAc) {
+          const accountIdToUse = this.masters.cashAccountId || accounts[0]?.id;
+          if (accountIdToUse) {
+            await adminClient.put(`/products/${this.masters.productTp.id}`, {
+              purchaseAc: accountIdToUse,
+              bulkPurAc: accountIdToUse,
+              saleAc: accountIdToUse,
+              bulkSaleAc: accountIdToUse,
+              profitAc: accountIdToUse,
+              bulkProficAc: accountIdToUse,
+              availableInRetailBuying: true,
+              availableInRetailSelling: false,
+              availableInBulkBuying: true,
+              availableInBulkSelling: true,
+              ...(this.masters.cardIssuerPartyId ? { issuerProfileIds: [this.masters.cardIssuerPartyId] } : {}),
+            });
+            TestLogger.info(`Configured accounting accounts on Product TP: ${accountIdToUse}`);
+          }
+        }
+      } catch (err: any) {
+        TestLogger.info(`Product TP accounts configuration note: ${err?.message || err}`);
+      }
+    }
+
+    // Ensure productEm has valid purchase and sale accounts configured
+    if (this.masters.productEm?.id) {
+      try {
+        const emDetailRes = await adminClient.get(`/products/${this.masters.productEm.id}`);
+        const emData = emDetailRes.data;
+        if (!emData?.purchaseAc && !emData?.bulkPurAc) {
+          const accountIdToUse = this.masters.cashAccountId || accounts[0]?.id;
+          if (accountIdToUse) {
+            await adminClient.put(`/products/${this.masters.productEm.id}`, {
+              purchaseAc: accountIdToUse,
+              bulkPurAc: accountIdToUse,
+              saleAc: accountIdToUse,
+              bulkSaleAc: accountIdToUse,
+              profitAc: accountIdToUse,
+              bulkProficAc: accountIdToUse,
+              availableInRetailBuying: true,
+              availableInBulkSelling: true,
+              maintainBlankStockOfProduct: false,
+              ...(this.masters.cardIssuerPartyId ? { issuerProfileIds: [this.masters.cardIssuerPartyId] } : {}),
+            });
+            TestLogger.info(`Configured accounting accounts on Product EM: ${accountIdToUse}`);
+          }
+        }
+      } catch (err: any) {
+        TestLogger.info(`Product EM accounts configuration note: ${err?.message || err}`);
+      }
+    }
+
     // Discover / configure ADVANCE_CONTROL_ACCOUNT
     const settingsRes = await adminClient.get('/additional-settings');
     const categories = Array.isArray(settingsRes.data) ? settingsRes.data : (Array.isArray(settingsRes.data?.data) ? settingsRes.data.data : []);
@@ -577,6 +862,35 @@ export class MasterDataRegistry {
       }
     }
 
+    // Ensure TRANSACTION_CREDIT_POLICY allows outstanding on sale and purchase
+    try {
+      let creditPolicyCat = categories.find((c: any) => String(c.code).toUpperCase() === 'TRANSACTION_CREDIT_POLICY');
+      if (!creditPolicyCat) {
+        const createRes = await adminClient.post('/additional-settings', {
+          title: 'Transaction Credit Policy',
+          code: 'TRANSACTION_CREDIT_POLICY',
+          subcategories: [
+            { title: 'Allow Outstanding On Sale', code: 'ALLOW_OUTSTANDING_ON_SALE', valueType: 'BOOLEAN', value: 'YES' },
+            { title: 'Allow Outstanding On Purchase', code: 'ALLOW_OUTSTANDING_ON_PURCHASE', valueType: 'BOOLEAN', value: 'YES' },
+          ],
+        });
+        if (createRes.ok) creditPolicyCat = createRes.data;
+      } else {
+        const subs = creditPolicyCat.subcategories || creditPolicyCat.children || [];
+        for (const code of ['ALLOW_OUTSTANDING_ON_SALE', 'ALLOW_OUTSTANDING_ON_PURCHASE']) {
+          const sub = subs.find((s: any) => String(s.code).toUpperCase() === code);
+          if (sub && sub.value !== 'YES' && sub.value !== 'true') {
+            await adminClient.put(`/additional-settings/${creditPolicyCat.id}/subcategories/${sub.id}`, {
+              description: sub.description || code,
+              value: 'YES',
+            });
+          }
+        }
+      }
+    } catch (err: any) {
+      TestLogger.info(`Credit policy setting initialization note: ${err?.message || err}`);
+    }
+
     // Discover Voucher Category Options
     const accTypeRes = await adminClient.get('/select-options/VOUCHER_ACCOUNT_TYPE');
     const accTypeList = Array.isArray(accTypeRes.data) ? accTypeRes.data : (Array.isArray(accTypeRes.data?.data) ? accTypeRes.data.data : []);
@@ -612,35 +926,75 @@ export class MasterDataRegistry {
       TestLogger.info(`Fake Currency Reason ID: ${this.masters.fakeReasonId}`);
     }
 
-    // 6. Policy Transaction Date
+    // 5B. Ensure productCn has fakeAccount and lossAccount configured
+    if (this.masters.productCn && this.masters.cashAccountId) {
+      try {
+        await adminClient.put(`/products/${this.masters.productCn.id}`, {
+          fakeAccount: this.masters.cashAccountId,
+          lossAccount: this.masters.cashAccountId,
+        });
+      } catch {}
+    }
+
+    // 6. Synchronize BOD/EOD and Policy Transaction Date across branches
+    const today = new Date().toISOString().slice(0, 10);
+    const branchesToSync = [this.masters.branchA?.id, this.masters.branchB?.id].filter(
+      (id, idx, arr): id is string => Boolean(id) && arr.indexOf(id) === idx
+    );
+
+    for (const bId of branchesToSync) {
+      try {
+        const pol = await adminClient.get('/auth/policy-context', { branchId: bId });
+        if (pol.ok && pol.data) {
+          if (pol.data.workflowState === 'PENDING_EOD' && pol.data.openBusinessDate && pol.data.openBusinessDate < today) {
+            try {
+              await adminClient.post('/day-end-start-process/complete', {
+                branchId: bId,
+                answers: { ratesVerified: true, cashVerified: true },
+              });
+            } catch {}
+          }
+          try {
+            await adminClient.post('/day-end-start-process/start', {
+              branchId: bId,
+              answers: { ratesVerified: true, cashVerified: true },
+            });
+          } catch {}
+        }
+      } catch {}
+    }
+
     if (this.masters.branchA?.id) {
       const policyRes = await adminClient.get('/auth/policy-context', {
         branchId: this.masters.branchA.id,
         counterId: this.masters.counterA1?.id,
       });
-      if (policyRes.ok && policyRes.data?.transactionDate) {
-        this.masters.transactionDate = policyRes.data.transactionDate;
+      if (policyRes.ok && policyRes.data) {
+        this.masters.transactionDate =
+          policyRes.data.transactionDate || policyRes.data.openBusinessDate || today;
         TestLogger.info(`Policy Transaction Date: ${this.masters.transactionDate}`);
       }
     }
 
-    // 6B. Ensure Branch B has BOD active if separate from Branch A
-    if (this.masters.branchB?.id && this.masters.branchB.id !== this.masters.branchA?.id) {
-      try {
-        await adminClient.post('/day-end-start-process/start', {
-          branchId: this.masters.branchB.id,
-          answers: { ratesVerified: true, cashVerified: true },
-        });
-      } catch {}
-    }
-
     // 6C. Discover Purpose Master
     try {
-      const purpRes = await adminClient.get('/purpose', { limit: 10 });
+      const purpRes = await adminClient.get('/purposes', { limit: 10 });
       const purposes = Array.isArray(purpRes.data?.data) ? purpRes.data.data : (Array.isArray(purpRes.data?.items) ? purpRes.data.items : (Array.isArray(purpRes.data) ? purpRes.data : []));
       if (purposes.length > 0) {
         this.masters.purposeId = purposes[0].id;
         TestLogger.info(`Discovered Purpose ID: ${this.masters.purposeId}`);
+      } else {
+        const createPurpRes = await adminClient.post('/purposes', {
+          code: 'TR',
+          description: 'Travel / Remittance',
+          sell: true,
+          purchase: true,
+          active: true,
+        });
+        if (createPurpRes.ok && createPurpRes.data?.id) {
+          this.masters.purposeId = createPurpRes.data.id;
+          TestLogger.info(`Created Purpose ID: ${this.masters.purposeId}`);
+        }
       }
     } catch {}
 
@@ -651,6 +1005,17 @@ export class MasterDataRegistry {
       if (matList.length > 0) {
         this.masters.ttMaturityOptionId = matList[0].id;
         TestLogger.info(`Discovered TT Maturity Option ID: ${this.masters.ttMaturityOptionId}`);
+      } else {
+        const createMatRes = await adminClient.post('/select-options', {
+          code: 'TTMATURITY',
+          value: '2',
+          label: '2 Days (Spot)',
+          isActive: true,
+        });
+        if (createMatRes.ok && createMatRes.data?.id) {
+          this.masters.ttMaturityOptionId = createMatRes.data.id;
+          TestLogger.info(`Created TT Maturity Option ID: ${this.masters.ttMaturityOptionId}`);
+        }
       }
     } catch {}
 
@@ -786,6 +1151,7 @@ export class MasterDataRegistry {
       }
     }
 
+    this.initialized = true;
     return this.masters;
   }
 }

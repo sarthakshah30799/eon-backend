@@ -23,6 +23,9 @@ function normalizeFinancialCodeDto(
   dto: CreateFinancialCodeDto | UpdateFinancialCodeDto,
 ) {
   const normalizeOptional = (value?: string | null) => {
+    if (value === undefined) {
+      return undefined;
+    }
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
   };

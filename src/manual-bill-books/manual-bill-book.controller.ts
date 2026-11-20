@@ -29,6 +29,11 @@ import {
   ManageDeliveryPersonDto,
   ReassignManualBookDto,
 } from "./dto/manual-bill-book.dto";
+import {
+  AllocateManualBookPagesDto,
+  DeallocateManualBookPagesDto,
+  UnmapManualBookPagesDto,
+} from "./dto/manage-pages.dto";
 import { ManualBillBookListQueryDto } from "./dto/manual-bill-book-list-query.dto";
 import { ManualBillBookSelectablePagesQueryDto } from "./dto/manual-bill-book-selectable-pages-query.dto";
 import { PaginatedResponseDto } from "../common/pagination/dto/paginated-response.dto";
@@ -335,14 +340,13 @@ export class ManualBillBookController {
   @ApiOperation({ summary: "Allocate manual book pages to a Delivery Person" })
   async allocateToDP(
     @Session() session: any,
-    @Body()
-    body: { pageIds: string[]; deliveryPersonId: string; remarks?: string },
+    @Body() dto: AllocateManualBookPagesDto,
   ) {
     return this.service.allocateToDP(
-      body.pageIds,
-      body.deliveryPersonId,
+      dto.pageIds,
+      dto.deliveryPersonId,
       session.userId,
-      body.remarks,
+      dto.remarks,
     );
   }
 
@@ -350,12 +354,12 @@ export class ManualBillBookController {
   @ApiOperation({ summary: "Deallocate manual book pages back to Cashier" })
   async deallocateFromDP(
     @Session() session: any,
-    @Body() body: { pageIds: string[]; remarks?: string },
+    @Body() dto: DeallocateManualBookPagesDto,
   ) {
     return this.service.deallocateFromDP(
-      body.pageIds,
+      dto.pageIds,
       session.userId,
-      body.remarks,
+      dto.remarks,
     );
   }
 
@@ -417,21 +421,14 @@ export class ManualBillBookController {
   })
   async unmapFromDP(
     @Session() session: any,
-    @Body()
-    body: {
-      dpUserId: string;
-      manualBookId: string;
-      mvFrom: number;
-      mvTo: number;
-      remarks?: string;
-    },
+    @Body() dto: UnmapManualBookPagesDto,
   ) {
     return this.service.unmapFromDP({
-      dpUserId: body.dpUserId,
-      manualBookId: body.manualBookId,
-      mvFrom: body.mvFrom,
-      mvTo: body.mvTo,
-      remarks: body.remarks,
+      dpUserId: dto.dpUserId,
+      manualBookId: dto.manualBookId,
+      mvFrom: dto.mvFrom,
+      mvTo: dto.mvTo,
+      remarks: dto.remarks,
       executorId: session.userId,
     });
   }

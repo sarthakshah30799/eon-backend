@@ -282,7 +282,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       TestLogger.success(`Payment voucher re-opened cleanly via GET /payments/:id without 500 errors`);
     });
 
-    it('8.6B2 should verify cash payment voucher renders in Cash Report and Cash Ledger frontend tables', async () => {
+    it('8.6B2 should verify cash payment voucher renders in Cash Report frontend table', async () => {
       const cashRes = await client.get('/reports/cash-report', {
         startDate: '2026-01-01',
         endDate: '2026-12-31',
@@ -290,13 +290,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       expect(cashRes.status).toBe(200);
       ReportAccuracyValidator.verifyFrontendContract('cash-report', cashRes.data);
 
-      const ledgerRes = await client.get('/reports/cash-ledger-report', {
-        startDate: '2026-01-01',
-        endDate: '2026-12-31',
-      });
-      expect(ledgerRes.status).toBe(200);
-      ReportAccuracyValidator.verifyFrontendContract('cash-ledger', ledgerRes.data);
-      TestLogger.success('Cash payment voucher verified on Cash Ledger frontend table');
+      TestLogger.success('Cash payment voucher verified on Cash Report frontend table');
     });
 
     it('8.6C should reject payment voucher submission with a non-cash/bank account as header (negative test)', async () => {
@@ -393,10 +387,17 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       // Step 1: Create transaction with partial payment leaving an outstanding balance
       const saleRes = await client.post('/transactions/drafts', {
         slug: TRANSACTION_SLUGS.SALE_CORPORATE_INDIVIDUAL,
+        transactionDate: getTxDate(),
         branchId: registry.masters.branchA.id,
         counterId: registry.masters.counterA1?.id,
         tradeMode: 'BULK',
         partyProfileId: registry.masters.corporatePartyProfile.id,
+        passenger: {
+          firstName: 'Corporate',
+          lastName: 'Executive',
+          nationalityType: 'INDIAN',
+          pan: registry.masters.corporatePartyProfile.panNo || 'ABCDE1234F',
+        },
         items: [
           {
             productId: registry.masters.productCn?.id,
@@ -408,6 +409,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         payments: [
           {
             paymentMethod: 'CHEQUE',
+            accountId: registry.masters.bankAccountId,
             amount: 5000, // Total = 17,700, Paid = 5,000, Outstanding = 12,700
             referenceNumber: 'CHQ100200',
             referenceDate: new Date().toISOString().slice(0, 10),
@@ -417,6 +419,9 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         ],
       });
 
+      if (![200, 201].includes(saleRes.status)) {
+        TestLogger.warn(`8.8 sale draft failed (${saleRes.status}): ${JSON.stringify(saleRes.data)}`);
+      }
       expect([200, 201]).toContain(saleRes.status);
       testOutstandingTransactionId = saleRes.data?.id;
       expect(testOutstandingTransactionId).toBeDefined();

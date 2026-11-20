@@ -15,6 +15,7 @@ import { TransfersService } from "./transfers.service";
 import { CurrencyTransferType } from "./transfers.enums";
 import { CreateTransferRequestPayload } from "./dto/transfer-request.dto";
 import { RecordTransferPrintDto } from "./dto/record-transfer-print.dto";
+import { RejectTransferDto } from "./dto/reject-transfer.dto";
 import { TransferListQueryDto } from "./dto/transfer-list-query.dto";
 import { CurrencyTransfer } from "./entities";
 import { PaginatedResponseDto } from "../common/pagination";
@@ -107,7 +108,7 @@ export class TransfersController {
   @ApiOperation({ summary: "Reject a held transfer" })
   async rejectTransfer(
     @Param("id") id: string,
-    @Body() body: { remarks?: string | null },
+    @Body() body: RejectTransferDto,
     @Session() session: any,
   ): Promise<CurrencyTransfer> {
     if (!session?.userId) {

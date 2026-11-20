@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Session,
+  ValidationPipe,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -16,12 +17,14 @@ import {
   ApiResponse,
   ApiCookieAuth,
   ApiParam,
+  ApiBody,
 } from "@nestjs/swagger";
 import { RoleService } from "./role.service";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RoleResponseDto } from "./dto/role-response.dto";
 import { RoleListQueryDto } from "./dto/role-list-query.dto";
+import { UpdateRolePermissionsDto } from "./dto/update-role-permissions.dto";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { PaginatedResponseDto } from "../common/pagination";
@@ -118,11 +121,13 @@ export class RoleController {
   @ApiOperation({ summary: "Update permissions matrix for a role" })
   @ApiParam({ name: "id", description: "Role UUID" })
   @ApiResponse({ status: 200, description: "Success message" })
+  @ApiBody({ type: UpdateRolePermissionsDto })
   async updatePermissions(
     @Param("id") id: string,
     @Body() body: Record<string, Record<string, boolean>>,
     @Session() session: any,
   ) {
-    return this.roleService.updateRolePermissions(id, body, session.userId);
+    const grid = (body as any)?.permissions ?? body;
+    return this.roleService.updateRolePermissions(id, grid, session.userId);
   }
 }

@@ -14,8 +14,10 @@ import {
   Res,
   HttpStatus,
   ForbiddenException,
+  ValidationPipe,
 } from "@nestjs/common";
 import {
+  ApiBody,
   ApiCookieAuth,
   ApiOperation,
   ApiResponse,
@@ -27,6 +29,14 @@ import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RecordTransactionPrintDto } from "./dto/record-transaction-print.dto";
+import { CreateTransactionDraftDto } from "./dto/create-transaction-draft.dto";
+import {
+  TransactionTaxPreviewDto,
+  TransactionTcsPreviewDto,
+  PurchaseRulePreviewDto,
+  ApproveTransactionDto,
+  RejectTransactionDto,
+} from "./dto/transaction-preview.dto";
 import { TransactionsService } from "./transactions.service";
 import { PurchaseRuleService } from "./purchase-rule.service";
 import { PartyCreditService } from "../party-profiles/party-credit.service";
@@ -215,6 +225,7 @@ export class TransactionsController {
     status: 201,
     description: "Transaction draft created successfully",
   })
+  @ApiBody({ type: CreateTransactionDraftDto })
   @UseInterceptors(AnyFilesInterceptor())
   async createDraft(
     @Body() body: Record<string, any>,
@@ -235,9 +246,9 @@ export class TransactionsController {
     summary: "Preview GST tax calculation for a transaction payload",
   })
   async previewTax(
-    @Body() body: Record<string, any>,
+    @Body() body: TransactionTaxPreviewDto,
   ): Promise<Record<string, any>> {
-    return this.transactionsService.previewTransactionTax(body);
+    return this.transactionsService.previewTransactionTax(body as Record<string, unknown>);
   }
 
   @Post("tcs-preview")
@@ -245,26 +256,9 @@ export class TransactionsController {
     summary: "Preview TCS calculation for a transaction payload",
   })
   async previewTcs(
-    @Body() body: Record<string, unknown>,
+    @Body() body: TransactionTcsPreviewDto,
   ): Promise<Record<string, unknown>> {
-    return this.transactionsService.previewTransactionTcs(
-      body as {
-        transactionType: import("./transactions.enums").TransactionType;
-        purposeId: string;
-        slug?: string | null;
-        preTcsFinalAmount?: string | number | null;
-        itemBaseAmount?: string | number | null;
-        itemTaxAmount?: string | number | null;
-        additionalChargeBaseAmount?: string | number | null;
-        additionalChargeTaxAmount?: string | number | null;
-        loanAmount?: string | number | null;
-        declaredAmount?: string | number | null;
-        itrFiled?: boolean | null;
-        tcsDeclarationAccepted?: boolean | null;
-        isProprietorship?: boolean | null;
-        maxTcsRatePercent?: string | number | null;
-      },
-    );
+    return this.transactionsService.previewTransactionTcs(body);
   }
 
   @Post("purchase-rule-preview")
@@ -272,9 +266,9 @@ export class TransactionsController {
     summary: "Preview purchase rule validation for a transaction payload",
   })
   async previewPurchaseRule(
-    @Body() body: Record<string, any>,
+    @Body() body: PurchaseRulePreviewDto,
   ): Promise<Record<string, any>> {
-    return this.purchaseRuleService.preview(body);
+    return this.purchaseRuleService.preview(body as any);
   }
 
   @Post("credit-preview")
@@ -316,7 +310,7 @@ export class TransactionsController {
   })
   async approveTransaction(
     @Param("id") transactionId: string,
-    @Body() body: { approvalRemarks?: string },
+    @Body() body: ApproveTransactionDto,
     @Session() session: any,
   ): Promise<Transaction> {
     if (!session?.userId) {
@@ -339,7 +333,7 @@ export class TransactionsController {
   })
   async rejectTransaction(
     @Param("id") transactionId: string,
-    @Body() body: { rejectionReason?: string },
+    @Body() body: RejectTransactionDto,
     @Session() session: any,
   ): Promise<Transaction> {
     if (!session?.userId) {

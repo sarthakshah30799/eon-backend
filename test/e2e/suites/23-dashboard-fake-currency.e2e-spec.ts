@@ -54,8 +54,59 @@ describe('Module 18: Executive Dashboard KPIs & Counterfeit Currency Management'
       expect(registry.masters.currencyUsd?.id).toBeDefined();
       expect(registry.masters.fakeReasonId).toBeDefined();
 
+      // Ensure counter stock availability
+      try {
+        const holdRes = await client.get('/transactions/counter-hold-cost', {
+          branchId: registry.masters.branchA.id,
+          counterId: registry.masters.counterA1?.id,
+          currencyId: registry.masters.currencyUsd.id,
+        });
+        const availQty = Number(holdRes.data?.closingQuantity || 0);
+        if (availQty < 100) {
+          await client.post('/transactions/drafts', {
+            slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
+            branchId: registry.masters.branchA.id,
+            counterId: registry.masters.counterA1?.id,
+            tradeMode: 'RETAIL',
+            passenger: {
+              firstName: 'Stock',
+              lastName: 'Seeder',
+              nationalityType: 'INDIAN',
+              pan: 'ABCDE1234F',
+            },
+            items: [
+              {
+                productId: registry.masters.productCn?.id,
+                currencyId: registry.masters.currencyUsd.id,
+                quantity: 200,
+                rate: 87.0,
+              },
+            ],
+            payments: [
+              {
+                paymentMethod: 'CASH',
+                amount: 17400,
+                accountId: registry.masters.cashAccountId,
+              },
+            ],
+          });
+        }
+      } catch {}
+
+      const rateRes = await client.get('/transactions/average-sell-price', {
+        productId: registry.masters.productCn?.id,
+        currencyId: registry.masters.currencyUsd.id,
+      });
+      let fakeRate = 88.0;
+      if (rateRes.ok && Number(rateRes.data?.averageSellRate) > 0) {
+        fakeRate = Number(Number(rateRes.data.averageSellRate).toFixed(2));
+      }
+
+      const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
       const res = await client.post('/transactions/drafts', {
         slug: TRANSACTION_SLUGS.FAKE_CURRENCY,
+        transactionDate: txDate,
+        tradeMode: 'RETAIL',
         branchId: registry.masters.branchA.id,
         counterId: registry.masters.counterA1?.id,
         reasonId: registry.masters.fakeReasonId,
@@ -64,7 +115,7 @@ describe('Module 18: Executive Dashboard KPIs & Counterfeit Currency Management'
             productId: registry.masters.productCn?.id,
             currencyId: registry.masters.currencyUsd.id,
             quantity: 100,
-            rate: 88.0,
+            rate: fakeRate,
           },
         ],
       });

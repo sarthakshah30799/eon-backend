@@ -3,9 +3,12 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import * as XLSX from "xlsx";
 import { AccountProfile } from "../account-profiles/account-profile.entity";
+import { AccountProfileBranch } from "../account-profiles/entities/account-profile-branch.entity";
+import { SessionContext } from "../auth/types/session-context";
 import { Branch } from "../branches/branch.entity";
-import { TransactionStatus } from "../transactions/transactions.enums";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
+import { TransactionStatus } from "../transactions/transactions.enums";
+import { UserRole } from "../user-roles/user-role.entity";
 import { AccountingVoucher } from "../vouchers/entities";
 import {
   VoucherEntryDirection,
@@ -15,7 +18,9 @@ import {
   CashReportFormat,
   CashReportLayout,
   CashReportQueryDto,
+  CashReportScope,
 } from "./dto/cash-report-query.dto";
+import { resolveFlmAccessibleBranchIds } from "./flm-report-access.helpers";
 
 type ReportColumn = { key: string; label: string };
 
@@ -32,6 +37,8 @@ type Movement = {
   receiptsCents: number;
   paymentsCents: number;
   isReceipt: boolean;
+  typeCode: string;
+  transactionLabel: string;
 };
 
 type ReportRow = {
@@ -46,9 +53,7 @@ type ReportRow = {
   runningBalance: string;
 };
 
-type ReportSection = {
-  branchId: string | null;
-  branchLabel: string;
+type AccountSection = {
   accountId: string;
   accountLabel: string;
   openingBalance: string;
@@ -58,16 +63,34 @@ type ReportSection = {
   rows: ReportRow[];
 };
 
+type BranchBlock = {
+  branchId: string | null;
+  branchLabel: string;
+  accounts: AccountSection[];
+  summary: {
+    openingBalance: string;
+    totalReceipts: string;
+    totalPayments: string;
+    closingBalance: string;
+  };
+};
+
+type ColumnarRow = {
+  accountId: string;
+  code: string;
+  values: Record<string, string>;
+};
+
 const COLUMNS: ReportColumn[] = [
   { key: "transactionType", label: "Transaction" },
   { key: "date", label: "Date" },
   { key: "type", label: "Type" },
-  { key: "number", label: "Transaction number" },
+  { key: "number", label: "No" },
   { key: "party", label: "Party" },
   { key: "narration", label: "Narration" },
-  { key: "receipts", label: "Receipt" },
+  { key: "receipts", label: "Receipts" },
   { key: "payments", label: "Payments" },
-  { key: "runningBalance", label: "Running Balance" },
+  { key: "runningBalance", label: "Running Bal." },
 ];
 
 const toText = (value: unknown) => String(value ?? "").trim();
@@ -78,14 +101,19 @@ const normalizeUpper = (value: unknown) =>
     .toUpperCase();
 
 const isCashLedgerAccount = (account: AccountProfile) => {
-  const tokens = [
-    account.accountType?.value,
-    account.accountType?.label,
-  ].map(normalizeUpper);
+  const tokens = [account.accountType?.value, account.accountType?.label].map(
+    normalizeUpper,
+  );
   return tokens.includes("CASH_LEDGER");
 };
 
 const money = (cents: number) => (cents / 100).toFixed(2);
+
+const balanceLabel = (cents: number) => {
+  const abs = money(Math.abs(cents));
+  if (cents < 0) return `${abs} Cr.`;
+  return `${abs} Dr.`;
+};
 
 const cents = (value: unknown) => {
   const numeric = Number(value ?? 0);
@@ -102,8 +130,10 @@ const getSnapshotLabel = (
   snapshot: Record<string, unknown> | null | undefined,
 ) => {
   if (!snapshot) return "";
-  const code = toText(snapshot.code);
-  const name = toText(snapshot.name ?? snapshot.label);
+  const code = toText(snapshot.code ?? snapshot.accountCode);
+  const name = toText(
+    snapshot.name ?? snapshot.label ?? snapshot.accountName,
+  );
   if (code && name) return `${code} - ${name}`;
   return name || code;
 };
@@ -143,26 +173,59 @@ export class CashReportService {
   constructor(
     @InjectRepository(AccountProfile)
     private readonly accountRepository: Repository<AccountProfile>,
+    @InjectRepository(AccountProfileBranch)
+    private readonly accountBranchRepository: Repository<AccountProfileBranch>,
     @InjectRepository(Branch)
     private readonly branchRepository: Repository<Branch>,
+    @InjectRepository(UserRole)
+    private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(AccountingVoucher, "database2")
     private readonly voucherRepository: Repository<AccountingVoucher>,
     @InjectRepository(TransactionPayment, "database2")
     private readonly paymentRepository: Repository<TransactionPayment>,
   ) {}
 
-  async buildReport(query: CashReportQueryDto) {
+  async buildReport(
+    query: CashReportQueryDto,
+    session?: SessionContext,
+  ) {
     const startDate = toDateOnly(query.startDate);
     const endDate = toDateOnly(query.endDate);
-    if (!startDate || !endDate)
+    if (!startDate || !endDate) {
       throw new BadRequestException("Start date and end date are required");
-    if (startDate > endDate)
+    }
+    if (startDate > endDate) {
       throw new BadRequestException("Start date cannot be after end date");
+    }
 
-    const layout = query.layout ?? CashReportLayout.BRANCH_WISE;
-    const cashAccounts = await this.resolveCashAccounts(query.accountIds);
+    const layout = query.layout ?? CashReportLayout.LEDGER;
+    const scope =
+      layout === CashReportLayout.COLUMNAR
+        ? CashReportScope.BRANCH
+        : (query.scope ?? CashReportScope.BRANCH);
+    const branchIds = await resolveFlmAccessibleBranchIds(
+      this.userRoleRepository,
+      query.branchIds ?? [],
+      session,
+    );
+    const counterIds = (query.counterIds ?? []).filter(Boolean);
+
+    const cashAccounts = await this.resolveCashAccounts(
+      branchIds,
+      query.accountIds,
+    );
     if (!cashAccounts.length) {
-      return { columns: COLUMNS, layout, sections: [] as ReportSection[] };
+      return {
+        startDate,
+        endDate,
+        scope,
+        layout,
+        message:
+          "No cash ledger accounts linked to the selected branches for the selected filters.",
+        columns: COLUMNS.map((column) => ({ ...column })),
+        branches: [] as BranchBlock[],
+        rows: [] as ColumnarRow[],
+      };
     }
 
     const cashIds = cashAccounts.map((account) => account.id);
@@ -172,7 +235,6 @@ export class CashReportService {
         `${account.accountCode} - ${account.accountName}`,
       ]),
     );
-    const branchIds = (query.branchIds ?? []).filter(Boolean);
     const branchLabelById = await this.resolveBranchLabels(branchIds);
 
     const [openingMovements, rangeMovements] = await Promise.all([
@@ -180,6 +242,7 @@ export class CashReportService {
         cashIds,
         accountLabelById,
         branchIds,
+        counterIds,
         branchLabelById,
         beforeDate: startDate,
       }),
@@ -187,115 +250,161 @@ export class CashReportService {
         cashIds,
         accountLabelById,
         branchIds,
+        counterIds,
         branchLabelById,
         startDate,
         endDate,
       }),
     ]);
 
-    const sections = this.buildSections(
-      layout,
+    if (layout === CashReportLayout.COLUMNAR) {
+      const columnar = this.buildColumnar({
+        cashAccounts,
+        openingMovements,
+        rangeMovements,
+        branchLabelById,
+        branchIds,
+      });
+      return {
+        startDate,
+        endDate,
+        scope,
+        layout,
+        message: columnar.rows.length
+          ? ""
+          : "No cash ledger balances found for the selected filters.",
+        columns: columnar.columns,
+        branches: [] as BranchBlock[],
+        rows: columnar.rows,
+      };
+    }
+
+    const branches = this.buildBranches({
+      scope,
       cashAccounts,
       openingMovements,
       rangeMovements,
       branchLabelById,
-    );
-
-    return { columns: COLUMNS, layout, sections };
-  }
-
-  async buildExport(query: CashReportQueryDto, format: CashReportFormat) {
-    const report = await this.buildReport(query);
-    const exportRows = report.sections.flatMap((section) => {
-      const header =
-        report.layout === CashReportLayout.BRANCH_WISE
-          ? `${section.branchLabel} | ${section.accountLabel}`
-          : section.accountLabel;
-      return [
-        ...section.rows.map((row) => ({
-          Section: header,
-          Transaction: row.transactionType,
-          Date: row.date,
-          Type: row.type,
-          "Transaction number": row.number,
-          Party: row.party,
-          Narration: row.narration,
-          Receipt: row.receipts,
-          Payments: row.payments,
-          "Running Balance": row.runningBalance,
-        })),
-        {
-          Section: header,
-          Transaction: "Summary",
-          Date: "",
-          Type: "",
-          "Transaction number": "",
-          Party: "",
-          Narration: "",
-          Receipt: "",
-          Payments: "",
-          "Running Balance": "",
-        },
-        {
-          Section: header,
-          Transaction: "Opening balance",
-          Date: "",
-          Type: "OP",
-          "Transaction number": "",
-          Party: "",
-          Narration: "",
-          Receipt: "",
-          Payments: "",
-          "Running Balance": section.openingBalance,
-        },
-        {
-          Section: header,
-          Transaction: "Total receipts",
-          Date: "",
-          Type: "",
-          "Transaction number": "",
-          Party: "",
-          Narration: "",
-          Receipt: section.totalReceipts,
-          Payments: "",
-          "Running Balance": "",
-        },
-        {
-          Section: header,
-          Transaction: "Total payments",
-          Date: "",
-          Type: "",
-          "Transaction number": "",
-          Party: "",
-          Narration: "",
-          Receipt: "",
-          Payments: section.totalPayments,
-          "Running Balance": "",
-        },
-        {
-          Section: header,
-          Transaction: "Closing balance",
-          Date: "",
-          Type: "CL",
-          "Transaction number": "",
-          Party: "",
-          Narration: "",
-          Receipt: "",
-          Payments: "",
-          "Running Balance": section.closingBalance,
-        },
-      ];
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    return {
+      startDate,
+      endDate,
+      scope,
+      layout,
+      message: branches.length
+        ? ""
+        : "No cash ledger movements found for the selected filters.",
+      columns: COLUMNS.map((column) => ({ ...column })),
+      branches,
+      rows: [] as ColumnarRow[],
+    };
+  }
+
+  async buildExport(
+    query: CashReportQueryDto,
+    format: CashReportFormat,
+    session?: SessionContext,
+  ) {
+    const report = await this.buildReport(query, session);
+    const exportRows: Array<Record<string, string>> = [];
+
+    if (report.layout === CashReportLayout.COLUMNAR) {
+      for (const row of report.rows) {
+        const exportRow: Record<string, string> = { Code: row.code };
+        for (const column of report.columns) {
+          if (column.key === "code") continue;
+          exportRow[column.label] = row.values[column.key] ?? "0.00";
+        }
+        exportRows.push(exportRow);
+      }
+    } else {
+      for (const branch of report.branches) {
+        for (const account of branch.accounts) {
+          const section = `${branch.branchLabel} | ${account.accountLabel}`;
+          for (const row of account.rows) {
+            exportRows.push({
+              Section: section,
+              Transaction: row.transactionType,
+              Date: row.date,
+              Type: row.type,
+              No: row.number,
+              Party: row.party,
+              Narration: row.narration,
+              Receipts: row.receipts,
+              Payments: row.payments,
+              "Running Bal.": row.runningBalance,
+            });
+          }
+        }
+        exportRows.push({
+          Section: `${branch.branchLabel} | Summary of Cash`,
+          Transaction: "Opening Balance",
+          Date: "",
+          Type: "",
+          No: "",
+          Party: "",
+          Narration: "",
+          Receipts: "",
+          Payments: "",
+          "Running Bal.": branch.summary.openingBalance,
+        });
+        exportRows.push({
+          Section: `${branch.branchLabel} | Summary of Cash`,
+          Transaction: "Total Receipts",
+          Date: "",
+          Type: "",
+          No: "",
+          Party: "",
+          Narration: "",
+          Receipts: branch.summary.totalReceipts,
+          Payments: "",
+          "Running Bal.": "",
+        });
+        exportRows.push({
+          Section: `${branch.branchLabel} | Summary of Cash`,
+          Transaction: "Total Payment",
+          Date: "",
+          Type: "",
+          No: "",
+          Party: "",
+          Narration: "",
+          Receipts: "",
+          Payments: branch.summary.totalPayments,
+          "Running Bal.": "",
+        });
+        exportRows.push({
+          Section: `${branch.branchLabel} | Summary of Cash`,
+          Transaction: "Closing Balance",
+          Date: "",
+          Type: "",
+          No: "",
+          Party: "",
+          Narration: "",
+          Receipts: "",
+          Payments: "",
+          "Running Bal.": branch.summary.closingBalance,
+        });
+      }
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(
+      exportRows.length
+        ? exportRows
+        : [{ Message: report.message || "No data" }],
+    );
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Cash Report");
+
+    const filename = `cash-report-${report.startDate}-to-${report.endDate}.${
+      format === CashReportFormat.CSV ? "csv" : "xlsx"
+    }`;
 
     if (format === CashReportFormat.CSV) {
       return {
         buffer: Buffer.from(XLSX.utils.sheet_to_csv(worksheet), "utf8"),
         contentType: "text/csv; charset=utf-8",
-        filename: "cash-report.csv",
+        filename,
       };
     }
 
@@ -303,19 +412,41 @@ export class CashReportService {
       buffer: XLSX.write(workbook, { bookType: "xlsx", type: "buffer" }),
       contentType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      filename: "cash-report.xlsx",
+      filename,
     };
   }
 
-  private async resolveCashAccounts(accountIds?: string[]) {
+  private async resolveCashAccounts(
+    branchIds: string[],
+    accountIds?: string[],
+  ) {
     const accounts = await this.accountRepository.find({
       where: { active: true },
-      relations: ["accountType"],
+      relations: ["accountType", "branchLinks"],
     });
-    const cashAccounts = accounts.filter(isCashLedgerAccount);
-    if (!accountIds?.length) return cashAccounts;
-    const selected = new Set(accountIds);
-    return cashAccounts.filter((account) => selected.has(account.id));
+    let cashAccounts = accounts.filter(isCashLedgerAccount);
+
+    if (branchIds.length) {
+      const links = await this.accountBranchRepository.find({
+        where: { branchId: In(branchIds) },
+        select: ["accountProfileId", "branchId"],
+      });
+      const linkedAccountIds = new Set(
+        links.map((link) => link.accountProfileId),
+      );
+      cashAccounts = cashAccounts.filter((account) => {
+        const hasLinks = (account.branchLinks ?? []).length > 0;
+        if (!hasLinks) return true; // global cash accounts
+        return linkedAccountIds.has(account.id);
+      });
+    }
+
+    if (accountIds?.length) {
+      const selected = new Set(accountIds);
+      cashAccounts = cashAccounts.filter((account) => selected.has(account.id));
+    }
+
+    return cashAccounts;
   }
 
   private async resolveBranchLabels(branchIds: string[]) {
@@ -325,7 +456,7 @@ export class CashReportService {
     return new Map(
       branches.map((branch) => [
         branch.id,
-        toText(branch.name) || toText(branch.code) || branch.id,
+        toText(branch.code) || toText(branch.name) || branch.id,
       ]),
     );
   }
@@ -334,6 +465,7 @@ export class CashReportService {
     cashIds: string[];
     accountLabelById: Map<string, string>;
     branchIds: string[];
+    counterIds: string[];
     branchLabelById: Map<string, string>;
     startDate?: string;
     endDate?: string;
@@ -356,6 +488,7 @@ export class CashReportService {
     cashIds: string[];
     accountLabelById: Map<string, string>;
     branchIds: string[];
+    counterIds: string[];
     branchLabelById: Map<string, string>;
     startDate?: string;
     endDate?: string;
@@ -375,6 +508,11 @@ export class CashReportService {
     if (input.branchIds.length) {
       qb.andWhere("voucher.branchId IN (:...branchIds)", {
         branchIds: input.branchIds,
+      });
+    }
+    if (input.counterIds.length) {
+      qb.andWhere("voucher.counterId IN (:...counterIds)", {
+        counterIds: input.counterIds,
       });
     }
     if (input.beforeDate) {
@@ -436,6 +574,8 @@ export class CashReportService {
           receiptsCents: isReceipt ? amountCents : 0,
           paymentsCents: isReceipt ? 0 : amountCents,
           isReceipt,
+          typeCode: isReceipt ? "CI" : "CO",
+          transactionLabel: isReceipt ? "Receipt" : "Payment",
         });
         continue;
       }
@@ -462,6 +602,8 @@ export class CashReportService {
           receiptsCents: isReceipt ? amountCents : 0,
           paymentsCents: isReceipt ? 0 : amountCents,
           isReceipt,
+          typeCode: "DW",
+          transactionLabel: "Deposit Withdrawals",
         });
       }
     }
@@ -473,6 +615,7 @@ export class CashReportService {
     cashIds: string[];
     accountLabelById: Map<string, string>;
     branchIds: string[];
+    counterIds: string[];
     branchLabelById: Map<string, string>;
     startDate?: string;
     endDate?: string;
@@ -490,6 +633,11 @@ export class CashReportService {
     if (input.branchIds.length) {
       qb.andWhere("tx.branchId IN (:...branchIds)", {
         branchIds: input.branchIds,
+      });
+    }
+    if (input.counterIds.length) {
+      qb.andWhere("tx.counterId IN (:...counterIds)", {
+        counterIds: input.counterIds,
       });
     }
     if (input.beforeDate) {
@@ -558,54 +706,115 @@ export class CashReportService {
         receiptsCents: isReceipt ? amountCents : 0,
         paymentsCents: isReceipt ? 0 : amountCents,
         isReceipt,
+        typeCode: isReceipt ? "CI" : "CO",
+        transactionLabel: isReceipt ? "Receipt" : "Payment",
       });
     }
 
     return movements;
   }
 
-  private buildSections(
-    layout: CashReportLayout,
-    cashAccounts: AccountProfile[],
-    openingMovements: Movement[],
-    rangeMovements: Movement[],
-    branchLabelById: Map<string, string>,
-  ): ReportSection[] {
+  private buildColumnar(input: {
+    cashAccounts: AccountProfile[];
+    openingMovements: Movement[];
+    rangeMovements: Movement[];
+    branchLabelById: Map<string, string>;
+    branchIds: string[];
+  }) {
+    const branchIds = (
+      input.branchIds.length
+        ? input.branchIds
+        : Array.from(input.branchLabelById.keys())
+    ).filter(Boolean);
+
+    const sortedBranches = branchIds
+      .map((id) => ({
+        id,
+        label: input.branchLabelById.get(id) || id,
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+
+    const closingByKey = new Map<string, number>();
+    const applyMovement = (movement: Movement) => {
+      const key = `${movement.branchId}::${movement.accountId}`;
+      closingByKey.set(
+        key,
+        (closingByKey.get(key) ?? 0) +
+          movement.receiptsCents -
+          movement.paymentsCents,
+      );
+    };
+    input.openingMovements.forEach(applyMovement);
+    input.rangeMovements.forEach(applyMovement);
+
+    const columns: ReportColumn[] = [
+      { key: "code", label: "Code" },
+      ...sortedBranches.map((branch) => ({
+        key: branch.id,
+        label: branch.label,
+      })),
+    ];
+
+    const rows: ColumnarRow[] = [...input.cashAccounts]
+      .sort((left, right) =>
+        toText(left.accountCode).localeCompare(toText(right.accountCode)),
+      )
+      .map((account) => {
+        const values: Record<string, string> = {};
+        for (const branch of sortedBranches) {
+          const amountCents =
+            closingByKey.get(`${branch.id}::${account.id}`) ?? 0;
+          values[branch.id] = money(amountCents);
+        }
+        return {
+          accountId: account.id,
+          code: toText(account.accountCode) || account.id,
+          values,
+        };
+      });
+
+    return { columns, rows };
+  }
+
+  private buildBranches(input: {
+    scope: CashReportScope;
+    cashAccounts: AccountProfile[];
+    openingMovements: Movement[];
+    rangeMovements: Movement[];
+    branchLabelById: Map<string, string>;
+  }): BranchBlock[] {
+    const isBranchScope = input.scope === CashReportScope.BRANCH;
+
     const openingByKey = new Map<string, number>();
-    for (const movement of openingMovements) {
-      const key =
-        layout === CashReportLayout.BRANCH_WISE
-          ? `${movement.branchId}::${movement.accountId}`
-          : movement.accountId;
-      const current = openingByKey.get(key) ?? 0;
+    for (const movement of input.openingMovements) {
+      const key = isBranchScope
+        ? `${movement.branchId}::${movement.accountId}`
+        : movement.accountId;
       openingByKey.set(
         key,
-        current + movement.receiptsCents - movement.paymentsCents,
+        (openingByKey.get(key) ?? 0) +
+          movement.receiptsCents -
+          movement.paymentsCents,
       );
     }
 
-    const sectionMap = new Map<
-      string,
-      {
-        branchId: string | null;
-        branchLabel: string;
-        accountId: string;
-        accountLabel: string;
-        openingCents: number;
-        movements: Movement[];
-      }
-    >();
+    type AccSection = {
+      branchId: string | null;
+      branchLabel: string;
+      accountId: string;
+      accountLabel: string;
+      openingCents: number;
+      movements: Movement[];
+    };
 
-    const ensureSection = (
+    const sectionMap = new Map<string, AccSection>();
+    const ensure = (
       branchId: string | null,
       branchLabel: string,
       accountId: string,
       accountLabel: string,
     ) => {
-      const key =
-        layout === CashReportLayout.BRANCH_WISE
-          ? `${branchId}::${accountId}`
-          : accountId;
+      const key = isBranchScope ? `${branchId}::${accountId}` : accountId;
       let section = sectionMap.get(key);
       if (!section) {
         section = {
@@ -621,52 +830,49 @@ export class CashReportService {
       return section;
     };
 
-    if (layout === CashReportLayout.CONSOLIDATED) {
-      for (const account of cashAccounts) {
-        ensureSection(
+    if (!isBranchScope) {
+      for (const account of input.cashAccounts) {
+        ensure(
           null,
-          "All Branches",
+          "ALL",
           account.id,
           `${account.accountCode} - ${account.accountName}`,
         );
       }
     }
 
-    for (const movement of rangeMovements) {
-      const section = ensureSection(
-        layout === CashReportLayout.BRANCH_WISE ? movement.branchId : null,
-        layout === CashReportLayout.BRANCH_WISE
-          ? movement.branchLabel
-          : "All Branches",
+    for (const movement of input.rangeMovements) {
+      ensure(
+        isBranchScope ? movement.branchId : null,
+        isBranchScope ? movement.branchLabel : "ALL",
         movement.accountId,
         movement.accountLabel,
-      );
-      section.movements.push(movement);
+      ).movements.push(movement);
     }
 
-    if (layout === CashReportLayout.BRANCH_WISE) {
+    if (isBranchScope) {
       for (const [key, openingCents] of openingByKey.entries()) {
         if (sectionMap.has(key)) continue;
         const [branchId, accountId] = key.split("::");
-        const account = cashAccounts.find((item) => item.id === accountId);
+        const account = input.cashAccounts.find((item) => item.id === accountId);
         if (!account) continue;
-        ensureSection(
+        ensure(
           branchId,
-          branchLabelById.get(branchId) || branchId,
+          input.branchLabelById.get(branchId) || branchId,
           accountId,
           `${account.accountCode} - ${account.accountName}`,
         ).openingCents = openingCents;
       }
     }
 
-    const sections = Array.from(sectionMap.values())
+    const accountSections = Array.from(sectionMap.values())
       .map((section) => {
         let running = section.openingCents;
         let totalReceiptsCents = 0;
         let totalPaymentsCents = 0;
         const rows: ReportRow[] = [
           {
-            transactionType: "Opening balance",
+            transactionType: "Opening Balance",
             date: "",
             type: "OP",
             number: "",
@@ -674,7 +880,7 @@ export class CashReportService {
             narration: "",
             receipts: "",
             payments: "",
-            runningBalance: money(running),
+            runningBalance: balanceLabel(running),
           },
         ];
 
@@ -683,9 +889,9 @@ export class CashReportService {
           totalPaymentsCents += movement.paymentsCents;
           running += movement.receiptsCents - movement.paymentsCents;
           rows.push({
-            transactionType: movement.isReceipt ? "Receipt" : "Payment",
+            transactionType: movement.transactionLabel,
             date: movement.transactionDate,
-            type: movement.isReceipt ? "CI" : "CO",
+            type: movement.typeCode,
             number: movement.number,
             party: movement.party,
             narration: movement.narration,
@@ -695,12 +901,12 @@ export class CashReportService {
             payments: movement.paymentsCents
               ? money(movement.paymentsCents)
               : "",
-            runningBalance: money(running),
+            runningBalance: balanceLabel(running),
           });
         }
 
         rows.push({
-          transactionType: "Closing balance",
+          transactionType: "Closing Balance",
           date: "",
           type: "CL",
           number: "",
@@ -708,27 +914,81 @@ export class CashReportService {
           narration: "",
           receipts: "",
           payments: "",
-          runningBalance: money(running),
+          runningBalance: balanceLabel(running),
         });
+
+        const hasActivity =
+          section.openingCents !== 0 ||
+          totalReceiptsCents !== 0 ||
+          totalPaymentsCents !== 0 ||
+          section.movements.length > 0;
 
         return {
           branchId: section.branchId,
           branchLabel: section.branchLabel,
           accountId: section.accountId,
           accountLabel: section.accountLabel,
-          openingBalance: money(section.openingCents),
-          totalReceipts: money(totalReceiptsCents),
-          totalPayments: money(totalPaymentsCents),
-          closingBalance: money(running),
+          openingCents: section.openingCents,
+          totalReceiptsCents,
+          totalPaymentsCents,
+          closingCents: running,
           rows,
+          hasActivity,
         };
       })
+      .filter((section) => section.hasActivity)
       .sort((left, right) => {
         const branchCompare = left.branchLabel.localeCompare(right.branchLabel);
         if (branchCompare !== 0) return branchCompare;
         return left.accountLabel.localeCompare(right.accountLabel);
       });
 
-    return sections;
+    const byBranch = new Map<string, typeof accountSections>();
+    for (const section of accountSections) {
+      const key = section.branchId ?? "ALL";
+      const list = byBranch.get(key) ?? [];
+      list.push(section);
+      byBranch.set(key, list);
+    }
+
+    return Array.from(byBranch.entries())
+      .map(([, sections]) => {
+        const openingCents = sections.reduce(
+          (sum, section) => sum + section.openingCents,
+          0,
+        );
+        const totalReceiptsCents = sections.reduce(
+          (sum, section) => sum + section.totalReceiptsCents,
+          0,
+        );
+        const totalPaymentsCents = sections.reduce(
+          (sum, section) => sum + section.totalPaymentsCents,
+          0,
+        );
+        const closingCents = sections.reduce(
+          (sum, section) => sum + section.closingCents,
+          0,
+        );
+        return {
+          branchId: sections[0]?.branchId ?? null,
+          branchLabel: sections[0]?.branchLabel ?? "ALL",
+          accounts: sections.map((section) => ({
+            accountId: section.accountId,
+            accountLabel: section.accountLabel,
+            openingBalance: money(section.openingCents),
+            totalReceipts: money(section.totalReceiptsCents),
+            totalPayments: money(section.totalPaymentsCents),
+            closingBalance: money(section.closingCents),
+            rows: section.rows,
+          })),
+          summary: {
+            openingBalance: money(openingCents),
+            totalReceipts: money(totalReceiptsCents),
+            totalPayments: money(totalPaymentsCents),
+            closingBalance: money(closingCents),
+          },
+        };
+      })
+      .sort((left, right) => left.branchLabel.localeCompare(right.branchLabel));
   }
 }

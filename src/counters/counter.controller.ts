@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Session,
+  ValidationPipe,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -16,12 +17,14 @@ import {
   ApiResponse,
   ApiCookieAuth,
   ApiParam,
+  ApiBody,
 } from "@nestjs/swagger";
 import { CounterService } from "./counter.service";
 import { CreateCounterDto } from "./dto/create-counter.dto";
 import { UpdateCounterDto } from "./dto/update-counter.dto";
 import { CounterResponseDto } from "./dto/counter-response.dto";
 import { CounterListQueryDto } from "./dto/counter-list-query.dto";
+import { UpdateCounterPermissionsDto } from "./dto/update-counter-permissions.dto";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { PaginatedResponseDto } from "../common/pagination";
@@ -61,14 +64,16 @@ export class CounterController {
   @ApiParam({ name: "id", description: "Counter UUID" })
   @ApiResponse({ status: 200, description: "Success message" })
   @ApiResponse({ status: 404, description: "Counter not found" })
+  @ApiBody({ type: UpdateCounterPermissionsDto })
   async updatePermissions(
     @Param("id") id: string,
     @Body() body: Record<string, Record<string, boolean>>,
     @Session() session: any,
   ): Promise<{ message: string }> {
+    const grid = (body as any)?.permissions ?? body;
     return this.counterService.updateCounterPermissions(
       id,
-      body,
+      grid,
       session.userId,
     );
   }
