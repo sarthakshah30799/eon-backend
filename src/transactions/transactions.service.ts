@@ -329,8 +329,14 @@ type TransactionPaymentPayload = {
   paymentMethod: TransactionPaymentMethod;
   paymentDirection?: TransactionPaymentDirection;
   referenceNumber?: string | null;
+  /** Alias accepted from some clients; normalized to referenceNumber. */
+  chequeNumber?: string | null;
   referenceDate?: string | null;
+  /** Alias accepted from some clients; normalized to referenceDate. */
+  chequeDate?: string | null;
   branchName?: string | null;
+  /** Alias accepted from some clients; normalized to branchName. */
+  chequeBranch?: string | null;
   drawnOn?: string | null;
   chequePageId?: string | null;
   chequePageSnapshot?: Record<string, unknown> | null;
@@ -2923,11 +2929,6 @@ export class TransactionsService {
         );
         const product = await resolveProduct(String(row.productId));
         const productEntity = await resolveProductEntity(String(row.productId));
-        assertProductAvailableForContext(productEntity, {
-          kind: "sale_purchase",
-          transactionType: transactionPayload.transactionType,
-          tradeMode: transactionPayload.tradeMode ?? TradeMode.BULK,
-        });
         const isCardItem = isCardProductCode(productEntity.productCode);
         const isTpItem =
           String(productEntity.productCode ?? "").trim().toUpperCase() === "TP";
@@ -2936,6 +2937,22 @@ export class TransactionsService {
           (transactionPayload.transactionType === TransactionType.PURCHASE
             ? isSurrenderBuyingProduct(productEntity)
             : isSurrenderBulkSaleProduct(productEntity));
+        // Surrender issuer sale must fail on tradeMode before the generic
+        // retail-selling availability check (EM is bulk-sell only).
+        if (
+          isEmItem &&
+          transactionPayload.transactionType === TransactionType.SALE &&
+          transactionPayload.tradeMode !== TradeMode.BULK
+        ) {
+          throw new BadRequestException(
+            "Surrender issuer sale must use bulk trade mode",
+          );
+        }
+        assertProductAvailableForContext(productEntity, {
+          kind: "sale_purchase",
+          transactionType: transactionPayload.transactionType,
+          tradeMode: transactionPayload.tradeMode ?? TradeMode.BULK,
+        });
         const isTtItem = isTtProductCode(productEntity.productCode);
         const isMultiCurrencyCard = isMultiCurrencyCardProduct(
           productEntity.productCode,
@@ -3351,11 +3368,38 @@ export class TransactionsService {
             where: { id: String(row.cardId) },
           });
           if (cardEntity) {
+            // Never put encrypted bytea Buffer into jsonb — TypeORM deep-compare
+            // on later saves calls Buffer.equals and throws ERR_INVALID_ARG_TYPE.
+            let maskedCardNumber: string | null = null;
+            try {
+              const decrypted = (await this.cardStockCardRepository.manager.query(
+                `SELECT public.decrypt_card_number(card_number) AS "cardNumber"
+                   FROM product_stock_products
+                  WHERE id = $1`,
+                [cardEntity.id],
+              )) as Array<{ cardNumber?: string }>;
+              const clear = String(decrypted?.[0]?.cardNumber ?? "");
+              if (clear.length <= 8) {
+                maskedCardNumber =
+                  clear.slice(0, 4) + "X".repeat(Math.max(clear.length - 4, 0));
+              } else if (clear) {
+                maskedCardNumber =
+                  clear.slice(0, 4) +
+                  "X".repeat(clear.length - 8) +
+                  clear.slice(-4);
+              }
+            } catch {
+              maskedCardNumber = null;
+            }
             resolvedCardSnapshot = {
               id: cardEntity.id,
+              series: cardEntity.series,
               kitNumber: cardEntity.kitNumber,
-              cardNumber: cardEntity.cardNumber,
+              denomination: cardEntity.denomination,
+              amount: cardEntity.amount,
+              expirationDate: cardEntity.expirationDate,
               status: cardEntity.status,
+              maskedCardNumber,
             };
           }
         }
@@ -3711,7 +3755,21 @@ export class TransactionsService {
       const savedPaymentRows: TransactionPayment[] = [];
       const advanceRequests: Array<AdvanceApplicationPayloadDto | null> = [];
       for (let index = 0; index < paymentRows.length; index += 1) {
-        const row = paymentRows[index];
+        const row: TransactionPaymentPayload = {
+          ...paymentRows[index],
+          referenceNumber:
+            paymentRows[index].referenceNumber ??
+            paymentRows[index].chequeNumber ??
+            null,
+          referenceDate:
+            paymentRows[index].referenceDate ??
+            paymentRows[index].chequeDate ??
+            null,
+          branchName:
+            paymentRows[index].branchName ??
+            paymentRows[index].chequeBranch ??
+            null,
+        };
         const paymentMethod = this.resolvePaymentMethod(row.paymentMethod);
         const advanceVoucherId = normalizeNullableString(row.advanceVoucherId);
         const isAdvance = Boolean(
@@ -3971,9 +4029,13 @@ export class TransactionsService {
       }
 
       const totalPaid = Number((cashTotal + chequeTotal).toFixed(2));
+      // Corporate/individual contexts still require payment rows above, but when
+      // credit policy allows outstanding, partial payment must not be forced to
+      // equal the full payable total.
       const shouldMatchPaymentTotal =
         !isFakeCurrency &&
-        (requiresPaymentRows || (paymentRows.length > 0 && !allowPartialPayment));
+        paymentRows.length > 0 &&
+        !allowPartialPayment;
       if (
         !isFakeCurrency &&
         paymentRows.length > 0 &&

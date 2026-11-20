@@ -122,7 +122,11 @@ export const buildSurrenderProductSnapshot = (product: {
   code: product.productCode,
   name: product.productDescription,
   label: `${product.productCode} - ${product.productDescription}`,
-  maintainBlankStockOfProduct: product.maintainBlankStockOfProduct === false,
+  // Preserve the product flag as-is so isSurrenderUnitSnapshot (flag === false)
+  // correctly recognizes surrender / EM balances.
+  maintainBlankStockOfProduct: product.maintainBlankStockOfProduct === false
+    ? false
+    : product.maintainBlankStockOfProduct ?? null,
 });
 
 export const isBlankStockCardProductCode = (

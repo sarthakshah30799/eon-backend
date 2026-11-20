@@ -595,17 +595,8 @@ export class ProductSettlementService {
     if (!selling) {
       throw new BadRequestException("Selling branch not found");
     }
-    let ho = await this.branchRepository.findOne({
-      where: { isHeadOffice: true, isActive: true },
-    });
-    if (!ho) {
-      ho = await this.branchRepository.findOne({
-        where: { isHeadOffice: true },
-      });
-    }
-    if (!ho) {
-      ho = selling;
-    }
+    // Same HO resolution as CARD/TT: selling HO auto-posts; non-HO stays PENDING_HO_ACCEPTANCE.
+    const ho = await this.getSettlementHo(selling.id, selling);
 
     const feAmount = Number(item.quantity);
     const buyRate = Number(item.rate);
@@ -1354,6 +1345,11 @@ export class ProductSettlementService {
         s.sale_buy_rate AS "saleBuyRate", s.buy_rate AS "buyRate",
         s.booking_rate AS "bookingRate", s.settlement_amount AS "settlementAmount",
         s.branch_id AS "branchId", s.branch_snapshot AS "branchSnapshot",
+        s.ho_branch_id AS "hoBranchId", s.ho_branch_snapshot AS "hoBranchSnapshot",
+        s.deal_cover_id AS "dealCoverId",
+        s.transaction_id AS "transactionId",
+        s.transaction_item_id AS "transactionItemId",
+        s.buy_rate_snapshot AS "buyRateSnapshot",
         s.issuer_party_profile_id AS "issuerPartyProfileId",
         s.issuer_party_profile_snapshot AS "issuerPartyProfileSnapshot",
         s.currency_id AS "currencyId", s.currency_snapshot AS "currencySnapshot",

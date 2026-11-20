@@ -475,9 +475,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
         {
           paymentMethod: 'CHEQUE',
           amount: 88500,
-          chequeNumber: 'CHQ888111',
-          chequeDate: new Date().toISOString().slice(0, 10),
-          chequeBranch: 'Fort',
+          accountId: registry.masters.bankAccountId,
+          referenceNumber: 'CHQ888111',
+          referenceDate: new Date().toISOString().slice(0, 10),
+          branchName: 'Fort',
           drawnOn: 'Axis Bank',
         },
       ],
@@ -515,9 +516,10 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
         {
           paymentMethod: 'CHEQUE',
           amount: 500 * 88.5,
-          chequeNumber: 'CHQ888112',
-          chequeDate: new Date().toISOString().slice(0, 10),
-          chequeBranch: 'Fort',
+          accountId: registry.masters.bankAccountId,
+          referenceNumber: 'CHQ888112',
+          referenceDate: new Date().toISOString().slice(0, 10),
+          branchName: 'Fort',
           drawnOn: 'Axis Bank',
         },
       ],
@@ -556,14 +558,17 @@ describe('Module 3A: Single Currency Forex Card (CC) Full Lifecycle, Surrender &
           paymentMethod: 'CHEQUE',
           amount: 88500,
           accountId: registry.masters.bankAccountId,
-          chequeNumber: 'CHQ888113',
-          chequeDate: new Date().toISOString().slice(0, 10),
-          chequeBranch: 'Fort',
+          referenceNumber: 'CHQ888113',
+          referenceDate: new Date().toISOString().slice(0, 10),
+          branchName: 'Fort',
           drawnOn: 'Axis Bank',
         },
       ],
     });
 
+    if (![200, 201].includes(res.status)) {
+      TestLogger.warn(`3A.6H bulk issuer sale failed (${res.status}): ${JSON.stringify(res.data)}`);
+    }
     expect([200, 201]).toContain(res.status);
     expect(res.data?.id).toBeDefined();
     reconciler.recordOperationDelta({
