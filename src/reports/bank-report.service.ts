@@ -168,7 +168,11 @@ export class BankReportService {
     if (startDate > endDate)
       throw new BadRequestException("Start date cannot be after end date");
 
-    const layout = query.layout ?? BankReportLayout.BRANCH_WISE;
+    const layout =
+      query.layout ??
+      (query.scope === "consolidated"
+        ? BankReportLayout.CONSOLIDATED
+        : BankReportLayout.BRANCH_WISE);
     const bankAccounts = await this.resolveBankAccounts(query.accountIds);
     if (!bankAccounts.length) {
       return { columns: COLUMNS, layout, sections: [] as ReportSection[] };
@@ -182,6 +186,7 @@ export class BankReportService {
       ]),
     );
     const branchIds = (query.branchIds ?? []).filter(Boolean);
+    const counterIds = (query.counterIds ?? []).filter(Boolean);
     const branchLabelById = await this.resolveBranchLabels(branchIds);
 
     const [openingMovements, rangeMovements] = await Promise.all([
@@ -189,6 +194,7 @@ export class BankReportService {
         bankIds,
         accountLabelById,
         branchIds,
+        counterIds,
         branchLabelById,
         beforeDate: startDate,
       }),
@@ -196,6 +202,7 @@ export class BankReportService {
         bankIds,
         accountLabelById,
         branchIds,
+        counterIds,
         branchLabelById,
         startDate,
         endDate,
@@ -355,6 +362,7 @@ export class BankReportService {
     bankIds: string[];
     accountLabelById: Map<string, string>;
     branchIds: string[];
+    counterIds: string[];
     branchLabelById: Map<string, string>;
     startDate?: string;
     endDate?: string;
@@ -377,6 +385,7 @@ export class BankReportService {
     bankIds: string[];
     accountLabelById: Map<string, string>;
     branchIds: string[];
+    counterIds: string[];
     branchLabelById: Map<string, string>;
     startDate?: string;
     endDate?: string;
@@ -396,6 +405,11 @@ export class BankReportService {
     if (input.branchIds.length) {
       qb.andWhere("voucher.branchId IN (:...branchIds)", {
         branchIds: input.branchIds,
+      });
+    }
+    if (input.counterIds.length) {
+      qb.andWhere("voucher.counterId IN (:...counterIds)", {
+        counterIds: input.counterIds,
       });
     }
     if (input.beforeDate) {
@@ -498,6 +512,7 @@ export class BankReportService {
     bankIds: string[];
     accountLabelById: Map<string, string>;
     branchIds: string[];
+    counterIds: string[];
     branchLabelById: Map<string, string>;
     startDate?: string;
     endDate?: string;
@@ -515,6 +530,11 @@ export class BankReportService {
     if (input.branchIds.length) {
       qb.andWhere("tx.branchId IN (:...branchIds)", {
         branchIds: input.branchIds,
+      });
+    }
+    if (input.counterIds.length) {
+      qb.andWhere("tx.counterId IN (:...counterIds)", {
+        counterIds: input.counterIds,
       });
     }
     if (input.beforeDate) {

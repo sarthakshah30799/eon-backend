@@ -282,7 +282,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       TestLogger.success(`Payment voucher re-opened cleanly via GET /payments/:id without 500 errors`);
     });
 
-    it('8.6B2 should verify cash payment voucher renders in Cash Report and Cash Ledger frontend tables', async () => {
+    it('8.6B2 should verify cash payment voucher renders in Cash Report frontend table', async () => {
       const cashRes = await client.get('/reports/cash-report', {
         startDate: '2026-01-01',
         endDate: '2026-12-31',
@@ -290,13 +290,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       expect(cashRes.status).toBe(200);
       ReportAccuracyValidator.verifyFrontendContract('cash-report', cashRes.data);
 
-      const ledgerRes = await client.get('/reports/cash-ledger-report', {
-        startDate: '2026-01-01',
-        endDate: '2026-12-31',
-      });
-      expect(ledgerRes.status).toBe(200);
-      ReportAccuracyValidator.verifyFrontendContract('cash-ledger', ledgerRes.data);
-      TestLogger.success('Cash payment voucher verified on Cash Ledger frontend table');
+      TestLogger.success('Cash payment voucher verified on Cash Report frontend table');
     });
 
     it('8.6C should reject payment voucher submission with a non-cash/bank account as header (negative test)', async () => {

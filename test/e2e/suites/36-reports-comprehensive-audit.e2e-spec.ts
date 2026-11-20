@@ -91,19 +91,15 @@ describe('Module 36: 18-Report Frontend Display & Data Accuracy Comprehensive Au
     TestLogger.success(`Currency Balance Report verified across ${renderedView.itemRows.length} counters`);
   });
 
-  it('36.3 should audit Cash Report and Cash Ledger for running balance integrity', async () => {
-    TestLogger.step('36.3', 'Auditing Cash Report & Cash Ledger for running balance accuracy');
+  it('36.3 should audit Cash Report for running balance integrity', async () => {
+    TestLogger.step('36.3', 'Auditing Cash Report for running balance accuracy');
 
     const cashRes = await client.get('/reports/cash-report', defaultDateRange);
     expect([200, 304]).toContain(cashRes.status);
     ReportAccuracyValidator.verifyFrontendContract('cash-report', cashRes.data);
     ReportAccuracyValidator.verifyMathematicalInvariants('cash-report', cashRes.data);
 
-    const ledgerRes = await client.get('/reports/cash-ledger-report', defaultDateRange);
-    expect([200, 304]).toContain(ledgerRes.status);
-    ReportAccuracyValidator.verifyFrontendContract('cash-ledger', ledgerRes.data);
-
-    TestLogger.success('Cash Report & Cash Ledger audited successfully');
+    TestLogger.success('Cash Report audited successfully');
   });
 
   it('36.4 should audit Bank Report and Bank Reconciliation Report for ledger debit/credit postings', async () => {

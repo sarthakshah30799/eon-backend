@@ -1,4 +1,11 @@
-import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Query,
+  Res,
+  Session,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiCookieAuth,
   ApiOperation,
@@ -7,6 +14,7 @@ import {
 } from "@nestjs/swagger";
 import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
+import { SessionContext } from "../auth/types/session-context";
 import {
   CashReportFormat,
   CashReportQueryDto,
@@ -21,21 +29,26 @@ export class CashReportController {
   constructor(private readonly reportService: CashReportService) {}
 
   @Get("cash-report")
-  @ApiOperation({ summary: "Get cash ledger report data" })
+  @ApiOperation({ summary: "Get cash report data" })
   @ApiResponse({ status: 200, description: "Cash report response" })
-  async getCashReport(@Query() query: CashReportQueryDto) {
-    return this.reportService.buildReport(query);
+  getCashReport(
+    @Query() query: CashReportQueryDto,
+    @Session() session: SessionContext,
+  ) {
+    return this.reportService.buildReport(query, session);
   }
 
   @Get("cash-report/export")
   @ApiOperation({ summary: "Download cash report as CSV or Excel" })
   async exportCashReport(
     @Query() query: CashReportQueryDto,
+    @Session() session: SessionContext,
     @Res() res: Response,
   ) {
     const payload = await this.reportService.buildExport(
       query,
       query.format ?? CashReportFormat.XLSX,
+      session,
     );
     res.status(200);
     res.setHeader("Content-Type", payload.contentType);
