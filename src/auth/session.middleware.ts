@@ -27,8 +27,9 @@ export class SessionMiddleware implements NestMiddleware {
       password: this.configService.database.password,
       database: this.configService.database.database,
       ssl,
-      max: 5,
+      max: 20,
       idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
     });
 
     this.sessionMiddleware = session({

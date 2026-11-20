@@ -11,7 +11,7 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
 
   let testReceiptId: string;
   let testRefundId: string;
-  const testPan = 'ABCDE1234F';
+  let testPan = 'ABCDE1234F';
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -21,6 +21,7 @@ describe('Module 25: Advance Refund & Knock-Off Lifecycle', () => {
     TestLogger.header('Module 25: Advance Refund & Knock-Off');
     await workplaceManager.asAdmin();
     await registry.initialize(client);
+    testPan = registry.masters.corporatePartyProfile?.panNo || 'ABCDE1234F';
   });
 
   it('25.1 should query available advance receipts endpoint', async () => {

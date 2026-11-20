@@ -1147,6 +1147,34 @@ export class CreditRequestFundService {
         "Only HO / Admin can approve Credit Request Fund",
       );
 
+    const pendingHeader = await this.headerRepository.findOne({
+      where: { id },
+    });
+    if (!pendingHeader)
+      throw new NotFoundException("Credit Request Fund not found");
+    if (pendingHeader.status !== CreditRequestFundStatus.PENDING)
+      throw new BadRequestException("Only pending requests can be approved");
+
+    const [branchControl, advanceControl, destBranch, reqBranch] =
+      await Promise.all([
+        this.voucherService.getBranchControlAccount(),
+        this.voucherService.getAdvanceControlAccount(),
+        this.branchRepository.findOne({
+          where: { id: pendingHeader.destinationBranchId },
+        }),
+        this.branchRepository.findOne({ where: { id: pendingHeader.branchId } }),
+      ]);
+    if (!destBranch || !reqBranch)
+      throw new NotFoundException("Branch not found for approval");
+
+    const destCounterId = await this.resolveBranchCounterId(
+      destBranch.id,
+      session,
+    );
+    const approvedDate =
+      toDateOnly(dto.transactionDate) ||
+      (await this.resolveApprovalDate(destBranch.id, destCounterId, actorId));
+
     return this.database2.transaction(async (manager) => {
       const headerRepo = manager.getRepository(CreditRequestFund);
       const header = await headerRepo
@@ -1158,26 +1186,6 @@ export class CreditRequestFundService {
         throw new NotFoundException("Credit Request Fund not found");
       if (header.status !== CreditRequestFundStatus.PENDING)
         throw new BadRequestException("Only pending requests can be approved");
-
-      const [branchControl, advanceControl, destBranch, reqBranch] =
-        await Promise.all([
-          this.voucherService.getBranchControlAccount(),
-          this.voucherService.getAdvanceControlAccount(),
-          this.branchRepository.findOne({
-            where: { id: header.destinationBranchId },
-          }),
-          this.branchRepository.findOne({ where: { id: header.branchId } }),
-        ]);
-      if (!destBranch || !reqBranch)
-        throw new NotFoundException("Branch not found for approval");
-
-      const destCounterId = await this.resolveBranchCounterId(
-        destBranch.id,
-        session,
-      );
-      const approvedDate =
-        toDateOnly(dto.transactionDate) ||
-        (await this.resolveApprovalDate(destBranch.id, destCounterId, actorId));
 
       const baseIdempotency = `crf-approve:${header.id}`;
       const common = {

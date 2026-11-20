@@ -63,6 +63,7 @@ export class ApiClient {
     password: string,
     label: string = "User",
   ): Promise<ApiResponse> {
+    this.clearCookies();
     const res = await this.post("/auth/login", { email, password });
     if (res.ok) {
       this.currentUser = {
@@ -219,7 +220,12 @@ export class ApiClient {
   ): Promise<Response> {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        return await fetch(url, init);
+        const timeoutMs = Number(process.env.E2E_FETCH_TIMEOUT_MS) || 60000;
+        const timeoutSignal = AbortSignal.timeout(timeoutMs);
+        const signal = init.signal
+          ? AbortSignal.any([init.signal, timeoutSignal])
+          : timeoutSignal;
+        return await fetch(url, { ...init, signal });
       } catch (err: any) {
         const isNetworkErr =
           err?.cause?.code === "ECONNRESET" ||

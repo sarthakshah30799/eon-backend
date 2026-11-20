@@ -9,10 +9,14 @@ import {
   Session,
   UseGuards,
 } from "@nestjs/common";
-import { ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiCookieAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
 import { TransactionAd1Service } from "./transaction-ad1.service";
 import { TransactionAd1ListQueryDto } from "./dto/transaction-ad1-list-query.dto";
+import {
+  CreateTransactionAd1Dto,
+  UpdateTransactionAd1Dto,
+} from "./dto/create-transaction-ad1.dto";
 import { PaginatedResponseDto } from "../common/pagination";
 import { TransactionAd1 } from "./entities/transaction-ad1.entity";
 
@@ -25,13 +29,22 @@ export class TransactionAd1Controller {
 
   @Post()
   @ApiOperation({ summary: "Create an AD1 transaction" })
+  @ApiBody({ type: CreateTransactionAd1Dto })
   async create(@Body() body: Record<string, any>, @Session() session: any) {
     const performedById = session?.userId ?? null;
+    const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHoStaff);
+    const effectiveBranchId = canSelectWorkplace
+      ? (body?.branchId?.trim() || session?.activeBranchId) ?? null
+      : session?.activeBranchId ?? null;
+    const effectiveCounterId = canSelectWorkplace
+      ? (body?.counterId?.trim() || session?.activeCounterId) ?? null
+      : session?.activeCounterId ?? null;
+
     return this.ad1Service.create(
-      body,
+      body as any,
       performedById,
-      session?.activeBranchId ?? null,
-      session?.activeCounterId ?? null,
+      effectiveBranchId,
+      effectiveCounterId,
     );
   }
 
@@ -74,18 +87,27 @@ export class TransactionAd1Controller {
 
   @Put(":id")
   @ApiOperation({ summary: "Update an AD1 transaction" })
+  @ApiBody({ type: UpdateTransactionAd1Dto })
   async update(
     @Param("id") id: string,
     @Body() body: Record<string, any>,
     @Session() session: any,
   ) {
     const performedById = session?.userId ?? null;
+    const canSelectWorkplace = Boolean(session?.isAdmin || session?.isHoStaff);
+    const effectiveBranchId = canSelectWorkplace
+      ? (body?.branchId?.trim() || session?.activeBranchId) ?? null
+      : session?.activeBranchId ?? null;
+    const effectiveCounterId = canSelectWorkplace
+      ? (body?.counterId?.trim() || session?.activeCounterId) ?? null
+      : session?.activeCounterId ?? null;
+
     return this.ad1Service.update(
       id,
-      body,
+      body as any,
       performedById,
-      session?.activeBranchId ?? null,
-      session?.activeCounterId ?? null,
+      effectiveBranchId,
+      effectiveCounterId,
     );
   }
 

@@ -274,6 +274,9 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
+    const testPan414 = `AAPPA${Math.floor(1000 + Math.random() * 9000)}A`;
+    const testPass414 = `P${Math.floor(1000000 + Math.random() * 9000000)}`;
+
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
       branchId: registry.masters.branchA.id,
@@ -284,9 +287,9 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
         firstName: 'Aarav',
         lastName: 'Sharma',
         nationalityType: 'INDIAN',
-        pan: 'ABCDE1234F',
+        pan: testPan414,
         panHolderName: 'Aarav Sharma',
-        passportNumber: 'Z1122334',
+        passportNumber: testPass414,
         paidByPanNumber: 'FGHIJ6789K',
         paidByPanHolderName: 'Rajesh Sharma',
         paidByPanDob: '1970-01-01',
@@ -308,6 +311,9 @@ describe('Module 4: Passenger AML, KYC, Identity & LRS Regulatory Rules', () => 
       ],
     });
 
+    if (![200, 201].includes(res.status)) {
+      TestLogger.warn(`4.14 third-party PAN transaction failed (${res.status}): ${JSON.stringify(res.data)}`);
+    }
     expect([200, 201]).toContain(res.status);
     TestLogger.success('Third-party Paid By PAN transaction recorded successfully');
   });

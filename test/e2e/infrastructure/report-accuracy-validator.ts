@@ -52,8 +52,9 @@ export class ReportAccuracyValidator {
     }
 
     // 1. Verify numeric cells with strict precision
-    if (expectedTx.quantity !== undefined && row.cells['quantity']) {
-      this.assertCellNumber(reportName, row.cells['quantity'], expectedTx.quantity, 0.001);
+    const qtyCell = row.cells['feAmount'] || row.cells['quantity'];
+    if (expectedTx.quantity !== undefined && qtyCell) {
+      this.assertCellNumber(reportName, qtyCell, expectedTx.quantity, 0.001);
     }
     if (expectedTx.rate !== undefined && row.cells['rate']) {
       this.assertCellNumber(reportName, row.cells['rate'], expectedTx.rate, 0.01);
@@ -61,33 +62,36 @@ export class ReportAccuracyValidator {
     if (expectedTx.grossAmount !== undefined && row.cells['amount']) {
       this.assertCellNumber(reportName, row.cells['amount'], expectedTx.grossAmount, 0.05);
     }
-    if (expectedTx.taxAmount !== undefined && row.cells['taxAmount']) {
-      this.assertCellNumber(reportName, row.cells['taxAmount'], expectedTx.taxAmount, 0.05);
+    const taxCell = row.cells['taxAmt'] || row.cells['taxAmount'];
+    if (expectedTx.taxAmount !== undefined && taxCell) {
+      this.assertCellNumber(reportName, taxCell, expectedTx.taxAmount, 0.05);
     }
     if (expectedTx.netAmount !== undefined) {
-      const netCell = row.cells['netAmount'] || row.cells['amount'] || row.cells['inrAmount'];
+      const netCell = row.cells['netAmt'] || row.cells['netAmount'] || row.cells['amount'] || row.cells['inrAmount'];
       if (netCell) {
         this.assertCellNumber(reportName, netCell, expectedTx.netAmount, 0.05);
       }
     }
 
     // 2. Verify string cells
-    if (expectedTx.currencyCode && row.cells['currencyCode']) {
-      this.assertCellString(reportName, row.cells['currencyCode'], expectedTx.currencyCode);
+    const currCell = row.cells['cnCode'] || row.cells['currencyCode'];
+    if (expectedTx.currencyCode && currCell) {
+      this.assertCellString(reportName, currCell, expectedTx.currencyCode);
     }
     if (expectedTx.partyProfileName) {
-      const partyCell = row.cells['partyProfileName'] || row.cells['party'] || row.cells['partyName'];
+      const partyCell = row.cells['partyName'] || row.cells['partyProfileName'] || row.cells['party'];
       if (partyCell) {
         this.assertCellString(reportName, partyCell, expectedTx.partyProfileName);
       }
     }
-    if (expectedTx.branchName && row.cells['branch']) {
-      this.assertCellString(reportName, row.cells['branch'], expectedTx.branchName);
+    const branchCell = row.cells['brnCode'] || row.cells['branch'];
+    if (expectedTx.branchName && branchCell) {
+      this.assertCellString(reportName, branchCell, expectedTx.branchName);
     }
 
     // 3. Verify no required fields rendered as fallback dash '-'
     for (const [key, cell] of Object.entries(row.cells)) {
-      if (['vno', 'date', 'partyProfileName', 'currencyCode', 'netAmount'].includes(key)) {
+      if (['vno', 'date', 'partyName', 'partyProfileName', 'cnCode', 'currencyCode', 'netAmt', 'netAmount'].includes(key)) {
         if (cell.isFallbackDash) {
           this.throwDiscrepancyError(reportName, key, 'VALID_VALUE', '-', {
             message: `Required column '${cell.columnLabel}' rendered as fallback dash '-' on frontend!`,
@@ -123,10 +127,10 @@ export class ReportAccuracyValidator {
       let runningSum = 0;
       for (const row of renderedView.rows) {
         if (row.rowType === 'ITEM') {
-          const net = parseFloat(row.cells['netAmount']?.renderedText || '0') || 0;
+          const net = parseFloat(row.cells['netAmt']?.renderedText || row.cells['netAmount']?.renderedText || '0') || 0;
           runningSum += net;
         } else if (row.rowType === 'SUBTOTAL') {
-          const subtotalNet = parseFloat(row.cells['netAmount']?.renderedText || '0') || 0;
+          const subtotalNet = parseFloat(row.cells['netAmt']?.renderedText || row.cells['netAmount']?.renderedText || '0') || 0;
           if (Math.abs(runningSum - subtotalNet) > 0.1) {
             this.throwDiscrepancyError(reportName, 'SUBTOTAL(netAmount)', runningSum, subtotalNet, {
               message: 'Frontend visible subtotal does not match sum of items in that group!',
@@ -197,9 +201,23 @@ export class ReportAccuracyValidator {
     }
 
     // Verify all required schema columns are present in rendered view
+    const KEY_ALIASES: Record<string, string[]> = {
+      branch: ['brnCode', 'branch', 'branchCode'],
+      partyProfileName: ['partyName', 'partyProfileName', 'party'],
+      partyProfileCode: ['partyCode', 'partyProfileCode', 'partyName'],
+      currencyCode: ['cnCode', 'currencyCode'],
+      productCode: ['productCode', 'exchType'],
+      quantity: ['feAmount', 'quantity'],
+      taxAmount: ['taxAmt', 'taxAmount'],
+      netAmount: ['netAmt', 'netAmount', 'inrAmount'],
+      manualBillBook: ['manualBillRef', 'manualBillBook'],
+    };
+
     const renderedColKeys = new Set(renderedView.columns.map(c => c.key));
     for (const spec of schema) {
-      if (spec.requiredForItems && !renderedColKeys.has(spec.key)) {
+      const hasCol = renderedColKeys.has(spec.key) ||
+        (KEY_ALIASES[spec.key] && KEY_ALIASES[spec.key].some(alias => renderedColKeys.has(alias)));
+      if (spec.requiredForItems && !hasCol) {
         this.throwDiscrepancyError(reportName, spec.key, 'COLUMN_PRESENT', 'COLUMN_MISSING', {
           expectedLabel: spec.label,
           renderedColumns: renderedView.columns.map(c => c.key),

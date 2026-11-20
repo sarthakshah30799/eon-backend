@@ -47,6 +47,9 @@ type PartyProfileAction = "view" | "add" | "modify" | "delete";
 
 function normalizeDto(dto: CreatePartyProfileDto | UpdatePartyProfileDto) {
   const normalizeOptional = (value?: string | null) => {
+    if (value === undefined) {
+      return undefined;
+    }
     const trimmed = value?.trim();
     return trimmed ? trimmed : null;
   };
@@ -883,7 +886,17 @@ export class PartyProfileService {
     userId: string,
   ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
-    const client = await this.partyProfileRepository.findOne({ where: { id } });
+    const client = await this.partyProfileRepository.findOne({
+      where: { id },
+      relations: [
+        "entityType",
+        "group",
+        "location",
+        "kycRiskCategory",
+        "businessNature",
+        "tdsGroup",
+      ],
+    });
     if (!client) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
@@ -1096,7 +1109,17 @@ export class PartyProfileService {
     userId: string,
   ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
-    const client = await this.partyProfileRepository.findOne({ where: { id } });
+    const client = await this.partyProfileRepository.findOne({
+      where: { id },
+      relations: [
+        "entityType",
+        "group",
+        "location",
+        "kycRiskCategory",
+        "businessNature",
+        "tdsGroup",
+      ],
+    });
     if (!client) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }
@@ -1125,7 +1148,17 @@ export class PartyProfileService {
     userId: string,
   ): Promise<PartyProfileResponseDto> {
     const user = await this.getCurrentUser(userId);
-    const client = await this.partyProfileRepository.findOne({ where: { id } });
+    const client = await this.partyProfileRepository.findOne({
+      where: { id },
+      relations: [
+        "entityType",
+        "group",
+        "location",
+        "kycRiskCategory",
+        "businessNature",
+        "tdsGroup",
+      ],
+    });
     if (!client) {
       throw new NotFoundException(`Party Profile with id ${id} not found`);
     }

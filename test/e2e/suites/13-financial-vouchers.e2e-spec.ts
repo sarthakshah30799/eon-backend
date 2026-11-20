@@ -393,10 +393,17 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
       // Step 1: Create transaction with partial payment leaving an outstanding balance
       const saleRes = await client.post('/transactions/drafts', {
         slug: TRANSACTION_SLUGS.SALE_CORPORATE_INDIVIDUAL,
+        transactionDate: getTxDate(),
         branchId: registry.masters.branchA.id,
         counterId: registry.masters.counterA1?.id,
         tradeMode: 'BULK',
         partyProfileId: registry.masters.corporatePartyProfile.id,
+        passenger: {
+          firstName: 'Corporate',
+          lastName: 'Executive',
+          nationalityType: 'INDIAN',
+          pan: registry.masters.corporatePartyProfile.panNo || 'ABCDE1234F',
+        },
         items: [
           {
             productId: registry.masters.productCn?.id,
@@ -408,6 +415,7 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         payments: [
           {
             paymentMethod: 'CHEQUE',
+            accountId: registry.masters.bankAccountId,
             amount: 5000, // Total = 17,700, Paid = 5,000, Outstanding = 12,700
             referenceNumber: 'CHQ100200',
             referenceDate: new Date().toISOString().slice(0, 10),
@@ -417,6 +425,9 @@ describe('Module 8: Financial Vouchers (Receipts, Payments, Advances, Bills, Jou
         ],
       });
 
+      if (![200, 201].includes(saleRes.status)) {
+        TestLogger.warn(`8.8 sale draft failed (${saleRes.status}): ${JSON.stringify(saleRes.data)}`);
+      }
       expect([200, 201]).toContain(saleRes.status);
       testOutstandingTransactionId = saleRes.data?.id;
       expect(testOutstandingTransactionId).toBeDefined();

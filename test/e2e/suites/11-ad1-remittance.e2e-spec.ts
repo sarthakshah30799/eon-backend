@@ -37,6 +37,8 @@ describe('Module 6: AD1 / Remittance Transactions', () => {
 
     const res = await client.post('/transactions/ad1', {
       branchId: registry.masters.branchA.id,
+      docNo: `AD1_${Date.now().toString().slice(-6)}`,
+      currencyId: registry.masters.currencyUsd?.id,
       remitterName: 'Kunal Singhania',
       beneficiaryName: 'University Fees Global',
       currencyCode: 'USD',

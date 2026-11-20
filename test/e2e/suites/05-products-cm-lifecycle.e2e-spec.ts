@@ -13,6 +13,7 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
 
   let testCmKitNo: string;
   let testCmCardNo: string;
+  let testCmCardId: string;
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -69,12 +70,31 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
     TestLogger.success(`CM Card stock receipt created: ${testCmKitNo}`);
 
     const receiptId = res.data?.id;
+    if (res.data?.items?.[0]?.cards?.[0]?.id) {
+      testCmCardId = res.data.items[0].cards[0].id;
+    }
     if (receiptId) {
       const getRes = await client.get(`/card-stock/receipts/${receiptId}`);
       expect(getRes.status).toBe(200);
       expect(getRes.data).toBeDefined();
       expect(getRes.data.id).toBe(receiptId);
+      if (getRes.data?.items?.[0]?.cards?.[0]?.id) {
+        testCmCardId = getRes.data.items[0].cards[0].id;
+      }
       TestLogger.success(`Verified GET /card-stock/receipts/${receiptId} round-trip (200 OK)`);
+    }
+
+    if (!testCmCardId) {
+      const availRes = await client.get('/card-stock/receipts/cards/available', {
+        branchId: registry.masters.branchA.id,
+        productId: registry.masters.productCm?.id,
+        issuerPartyProfileId: registry.masters.cardIssuerPartyId,
+      });
+      const cards = Array.isArray(availRes.data?.data) ? availRes.data.data : (Array.isArray(availRes.data) ? availRes.data : []);
+      const matching = cards.find((c: any) => c.kitNumber === testCmKitNo) || cards[0];
+      if (matching?.id) {
+        testCmCardId = matching.id;
+      }
     }
   });
 
@@ -82,11 +102,15 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
     expect(registry.masters.branchA?.id).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
     expect(registry.masters.currencyEur?.id).toBeDefined();
+    expect(testCmCardId).toBeDefined();
 
+    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
+      transactionDate: txDate,
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
       tradeMode: 'RETAIL',
       passenger: {
         firstName: 'Siddharth',
@@ -103,6 +127,8 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
           rate: 88.5,
           cardKitNumber: testCmKitNo,
           cardNumber: testCmCardNo,
+          cardId: testCmCardId,
+          issuerPartyProfileId: registry.masters.cardIssuerPartyId,
         },
         {
           productId: registry.masters.productCm?.id,
@@ -111,16 +137,23 @@ describe('Module 3B: Multi-Currency Forex Card (CM) Full Lifecycle, Multi-Wallet
           rate: 95.0,
           cardKitNumber: testCmKitNo,
           cardNumber: testCmCardNo,
+          cardId: testCmCardId,
+          issuerPartyProfileId: registry.masters.cardIssuerPartyId,
         },
       ],
       payments: [
         {
           paymentMethod: 'BANK_TRANSFER',
           amount: 88500 + 47500,
+          accountId: registry.masters.bankAccountId,
+          referenceDate: new Date().toISOString().slice(0, 10),
         },
       ],
     });
 
+    if (![200, 201].includes(res.status)) {
+      TestLogger.warn(`3B.2 CM sale draft failed (${res.status}): ${JSON.stringify(res.data)}`);
+    }
     expect([200, 201]).toContain(res.status);
     const txnId = res.data?.id || res.data?.transaction?.id;
     expect(txnId).toBeDefined();

@@ -13,7 +13,7 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
   let testOutstandingSaleId: string;
   let testAdjustmentId: string;
   let testAdvanceReceiptId: string;
-  const testPan = 'ABCDE1234F';
+  let testPan = 'ABCDE1234F';
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -23,6 +23,7 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
     TestLogger.header('Module 9: Advance Adjustments & Refunds');
     await workplaceManager.asAdmin();
     await registry.initialize(client);
+    testPan = registry.masters.corporatePartyProfile?.panNo || 'ABCDE1234F';
   });
 
   it('9.1 should query outstanding sales eligible for advance adjustment', async () => {
@@ -127,12 +128,14 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
     expect(registry.masters.corporatePartyProfile?.id).toBeDefined();
     expect(testAdvanceReceiptId).toBeDefined();
 
+    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+
     // Step 1: Query outstanding sales for corporate client
     const salesRes = await client.get('/advance-adjustments/outstanding-sales', {
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1.id,
       partyProfileId: registry.masters.corporatePartyProfile.id,
-      asOnDate: new Date().toISOString().slice(0, 10),
+      asOnDate: txDate,
     });
 
     let sales = Array.isArray(salesRes.data)
@@ -142,10 +145,17 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
     if (sales.length === 0 && registry.masters.productCn?.id && registry.masters.currencyUsd?.id) {
       const saleRes = await client.post('/transactions/drafts', {
         slug: TRANSACTION_SLUGS.SALE_CORPORATE_INDIVIDUAL,
+        transactionDate: txDate,
         branchId: registry.masters.branchA.id,
         counterId: registry.masters.counterA1.id,
         tradeMode: 'BULK',
         partyProfileId: registry.masters.corporatePartyProfile.id,
+        passenger: {
+          firstName: 'Corporate',
+          lastName: 'Executive',
+          nationalityType: 'INDIAN',
+          pan: testPan,
+        },
         items: [
           {
             productId: registry.masters.productCn.id,
@@ -157,20 +167,24 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
         payments: [
           {
             paymentMethod: 'CHEQUE',
+            accountId: registry.masters.bankAccountId,
             amount: 3850,
             referenceNumber: 'CHQ999111',
-            referenceDate: new Date().toISOString().slice(0, 10),
+            referenceDate: txDate,
             branchName: 'Fort',
             drawnOn: 'HDFC Bank',
           },
         ],
       });
+      if (![200, 201].includes(saleRes.status)) {
+        TestLogger.warn(`9.5C sale draft failed (${saleRes.status}): ${JSON.stringify(saleRes.data)}`);
+      }
       expect([200, 201]).toContain(saleRes.status);
       const recheckSales = await client.get('/advance-adjustments/outstanding-sales', {
         branchId: registry.masters.branchA.id,
         counterId: registry.masters.counterA1.id,
         partyProfileId: registry.masters.corporatePartyProfile.id,
-        asOnDate: new Date().toISOString().slice(0, 10),
+        asOnDate: txDate,
       });
       sales = Array.isArray(recheckSales.data)
         ? recheckSales.data
@@ -184,8 +198,8 @@ describe('Module 9: Advance Adjustment & HO Advance Refund Honour', () => {
     const adjRes = await client.post('/advance-adjustments', {
       branchId: registry.masters.branchA.id,
       counterId: registry.masters.counterA1.id,
-      transactionDate: new Date().toISOString().slice(0, 10),
-      asOnDate: new Date().toISOString().slice(0, 10),
+      transactionDate: txDate,
+      asOnDate: txDate,
       partyProfileId: registry.masters.corporatePartyProfile.id,
       receiptVoucherId: testAdvanceReceiptId,
       panNumber: testPan,

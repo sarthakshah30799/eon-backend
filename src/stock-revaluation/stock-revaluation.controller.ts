@@ -24,7 +24,11 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import { AuthenticatedGuard } from "../auth/guards/authenticated.guard";
-import { ProcessStockRevaluationDto } from "./dto/stock-revaluation.dto";
+import {
+  ProcessStockRevaluationDto,
+  ProcessStockRevaluationRequestDto,
+  UploadStockRevaluationRequestDto,
+} from "./dto/stock-revaluation.dto";
 import { StockRevaluationService } from "./stock-revaluation.service";
 import { StockRevaluationFrequency } from "./stock-revaluation.enums";
 
@@ -77,7 +81,7 @@ export class StockRevaluationController {
 
   @Post("process")
   async process(
-    @Body() body: { targets?: string; frequency?: string },
+    @Body() body: ProcessStockRevaluationRequestDto,
     @Session() session: any,
   ) {
     const canSelectAllBranches = Boolean(
@@ -98,16 +102,14 @@ export class StockRevaluationController {
       throw new BadRequestException("Active branch and counter are required");
 
     if (
-      !Object.values(StockRevaluationFrequency).includes(
-        body.frequency as StockRevaluationFrequency,
-      )
+      !Object.values(StockRevaluationFrequency).includes(body.frequency)
     ) {
       throw new BadRequestException("Stock revaluation frequency is invalid");
     }
     return this.service.process(
       {
         branchIds: [],
-        frequency: body.frequency as StockRevaluationFrequency,
+        frequency: body.frequency,
         rates: [],
       },
       session.userId,
@@ -120,8 +122,7 @@ export class StockRevaluationController {
   @UseInterceptors(FileInterceptor("file"))
   async upload(
     @UploadedFile() file: { buffer: Buffer } | undefined,
-    @Body("targets") targets: string,
-    @Body("frequency") frequency: string,
+    @Body() body: UploadStockRevaluationRequestDto,
     @Session() session: any,
   ) {
     this.requireManager(session);
@@ -129,17 +130,15 @@ export class StockRevaluationController {
       throw new BadRequestException(
         "Stock revaluation template file is required",
       );
-    const parsedTargets = this.parseTargets(targets);
+    const parsedTargets = this.parseTargets(body.targets);
     if (
-      !Object.values(StockRevaluationFrequency).includes(
-        frequency as StockRevaluationFrequency,
-      )
+      !Object.values(StockRevaluationFrequency).includes(body.frequency)
     )
       throw new BadRequestException("Stock revaluation frequency is invalid");
     return this.service.upload(
       {
         branchIds: [],
-        frequency: frequency as StockRevaluationFrequency,
+        frequency: body.frequency,
         rates: [],
       },
       file,

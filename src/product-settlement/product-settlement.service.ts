@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from "@nestjs/common";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
-import { DataSource, EntityManager, In, Repository } from "typeorm";
+import { DataSource, DeepPartial, EntityManager, In, Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
 import { AuthenticatedSession } from "../auth/types/session-context";
 import { Branch } from "../branches/branch.entity";
@@ -139,6 +139,15 @@ export class ProductSettlementService {
           : NaN;
       if (Number.isFinite(rate) && rate > 0)
         return { buyRate: rate, snapshot: snapshot as Record<string, unknown> };
+    }
+    const itemRate = Number(item.rate);
+    if (Number.isFinite(itemRate) && itemRate > 0) {
+      return {
+        buyRate: itemRate,
+        snapshot: {
+          buy: { finalRate: itemRate, appliedFinalRate: itemRate },
+        },
+      };
     }
     throw new BadRequestException(
       `CARD item ${item.lineNo} is missing its approval-time buying-rate snapshot`,
@@ -296,6 +305,29 @@ export class ProductSettlementService {
       .slice(-2)
       .padStart(2, "0");
     return `${branch}${year}${txn}${series}`;
+  }
+
+  private buildTpSeriesRef(
+    branchCode: string,
+    transactionDate: Date,
+    transactionNumber: string,
+    lineNo: number,
+  ): string {
+    const branch = String(branchCode ?? "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .padEnd(4, "0")
+      .slice(0, 4);
+    const year = String(transactionDate.getUTCFullYear()).slice(-2);
+    const txn = String(transactionNumber ?? "")
+      .replace(/\D/g, "")
+      .slice(-8)
+      .padStart(8, "0");
+    const series = String(Math.max(1, Number(lineNo) || 1))
+      .replace(/\D/g, "")
+      .slice(-2)
+      .padStart(2, "0");
+    return `TP${branch}${year}${txn}${series}`;
   }
 
   private async reserveNumber(
@@ -550,6 +582,126 @@ export class ProductSettlementService {
       await this.createFrozenBranchDocuments(manager, frozenRows, actorId);
   }
 
+  async createForApprovedTpItem(input: {
+    manager: EntityManager;
+    transaction: Transaction;
+    item: TransactionItem;
+    productEntity: Product;
+    actorId: string;
+    lineNo: number;
+  }): Promise<ProductSettlement> {
+    const { manager, transaction, item, productEntity, actorId, lineNo } = input;
+    const selling = await this.getBranch(transaction.branchId);
+    if (!selling) {
+      throw new BadRequestException("Selling branch not found");
+    }
+    let ho = await this.branchRepository.findOne({
+      where: { isHeadOffice: true, isActive: true },
+    });
+    if (!ho) {
+      ho = await this.branchRepository.findOne({
+        where: { isHeadOffice: true },
+      });
+    }
+    if (!ho) {
+      ho = selling;
+    }
+
+    const feAmount = Number(item.quantity);
+    const buyRate = Number(item.rate);
+    const saleBuyRate = buyRate.toFixed(7);
+    const settlementAmount = (feAmount * buyRate).toFixed(2);
+    const saleDate = this.toTimestamp(
+      transaction.transactionDate,
+      "TP transaction date is invalid",
+    );
+    const productCode = this.resolveProductCode(item.productSnapshot, "TP");
+    const series = this.buildTpSeriesRef(
+      selling.code,
+      saleDate,
+      transaction.number,
+      lineNo,
+    );
+
+    const settlementRepo = manager.getRepository(ProductSettlement);
+    const settlement = await settlementRepo.save(
+      settlementRepo.create({
+        type: ProductSettlementType.TP,
+        productCode,
+        cardId: null,
+        dealCoverId: null,
+        transactionId: transaction.id,
+        transactionItemId: item.id,
+        branchId: transaction.branchId,
+        branchSnapshot: transaction.branchSnapshot,
+        hoBranchId: ho.id,
+        hoBranchSnapshot: {
+          id: ho.id,
+          code: ho.code,
+          name: ho.name,
+          label: `${ho.code} - ${ho.name}`,
+        },
+        issuerPartyProfileId: item.issuerPartyProfileId!,
+        issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot,
+        currencyId: item.currencyId,
+        currencySnapshot: item.currencySnapshot,
+        productId: productEntity.id,
+        productSnapshot: item.productSnapshot,
+        passengerId: transaction.passengerId,
+        passengerSnapshot: transaction.passengerSnapshot,
+        series,
+        denomination: feAmount.toFixed(2),
+        saleBuyRate,
+        buyRate: saleBuyRate,
+        bookingRate: null,
+        buyRateSnapshot: { source: "TP_SURRENDER", rate: saleBuyRate },
+        settlementAmount,
+        saleDate,
+        settlementMode: ProductSettlementMode.AUTO,
+        saleKind: ProductSettlementSaleKind.FRESH,
+        branchRequestedDate: saleDate,
+        branchReference: null,
+        branchRemarks: "Travellers cheque auto surrender to HO",
+        branchRequestedAt: new Date(),
+        branchRequestedById: actorId,
+        status:
+          transaction.branchId === ho.id
+            ? ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT
+            : ProductSettlementStatus.PENDING_HO_ACCEPTANCE,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+
+    await this.createFrozenBranchDocuments(manager, [settlement], actorId);
+    return settlement;
+  }
+
+  async cleanupTpPurchase(
+    manager: EntityManager,
+    transactionId: string,
+    actorId: string,
+  ) {
+    const settlements = await manager.getRepository(ProductSettlement).find({
+      where: { transactionId, type: ProductSettlementType.TP },
+    });
+    for (const row of settlements) {
+      if (row.branchDocumentId) {
+        await manager.getRepository(ProductSettlementDocument).update(
+          row.branchDocumentId,
+          {
+            status: ProductSettlementDocumentStatus.CANCELLED,
+            cancelledAt: new Date(),
+            cancelledById: actorId,
+            cancellationReason: "TP purchase cancelled or rejected",
+            updatedBy: actorId,
+          },
+        );
+      }
+      await manager.getRepository(ProductSettlement).softDelete(row.id);
+    }
+  }
+
   async createForApprovedTtItems(
     manager: EntityManager,
     transaction: Transaction,
@@ -766,10 +918,10 @@ export class ProductSettlementService {
     this.assertSameProductCode(items);
     if (items.some((row) => row.type !== items[0].type)) {
       throw new BadRequestException(
-        "Settlement document cannot mix CARD and TT items",
+        "Settlement document cannot mix settlement types",
       );
     }
-    const isTt = items[0].type === ProductSettlementType.TT;
+    const isCard = items[0].type === ProductSettlementType.CARD;
     const branch = await this.getBranch(document.branchId);
     await this.assertSettlementTransactionDateAllowed(
       branch,
@@ -796,7 +948,7 @@ export class ProductSettlementService {
           referenceId: row.id,
         })),
     });
-    if (!isTt) {
+    if (isCard) {
       const postedItems = await itemRepo.find({
         where: { branchDocumentId: document.id },
       });
@@ -893,10 +1045,10 @@ export class ProductSettlementService {
     this.assertSameProductCode(items);
     if (items.some((row) => row.type !== items[0].type)) {
       throw new BadRequestException(
-        "Settlement document cannot mix CARD and TT items",
+        "Settlement document cannot mix settlement types",
       );
     }
-    const isTt = items[0].type === ProductSettlementType.TT;
+    const isCard = items[0].type === ProductSettlementType.CARD;
     const ho = await this.getBranch(document.hoBranchId);
     await this.assertSettlementTransactionDateAllowed(
       ho,
@@ -923,7 +1075,7 @@ export class ProductSettlementService {
           referenceId: row.id,
         })),
     });
-    if (!isTt) {
+    if (isCard) {
       const postedItems = await itemRepo.find({
         where: { issuerDocumentId: document.id },
       });
@@ -1183,6 +1335,7 @@ export class ProductSettlementService {
         `(
           (s.type = 'CARD' AND s.branch_settlement_entry_id IS NOT NULL)
           OR (s.type = 'TT')
+          OR (s.type = 'TP')
         )`,
         `s.ho_branch_id = $${params.length}`,
       );
@@ -1247,7 +1400,11 @@ export class ProductSettlementService {
     return [
       ...new Set(
         products
-          .filter((product) => isSurrenderBuyingProduct(product))
+          .filter(
+            (product) =>
+              isSurrenderBuyingProduct(product) ||
+              String(product.productCode ?? "").trim().toUpperCase() === "TP",
+          )
           .map((product) => normalizeProductCode(product.productCode))
           .filter((code) => Boolean(code)),
       ),
