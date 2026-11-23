@@ -4,6 +4,10 @@ export const SINGLE_CURRENCY_CARD_PRODUCT_CODE = "CC";
 export const MULTI_CURRENCY_CARD_PRODUCT_CODE = "CM";
 export const CN_PRODUCT_CODE = "CN";
 export const TT_PRODUCT_CODE = "TT";
+export const TP_PRODUCT_CODE = "TP";
+
+export const isTpProductCode = (productCode?: string | null): boolean =>
+  normalizeProductCode(productCode) === TP_PRODUCT_CODE;
 
 export const CARD_PRODUCT_CODES = [
   SINGLE_CURRENCY_CARD_PRODUCT_CODE,
@@ -73,6 +77,9 @@ export const hasSurrenderIssuerPath = hasSurrenderIssuerLinks;
 export const isSurrenderMenuProduct = (
   product: SurrenderProductLike,
 ): boolean =>
+  !isTtProductCode(product.productCode) &&
+  !isTpProductCode(product.productCode) &&
+  !isCardProductCode(product.productCode) &&
   product.maintainBlankStockOfProduct === false &&
   hasSurrenderIssuerLinks(product) &&
   product.availableInRetailBuying === true &&

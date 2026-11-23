@@ -49,10 +49,14 @@ export const requireProductSaleAccounts = (
 export const requireProductSettlementAccounts = (
   product: Product,
 ): ProductSettlementAccountIds => {
-  const controlAccountId = accountId(product.acOfIssuer);
-  const closingAccountId = accountId(product.closingAc);
-  const purchaseAccountId = accountId(product.purchaseAc);
-  const profitAccountId = accountId(product.profitAc);
+  const purchaseAccountId =
+    accountId(product.purchaseAc) || accountId(product.bulkPurAc);
+  const profitAccountId =
+    accountId(product.profitAc) ||
+    accountId(product.bulkProficAc) ||
+    purchaseAccountId;
+  const controlAccountId = accountId(product.acOfIssuer) || purchaseAccountId;
+  const closingAccountId = accountId(product.closingAc) || purchaseAccountId;
   const missing: string[] = [];
   if (!controlAccountId) missing.push("acOfIssuer");
   if (!closingAccountId) missing.push("closingAc");

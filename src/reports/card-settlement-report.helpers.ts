@@ -273,7 +273,7 @@ const loadSettlementRows = async (
 ): Promise<SettlementQueryRow[]> => {
   const conditions = [
     "s.deleted_at IS NULL",
-    `(s.type = 'TT' OR (s.type = 'CARD' AND c.deleted_at IS NULL AND s.card_id IS NOT NULL))`,
+    `(s.type IN ('TT', 'TP') OR (s.type = 'CARD' AND c.deleted_at IS NULL AND s.card_id IS NOT NULL))`,
     `s.status <> '${ProductSettlementStatus.CANCELLED}'`,
   ];
   const params: unknown[] = [];
@@ -291,7 +291,7 @@ const loadSettlementRows = async (
         `(
           (s.type = 'CARD' AND (s.branch_settlement_entry_id IS NULL OR ${BRANCH_SETTLE_DATE_SQL} >= $${params.length}))
           OR (
-            s.type = 'TT'
+            s.type IN ('TT', 'TP')
             AND (
               s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE')
               OR COALESCE(${BRANCH_SETTLE_DATE_SQL}, s.branch_settlement_date) >= $${params.length}
@@ -302,13 +302,13 @@ const loadSettlementRows = async (
     } else {
       conditions.push(`(
         (s.type = 'CARD' AND s.branch_settlement_entry_id IS NULL)
-        OR (s.type = 'TT' AND s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE'))
+        OR (s.type IN ('TT', 'TP') AND s.status IN ('PENDING_BRANCH_SETTLEMENT', 'PENDING_HO_ACCEPTANCE'))
       )`);
     }
   } else {
     conditions.push(`(
       (s.type = 'CARD' AND s.branch_settlement_entry_id IS NOT NULL)
-      OR (s.type = 'TT' AND s.status IN ('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED'))
+      OR (s.type IN ('TT', 'TP') AND s.status IN ('PENDING_ISSUER_SETTLEMENT', 'ISSUER_SETTLED'))
     )`);
 
     if (filters.startDate) {
@@ -360,7 +360,7 @@ const loadSettlementRows = async (
         s.currency_snapshot AS "currencySnapshot",
         s.passenger_snapshot AS "passengerSnapshot",
         CASE
-          WHEN s.type = 'TT' THEN s.series
+          WHEN s.type IN ('TT', 'TP') THEN s.series
           ELSE ${MASKED_CARD_SQL}
         END AS "maskedCardNumber",
         t.number AS "invoiceNumber",

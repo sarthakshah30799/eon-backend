@@ -117,6 +117,7 @@ import {
   isSurrenderBuyingProduct,
   isSurrenderBulkSaleProduct,
   isMultiCurrencyCardProduct,
+  isTpProductCode,
 } from "../card-stock/card-product.util";
 import { EmSurrenderService } from "../card-stock/em-surrender.service";
 import { isTtProductCode } from "../tt-deal/tt-product.util";
@@ -2780,6 +2781,7 @@ export class TransactionsService {
       const cardSaleItems: TransactionItem[] = [];
       const emSaleItems: TransactionItem[] = [];
       const ttSaleItems: TransactionItem[] = [];
+      const tpSaleItems: TransactionItem[] = [];
       const selectedCardCurrencyKeys = new Set<string>();
       const selectedEmCardIds = new Set<string>();
       const selectedTtDealIds = new Set<string>();
@@ -2929,13 +2931,11 @@ export class TransactionsService {
           tradeMode: transactionPayload.tradeMode ?? TradeMode.BULK,
         });
         const isCardItem = isCardProductCode(productEntity.productCode);
-        const isTpItem =
-          String(productEntity.productCode ?? "").trim().toUpperCase() === "TP";
+        const isTpItem = isTpProductCode(productEntity.productCode);
         const isEmItem =
-          !isTpItem &&
-          (transactionPayload.transactionType === TransactionType.PURCHASE
+          transactionPayload.transactionType === TransactionType.PURCHASE
             ? isSurrenderBuyingProduct(productEntity)
-            : isSurrenderBulkSaleProduct(productEntity));
+            : isSurrenderBulkSaleProduct(productEntity);
         const isTtItem = isTtProductCode(productEntity.productCode);
         const isMultiCurrencyCard = isMultiCurrencyCardProduct(
           productEntity.productCode,
@@ -3453,6 +3453,12 @@ export class TransactionsService {
         }
         if (savedItem.dealCoverId) {
           ttSaleItems.push(savedItem);
+        }
+        if (
+          transaction.transactionType === TransactionType.SALE &&
+          isTpItem
+        ) {
+          tpSaleItems.push(savedItem);
         }
       }
 
@@ -4075,6 +4081,17 @@ export class TransactionsService {
             performedById,
           );
         }
+        if (
+          approved.transactionType === TransactionType.SALE &&
+          tpSaleItems.length
+        ) {
+          await this.productSettlementService.finalizeTpIssuerSale(
+            manager,
+            approved,
+            tpSaleItems,
+            performedById,
+          );
+        }
         Object.assign(transaction, approved);
       }
 
@@ -4320,6 +4337,17 @@ export class TransactionsService {
         approvedItems,
         performedById,
       );
+      const tpItems = approvedItems.filter((item) => {
+        return isTpProductCode(productById.get(item.productId)?.productCode);
+      });
+      if (approved.transactionType === TransactionType.SALE && tpItems.length) {
+        await this.productSettlementService.finalizeTpIssuerSale(
+          manager,
+          approved,
+          tpItems,
+          performedById,
+        );
+      }
       await logRepo.save(
         logRepo.create({
           transactionId: approved.id,

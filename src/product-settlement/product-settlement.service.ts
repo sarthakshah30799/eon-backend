@@ -28,6 +28,7 @@ import {
 import { CardStockReferenceType } from "../card-stock/card-stock.enums";
 import {
   isSurrenderBuyingProduct,
+  isTpProductCode,
   normalizeProductCode,
 } from "../card-stock/card-product.util";
 import { Product } from "../products/product.entity";
@@ -702,6 +703,41 @@ export class ProductSettlementService {
     }
   }
 
+  async finalizeTpIssuerSale(
+    manager: EntityManager,
+    transaction: Transaction,
+    items: TransactionItem[],
+    actorId: string,
+  ): Promise<void> {
+    const settlementRepo = manager.getRepository(ProductSettlement);
+    for (const item of items) {
+      const issuerPartyId =
+        item.issuerPartyProfileId ?? transaction.partyProfileId;
+      const openSettlements = await settlementRepo.find({
+        where: {
+          type: ProductSettlementType.TP,
+          currencyId: item.currencyId,
+          ...(issuerPartyId ? { issuerPartyProfileId: String(issuerPartyId) } : {}),
+          status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+        },
+        order: { createdAt: "ASC" },
+      });
+
+      let remainingQuantity = Number(item.quantity ?? 0);
+      for (const settle of openSettlements) {
+        if (remainingQuantity <= 0) break;
+        const settleDenom = Number(settle.denomination ?? 0);
+        if (settleDenom > 0 && settleDenom <= remainingQuantity) {
+          await settlementRepo.update(settle.id, {
+            status: ProductSettlementStatus.ISSUER_SETTLED,
+            updatedBy: actorId,
+          });
+          remainingQuantity -= settleDenom;
+        }
+      }
+    }
+  }
+
   async createForApprovedTtItems(
     manager: EntityManager,
     transaction: Transaction,
@@ -1335,7 +1371,6 @@ export class ProductSettlementService {
         `(
           (s.type = 'CARD' AND s.branch_settlement_entry_id IS NOT NULL)
           OR (s.type = 'TT')
-          OR (s.type = 'TP')
         )`,
         `s.ho_branch_id = $${params.length}`,
       );
@@ -1403,7 +1438,7 @@ export class ProductSettlementService {
           .filter(
             (product) =>
               isSurrenderBuyingProduct(product) ||
-              String(product.productCode ?? "").trim().toUpperCase() === "TP",
+              isTpProductCode(product.productCode),
           )
           .map((product) => normalizeProductCode(product.productCode))
           .filter((code) => Boolean(code)),

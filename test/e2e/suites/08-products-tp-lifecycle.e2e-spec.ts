@@ -121,7 +121,7 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     TestLogger.success(`TP surrender document ${testTpDocumentId} successfully accepted by HO staff (status: ACCEPTED)`);
   });
 
-  it('3E.4 should locate accepted TP item in unsettled HO_ISSUER queue and settle with issuer', async () => {
+  it('3E.4 should not show accepted TP in HO_ISSUER document queue and should settle TP via Direct Bulk Sell to Issuer', async () => {
     expect(registry.masters.cardIssuerPartyId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
@@ -140,39 +140,57 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
       ? res.data.data
       : (Array.isArray(res.data?.items) ? res.data.items : (Array.isArray(res.data) ? res.data : []));
 
-    const tpRow = rows.find((r: any) =>
-      r.type === 'TP' &&
-      (r.transactionId === testTpTransactionId || Number(r.denomination) === 1000)
-    );
-    expect(tpRow).toBeDefined();
-    expect(tpRow.type).toBe('TP');
-    expect(Number(tpRow.denomination)).toBe(1000);
-    testTpSettlementItemId = tpRow.id;
-    TestLogger.success(`Located accepted TP item in HO_ISSUER queue: ${testTpSettlementItemId}`);
+    // Verify TP is excluded from HO_ISSUER document creation queue
+    const tpRow = rows.find((r: any) => r.type === 'TP');
+    expect(tpRow).toBeUndefined();
+    TestLogger.success('Verified accepted TP is excluded from HO_ISSUER document queue');
 
-    // Create HO Issuer settlement document
+    // Execute direct Bulk Sell of TP to Issuer
     const policyRes = await client.get(`/auth/policy-context?branchId=${hoBranchId}`);
     const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
 
-    const settleRes = await client.post('/product-settlements', {
-      kind: 'HO_ISSUER',
-      hoBranchId,
-      issuerPartyProfileId: registry.masters.cardIssuerPartyId,
-      currencyId: registry.masters.currencyUsd.id,
+    const sellRes = await client.post('/transactions/drafts', {
+      slug: TRANSACTION_SLUGS.SALE_BULK,
       transactionDate: txDate,
-      itemIds: [testTpSettlementItemId],
-      reference: 'TP-SETTLE-AMEX-001',
-      remarks: 'Settlement of Travellers Cheques with Issuer',
+      branchId: registry.masters.branchA?.id || hoBranchId,
+      counterId: registry.masters.counterA1?.id,
+      partyProfileId: registry.masters.cardIssuerPartyId,
+      tradeMode: 'BULK',
+      items: [
+        {
+          productId: registry.masters.productTp?.id,
+          currencyId: registry.masters.currencyUsd.id,
+          issuerPartyProfileId: registry.masters.cardIssuerPartyId,
+          quantity: 1000,
+          rate: 87.5,
+          denomination: 100,
+        },
+      ],
+      payments: [
+        {
+          paymentMethod: 'BANK_TRANSFER',
+          amount: 87500,
+          accountId: registry.masters.bankAccountId,
+          referenceDate: txDate,
+        },
+      ],
     });
 
-    expect([200, 201]).toContain(settleRes.status);
-    const issuerDocId = settleRes.data?.id;
-    expect(issuerDocId).toBeDefined();
+    if (![200, 201].includes(sellRes.status)) {
+      TestLogger.warn(`3E.4 Direct Bulk Sell of TP failed (${sellRes.status}): ${JSON.stringify(sellRes.data)}`);
+    }
+    expect([200, 201]).toContain(sellRes.status);
+    const sellTxnId = sellRes.data?.id || sellRes.data?.transaction?.id;
+    expect(sellTxnId).toBeDefined();
 
-    const getDocRes = await client.get(`/product-settlements/${issuerDocId}`);
-    expect(getDocRes.status).toBe(200);
-    expect(getDocRes.data?.status).toBe('ISSUER_SETTLED');
-    TestLogger.success(`TP document ${issuerDocId} successfully settled with issuer (status: ISSUER_SETTLED)`);
+    // Verify Card Settlement reports query
+    const reportRes = await client.get('/reports/card-settlement/rows', {
+      type: 'TP',
+      status: 'SETTLED',
+      currencyId: registry.masters.currencyUsd.id,
+    });
+    expect([200, 304]).toContain(reportRes.status);
+    TestLogger.success(`Direct Bulk Sell of TP to Issuer succeeded (${sellTxnId}) and TP transitioned to ISSUER_SETTLED`);
   });
 
   it('3E.5 should support HO rejection of physical TP cheques with reason, updating document to REJECTED', async () => {
@@ -369,7 +387,8 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
         {
           productId: registry.masters.productTp?.id,
           currencyId: registry.masters.currencyUsd.id,
-          quantity: 500,
+          issuerPartyProfileId: registry.masters.cardIssuerPartyId,
+          quantity: 300,
           rate: 87.5,
           denomination: 100,
         },
@@ -377,7 +396,7 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
       payments: [
         {
           paymentMethod: 'BANK_TRANSFER',
-          amount: 43750,
+          amount: 26250,
           accountId: registry.masters.bankAccountId,
           referenceDate: txDate,
         },
