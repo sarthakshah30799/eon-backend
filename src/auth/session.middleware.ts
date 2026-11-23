@@ -1,4 +1,4 @@
-import { Injectable, NestMiddleware } from "@nestjs/common";
+import { Injectable, NestMiddleware, OnModuleDestroy } from "@nestjs/common";
 import { Request, Response, NextFunction, RequestHandler } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -9,8 +9,9 @@ import { SessionPolicyService } from "../session-policy/session-policy.service";
 const PgSession = connectPgSimple(session);
 
 @Injectable()
-export class SessionMiddleware implements NestMiddleware {
+export class SessionMiddleware implements NestMiddleware, OnModuleDestroy {
   private readonly sessionMiddleware: RequestHandler;
+  private readonly pool: Pool;
 
   constructor(
     private readonly configService: ConfigService,
@@ -20,21 +21,22 @@ export class SessionMiddleware implements NestMiddleware {
 
     // One shared pool for the process. Creating PgSession inside use() leaked
     // a new pool (and connections) on every HTTP request.
-    const pool = new Pool({
+    this.pool = new Pool({
       host: this.configService.database.host,
       port: this.configService.database.port,
       user: this.configService.database.username,
       password: this.configService.database.password,
       database: this.configService.database.database,
       ssl,
-      max: 20,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
+      max: this.configService.sessionPool.max,
+      idleTimeoutMillis: this.configService.sessionPool.idleTimeoutMillis,
+      connectionTimeoutMillis:
+        this.configService.sessionPool.connectionTimeoutMillis,
     });
 
     this.sessionMiddleware = session({
       store: new PgSession({
-        pool,
+        pool: this.pool,
         tableName: "user_sessions",
         createTableIfMissing: true,
       }),
@@ -90,5 +92,9 @@ export class SessionMiddleware implements NestMiddleware {
 
       next();
     });
+  }
+
+  async onModuleDestroy() {
+    await this.pool.end();
   }
 }

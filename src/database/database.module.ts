@@ -27,8 +27,10 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         logging: true,
         namingStrategy: new SnakeNamingStrategy(),
         extra: {
-          max: 10,
-          idleTimeoutMillis: 30_000,
+          max: configService.database.pool.max,
+          idleTimeoutMillis: configService.database.pool.idleTimeoutMillis,
+          connectionTimeoutMillis:
+            configService.database.pool.connectionTimeoutMillis,
         },
       }),
     }),
@@ -66,8 +68,10 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         logging: true,
         namingStrategy: new SnakeNamingStrategy(),
         extra: {
-          max: 10,
-          idleTimeoutMillis: 30_000,
+          max: configService.database2.pool.max,
+          idleTimeoutMillis: configService.database2.pool.idleTimeoutMillis,
+          connectionTimeoutMillis:
+            configService.database2.pool.connectionTimeoutMillis,
         },
       }),
     }),
