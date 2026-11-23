@@ -36,6 +36,18 @@ export class ConfigService {
     return value.toLowerCase() === "true";
   }
 
+  getOptionalNumber(key: string): number | undefined {
+    const value = process.env[key];
+    if (value === undefined || value === "") {
+      return undefined;
+    }
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`Environment variable ${key} is not a valid number`);
+    }
+    return parsed;
+  }
+
   get port(): number {
     const p = this.getOptional("PORT");
     return p ? parseInt(p, 10) : 3000;
@@ -80,6 +92,13 @@ export class ConfigService {
           }
         : false,
       synchronize: false,
+      pool: {
+        max: this.getOptionalNumber("DB_POOL_MAX") ?? 4,
+        idleTimeoutMillis:
+          this.getOptionalNumber("DB_POOL_IDLE_TIMEOUT_MS") ?? 10_000,
+        connectionTimeoutMillis:
+          this.getOptionalNumber("DB_POOL_CONN_TIMEOUT_MS") ?? 10_000,
+      },
     };
   }
 
@@ -112,6 +131,23 @@ export class ConfigService {
               this.getOptionalBoolean("DB2_SSL_REJECT_UNAUTHORIZED") !== false,
           }
         : false,
+      pool: {
+        max: this.getOptionalNumber("DB2_POOL_MAX") ?? 4,
+        idleTimeoutMillis:
+          this.getOptionalNumber("DB2_POOL_IDLE_TIMEOUT_MS") ?? 10_000,
+        connectionTimeoutMillis:
+          this.getOptionalNumber("DB2_POOL_CONN_TIMEOUT_MS") ?? 10_000,
+      },
+    };
+  }
+
+  get sessionPool() {
+    return {
+      max: this.getOptionalNumber("SESSION_POOL_MAX") ?? 2,
+      idleTimeoutMillis:
+        this.getOptionalNumber("SESSION_POOL_IDLE_TIMEOUT_MS") ?? 10_000,
+      connectionTimeoutMillis:
+        this.getOptionalNumber("SESSION_POOL_CONN_TIMEOUT_MS") ?? 10_000,
     };
   }
 }
