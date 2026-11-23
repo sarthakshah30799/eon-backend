@@ -12,6 +12,31 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   let testTpTransactionId: string;
   let testTpDocumentId: string;
   let testTpSettlementItemId: string;
+  let sellingBranchId: string;
+  let sellingCounterId: string | undefined;
+
+  const listDocs = (payload: any) =>
+    Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload)
+          ? payload
+          : [];
+
+  const matchesTpProduct = (doc: any) => {
+    const codes = doc?.productCodes;
+    if (typeof codes === 'string') {
+      return codes
+        .split(',')
+        .map((c: string) => c.trim().toUpperCase())
+        .includes('TP');
+    }
+    if (Array.isArray(codes)) {
+      return codes.map((c: any) => String(c).trim().toUpperCase()).includes('TP');
+    }
+    return String(doc?.productCode ?? '').trim().toUpperCase() === 'TP';
+  };
 
   beforeAll(async () => {
     client = new ApiClient();
@@ -21,20 +46,33 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     TestLogger.header('Module 3E: Travellers Cheque (TP) Encashment Surrender Lifecycle');
     await workplaceManager.asAdmin();
     await registry.initialize(client);
+
+    // Branch→HO surrender requires a non-HO selling branch; HO punches auto-accept.
+    expect(registry.masters.nonHoBranch?.id).toBeDefined();
+    expect(registry.masters.nonHoCounter?.id).toBeDefined();
+    sellingBranchId = registry.masters.nonHoBranch!.id;
+    sellingCounterId = registry.masters.nonHoCounter!.id;
+    TestLogger.info(
+      `TP selling branch (non-HO): ${registry.masters.nonHoBranch!.code || sellingBranchId}`,
+    );
   });
 
   it('3E.1 should execute customer encashment surrender of TP cheques with auto-surrender to HO', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
     expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
     const partyProfileId = registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId;
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       partyProfileId,
       tradeMode: 'RETAIL',
       passenger: {
@@ -60,7 +98,7 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
           paymentMethod: 'BANK_TRANSFER',
           amount: 87000,
           accountId: registry.masters.bankAccountId,
-          referenceDate: new Date().toISOString().slice(0, 10),
+          referenceDate: txDate,
         },
       ],
     });
@@ -87,18 +125,19 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     const branchDocsRes = await client.get('/product-settlements', {
       kind: 'BRANCH_HO',
       status: ['PENDING_HO_ACCEPTANCE'],
+      branchId: sellingBranchId,
       limit: 100,
     });
 
     expect([200, 304]).toContain(branchDocsRes.status);
-    const branchDocs = Array.isArray(branchDocsRes.data?.data)
-      ? branchDocsRes.data.data
-      : (Array.isArray(branchDocsRes.data?.items) ? branchDocsRes.data.items : (Array.isArray(branchDocsRes.data) ? branchDocsRes.data : []));
+    const branchDocs = listDocs(branchDocsRes.data);
 
-    const tpDoc = branchDocs.find((d: any) =>
-      (d.productCodes?.includes('TP') || d.productCode === 'TP') &&
-      d.currencyId === registry.masters.currencyUsd.id &&
-      d.status === 'PENDING_HO_ACCEPTANCE'
+    const tpDoc = branchDocs.find(
+      (d: any) =>
+        matchesTpProduct(d) &&
+        d.currencyId === registry.masters.currencyUsd.id &&
+        d.status === 'PENDING_HO_ACCEPTANCE' &&
+        d.branchId === sellingBranchId,
     );
 
     expect(tpDoc).toBeDefined();
@@ -125,9 +164,24 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     expect(registry.masters.cardIssuerPartyId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
-    const hoBranchId = registry.masters.hoBranch?.id || registry.masters.branchA?.id;
-
     await workplaceManager.asHoStaff();
+    const unsettledProbe = await client.get('/product-settlements/unsettled', {
+      kind: 'HO_ISSUER',
+      issuerPartyProfileId: registry.masters.cardIssuerPartyId,
+      currencyId: registry.masters.currencyUsd.id,
+      limit: 100,
+    });
+    const probeRows = listDocs(unsettledProbe.data);
+    const probeTp = probeRows.find(
+      (r: any) =>
+        r.type === 'TP' &&
+        (r.transactionId === testTpTransactionId || Number(r.denomination) === 1000),
+    );
+    const hoBranchId =
+      probeTp?.hoBranchId ||
+      registry.masters.hoBranch?.id ||
+      registry.masters.branchA?.id;
+
     const res = await client.get('/product-settlements/unsettled', {
       kind: 'HO_ISSUER',
       issuerPartyProfileId: registry.masters.cardIssuerPartyId,
@@ -136,9 +190,7 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     });
 
     expect([200, 304]).toContain(res.status);
-    const rows = Array.isArray(res.data?.data)
-      ? res.data.data
-      : (Array.isArray(res.data?.items) ? res.data.items : (Array.isArray(res.data) ? res.data : []));
+    const rows = listDocs(res.data);
 
     // Verify TP is excluded from HO_ISSUER document creation queue
     const tpRow = rows.find((r: any) => r.type === 'TP');
@@ -146,14 +198,17 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     TestLogger.success('Verified accepted TP is excluded from HO_ISSUER document queue');
 
     // Execute direct Bulk Sell of TP to Issuer
-    const policyRes = await client.get(`/auth/policy-context?branchId=${hoBranchId}`);
-    const txDate = policyRes.data?.transactionDate || registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
 
     const sellRes = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_BULK,
       transactionDate: txDate,
-      branchId: registry.masters.branchA?.id || hoBranchId,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       partyProfileId: registry.masters.cardIssuerPartyId,
       tradeMode: 'BULK',
       items: [
@@ -194,18 +249,21 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   });
 
   it('3E.5 should support HO rejection of physical TP cheques with reason, updating document to REJECTED', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
     expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
-    // Punch another TP purchase to generate a fresh surrender document
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
     const partyProfileId = registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId;
     const purchaseRes = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       partyProfileId,
       tradeMode: 'RETAIL',
       passenger: {
@@ -240,24 +298,23 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     const purchaseTxnId = purchaseRes.data?.id || purchaseRes.data?.transaction?.id;
     expect(purchaseTxnId).toBeDefined();
 
-    // Locate the newly created BRANCH_HO surrender doc
     await workplaceManager.asHoStaff();
     const branchDocsRes = await client.get('/product-settlements', {
       kind: 'BRANCH_HO',
       status: ['PENDING_HO_ACCEPTANCE'],
+      branchId: sellingBranchId,
       limit: 100,
     });
-    const branchDocs = Array.isArray(branchDocsRes.data?.data)
-      ? branchDocsRes.data.data
-      : (Array.isArray(branchDocsRes.data?.items) ? branchDocsRes.data.items : (Array.isArray(branchDocsRes.data) ? branchDocsRes.data : []));
+    const branchDocs = listDocs(branchDocsRes.data);
 
-    const tpDocToReject = branchDocs.find((d: any) =>
-      (d.productCodes?.includes('TP') || d.productCode === 'TP') &&
-      d.status === 'PENDING_HO_ACCEPTANCE'
+    const tpDocToReject = branchDocs.find(
+      (d: any) =>
+        matchesTpProduct(d) &&
+        d.status === 'PENDING_HO_ACCEPTANCE' &&
+        d.branchId === sellingBranchId,
     );
     expect(tpDocToReject).toBeDefined();
 
-    // HO rejects physical cheques (e.g. signature discrepancy)
     const rejectReason = 'Physical cheque signature mismatch with customer passport';
     const rejectRes = await client.post(`/product-settlements/${tpDocToReject.id}/reject`, {
       reason: rejectReason,
@@ -272,16 +329,20 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   });
 
   it('3E.6 should reject TP purchase when issuer selection is missing', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
     const partyProfileId = registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId;
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       partyProfileId,
       tradeMode: 'RETAIL',
       passenger: {
@@ -316,17 +377,21 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   });
 
   it('3E.7 should allow TP purchase with autoSurrender: false without queueing HO surrender document', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
     expect(registry.masters.cardIssuerPartyId).toBeDefined();
 
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
     const partyProfileId = registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId;
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       partyProfileId,
       tradeMode: 'RETAIL',
       passenger: {
@@ -361,7 +426,6 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
     const txnId = res.data?.id || res.data?.transaction?.id;
     expect(txnId).toBeDefined();
 
-    // Verify transaction exists
     const getRes = await client.get(`/transactions/${txnId}`);
     expect(getRes.status).toBe(200);
     TestLogger.success(`TP purchase with autoSurrender: false saved cleanly (${txnId}) without auto-queueing HO surrender doc`);
@@ -412,16 +476,20 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   });
 
   it('3E.9 should reject retail sale of Travellers Cheques (TP) when availableInRetailSelling is false', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
     const partyProfileId = registry.masters.corporatePartyProfile?.id || registry.masters.cardIssuerPartyId;
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.SALE_RETAIL,
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       partyProfileId,
       tradeMode: 'RETAIL',
       passenger: {
@@ -454,15 +522,19 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   });
 
   it('3E.10 should reject TP encashment surrender exceeding cash limit ($1,000 for Indian)', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
     expect(registry.masters.currencyUsd?.id).toBeDefined();
 
-    const txDate = registry.masters.transactionDate || new Date().toISOString().slice(0, 10);
+    const policyRes = await client.get(`/auth/policy-context?branchId=${sellingBranchId}`);
+    const txDate =
+      policyRes.data?.transactionDate ||
+      registry.masters.transactionDate ||
+      new Date().toISOString().slice(0, 10);
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
       transactionDate: txDate,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       tradeMode: 'RETAIL',
       passenger: {
         firstName: 'Anand',
@@ -491,13 +563,13 @@ describe('Module 3E: Travellers Cheque (TP) Encashment Surrender & Settle Lifecy
   });
 
   it('3E.11 should reject TP transaction with non-existent currency ID', async () => {
-    expect(registry.masters.branchA?.id).toBeDefined();
+    expect(sellingBranchId).toBeDefined();
 
     const dummyCurrencyId = '00000000-0000-0000-0000-000000009999';
     const res = await client.post('/transactions/drafts', {
       slug: TRANSACTION_SLUGS.PURCHASE_RETAIL,
-      branchId: registry.masters.branchA.id,
-      counterId: registry.masters.counterA1?.id,
+      branchId: sellingBranchId,
+      counterId: sellingCounterId,
       tradeMode: 'RETAIL',
       items: [
         {
