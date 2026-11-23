@@ -1,8 +1,12 @@
 import "dotenv/config";
 import dns from "node:dns";
+import net from "node:net";
 
 // Prefer IPv4 over IPv6 to prevent ENETUNREACH on networks/containers without IPv6 routing
 dns.setDefaultResultOrder?.("ipv4first");
+
+// Disable Happy Eyeballs autoSelectFamily race to prevent 5s socket connect timeouts on cloud DBs
+net.setDefaultAutoSelectFamily?.(false);
 
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
