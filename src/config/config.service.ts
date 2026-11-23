@@ -106,11 +106,11 @@ export class ConfigService {
       synchronize: false,
       logging: this.dbLogging,
       pool: {
-        max: this.getOptionalNumber("DB_POOL_MAX") ?? 4,
+        max: this.getOptionalNumber("DB_POOL_MAX") ?? 10,
         idleTimeoutMillis:
-          this.getOptionalNumber("DB_POOL_IDLE_TIMEOUT_MS") ?? 10_000,
+          this.getOptionalNumber("DB_POOL_IDLE_TIMEOUT_MS") ?? 30_000,
         connectionTimeoutMillis:
-          this.getOptionalNumber("DB_POOL_CONN_TIMEOUT_MS") ?? 10_000,
+          this.getOptionalNumber("DB_POOL_CONN_TIMEOUT_MS") ?? 30_000,
       },
     };
   }
@@ -146,11 +146,11 @@ export class ConfigService {
         : false,
       logging: this.dbLogging,
       pool: {
-        max: this.getOptionalNumber("DB2_POOL_MAX") ?? 4,
+        max: this.getOptionalNumber("DB2_POOL_MAX") ?? 10,
         idleTimeoutMillis:
-          this.getOptionalNumber("DB2_POOL_IDLE_TIMEOUT_MS") ?? 10_000,
+          this.getOptionalNumber("DB2_POOL_IDLE_TIMEOUT_MS") ?? 30_000,
         connectionTimeoutMillis:
-          this.getOptionalNumber("DB2_POOL_CONN_TIMEOUT_MS") ?? 10_000,
+          this.getOptionalNumber("DB2_POOL_CONN_TIMEOUT_MS") ?? 30_000,
       },
     };
   }
