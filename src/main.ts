@@ -1,4 +1,9 @@
 import "dotenv/config";
+import dns from "node:dns";
+
+// Prefer IPv4 over IPv6 to prevent ENETUNREACH on networks/containers without IPv6 routing
+dns.setDefaultResultOrder?.("ipv4first");
+
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { ValidationPipe } from "@nestjs/common";
