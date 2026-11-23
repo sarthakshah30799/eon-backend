@@ -39,6 +39,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
       name: "database2", // Unique name for the second connection
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
+        name: "database2",
         type: "postgres",
         host: configService.database2.host,
         port: configService.database2.port,
