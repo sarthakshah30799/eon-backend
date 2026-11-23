@@ -38,6 +38,10 @@ export class TransactionTaxPreviewItemDto {
   @ApiPropertyOptional()
   @IsOptional()
   total?: string | number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  finalAmount?: string | number;
 }
 
 export class TransactionTaxPreviewChargeDto {
@@ -53,9 +57,18 @@ export class TransactionTaxPreviewChargeDto {
   @ApiPropertyOptional()
   @IsOptional()
   gstRate?: string | number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  applyTax?: boolean;
 }
 
 export class TransactionTaxPreviewDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  transaction?: Record<string, unknown> | null;
+
   @ApiPropertyOptional({ enum: TransactionType })
   @IsOptional()
   @IsEnum(TransactionType)
@@ -80,6 +93,28 @@ export class TransactionTaxPreviewDto {
   @IsOptional()
   @IsBoolean()
   partyProfileApplyTax?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  taxRatePercent?: string | number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchStateName?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  partyStateName?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  branchSnapshot?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  partyProfileSnapshot?: Record<string, unknown> | null;
 
   @ApiPropertyOptional({ type: () => [TransactionTaxPreviewItemDto] })
   @IsOptional()
@@ -158,6 +193,15 @@ export class TransactionTcsPreviewDto {
 }
 
 export class PurchaseRulePreviewDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  transaction?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  id?: string | null;
+
   @ApiPropertyOptional({ enum: TransactionType })
   @IsOptional()
   @IsEnum(TransactionType)
@@ -167,16 +211,6 @@ export class PurchaseRulePreviewDto {
   @IsOptional()
   @IsString()
   slug?: string | null;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  branchId?: string | null;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  counterId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -190,6 +224,10 @@ export class PurchaseRulePreviewDto {
   @ApiPropertyOptional()
   @IsOptional()
   items?: Array<Record<string, unknown>>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  additionalCharges?: Array<Record<string, unknown>>;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -28,6 +28,7 @@ import {
 import { CardStockReferenceType } from "../card-stock/card-stock.enums";
 import {
   isSurrenderBuyingProduct,
+  isTpProductCode,
   normalizeProductCode,
 } from "../card-stock/card-product.util";
 import { Product } from "../products/product.entity";
@@ -595,17 +596,8 @@ export class ProductSettlementService {
     if (!selling) {
       throw new BadRequestException("Selling branch not found");
     }
-    let ho = await this.branchRepository.findOne({
-      where: { isHeadOffice: true, isActive: true },
-    });
-    if (!ho) {
-      ho = await this.branchRepository.findOne({
-        where: { isHeadOffice: true },
-      });
-    }
-    if (!ho) {
-      ho = selling;
-    }
+    // Same HO resolution as CARD/TT: selling HO auto-posts; non-HO stays PENDING_HO_ACCEPTANCE.
+    const ho = await this.getSettlementHo(selling.id, selling);
 
     const feAmount = Number(item.quantity);
     const buyRate = Number(item.rate);
@@ -699,6 +691,41 @@ export class ProductSettlementService {
         );
       }
       await manager.getRepository(ProductSettlement).softDelete(row.id);
+    }
+  }
+
+  async finalizeTpIssuerSale(
+    manager: EntityManager,
+    transaction: Transaction,
+    items: TransactionItem[],
+    actorId: string,
+  ): Promise<void> {
+    const settlementRepo = manager.getRepository(ProductSettlement);
+    for (const item of items) {
+      const issuerPartyId =
+        item.issuerPartyProfileId ?? transaction.partyProfileId;
+      const openSettlements = await settlementRepo.find({
+        where: {
+          type: ProductSettlementType.TP,
+          currencyId: item.currencyId,
+          ...(issuerPartyId ? { issuerPartyProfileId: String(issuerPartyId) } : {}),
+          status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+        },
+        order: { createdAt: "ASC" },
+      });
+
+      let remainingQuantity = Number(item.quantity ?? 0);
+      for (const settle of openSettlements) {
+        if (remainingQuantity <= 0) break;
+        const settleDenom = Number(settle.denomination ?? 0);
+        if (settleDenom > 0 && settleDenom <= remainingQuantity) {
+          await settlementRepo.update(settle.id, {
+            status: ProductSettlementStatus.ISSUER_SETTLED,
+            updatedBy: actorId,
+          });
+          remainingQuantity -= settleDenom;
+        }
+      }
     }
   }
 
@@ -1335,7 +1362,6 @@ export class ProductSettlementService {
         `(
           (s.type = 'CARD' AND s.branch_settlement_entry_id IS NOT NULL)
           OR (s.type = 'TT')
-          OR (s.type = 'TP')
         )`,
         `s.ho_branch_id = $${params.length}`,
       );
@@ -1354,6 +1380,11 @@ export class ProductSettlementService {
         s.sale_buy_rate AS "saleBuyRate", s.buy_rate AS "buyRate",
         s.booking_rate AS "bookingRate", s.settlement_amount AS "settlementAmount",
         s.branch_id AS "branchId", s.branch_snapshot AS "branchSnapshot",
+        s.ho_branch_id AS "hoBranchId", s.ho_branch_snapshot AS "hoBranchSnapshot",
+        s.deal_cover_id AS "dealCoverId",
+        s.transaction_id AS "transactionId",
+        s.transaction_item_id AS "transactionItemId",
+        s.buy_rate_snapshot AS "buyRateSnapshot",
         s.issuer_party_profile_id AS "issuerPartyProfileId",
         s.issuer_party_profile_snapshot AS "issuerPartyProfileSnapshot",
         s.currency_id AS "currencyId", s.currency_snapshot AS "currencySnapshot",
@@ -1403,7 +1434,7 @@ export class ProductSettlementService {
           .filter(
             (product) =>
               isSurrenderBuyingProduct(product) ||
-              String(product.productCode ?? "").trim().toUpperCase() === "TP",
+              isTpProductCode(product.productCode),
           )
           .map((product) => normalizeProductCode(product.productCode))
           .filter((code) => Boolean(code)),

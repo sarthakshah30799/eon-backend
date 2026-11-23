@@ -8,6 +8,7 @@ import {
 import { WorkflowStatus } from '../common/enums/workflow-status.enum';
 import { AdvanceRefund } from './entities/advance-refund.entity';
 import { AdvanceRefundItem } from './entities/advance-refund-item.entity';
+import { AdvanceRefundLog } from './entities/advance-refund-log.entity';
 
 describe('AdvanceRefundService', () => {
   let service: AdvanceRefundService;
@@ -127,6 +128,12 @@ describe('AdvanceRefundService', () => {
               save: jest.fn().mockImplementation((e) => Promise.resolve({ id: 'item-new-id', ...e })),
             };
           }
+          if (entity === AdvanceRefundLog) {
+            return {
+              create: jest.fn().mockImplementation((d) => ({ id: 'log-new-id', ...d })),
+              save: jest.fn().mockImplementation((e) => Promise.resolve({ id: 'log-new-id', ...e })),
+            };
+          }
           return {};
         }),
       },
@@ -207,17 +214,28 @@ describe('AdvanceRefundService', () => {
       }),
     };
 
+    const mockLogRepo = {
+      create: jest.fn().mockImplementation((d) => d),
+      save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
+    };
+
+    const mockUserRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 'user-1', name: 'Admin', email: 'admin@example.com' }),
+    };
+
     service = new AdvanceRefundService(
       mockDatabase1,
       mockDatabase2,
       mockAdvanceRefundRepo,
       mockItemRepo,
+      mockLogRepo as any,
       mockAccountRepo,
       mockPartyRepo,
       mockOptionRepo,
       mockBranchRepo,
       mockCounterRepo,
       mockBranchCounterRepo,
+      mockUserRepo as any,
       mockAdditionalSettings,
       mockDayPolicy,
       mockPartyProfileService,

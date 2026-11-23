@@ -10,6 +10,7 @@ export const FLM_FFMC_PARTY_PROFILE_TYPES = [
   ClientType.FOREIGN_CORRESPONDENT,
   ClientType.MISC_PROFILE,
   ClientType.FRANCHISE,
+  ClientType.CARD_ISSUER_PROFILE,
 ] as const;
 
 export type FlmFfmcPartyProfileType =
@@ -20,6 +21,8 @@ const LEGACY_PROFILE_TYPE_ALIASES: Record<string, FlmFfmcPartyProfileType> = {
   FOREX: ClientType.FOREX_CORRESPONDENT,
   FOREIGN: ClientType.FOREIGN_CORRESPONDENT,
   MISC: ClientType.MISC_PROFILE,
+  CARD_ISSUER: ClientType.CARD_ISSUER_PROFILE,
+  ISSUER: ClientType.CARD_ISSUER_PROFILE,
 };
 
 export const FLM_FFMC_PROFILE_TYPES = [
@@ -39,6 +42,7 @@ const FLM4_PROFILE_SLUG_BY_TYPE: Record<
     TransactionTypeProfileEnum.PURCHASE_FOREIGN,
   [ClientType.MISC_PROFILE]: TransactionTypeProfileEnum.PURCHASE_MISC,
   [ClientType.FRANCHISE]: TransactionTypeProfileEnum.PURCHASE_FRANCHISE,
+  [ClientType.CARD_ISSUER_PROFILE]: TransactionTypeProfileEnum.PURCHASE_MISC,
 };
 
 const FLM6_PROFILE_SLUG_BY_TYPE: Record<
@@ -52,6 +56,7 @@ const FLM6_PROFILE_SLUG_BY_TYPE: Record<
   [ClientType.FOREIGN_CORRESPONDENT]: TransactionTypeProfileEnum.SALE_FOREIGN,
   [ClientType.MISC_PROFILE]: TransactionTypeProfileEnum.SALE_MISC,
   [ClientType.FRANCHISE]: TransactionTypeProfileEnum.SALE_FRANCHISE,
+  [ClientType.CARD_ISSUER_PROFILE]: TransactionTypeProfileEnum.SALE_MISC,
 };
 
 const normalizeProfileType = (

@@ -8,9 +8,12 @@ export interface DiscoveredMasters {
   branchA?: { id: string; name: string; code: string };
   branchB?: { id: string; name: string; code: string };
   hoBranch?: { id: string; name: string; code: string; isHeadOffice?: boolean };
+  /** Non-HO selling branch for Branch→HO surrender flows (TP/EM/CARD). */
+  nonHoBranch?: { id: string; name: string; code: string };
   counterA1?: { id: string; name: string; branchId: string };
   counterA2?: { id: string; name: string; branchId: string };
   counterB1?: { id: string; name: string; branchId: string };
+  nonHoCounter?: { id: string; name: string; branchId: string };
   currencyUsd?: { id: string; code: string; name: string };
   currencyEur?: { id: string; code: string; name: string };
   currencyGbp?: { id: string; code: string; name: string };
@@ -40,6 +43,7 @@ export interface DiscoveredMasters {
   purposeId?: string;
   countryId?: string;
   ttMaturityOptionId?: string;
+  fbChargeBearerOptionId?: string;
 }
 
 export class MasterDataRegistry {
@@ -56,8 +60,95 @@ export class MasterDataRegistry {
     return MasterDataRegistry.instance;
   }
 
+  private async ensureNonHoBranch(adminClient: ApiClient): Promise<void> {
+    if (this.masters.nonHoBranch?.id) return;
+    try {
+      const branchRes = await adminClient.get('/branches', { limit: 100 });
+      const branches = Array.isArray(branchRes.data?.data)
+        ? branchRes.data.data
+        : Array.isArray(branchRes.data?.items)
+          ? branchRes.data.items
+          : Array.isArray(branchRes.data)
+            ? branchRes.data
+            : [];
+      const counterRes = await adminClient.get('/counters', { limit: 100 });
+      const counters = Array.isArray(counterRes.data?.data)
+        ? counterRes.data.data
+        : Array.isArray(counterRes.data?.items)
+          ? counterRes.data.items
+          : Array.isArray(counterRes.data)
+            ? counterRes.data
+            : [];
+      const hoIds = new Set(
+        branches.filter((b: any) => b.isHeadOffice).map((b: any) => String(b.id)),
+      );
+      const withCounter = (branch?: { id: string; name: string; code: string }) => {
+        if (!branch?.id || hoIds.has(branch.id)) return null;
+        const found = counters.find(
+          (c: any) =>
+            Array.isArray(c.branchIds) && c.branchIds.includes(branch.id),
+        );
+        if (!found) return null;
+        return {
+          branch,
+          counter: {
+            id: found.id,
+            name: found.name || found.counterName,
+            branchId: branch.id,
+          },
+        };
+      };
+      const preferred =
+        withCounter(this.masters.branchB) ||
+        withCounter(this.masters.branchA) ||
+        (() => {
+          for (const other of branches.filter((b: any) => !b.isHeadOffice)) {
+            const hit = withCounter({
+              id: other.id,
+              name: other.name || other.branchName,
+              code: other.code || other.branchCode,
+            });
+            if (hit) return hit;
+          }
+          return null;
+        })();
+      if (!preferred) return;
+      this.masters.nonHoBranch = preferred.branch;
+      this.masters.nonHoCounter = preferred.counter;
+    } catch {}
+  }
+
+  private async ensureFbChargeBearerOption(adminClient: ApiClient): Promise<void> {
+    if (this.masters.fbChargeBearerOptionId) return;
+    try {
+      const fbRes = await adminClient.get('/select-options/FBCHARGEBEARER');
+      const fbList = Array.isArray(fbRes.data)
+        ? fbRes.data
+        : Array.isArray(fbRes.data?.data)
+          ? fbRes.data.data
+          : [];
+      if (fbList.length > 0) {
+        this.masters.fbChargeBearerOptionId = fbList[0].id;
+        TestLogger.info(`Discovered FB Charge Bearer Option ID: ${this.masters.fbChargeBearerOptionId}`);
+        return;
+      }
+      const createFbRes = await adminClient.post('/select-options', {
+        code: 'FBCHARGEBEARER',
+        value: 'OUR',
+        label: 'OUR',
+        isActive: true,
+      });
+      if (createFbRes.ok && createFbRes.data?.id) {
+        this.masters.fbChargeBearerOptionId = createFbRes.data.id;
+        TestLogger.info(`Created FB Charge Bearer Option ID: ${this.masters.fbChargeBearerOptionId}`);
+      }
+    } catch {}
+  }
+
   public async initialize(adminClient: ApiClient): Promise<DiscoveredMasters> {
     if (this.initialized) {
+      await this.ensureNonHoBranch(adminClient);
+      await this.ensureFbChargeBearerOption(adminClient);
       if (this.masters.branchA?.id) {
         try {
           const policyRes = await adminClient.get('/auth/policy-context', {
@@ -212,11 +303,65 @@ export class MasterDataRegistry {
       this.masters.hoBranch = this.masters.branchA;
     }
 
+    const hoIds = new Set(
+      branches.filter((b: any) => b.isHeadOffice).map((b: any) => String(b.id)),
+    );
+    const counterForBranch = (branchId: string) =>
+      counters.find(
+        (c: any) => Array.isArray(c.branchIds) && c.branchIds.includes(branchId),
+      );
+    const nonHoCandidates: Array<{
+      branch: { id: string; name: string; code: string };
+      counter?: { id: string; name: string; branchId: string };
+    }> = [];
+    const pushCandidate = (
+      branch?: { id: string; name: string; code: string },
+      counter?: { id: string; name: string; branchId: string },
+    ) => {
+      if (!branch?.id || hoIds.has(branch.id)) return;
+      const resolvedCounter =
+        counter ||
+        (() => {
+          const found = counterForBranch(branch.id);
+          return found
+            ? {
+                id: found.id,
+                name: found.name || found.counterName,
+                branchId: branch.id,
+              }
+            : undefined;
+        })();
+      // Prefer branches that already have a counter (transaction drafts require one).
+      if (!resolvedCounter) return;
+      nonHoCandidates.push({ branch, counter: resolvedCounter });
+    };
+    pushCandidate(this.masters.branchB, this.masters.counterB1);
+    pushCandidate(this.masters.branchA, this.masters.counterA1);
+    if (!nonHoCandidates.length) {
+      for (const otherNonHo of branches.filter((b: any) => !b.isHeadOffice)) {
+        pushCandidate({
+          id: otherNonHo.id,
+          name: otherNonHo.name || otherNonHo.branchName,
+          code: otherNonHo.code || otherNonHo.branchCode,
+        });
+        if (nonHoCandidates.length) break;
+      }
+    }
+    if (nonHoCandidates[0]) {
+      this.masters.nonHoBranch = nonHoCandidates[0].branch;
+      this.masters.nonHoCounter = nonHoCandidates[0].counter;
+    }
+
     if (this.masters.branchA) {
       TestLogger.info(`Branch A: ${this.masters.branchA.name} (${this.masters.branchA.id})`);
     }
     if (this.masters.branchB) {
       TestLogger.info(`Branch B: ${this.masters.branchB.name} (${this.masters.branchB.id})`);
+    }
+    if (this.masters.nonHoBranch) {
+      TestLogger.info(
+        `Non-HO Branch: ${this.masters.nonHoBranch.name} (${this.masters.nonHoBranch.id})`,
+      );
     }
     if (this.masters.counterA1) {
       TestLogger.info(`Counter A1: ${this.masters.counterA1.name} (${this.masters.counterA1.id}) for Branch A`);
@@ -524,8 +669,15 @@ export class MasterDataRegistry {
     // Ensure Card Issuer is assigned to branches and linked to products CC, CM, TT, and EM
     if (this.masters.cardIssuerPartyId && this.masters.branchA?.id) {
       try {
+        const issuerBranchIds = [
+          this.masters.branchA.id,
+          this.masters.branchB?.id,
+          this.masters.nonHoBranch?.id,
+        ].filter(
+          (id, idx, arr): id is string => Boolean(id) && arr.indexOf(id) === idx,
+        );
         await adminClient.put(`/party-profiles/${this.masters.cardIssuerPartyId}/branches`, {
-          branchIds: [this.masters.branchA.id, ...(this.masters.branchB?.id ? [this.masters.branchB.id] : [])],
+          branchIds: issuerBranchIds,
         });
       } catch {}
     }
@@ -674,8 +826,15 @@ export class MasterDataRegistry {
 
     // Ensure Corporate Party Profile is assigned to test branches (Branch A & Branch B) and has credit limits configured
     if (this.masters.corporatePartyProfile && this.masters.branchA?.id) {
+      const corporateBranchIds = [
+        this.masters.branchA.id,
+        this.masters.branchB?.id,
+        this.masters.nonHoBranch?.id,
+      ].filter(
+        (id, idx, arr): id is string => Boolean(id) && arr.indexOf(id) === idx,
+      );
       await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}/branches`, {
-        branchIds: [this.masters.branchA.id, ...(this.masters.branchB?.id ? [this.masters.branchB.id] : [])],
+        branchIds: corporateBranchIds,
       });
       try {
         await adminClient.put(`/party-profiles/${this.masters.corporatePartyProfile.id}`, {
@@ -938,7 +1097,11 @@ export class MasterDataRegistry {
 
     // 6. Synchronize BOD/EOD and Policy Transaction Date across branches
     const today = new Date().toISOString().slice(0, 10);
-    const branchesToSync = [this.masters.branchA?.id, this.masters.branchB?.id].filter(
+    const branchesToSync = [
+      this.masters.branchA?.id,
+      this.masters.branchB?.id,
+      this.masters.nonHoBranch?.id,
+    ].filter(
       (id, idx, arr): id is string => Boolean(id) && arr.indexOf(id) === idx
     );
 
@@ -1018,6 +1181,9 @@ export class MasterDataRegistry {
         }
       }
     } catch {}
+
+    // 6E. Discover FB Charge Bearer Option (required on TT remittance)
+    await this.ensureFbChargeBearerOption(adminClient);
 
     // 7. Ensure Counter A1 has baseline USD currency notes stock for sales testing
     if (

@@ -486,8 +486,26 @@ export class EmSurrenderService {
       `SELECT set_config('app.skip_card_stock_card_insert_ledger', 'false', true)`,
     );
 
+    // Use UPDATE (not save) so TypeORM does not deep-compare jsonb snapshots
+    // that may still contain non-Buffer values from older rows.
     item.cardId = emCard.id;
-    await manager.getRepository(TransactionItem).save(item);
+    item.cardSnapshot = {
+      id: emCard.id,
+      series: emCard.series,
+      kitNumber: emCard.kitNumber,
+      denomination: emCard.denomination,
+      amount: emCard.amount,
+      expirationDate: emCard.expirationDate,
+      status: emCard.status,
+      maskedCardNumber:
+        (item.cardSnapshot as { maskedCardNumber?: string } | null)
+          ?.maskedCardNumber ?? null,
+    } as TransactionReferenceSnapshotValue;
+    await manager.getRepository(TransactionItem).update(item.id, {
+      cardId: emCard.id,
+      cardSnapshot: item.cardSnapshot,
+      updatedBy: actorId,
+    });
 
     if (autoSurrender) {
       await this.createPendingHoSettlement({
@@ -605,6 +623,14 @@ export class EmSurrenderService {
         selling.code,
         saleDate,
       );
+    const documentIssuerSnapshot =
+      item.issuerPartyProfileSnapshot ??
+      settlement.issuerPartyProfileSnapshot ??
+      ({
+        id: item.issuerPartyProfileId,
+        code: "ISSUER",
+        name: "Card Issuer",
+      } as TransactionReferenceSnapshotValue);
     const document = (await manager
       .getRepository(ProductSettlementDocument)
       .save(
@@ -614,7 +640,7 @@ export class EmSurrenderService {
           transactionNumber: number,
           transactionDate: saleDate,
           issuerPartyProfileId: item.issuerPartyProfileId!,
-          issuerPartyProfileSnapshot: item.issuerPartyProfileSnapshot,
+          issuerPartyProfileSnapshot: documentIssuerSnapshot,
           currencyId: item.currencyId,
           currencySnapshot: item.currencySnapshot,
           branchId: transaction.branchId,

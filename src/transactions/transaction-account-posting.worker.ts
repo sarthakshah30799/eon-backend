@@ -642,12 +642,13 @@ export class TransactionAccountPostingWorker
             : (quantity * rate) / per + Number(row.roundOff ?? 0),
         ),
       );
-      const profitAmount = Number(row.profitAmount);
-      if (!Number.isFinite(profitAmount))
+      const profitAmount = Number(row.profitAmount ?? 0);
+      if (!Number.isFinite(profitAmount) && row.settlementType !== "TP")
         throw new BadRequestException(
           `Stored ${label} profit is missing for sale item ${row.saleItemId}`,
         );
-      const branchAmount = saleAmount + profitAmount;
+      const safeProfit = Number.isFinite(profitAmount) ? profitAmount : 0;
+      const branchAmount = saleAmount + safeProfit;
 
       add(
         row,
