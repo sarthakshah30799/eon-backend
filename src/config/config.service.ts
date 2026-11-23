@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { LoggerOptions } from "typeorm";
 
 @Injectable()
 export class ConfigService {
@@ -65,6 +66,17 @@ export class ConfigService {
     return this.get("SESSION_SECRET");
   }
 
+  get dbLogging(): LoggerOptions {
+    const loggingEnv = this.getOptional("DB_LOGGING")?.toLowerCase();
+    if (loggingEnv === "true" || loggingEnv === "all") {
+      return true;
+    }
+    if (loggingEnv === "false" || loggingEnv === "none") {
+      return false;
+    }
+    return ["error"];
+  }
+
   get database() {
     const sslEnabled = this.getOptionalBoolean("DB_SSL") === true;
     return {
@@ -92,6 +104,7 @@ export class ConfigService {
           }
         : false,
       synchronize: false,
+      logging: this.dbLogging,
       pool: {
         max: this.getOptionalNumber("DB_POOL_MAX") ?? 4,
         idleTimeoutMillis:
@@ -131,6 +144,7 @@ export class ConfigService {
               this.getOptionalBoolean("DB2_SSL_REJECT_UNAUTHORIZED") !== false,
           }
         : false,
+      logging: this.dbLogging,
       pool: {
         max: this.getOptionalNumber("DB2_POOL_MAX") ?? 4,
         idleTimeoutMillis:

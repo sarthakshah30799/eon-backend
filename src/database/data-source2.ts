@@ -34,5 +34,5 @@ export const AppDataSource2 = new DataSource({
   migrations: [__dirname + "/../migrations2/*{.ts,.js}"],
   synchronize: configService.database.synchronize,
   namingStrategy: new SnakeNamingStrategy(),
-  logging: true,
+  logging: configService.database2.logging,
 });
