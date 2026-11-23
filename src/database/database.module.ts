@@ -24,7 +24,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         migrations: [__dirname + "/../migrations/*{.ts,.js}"],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,
-        logging: true,
+        logging: configService.database.logging,
         namingStrategy: new SnakeNamingStrategy(),
         extra: {
           max: configService.database.pool.max,
@@ -65,7 +65,7 @@ import { SnakeNamingStrategy } from "typeorm-naming-strategies";
         ],
         synchronize: false, // Ensure you handle schema changes properly
         migrationsRun: false,
-        logging: true,
+        logging: configService.database2.logging,
         namingStrategy: new SnakeNamingStrategy(),
         extra: {
           max: configService.database2.pool.max,
