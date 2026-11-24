@@ -280,7 +280,11 @@ export const loadAgeingPartyMeta = async (
         pp.eefc_client AS "eefcClient",
         pp.credit_days AS "creditDays",
         pp.credit_limit AS "creditLimit",
-        COALESCE(entity_type.code, '') AS "entityTypeCode"
+        COALESCE(
+          NULLIF(BTRIM(entity_type.label), ''),
+          NULLIF(BTRIM(entity_type.value), ''),
+          ''
+        ) AS "entityTypeLabel"
       FROM party_profiles pp
       LEFT JOIN category_options entity_type
         ON entity_type.id = pp.entity_type_id
@@ -292,7 +296,7 @@ export const loadAgeingPartyMeta = async (
     eefcClient: boolean | null;
     creditDays: string | number | null;
     creditLimit: string | number | null;
-    entityTypeCode: string | null;
+    entityTypeLabel: string | null;
   }>;
   return new Map(
     rows.map((row) => [
@@ -300,7 +304,7 @@ export const loadAgeingPartyMeta = async (
       {
         id: row.id,
         eefcClient: row.eefcClient,
-        entityTypeCode: row.entityTypeCode,
+        entityTypeLabel: row.entityTypeLabel,
         creditDays: toNumber(row.creditDays),
         creditLimit: toNumber(row.creditLimit),
       },
@@ -442,7 +446,7 @@ const toLines = (
       partyName,
       creditDays: meta?.creditDays ?? 0,
       creditLimit: meta?.creditLimit ?? 0,
-      category: String(meta?.entityTypeCode ?? "").trim(),
+      category: String(meta?.entityTypeLabel ?? "").trim(),
       bucketKey: bucket.key,
       outstanding,
       docNo: `${isSale ? "PS" : "PP"}${String(source.number ?? "").trim()}`,
