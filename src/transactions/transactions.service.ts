@@ -1837,6 +1837,11 @@ export class TransactionsService {
         .filter((product) => isTtProductCode(product.productCode))
         .map((product) => product.id),
     );
+    const tpProductIds = new Set(
+      requestedProducts
+        .filter((product) => isTpProductCode(product.productCode))
+        .map((product) => product.id),
+    );
     const hasRequestedTtItems = requestedItemRows.some((item) =>
       ttProductIds.has(String(item.productId)),
     );
@@ -2094,7 +2099,8 @@ export class TransactionsService {
             (item) =>
               !cardProductIds.has(String(item.productId)) &&
               !surrenderProductIds.has(String(item.productId)) &&
-              !ttProductIds.has(String(item.productId)),
+              !ttProductIds.has(String(item.productId)) &&
+              !tpProductIds.has(String(item.productId)),
           )
           .map((item) => {
             const prod = requestedProducts.find(
@@ -2126,6 +2132,17 @@ export class TransactionsService {
               excludeTransactionId:
                 transactionPayload.rootTransactionId ?? undefined,
             },
+          );
+        }
+
+        const tpSaleItems = requestedItemRows.filter((item) =>
+          tpProductIds.has(String(item.productId)),
+        );
+        if (tpSaleItems.length > 0) {
+          await this.assertTpSaleSettlementStock(
+            String(resolvedBranchId),
+            tpSaleItems,
+            transactionPayload.partyProfileId,
           );
         }
       }
@@ -4311,7 +4328,8 @@ export class TransactionsService {
             return (
               !isCardProductCode(prod?.productCode) &&
               !isSurrenderBulkSaleProduct(prod ?? {}) &&
-              !isTtProductCode(prod?.productCode)
+              !isTtProductCode(prod?.productCode) &&
+              !isTpProductCode(prod?.productCode)
             );
           })
           .map((item) => ({
@@ -4338,6 +4356,18 @@ export class TransactionsService {
               items: saleItemsToCheck,
               excludeTransactionId: locked.id,
             },
+          );
+        }
+
+        const tpDraftItems = draftItems.filter((item) => {
+          const prod = productById.get(item.productId);
+          return isTpProductCode(prod?.productCode);
+        });
+        if (tpDraftItems.length > 0) {
+          await this.assertTpSaleSettlementStock(
+            String(locked.branchId),
+            tpDraftItems,
+            locked.partyProfileId,
           );
         }
       }
@@ -4705,5 +4735,55 @@ export class TransactionsService {
       message,
       messageId,
     };
+  }
+
+  private async assertTpSaleSettlementStock(
+    branchId: string,
+    items: Array<{
+      currencyId: string;
+      productId: string;
+      quantity: string | number;
+      issuerPartyProfileId?: string | null;
+    }>,
+    headerPartyProfileId?: string | null,
+  ): Promise<void> {
+    const grouped = new Map<
+      string,
+      { currencyId: string; issuerId?: string; quantity: number }
+    >();
+    for (const item of items) {
+      const qty = Number(item.quantity ?? 0);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const currencyId = String(item.currencyId ?? "").trim();
+      const issuerId = String(
+        item.issuerPartyProfileId || headerPartyProfileId || "",
+      ).trim();
+      const key = `${currencyId}:${issuerId}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        grouped.set(key, {
+          currencyId,
+          issuerId: issuerId || undefined,
+          quantity: qty,
+        });
+      }
+    }
+
+    for (const group of grouped.values()) {
+      const availability =
+        await this.productSettlementService.getTpAvailability({
+          currencyId: group.currencyId,
+          issuerPartyProfileId: group.issuerId,
+          hoBranchId: branchId,
+        });
+      const availableNum = Number(availability.availableQuantity ?? 0);
+      if (group.quantity > availableNum) {
+        throw new BadRequestException(
+          `Insufficient accepted TP cheques awaiting settlement. Requested: ${group.quantity.toFixed(2)}, Available: ${availableNum.toFixed(2)}`,
+        );
+      }
+    }
   }
 }

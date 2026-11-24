@@ -18,6 +18,7 @@ import {
   ProductUnsettledQueryDto,
   CreateProductSettlementDocumentDto,
   RejectProductSettlementDocumentDto,
+  TpAvailabilityQueryDto,
 } from "./dto/product-settlement.dto";
 import { ProductSettlementService } from "./product-settlement.service";
 
@@ -44,6 +45,20 @@ export class ProductSettlementController {
     @Session() session: AuthenticatedSession,
   ) {
     return this.settlementService.listUnsettled(query, session);
+  }
+
+  @Get("tp-availability")
+  @ApiOperation({ summary: "Get accepted TP cheques availability for issuer sale" })
+  getTpAvailability(
+    @Query() query: TpAvailabilityQueryDto,
+    @Session() session: AuthenticatedSession,
+  ) {
+    const hoBranchId = query.hoBranchId || session?.activeBranchId || "";
+    return this.settlementService.getTpAvailability({
+      currencyId: query.currencyId,
+      issuerPartyProfileId: query.issuerPartyProfileId,
+      hoBranchId,
+    });
   }
 
   @Post()
