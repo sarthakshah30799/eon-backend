@@ -182,53 +182,60 @@ export class CfrAdvAdjustLogs1794912214665 implements MigrationInterface {
             'finalAmount', v_receipt.final_amount,
             'transactionDate', v_receipt.transaction_date
           );
-          v_jv_id := uuid_generate_v4();
 
-          INSERT INTO "accounting_vouchers" (
-            "id",
-            "voucher_type",
-            "number",
-            "idempotency_key",
-            "payload_hash",
-            "transaction_date",
-            "branch_id",
-            "branch_snapshot",
-            "counter_id",
-            "counter_snapshot",
-            "party_profile_id",
-            "party_profile_snapshot",
-            "pan_number",
-            "pan_name",
-            "pan_dob",
-            "narration",
-            "total_debit",
-            "total_credit",
-            "final_amount",
-            "created_by",
-            "updated_by"
-          ) VALUES (
-            v_jv_id,
-            'JOURNAL',
-            'JV/ADJ/' || rec.number,
-            'backfill:jv:' || rec.id,
-            'backfill-hash',
-            rec.transaction_date,
-            rec.branch_id,
-            rec.branch_snapshot,
-            rec.counter_id,
-            rec.counter_snapshot,
-            rec.party_profile_id,
-            rec.party_profile_snapshot,
-            rec.pan_number,
-            rec.pan_name,
-            rec.pan_dob,
-            'Advance Adjustment Backfill JV for ' || rec.number,
-            rec.total_adjustment_amount,
-            rec.total_adjustment_amount,
-            rec.total_adjustment_amount,
-            rec.created_by,
-            rec.updated_by
-          );
+          SELECT id INTO v_jv_id
+          FROM "accounting_vouchers"
+          WHERE "idempotency_key" = 'backfill:jv:' || rec.id;
+
+          IF v_jv_id IS NULL THEN
+            v_jv_id := uuid_generate_v4();
+
+            INSERT INTO "accounting_vouchers" (
+              "id",
+              "voucher_type",
+              "number",
+              "idempotency_key",
+              "payload_hash",
+              "transaction_date",
+              "branch_id",
+              "branch_snapshot",
+              "counter_id",
+              "counter_snapshot",
+              "party_profile_id",
+              "party_profile_snapshot",
+              "pan_number",
+              "pan_name",
+              "pan_dob",
+              "narration",
+              "total_debit",
+              "total_credit",
+              "final_amount",
+              "created_by",
+              "updated_by"
+            ) VALUES (
+              v_jv_id,
+              'JOURNAL',
+              'JV/ADJ/' || rec.number,
+              'backfill:jv:' || rec.id,
+              'backfill-hash',
+              rec.transaction_date,
+              rec.branch_id,
+              rec.branch_snapshot,
+              rec.counter_id,
+              rec.counter_snapshot,
+              rec.party_profile_id,
+              rec.party_profile_snapshot,
+              rec.pan_number,
+              rec.pan_name,
+              rec.pan_dob,
+              'Advance Adjustment Backfill JV for ' || rec.number,
+              rec.total_adjustment_amount,
+              rec.total_adjustment_amount,
+              rec.total_adjustment_amount,
+              rec.created_by,
+              rec.updated_by
+            );
+          END IF;
 
           UPDATE "advance_adjustment"
           SET
