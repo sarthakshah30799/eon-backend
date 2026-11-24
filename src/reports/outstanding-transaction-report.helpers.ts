@@ -100,7 +100,7 @@ type SourceRow = {
 export type OutstandingPartyMeta = {
   id: string;
   eefcClient: boolean | null;
-  entityTypeCode: string | null;
+  entityTypeLabel: string | null;
 };
 
 type Line = {
@@ -267,7 +267,11 @@ export const loadOutstandingPartyMeta = async (
     `SELECT
         pp.id AS "id",
         pp.eefc_client AS "eefcClient",
-        COALESCE(entity_type.code, '') AS "entityTypeCode"
+        COALESCE(
+          NULLIF(BTRIM(entity_type.label), ''),
+          NULLIF(BTRIM(entity_type.value), ''),
+          ''
+        ) AS "entityTypeLabel"
       FROM party_profiles pp
       LEFT JOIN category_options entity_type
         ON entity_type.id = pp.entity_type_id
@@ -497,7 +501,7 @@ export const buildOutstandingReport = (
         otherRef: reference,
         uniqCode: "",
         reference,
-        category: String(meta?.entityTypeCode ?? "").trim(),
+        category: String(meta?.entityTypeLabel ?? "").trim(),
       },
     });
   });

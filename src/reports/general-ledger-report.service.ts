@@ -90,7 +90,7 @@ type ColumnarRow = {
 
 const LEDGER_COLUMNS: ReportColumn[] = [
   { key: "date", label: "Date" },
-  { key: "docCode", label: "No" },
+  { key: "docCode", label: "Type" },
   { key: "number", label: "ID No." },
   { key: "subledger", label: "Sub Ledger" },
   { key: "particulars", label: "Particulars" },
@@ -111,6 +111,20 @@ const TECHNICAL_SLUGS = [
   "CARD_RETURN",
   "CARD_VOID",
 ];
+
+/** Same readable labels as Generate Ledger (`type` column). */
+const SOURCE_TYPE_LABELS: Partial<Record<string, string>> = {
+  [TransactionPostingSourceType.ADDITIONAL_CHARGE]: "Additional charge",
+  [TransactionPostingSourceType.TDS]: "TDS",
+  [TransactionPostingSourceType.TCS]: "TCS",
+  [TransactionPostingSourceType.ROUND_OFF]: "Round off",
+  [TransactionPostingSourceType.PARTY_CONTROL]: "Party control",
+  [TransactionPostingSourceType.TAX_ITEM]: "Tax",
+  [TransactionPostingSourceType.TAX_ADDITIONAL_CHARGE]: "Tax",
+  [TransactionPostingSourceType.AGENT_COMMISSION]: "Agent commission",
+  [TransactionPostingSourceType.ITEM_PROFIT]: "Item profit",
+  [TransactionPostingSourceType.FAKE_CURRENCY]: "Fake currency",
+};
 
 const toText = (value: unknown) => String(value ?? "").trim();
 
@@ -539,10 +553,17 @@ export class GeneralLedgerReportService {
   }
 
   private resolveDocCode(row: TransactionPostingRow, isDebit: boolean) {
-    if (isTransferDocument(row)) return "TR";
+    if (isTransferDocument(row)) {
+      return "Transfer";
+    }
 
     if (row.sourceType === TransactionPostingSourceType.PAYMENT) {
-      return isDebit ? "RT" : "PT";
+      return isDebit ? "Receipt" : "Payment";
+    }
+
+    const sourceLabel = SOURCE_TYPE_LABELS[row.sourceType];
+    if (sourceLabel) {
+      return sourceLabel;
     }
 
     const documentType = normalizeUpper(row.documentType);
@@ -550,16 +571,16 @@ export class GeneralLedgerReportService {
       documentType === TransactionType.PURCHASE ||
       documentType.includes("PURCHASE")
     ) {
-      return "PR";
+      return "Purchase";
     }
     if (
       documentType === TransactionType.SALE ||
       documentType.includes("SALE") ||
       documentType.includes("SELL")
     ) {
-      return "SL";
+      return "Sale";
     }
-    return toText(row.documentType).slice(0, 2).toUpperCase() || "-";
+    return toText(row.documentType) || toText(row.sourceType) || "-";
   }
 
   private resolveSubledger(
@@ -764,7 +785,7 @@ export class GeneralLedgerReportService {
       {
         rowType: "OPENING",
         date: input.startDate,
-        docCode: "OP",
+        docCode: "Opening",
         number: "OPN",
         subledger: balanceSubledger,
         particulars: "OPENING BAL",
@@ -816,7 +837,7 @@ export class GeneralLedgerReportService {
     rows.push({
       rowType: "CLOSING",
       date: input.endDate,
-      docCode: "CL",
+      docCode: "Closing",
       number: "CL",
       subledger: balanceSubledger,
       particulars: "CLOSING BAL",

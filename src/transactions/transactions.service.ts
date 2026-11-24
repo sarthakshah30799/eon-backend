@@ -2023,8 +2023,13 @@ export class TransactionsService {
     }
 
     const purposeId = String(transactionPayload.purposeId ?? "").trim() || null;
+    // Load slabs/subpurposes so Sale TCS refresh matches preview (slab rates).
+    // loadEntitySnapshot skips OneToMany, which zeroed TCS and left final_amount pre-TCS.
     const purpose = purposeId
-      ? await this.purposeRepository.findOne({ where: { id: purposeId } })
+      ? await this.purposeRepository.findOne({
+          where: { id: purposeId },
+          relations: { slabs: true, subpurposes: true },
+        })
       : null;
     if (purposeId && !purpose) {
       throw new NotFoundException(`Purpose with id ${purposeId} not found`);
@@ -2045,10 +2050,9 @@ export class TransactionsService {
       );
     }
     const purposeSnapshot = purpose
-      ? ((await loadEntitySnapshot(
-          this.purposeRepository,
-          purpose.id,
-        )) as TransactionReferenceSnapshotValue)
+      ? (PurposeResponseDto.fromEntity(
+          purpose,
+        ) as unknown as TransactionReferenceSnapshotValue)
       : null;
 
     if (!isFakeCurrency) {
@@ -3681,6 +3685,13 @@ export class TransactionsService {
           }),
         );
       }
+
+      // Tax triggers can leave final_amount pre-TCS when nested depth skips TCS
+      // (e.g. additional charges). Recompute so Sale payable includes TCS.
+      await manager.query(
+        `SELECT public.refresh_transaction_tcs($1::uuid)`,
+        [transaction.id],
+      );
 
       const refreshedTransaction = await transactionRepo.findOne({
         where: { id: transaction.id },
