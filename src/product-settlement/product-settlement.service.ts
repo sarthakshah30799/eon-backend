@@ -749,7 +749,7 @@ export class ProductSettlementService {
     const settlementRepo = manager.getRepository(ProductSettlement);
     for (const item of items) {
       const issuerPartyId =
-        item.issuerPartyProfileId ?? transaction.partyProfileId;
+        item.issuerPartyProfileId || transaction.partyProfileId;
       let openSettlements = await settlementRepo.find({
         where: {
           type: ProductSettlementType.TP,

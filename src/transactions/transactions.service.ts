@@ -4755,9 +4755,12 @@ export class TransactionsService {
       const qty = Number(item.quantity ?? 0);
       if (!Number.isFinite(qty) || qty <= 0) continue;
       const currencyId = String(item.currencyId ?? "").trim();
-      const issuerId = String(
-        item.issuerPartyProfileId || headerPartyProfileId || "",
-      ).trim();
+      const issuerId = String(item.issuerPartyProfileId ?? "").trim();
+      if (!issuerId) {
+        throw new BadRequestException(
+          "TP issuer is required for TP sale items. Please select the TP issuer at item level.",
+        );
+      }
       const key = `${currencyId}:${issuerId}`;
       const existing = grouped.get(key);
       if (existing) {
@@ -4765,7 +4768,7 @@ export class TransactionsService {
       } else {
         grouped.set(key, {
           currencyId,
-          issuerId: issuerId || undefined,
+          issuerId,
           quantity: qty,
         });
       }

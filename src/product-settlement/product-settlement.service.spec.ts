@@ -235,5 +235,60 @@ describe("ProductSettlementService - TP Availability & Issuer Sale", () => {
       );
       expect(mockProductSettlementRepo.save).toHaveBeenCalled();
     });
+
+    it("should settle open TP lot using item.issuerPartyProfileId when transaction.partyProfileId is an FFMC/AD buyer", async () => {
+      const mockManager = {
+        getRepository: jest.fn().mockReturnValue(mockProductSettlementRepo),
+      };
+
+      const openLot = {
+        id: "lot-ffmc-sale",
+        denomination: "500.0000000",
+        buyRate: "85.0000000",
+        series: "TP-003",
+        currencyId: "curr-usd",
+        issuerPartyProfileId: "tp-issuer-amex",
+        status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+      };
+
+      mockProductSettlementRepo.find.mockResolvedValue([openLot]);
+
+      const transaction = {
+        branchId: "branch-andheri",
+        partyProfileId: "ffmc-buyer-hdfc", // Header party is FFMC/AD
+      };
+      const items = [
+        {
+          currencyId: "curr-usd",
+          quantity: "500",
+          rate: "88.0000000",
+          issuerPartyProfileId: "tp-issuer-amex", // Item issuer is TP Issuer
+        },
+      ];
+
+      await service.finalizeTpIssuerSale(
+        mockManager as never,
+        transaction as never,
+        items as never,
+        "actor-1",
+      );
+
+      // find must have queried using tp-issuer-amex, not ffmc-buyer-hdfc
+      expect(mockProductSettlementRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            issuerPartyProfileId: "tp-issuer-amex",
+          }),
+        }),
+      );
+
+      expect(mockProductSettlementRepo.update).toHaveBeenCalledWith(
+        "lot-ffmc-sale",
+        expect.objectContaining({
+          status: ProductSettlementStatus.ISSUER_SETTLED,
+          updatedBy: "actor-1",
+        }),
+      );
+    });
   });
 });
