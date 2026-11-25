@@ -694,6 +694,52 @@ export class ProductSettlementService {
     }
   }
 
+  async getTpAvailability(params: {
+    currencyId: string;
+    issuerPartyProfileId?: string;
+    hoBranchId?: string;
+  }): Promise<{ availableQuantity: string; itemCount: number }> {
+    const { currencyId, issuerPartyProfileId, hoBranchId } = params;
+    if (!currencyId) {
+      throw new BadRequestException("currencyId is required");
+    }
+
+    const qb = this.database2
+      .getRepository(ProductSettlement)
+      .createQueryBuilder("s")
+      .select("COALESCE(SUM(s.denomination), 0)", "availableQuantity")
+      .addSelect("COUNT(s.id)", "itemCount")
+      .where("s.deleted_at IS NULL")
+      .andWhere("s.type = :type", { type: ProductSettlementType.TP })
+      .andWhere("s.status = :status", {
+        status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+      })
+      .andWhere("s.currency_id = :currencyId", { currencyId });
+
+    if (hoBranchId) {
+      qb.andWhere(
+        "(s.ho_branch_id = :hoBranchId OR s.branch_id = :hoBranchId)",
+        { hoBranchId },
+      );
+    }
+
+    if (issuerPartyProfileId) {
+      qb.andWhere("s.issuer_party_profile_id = :issuerPartyProfileId", {
+        issuerPartyProfileId,
+      });
+    }
+
+    const raw = await qb.getRawOne<{
+      availableQuantity?: string;
+      itemCount?: string;
+    }>();
+
+    return {
+      availableQuantity: Number(raw?.availableQuantity ?? 0).toFixed(7),
+      itemCount: Number(raw?.itemCount ?? 0),
+    };
+  }
+
   async finalizeTpIssuerSale(
     manager: EntityManager,
     transaction: Transaction,
@@ -703,27 +749,100 @@ export class ProductSettlementService {
     const settlementRepo = manager.getRepository(ProductSettlement);
     for (const item of items) {
       const issuerPartyId =
-        item.issuerPartyProfileId ?? transaction.partyProfileId;
-      const openSettlements = await settlementRepo.find({
+        item.issuerPartyProfileId || transaction.partyProfileId;
+      let openSettlements = await settlementRepo.find({
         where: {
           type: ProductSettlementType.TP,
           currencyId: item.currencyId,
           ...(issuerPartyId ? { issuerPartyProfileId: String(issuerPartyId) } : {}),
           status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+          hoBranchId: transaction.branchId,
         },
         order: { createdAt: "ASC" },
       });
+
+      if (!openSettlements.length) {
+        openSettlements = await settlementRepo.find({
+          where: {
+            type: ProductSettlementType.TP,
+            currencyId: item.currencyId,
+            ...(issuerPartyId ? { issuerPartyProfileId: String(issuerPartyId) } : {}),
+            status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+          },
+          order: { createdAt: "ASC" },
+        });
+      }
 
       let remainingQuantity = Number(item.quantity ?? 0);
       for (const settle of openSettlements) {
         if (remainingQuantity <= 0) break;
         const settleDenom = Number(settle.denomination ?? 0);
-        if (settleDenom > 0 && settleDenom <= remainingQuantity) {
+        if (settleDenom <= 0) continue;
+
+        const buyRate = Number(settle.buyRate || settle.saleBuyRate || 0);
+
+        if (settleDenom <= remainingQuantity) {
           await settlementRepo.update(settle.id, {
             status: ProductSettlementStatus.ISSUER_SETTLED,
             updatedBy: actorId,
           });
           remainingQuantity -= settleDenom;
+        } else {
+          // Partial lot split: settle remainingQuantity and keep the remainder open
+          const settledAmount = Number((remainingQuantity * buyRate).toFixed(2));
+          const remainingDenom = Number((settleDenom - remainingQuantity).toFixed(2));
+          const remainingAmount = Number((remainingDenom * buyRate).toFixed(2));
+
+          await settlementRepo.update(settle.id, {
+            denomination: remainingQuantity.toFixed(2),
+            settlementAmount: settledAmount.toFixed(2),
+            status: ProductSettlementStatus.ISSUER_SETTLED,
+            updatedBy: actorId,
+          });
+
+          const clone = settlementRepo.create({
+            type: settle.type,
+            productCode: settle.productCode,
+            cardId: settle.cardId,
+            dealCoverId: settle.dealCoverId,
+            transactionId: settle.transactionId,
+            transactionItemId: settle.transactionItemId,
+            branchId: settle.branchId,
+            branchSnapshot: settle.branchSnapshot,
+            hoBranchId: settle.hoBranchId,
+            hoBranchSnapshot: settle.hoBranchSnapshot,
+            issuerPartyProfileId: settle.issuerPartyProfileId,
+            issuerPartyProfileSnapshot: settle.issuerPartyProfileSnapshot,
+            currencyId: settle.currencyId,
+            currencySnapshot: settle.currencySnapshot,
+            productId: settle.productId,
+            productSnapshot: settle.productSnapshot,
+            passengerId: settle.passengerId,
+            passengerSnapshot: settle.passengerSnapshot,
+            series: `${settle.series}-REM`,
+            denomination: remainingDenom.toFixed(2),
+            saleBuyRate: settle.saleBuyRate,
+            buyRate: settle.buyRate,
+            bookingRate: settle.bookingRate,
+            buyRateSnapshot: settle.buyRateSnapshot,
+            settlementAmount: remainingAmount.toFixed(2),
+            saleDate: settle.saleDate,
+            settlementMode: settle.settlementMode,
+            saleKind: settle.saleKind,
+            branchRequestedDate: settle.branchRequestedDate,
+            branchReference: settle.branchReference,
+            branchRemarks: settle.branchRemarks,
+            branchRequestedAt: settle.branchRequestedAt,
+            branchRequestedById: settle.branchRequestedById,
+            branchDocumentId: settle.branchDocumentId,
+            status: ProductSettlementStatus.PENDING_ISSUER_SETTLEMENT,
+            hoAcceptedAt: settle.hoAcceptedAt,
+            hoAcceptedById: settle.hoAcceptedById,
+            createdBy: actorId,
+            updatedBy: actorId,
+          });
+          await settlementRepo.save(clone);
+          remainingQuantity = 0;
         }
       }
     }

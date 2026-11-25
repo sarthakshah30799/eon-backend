@@ -108,6 +108,12 @@ export class CreateProductSettlementDocumentDto {
   items: CreateProductSettlementItemDto[];
 }
 
+export class TpAvailabilityQueryDto {
+  @ApiProperty() @IsUUID() currencyId: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() issuerPartyProfileId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() hoBranchId?: string;
+}
+
 export class RejectProductSettlementDocumentDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(500) reason: string;
 }

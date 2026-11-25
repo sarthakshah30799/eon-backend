@@ -6,10 +6,10 @@ import { MigrationInterface, QueryRunner } from "typeorm";
  * pg_trigger_depth() > 1 — leaving final_amount GST-only after additional charges.
  * Call refresh_transaction_tcs explicitly after every tax breakdown refresh.
  */
-export class RefreshTcsAfterTaxBreakdown1795536832000
+export class RefreshTcsAfterTaxBreakdown1795527294418
   implements MigrationInterface
 {
-  name = "RefreshTcsAfterTaxBreakdown1795536832000";
+  name = "RefreshTcsAfterTaxBreakdown1795527294418";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
