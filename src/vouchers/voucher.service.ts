@@ -350,6 +350,7 @@ export class VoucherService implements OnModuleInit {
     id: string,
     usage?: VoucherType,
     role: "header" | "item" | "advance" = "item",
+    options?: { requireInr?: boolean },
   ) {
     const account = await this.accountRepository.findOne({
       where: { id, active: true },
@@ -357,8 +358,9 @@ export class VoucherService implements OnModuleInit {
     });
     if (!account)
       throw new NotFoundException(`Active Account Profile ${id} not found`);
+    const requireInr = options?.requireInr !== false;
     const currencyCode = await this.accountCurrencyCode(account.id);
-    if (!isInrCurrencyCode(currencyCode)) {
+    if (requireInr && !isInrCurrencyCode(currencyCode)) {
       if (role === "advance") {
         throw new BadRequestException(
           "ADVANCE_CONTROL_ACCOUNT additional setting must point to an INR Account Profile",
@@ -2757,6 +2759,8 @@ export class VoucherService implements OnModuleInit {
       itemAmount: string;
       subledgerPartyProfileId?: string | null;
       subledgerBranchId?: string | null;
+      /** Bank header may reuse a non-INR ledger already accepted on the source payment. */
+      requireHeaderInr?: boolean;
     },
     session: VoucherSession,
     manager?: EntityManager,
@@ -2814,7 +2818,9 @@ export class VoucherService implements OnModuleInit {
         this.option(input.accountTypeOptionId, "VOUCHER_ACCOUNT_TYPE"),
         this.option(input.entityTypeOptionId, "ENTITYTYPE"),
         this.party(input.partyProfileId),
-        this.account(input.headerAccountId, undefined, "header"),
+        this.account(input.headerAccountId, undefined, "header", {
+          requireInr: input.requireHeaderInr !== false,
+        }),
         this.account(input.itemAccountId, undefined, "header"),
         this.optionByValue("VOUCHER_ITEM_TYPE", VoucherItemTypeValue.ACCOUNT),
         input.remarkOptionId
@@ -3248,6 +3254,8 @@ export class VoucherService implements OnModuleInit {
         itemDirection,
         itemAmount: String(payment.amount),
         subledgerPartyProfileId: party.id,
+        // Mirror purchase/sale cheque rules: bank header need not be INR.
+        requireHeaderInr: false,
       },
       {
         ...session,
