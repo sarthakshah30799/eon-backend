@@ -14,6 +14,7 @@ import {
 } from "../transactions.enums";
 import { TransactionReferenceSnapshotValue } from "../types/transaction-snapshot.types";
 import { TransactionSettlementSource } from "../../vouchers/voucher.enums";
+import { AccountingVoucher } from "../../vouchers/entities/accounting-voucher.entity";
 import { VoucherAdvanceApplication } from "../../vouchers/entities/voucher-advance-application.entity";
 
 @Index("IDX_transaction_payments_transaction_id", ["transactionId"])
@@ -133,4 +134,15 @@ export class TransactionPayment extends BaseEntity {
     nullable: true,
   })
   clearanceCounterpartVoucherId: string | null;
+
+  @ManyToOne(() => AccountingVoucher, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({
+    name: "clearance_counterpart_voucher_id",
+    foreignKeyConstraintName:
+      "FK_transaction_payments_clearance_counterpart_voucher_id",
+  })
+  clearanceCounterpartVoucher: AccountingVoucher | null;
 }
