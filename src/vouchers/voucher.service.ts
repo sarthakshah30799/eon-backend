@@ -113,6 +113,24 @@ const isInrCurrencyCode = (value: unknown) => normalizeUpper(value) === "INR";
 const isIndividualToken = (value: unknown) =>
   normalizeUpper(value) === "INDIVIDUAL";
 const normalizePan = (value: unknown) => normalize(value).toUpperCase();
+const resolveClearanceFields = (dto: {
+  bankDate?: string | null;
+  isDishonored?: boolean | null;
+  reversalNumber?: string | null;
+}) => {
+  const isDishonored = Boolean(dto.isDishonored);
+  const bankDateRaw = normalize(dto.bankDate);
+  const bankDate = bankDateRaw ? bankDateRaw.slice(0, 10) : null;
+  const reversalNumber = isDishonored
+    ? normalize(dto.reversalNumber) || null
+    : null;
+  if (isDishonored && !reversalNumber) {
+    throw new BadRequestException(
+      "Reversal number is required when dishonor is selected",
+    );
+  }
+  return { bankDate, isDishonored, reversalNumber };
+};
 const toDateOnly = (value: unknown) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
@@ -918,6 +936,7 @@ export class VoucherService implements OnModuleInit {
             chequeDate,
             chequeBranch: null,
             drawnOn: null,
+            ...resolveClearanceFields(dto),
             remarkOptionId: remark?.id ?? null,
             remarkSnapshot: remark
               ? await this.snapshot(this.optionRepository, remark.id)
@@ -2010,6 +2029,7 @@ export class VoucherService implements OnModuleInit {
                 ? normalize(partyDto?.drawnOn) || null
                 : null,
             paymentMethod: resolvedPaymentMethod,
+            ...(partyDto ? resolveClearanceFields(partyDto) : {}),
             remarkOptionId: remark?.id ?? null,
             remarkSnapshot: remark
               ? await this.snapshot(this.optionRepository, remark.id)
@@ -2958,6 +2978,291 @@ export class VoucherService implements OnModuleInit {
 
     if (manager) return run(manager);
     return this.database2.transaction(run);
+  }
+
+  /**
+   * Bank Recon clear (bank date, not dishonor): create opposite Payment/Receipt
+   * and pair with the source voucher. Idempotent via pairedVoucherId.
+   */
+  async createClearanceCounterpartFromVoucher(
+    sourceId: string,
+    session: VoucherSession,
+    manager: EntityManager,
+  ): Promise<AccountingVoucher | null> {
+    const actorId = this.getActor(session);
+    const voucherRepo = manager.getRepository(AccountingVoucher);
+    const itemRepo = manager.getRepository(AccountingVoucherItem);
+    const source = await voucherRepo.findOne({
+      where: { id: sourceId },
+      relations: ["items"],
+    });
+    if (!source) {
+      throw new NotFoundException(`Accounting voucher ${sourceId} not found`);
+    }
+    if (
+      source.voucherType !== VoucherType.RECEIPT &&
+      source.voucherType !== VoucherType.PAYMENT
+    ) {
+      return null;
+    }
+    if (source.pairedVoucherId) {
+      return voucherRepo.findOne({
+        where: { id: source.pairedVoucherId },
+        relations: ["items"],
+      });
+    }
+    if (!source.partyProfileId || !source.headerAccountId) {
+      throw new BadRequestException(
+        `Cannot create clearance counterpart for voucher ${source.number}: party and bank account are required`,
+      );
+    }
+    if (!source.items?.length) {
+      throw new BadRequestException(
+        `Cannot create clearance counterpart for voucher ${source.number}: items are required`,
+      );
+    }
+
+    const counterpartType =
+      source.voucherType === VoucherType.RECEIPT
+        ? VoucherType.PAYMENT
+        : VoucherType.RECEIPT;
+    const idempotencyKey = `clearance-counterpart:voucher:${source.id}`;
+    const existing = await voucherRepo.findOne({
+      where: { idempotencyKey },
+      relations: ["items"],
+    });
+    if (existing) {
+      source.pairedVoucherId = existing.id;
+      source.updatedBy = actorId;
+      await voucherRepo.save(source);
+      return existing;
+    }
+
+    const workplace = await this.resolveWorkplace(
+      { branchId: source.branchId, counterId: source.counterId },
+      {
+        ...session,
+        isAdmin: true,
+        isHo: true,
+        activeBranchId: source.branchId,
+        activeCounterId: source.counterId,
+      },
+    );
+    const { allowedDate } = await this.dayPolicy.assertTransactionDateAllowed(
+      workplace.branch.id,
+      actorId,
+      undefined,
+      workplace.counter.id,
+    );
+    const transactionDate = allowedDate.slice(0, 10);
+
+    const itemDtos: CreateVoucherItemDto[] = source.items
+      .slice()
+      .sort((a, b) => a.lineNo - b.lineNo)
+      .map((item) => ({
+        itemTypeOptionId: item.itemTypeOptionId,
+        accountId: item.accountId,
+        direction: this.oppositeDirection(item.direction),
+        amount: String(item.amount),
+        subledgerPartyProfileId: item.subledgerPartyProfileId,
+        settledTransactionId: null,
+      }));
+    const totals = this.calculate(counterpartType, itemDtos);
+    const number = await this.additionalSettings.reserveTransactionNumber(
+      VOUCHER_NUMBER_SERIES[counterpartType],
+      workplace.branch.code,
+      new Date(transactionDate),
+    );
+    const payloadHash = createHash("sha256")
+      .update(JSON.stringify({ sourceId: source.id, counterpartType, totals }))
+      .digest("hex");
+
+    const counterpart = await voucherRepo.save(
+      voucherRepo.create({
+        voucherType: counterpartType,
+        number,
+        idempotencyKey,
+        payloadHash,
+        transactionDate,
+        branchId: source.branchId,
+        branchSnapshot: source.branchSnapshot,
+        counterId: source.counterId,
+        counterSnapshot: source.counterSnapshot,
+        accountTypeOptionId: source.accountTypeOptionId,
+        accountTypeSnapshot: source.accountTypeSnapshot,
+        accountMode: source.accountMode,
+        headerAccountId: source.headerAccountId,
+        headerAccountSnapshot: source.headerAccountSnapshot,
+        entityTypeOptionId: source.entityTypeOptionId,
+        entityTypeSnapshot: source.entityTypeSnapshot,
+        partyProfileId: source.partyProfileId,
+        partyProfileSnapshot: source.partyProfileSnapshot,
+        panNumber: source.panNumber,
+        panName: source.panName,
+        panDob: source.panDob,
+        paymentMethod: source.paymentMethod,
+        chequeNumber: source.chequeNumber,
+        normalizedChequeNumber: source.normalizedChequeNumber,
+        chequeDate: source.chequeDate,
+        chequeBranch: source.chequeBranch,
+        drawnOn: source.drawnOn,
+        remarkOptionId: source.remarkOptionId,
+        remarkSnapshot: source.remarkSnapshot,
+        narration: `Clearance counterpart of ${source.number}`,
+        ...totals,
+        advanceControlAccountId: null,
+        advanceControlAccountSnapshot: null,
+        pairedVoucherId: source.id,
+        bankDate: null,
+        reconciliationRemarks: null,
+        isDishonored: false,
+        reversalNumber: null,
+        createdBy: actorId,
+        updatedBy: actorId,
+      }),
+    );
+
+    for (let index = 0; index < source.items.length; index += 1) {
+      const sourceItem = source.items
+        .slice()
+        .sort((a, b) => a.lineNo - b.lineNo)[index];
+      await itemRepo.save(
+        itemRepo.create({
+          voucherId: counterpart.id,
+          voucher: counterpart,
+          lineNo: index + 1,
+          itemTypeOptionId: sourceItem.itemTypeOptionId,
+          itemTypeSnapshot: sourceItem.itemTypeSnapshot,
+          subledgerPartyProfileId: sourceItem.subledgerPartyProfileId,
+          subledgerPartyProfileSnapshot:
+            sourceItem.subledgerPartyProfileSnapshot,
+          subledgerBranchId: sourceItem.subledgerBranchId ?? null,
+          subledgerBranchSnapshot: sourceItem.subledgerBranchSnapshot ?? null,
+          accountId: sourceItem.accountId,
+          accountSnapshot: sourceItem.accountSnapshot,
+          direction: this.oppositeDirection(sourceItem.direction),
+          amount: sourceItem.amount,
+          settledTransactionId: null,
+          settledTransactionSnapshot: null,
+          createdBy: actorId,
+          updatedBy: actorId,
+        }),
+      );
+    }
+
+    source.pairedVoucherId = counterpart.id;
+    source.updatedBy = actorId;
+    await voucherRepo.save(source);
+
+    return voucherRepo.findOneOrFail({
+      where: { id: counterpart.id },
+      relations: ["items"],
+    });
+  }
+
+  /**
+   * Bank Recon clear of a purchase/sale payment row: create opposite
+   * Payment/Receipt voucher and store link on the payment.
+   */
+  async createClearanceCounterpartFromTransactionPayment(
+    paymentId: string,
+    session: VoucherSession,
+    manager: EntityManager,
+  ): Promise<AccountingVoucher | null> {
+    const actorId = this.getActor(session);
+    const paymentRepo = manager.getRepository(TransactionPayment);
+    const payment = await paymentRepo.findOne({
+      where: { id: paymentId },
+      relations: ["transaction"],
+    });
+    if (!payment) {
+      throw new NotFoundException(`Transaction payment ${paymentId} not found`);
+    }
+    if (payment.clearanceCounterpartVoucherId) {
+      return manager.getRepository(AccountingVoucher).findOne({
+        where: { id: payment.clearanceCounterpartVoucherId },
+        relations: ["items"],
+      });
+    }
+    const tx = payment.transaction;
+    if (!tx?.partyProfileId) {
+      throw new BadRequestException(
+        `Cannot create clearance counterpart for payment on ${tx?.number ?? paymentId}: party is required`,
+      );
+    }
+    if (!payment.accountId) {
+      throw new BadRequestException(
+        `Cannot create clearance counterpart for payment on ${tx.number}: bank account is required`,
+      );
+    }
+
+    const party = await this.party(tx.partyProfileId);
+    if (!party.entityType?.id) {
+      throw new BadRequestException(
+        `Party ${party.code} is missing entity type for clearance counterpart`,
+      );
+    }
+
+    const isReceiptDirection =
+      normalizeUpper(payment.paymentDirection) === "RECEIPT";
+    const counterpartType = isReceiptDirection
+      ? VoucherType.PAYMENT
+      : VoucherType.RECEIPT;
+    const itemDirection = isReceiptDirection
+      ? VoucherEntryDirection.DEBIT
+      : VoucherEntryDirection.CREDIT;
+
+    const bankAccountType = await this.resolveBankChequeAccountTypeOption();
+    const controlAccount = await this.resolveBillControlAccount(
+      normalizeUpper(tx.transactionType) === TransactionType.PURCHASE
+        ? VoucherItemTypeValue.PURCHASE_MISC
+        : VoucherItemTypeValue.SALE_MISC,
+    );
+
+    const { allowedDate } = await this.dayPolicy.assertTransactionDateAllowed(
+      tx.branchId,
+      actorId,
+      undefined,
+      tx.counterId,
+    );
+
+    const counterpart = await this.createSystemVoucher(
+      {
+        voucherType: counterpartType,
+        transactionDate: allowedDate.slice(0, 10),
+        branchId: tx.branchId,
+        counterId: tx.counterId,
+        accountTypeOptionId: bankAccountType.id,
+        accountMode: VoucherAccountMode.BANK_CHEQUE,
+        headerAccountId: payment.accountId,
+        entityTypeOptionId: party.entityType.id,
+        partyProfileId: party.id,
+        paymentMethod: payment.paymentMethod,
+        chequeNumber: payment.referenceNumber,
+        chequeDate: payment.referenceDate,
+        chequeBranch: payment.branchName,
+        drawnOn: payment.drawnOn,
+        narration: `Clearance counterpart of ${tx.number} payment line ${payment.lineNo}`,
+        idempotencyKey: `clearance-counterpart:payment:${payment.id}`,
+        itemAccountId: controlAccount.id,
+        itemDirection,
+        itemAmount: String(payment.amount),
+        subledgerPartyProfileId: party.id,
+      },
+      {
+        ...session,
+        isAdmin: true,
+        isHo: true,
+        activeBranchId: tx.branchId,
+        activeCounterId: tx.counterId,
+      },
+      manager,
+    );
+
+    payment.clearanceCounterpartVoucherId = counterpart.id;
+    payment.updatedBy = actorId;
+    await paymentRepo.save(payment);
+    return counterpart;
   }
 
   private async optionByValue(code: string, value: string) {

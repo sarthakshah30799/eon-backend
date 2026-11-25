@@ -125,4 +125,12 @@ export class TransactionPayment extends BaseEntity {
 
   @Column({ type: "citext", name: "reversal_number", nullable: true })
   reversalNumber: string | null;
+
+  /** Opposite Payment/Receipt voucher created on Bank Recon clear (not dishonor). */
+  @Column({
+    type: "uuid",
+    name: "clearance_counterpart_voucher_id",
+    nullable: true,
+  })
+  clearanceCounterpartVoucherId: string | null;
 }

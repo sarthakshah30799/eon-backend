@@ -36,6 +36,7 @@ import {
   BankReconciliationRowDto,
   BankReconciliationSection,
 } from "./dto/bank-reconciliation-response.dto";
+import { VoucherService } from "../vouchers/voucher.service";
 
 const toText = (value: unknown) => String(value ?? "").trim();
 
@@ -110,6 +111,7 @@ export class BankReconciliationService {
     private readonly paymentRepository: Repository<TransactionPayment>,
     @InjectDataSource("database2")
     private readonly database2: DataSource,
+    private readonly voucherService: VoucherService,
   ) {}
 
   async query(
@@ -232,6 +234,15 @@ export class BankReconciliationService {
 
     return this.database2.transaction(async (em) => {
       let updated = 0;
+      const createdCounterpartIds: string[] = [];
+      const voucherSession = {
+        userId: actorId,
+        activeBranchId: session?.activeBranchId ?? null,
+        activeCounterId: session?.activeCounterId ?? null,
+        isAdmin: Boolean(session?.isAdmin),
+        isHo: Boolean(session?.isHo),
+        isHoStaff: Boolean(session?.isHoStaff),
+      };
 
       if (paymentIds.length) {
         const payments = await em.find(TransactionPayment, {
@@ -245,9 +256,22 @@ export class BankReconciliationService {
               `Transaction payment ${item.sourceId} not found`,
             );
           }
+          const shouldCreateCounterpart =
+            Boolean(toDateOnly(item.bankDate)) && !Boolean(item.isDishonored);
           this.applyClearance(payment, item, actorId);
           await em.save(TransactionPayment, payment);
           updated += 1;
+          if (shouldCreateCounterpart) {
+            const counterpart =
+              await this.voucherService.createClearanceCounterpartFromTransactionPayment(
+                payment.id,
+                voucherSession,
+                em,
+              );
+            if (counterpart?.id) {
+              createdCounterpartIds.push(counterpart.id);
+            }
+          }
         }
       }
 
@@ -266,13 +290,33 @@ export class BankReconciliationService {
               `Accounting voucher ${item.sourceId} not found`,
             );
           }
+          const shouldCreateCounterpart =
+            Boolean(toDateOnly(item.bankDate)) &&
+            !Boolean(item.isDishonored) &&
+            (voucher.voucherType === VoucherType.RECEIPT ||
+              voucher.voucherType === VoucherType.PAYMENT);
           this.applyClearance(voucher, item, actorId);
           await em.save(AccountingVoucher, voucher);
           updated += 1;
+          if (shouldCreateCounterpart) {
+            const counterpart =
+              await this.voucherService.createClearanceCounterpartFromVoucher(
+                voucher.id,
+                voucherSession,
+                em,
+              );
+            if (counterpart?.id) {
+              createdCounterpartIds.push(counterpart.id);
+            }
+          }
         }
       }
 
-      return { updated };
+      return {
+        updated,
+        createdCounterpartCount: createdCounterpartIds.length,
+        createdCounterpartIds,
+      };
     });
   }
 
