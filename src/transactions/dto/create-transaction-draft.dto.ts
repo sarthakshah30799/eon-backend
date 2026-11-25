@@ -11,6 +11,8 @@ import {
   IsString,
   IsUUID,
   Matches,
+  MaxLength,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 import {
@@ -523,6 +525,25 @@ export class TransactionPaymentPayloadDto {
   @IsOptional()
   @IsString()
   remarks?: string | null;
+
+  @ApiPropertyOptional({ description: "Bank clearance date YYYY-MM-DD" })
+  @IsOptional()
+  @IsDateString()
+  bankDate?: string | null;
+
+  @ApiPropertyOptional({ description: "Cheque return / dishonor" })
+  @IsOptional()
+  @IsBoolean()
+  isDishonored?: boolean | null;
+
+  @ApiPropertyOptional({ description: "Required when isDishonored is true" })
+  @ValidateIf(
+    (row: TransactionPaymentPayloadDto) => Boolean(row.isDishonored),
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  reversalNumber?: string | null;
 }
 
 /** Matches additional charges in purchaseSchema.ts:283-290 */

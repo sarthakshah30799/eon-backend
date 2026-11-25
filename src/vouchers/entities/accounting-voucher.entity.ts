@@ -1,4 +1,12 @@
-import { Check, Column, Entity, Index, OneToMany } from "typeorm";
+import {
+  Check,
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+} from "typeorm";
 import { BaseEntity } from "../../base/base.entity";
 import { TransactionReferenceSnapshotValue } from "../../transactions/types/transaction-snapshot.types";
 import { TransactionPaymentMethod } from "../../transactions/transactions.enums";
@@ -170,6 +178,16 @@ export class AccountingVoucher extends BaseEntity {
   adviceStatus: VoucherAdviceStatus | null;
   @Column({ type: "uuid", name: "paired_voucher_id", nullable: true })
   pairedVoucherId: string | null;
+
+  @ManyToOne(() => AccountingVoucher, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({
+    name: "paired_voucher_id",
+    foreignKeyConstraintName: "FK_accounting_vouchers_paired_voucher_id",
+  })
+  pairedVoucher: AccountingVoucher | null;
 
   @Column({ type: "date", name: "bank_date", nullable: true })
   bankDate: string | null;

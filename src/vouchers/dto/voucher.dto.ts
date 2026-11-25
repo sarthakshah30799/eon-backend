@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -12,6 +13,8 @@ import {
   IsString,
   IsUUID,
   Matches,
+  MaxLength,
+  ValidateIf,
   ValidateNested,
   IsIn,
 } from "class-validator";
@@ -93,6 +96,20 @@ export class CreatePartyVoucherDto {
   @IsOptional()
   @IsIn(Object.values(TransactionPaymentMethod))
   paymentMethod?: TransactionPaymentMethod;
+  @ApiPropertyOptional({ description: "Bank clearance date YYYY-MM-DD" })
+  @IsOptional()
+  @IsDateString()
+  bankDate?: string | null;
+  @ApiPropertyOptional({ description: "Cheque return / dishonor" })
+  @IsOptional()
+  @IsBoolean()
+  isDishonored?: boolean | null;
+  @ApiPropertyOptional({ description: "Required when isDishonored is true" })
+  @ValidateIf((dto: CreatePartyVoucherDto) => Boolean(dto.isDishonored))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  reversalNumber?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
   @ApiProperty()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
@@ -136,6 +153,22 @@ export class CreateDepositWithdrawalVoucherDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() counterId?: string;
   @ApiProperty() @IsString() @IsNotEmpty() chequeNumber: string;
   @ApiProperty() @IsDateString() chequeDate: string;
+  @ApiPropertyOptional({ description: "Bank clearance date YYYY-MM-DD" })
+  @IsOptional()
+  @IsDateString()
+  bankDate?: string | null;
+  @ApiPropertyOptional({ description: "Cheque return / dishonor" })
+  @IsOptional()
+  @IsBoolean()
+  isDishonored?: boolean | null;
+  @ApiPropertyOptional({ description: "Required when isDishonored is true" })
+  @ValidateIf(
+    (dto: CreateDepositWithdrawalVoucherDto) => Boolean(dto.isDishonored),
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  reversalNumber?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsUUID() remarkOptionId?: string | null;
   @ApiProperty()
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))

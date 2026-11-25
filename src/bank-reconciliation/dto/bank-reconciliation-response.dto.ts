@@ -70,4 +70,13 @@ export class BankReconciliationResponseDto {
 export class BankReconciliationClearResultDto {
   @ApiProperty()
   updated!: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Opposite Payment/Receipt vouchers created on clear (not dishonor)",
+  })
+  createdCounterpartCount?: number;
+
+  @ApiPropertyOptional({ type: [String] })
+  createdCounterpartIds?: string[];
 }
