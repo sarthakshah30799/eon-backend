@@ -345,11 +345,32 @@ type TransactionPaymentPayload = {
   remarks?: string | null;
   settlementSource?: TransactionSettlementSource | null;
   advanceVoucherId?: string | null;
+  bankDate?: string | null;
+  isDishonored?: boolean | null;
+  reversalNumber?: string | null;
 };
 
 const normalizeNullableString = (value?: string | null) => {
   const normalized = String(value ?? "").trim();
   return normalized ? normalized : null;
+};
+
+const resolvePaymentClearanceFields = (row: {
+  bankDate?: string | null;
+  isDishonored?: boolean | null;
+  reversalNumber?: string | null;
+}) => {
+  const isDishonored = Boolean(row.isDishonored);
+  const bankDate = normalizeNullableString(row.bankDate)?.slice(0, 10) ?? null;
+  const reversalNumber = isDishonored
+    ? normalizeNullableString(row.reversalNumber)
+    : null;
+  if (isDishonored && !reversalNumber) {
+    throw new BadRequestException(
+      "Reversal number is required when dishonor is selected",
+    );
+  }
+  return { bankDate, isDishonored, reversalNumber };
 };
 
 type TransactionDraftPayload = {
@@ -4048,6 +4069,8 @@ export class TransactionsService {
             ),
             amount: String(row.amount),
             remarks: normalizeNullableString(row.remarks),
+            ...resolvePaymentClearanceFields(row),
+            clearanceCounterpartVoucherId: null,
             createdBy: performedById,
             updatedBy: performedById,
           }),

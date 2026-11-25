@@ -5,12 +5,14 @@ import { Branch } from "../branches/branch.entity";
 import { TransactionPayment } from "../transactions/entities/transaction-payment.entity";
 import { UserModule } from "../users/user.module";
 import { AccountingVoucher } from "../vouchers/entities";
+import { VoucherModule } from "../vouchers/voucher.module";
 import { BankReconciliationController } from "./bank-reconciliation.controller";
 import { BankReconciliationService } from "./bank-reconciliation.service";
 
 @Module({
   imports: [
     UserModule,
+    VoucherModule,
     TypeOrmModule.forFeature([AccountProfile, Branch]),
     TypeOrmModule.forFeature(
       [AccountingVoucher, TransactionPayment],
