@@ -15,7 +15,6 @@ import {
 import { PassengerPassportLookupResponseDto } from "./dto/passenger-passport-lookup-response.dto";
 import { LookupPassengerIdentityDto } from "./dto/lookup-passenger-identity.dto";
 
-const INVALID_VERIFICATION_TOKEN = /test/i;
 export const PASSENGER_PAN_PASSPORT_CONFLICT_MESSAGE =
   "PAN and passport belong to different passenger records";
 
@@ -27,9 +26,6 @@ const normalizeIdentity = (value?: string | null) => {
     .toUpperCase();
   return normalized || null;
 };
-
-const containsInvalidVerificationToken = (value?: string | null) =>
-  INVALID_VERIFICATION_TOKEN.test(String(value ?? "").trim());
 
 const parseDate = (value?: string | null) => {
   const normalized = String(value ?? "").trim();
@@ -65,12 +61,6 @@ export class PassengerService {
       verified: false,
       message,
     };
-  }
-
-  private hasInvalidVerificationToken(
-    values: Array<string | undefined | null>,
-  ): boolean {
-    return values.some((value) => containsInvalidVerificationToken(value));
   }
 
   private buildPassengerLookupPayload(
@@ -170,18 +160,6 @@ export class PassengerService {
       }
     }
 
-    if (
-      this.hasInvalidVerificationToken([
-        dto.panNumber,
-        dto.panHolderName,
-        dto.panDob,
-      ])
-    ) {
-      return this.buildFailure(
-        "Verification failed. Please review the entered details.",
-      );
-    }
-
     return {
       verified: true,
       message: "PAN details verified successfully",
@@ -235,22 +213,6 @@ export class PassengerService {
     ) {
       return this.buildFailure(
         "Arrival date cannot be after the transaction date",
-      );
-    }
-
-    if (
-      this.hasInvalidVerificationToken([
-        dto.passportNumber,
-        dto.passportPassengerName,
-        dto.passportIssueAt,
-        dto.passportIssueDate,
-        dto.passportExpiryDate,
-        dto.arrivalDate,
-        dto.transactionDate,
-      ])
-    ) {
-      return this.buildFailure(
-        "Verification failed. Please review the entered details.",
       );
     }
 
@@ -374,21 +336,6 @@ export class PassengerService {
 
     if (requiresValidityDate && isBlank(dto.validTill)) {
       return this.buildFailure("Valid till is required");
-    }
-
-    if (
-      this.hasInvalidVerificationToken([
-        dto.documentType,
-        dto.documentNumber,
-        requiresValidityDate ? dto.validTill : undefined,
-        dto.issueAt,
-        dto.issueDate,
-        dto.expiryDate,
-      ])
-    ) {
-      return this.buildFailure(
-        "Verification failed. Please review the entered details.",
-      );
     }
 
     return {
