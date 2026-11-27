@@ -54,7 +54,8 @@ const COLUMNS: OutstandingColumn[] = [
   { key: "category", label: "CATAGORY." },
 ];
 
-const EXCLUDED_SLUGS = new Set(
+/** Shared with party-credit so credit outstanding matches report eligibility. */
+export const OUTSTANDING_EXCLUDED_TRANSACTION_SLUGS = new Set(
   [
     TransactionTypeProfileEnum.FAKE_CURRENCY,
     TransactionTypeProfileEnum.CARD_STOCK_RECEIPT,
@@ -76,6 +77,8 @@ const EXCLUDED_SLUGS = new Set(
     "BRANCH_TRANSFER_SELL",
   ].map((slug) => slug.toUpperCase()),
 );
+
+const EXCLUDED_SLUGS = OUTSTANDING_EXCLUDED_TRANSACTION_SLUGS;
 
 type SourceRow = {
   id: string;

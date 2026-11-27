@@ -426,6 +426,7 @@ export class DealCoverService {
 
     const party = await this.partyProfileRepository.findOne({
       where: { id: dto.partyProfileId, active: true },
+      relations: ["branchLinks"],
     });
     if (!party) {
       throw new NotFoundException("Active party profile was not found");
@@ -433,6 +434,19 @@ export class DealCoverService {
     if (party.type !== dto.partyProfileType) {
       throw new BadRequestException(
         "Party profile type does not match the selected party",
+      );
+    }
+    if (!party.sale) {
+      throw new BadRequestException(
+        "Party profile must have Sell permission enabled",
+      );
+    }
+    const partyAssignedToBranch = (party.branchLinks ?? []).some(
+      (link) => link.branchId === branch.id,
+    );
+    if (!partyAssignedToBranch) {
+      throw new BadRequestException(
+        "Party profile is not assigned to the selected branch",
       );
     }
 

@@ -2477,19 +2477,34 @@ export class VoucherService implements OnModuleInit {
     const slug = normalizeUpper(query.slug);
     if (!isVoucherBillItemType(slug))
       throw new BadRequestException("Invalid bill item type slug");
-    if (!voucherBillTransactionType(slug))
+    const billTransactionType = voucherBillTransactionType(slug);
+    if (!billTransactionType)
       throw new BadRequestException("Invalid bill item type slug");
+    const panNumber = String(query.panNumber ?? "")
+      .trim()
+      .toUpperCase();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber))
+      throw new BadRequestException("PAN Number must be a valid 10-character Indian PAN");
 
+    // Selected party + PAN + sale/purchase type (from item type).
+    // Same INDIVI profile can be reused with different PANs, so PAN is required.
+    // Branch is not applied so bills from any branch can be settled.
     const pagination = normalizePagination(query);
     const qb = this.transactionRepository
       .createQueryBuilder("tx")
-      .where("tx.partyProfileId = :partyProfileId", {
+      .where("tx.deletedAt IS NULL")
+      .andWhere("tx.isLatest = true")
+      .andWhere("tx.status = :status", { status: TransactionStatus.APPROVED })
+      .andWhere("tx.partyProfileId = :partyProfileId", {
         partyProfileId: party.id,
       })
-      .andWhere("UPPER(tx.slug) = :slug", { slug })
-      .andWhere("tx.branchId = :branchId", { branchId: workplace.branch.id })
-      .andWhere("tx.status = :status", { status: TransactionStatus.APPROVED })
-      .andWhere("tx.isLatest = true")
+      .andWhere("tx.transactionType = :billTransactionType", {
+        billTransactionType,
+      })
+      .andWhere(
+        `UPPER(COALESCE(tx.passenger_snapshot->>'panNumber', '')) = :panNumber`,
+        { panNumber },
+      )
       .andWhere("tx.transactionDate <= :transactionDate", {
         transactionDate: query.transactionDate.slice(0, 10),
       })

@@ -6,10 +6,12 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsString,
   IsUUID,
   Min,
   ValidateNested,
 } from "class-validator";
+import { EmptyStringToUndefined } from "../../common/decorators/empty-string-to-undefined.decorator";
 import { TransactionType } from "../transactions.enums";
 
 export class CreditPreviewPaymentRowDto {
@@ -48,4 +50,22 @@ export class CreditPreviewDto {
   @IsOptional()
   @IsUUID()
   excludeTransactionId?: string | null;
+
+  @ApiPropertyOptional({
+    format: "uuid",
+    description: "Preferred outstanding scope key when passenger exists",
+  })
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsUUID()
+  passengerId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      "Used for outstanding scope when passengerId is not available. Incomplete values are ignored (outstanding treated as zero).",
+  })
+  @EmptyStringToUndefined()
+  @IsOptional()
+  @IsString()
+  panNumber?: string | null;
 }

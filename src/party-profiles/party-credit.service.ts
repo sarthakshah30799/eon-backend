@@ -2,8 +2,12 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AdditionalSettingService } from "../additional-settings/additional-setting.service";
+import { OUTSTANDING_EXCLUDED_TRANSACTION_SLUGS } from "../reports/outstanding-transaction-report.helpers";
 import { Transaction } from "../transactions/entities/transaction.entity";
-import { TransactionType } from "../transactions/transactions.enums";
+import {
+  TransactionStatus,
+  TransactionType,
+} from "../transactions/transactions.enums";
 import { PartyProfile } from "./party-profile.entity";
 import type {
   PartyCreditPreviewResponse,
@@ -49,6 +53,23 @@ const startOfUtcDay = (value: Date) =>
   new Date(
     Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
   );
+
+const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+const normalizePan = (value: unknown) => {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return PAN_PATTERN.test(normalized) ? normalized : "";
+};
+
+type OutstandingScope = {
+  partyProfileId?: string | null;
+  transactionType?: TransactionType | null;
+  passengerId?: string | null;
+  panNumber?: string | null;
+  excludeTransactionId?: string | null;
+};
 
 @Injectable()
 export class PartyCreditService {
@@ -124,71 +145,134 @@ export class PartyCreditService {
     );
   }
 
-  async getPartyOutstanding(
-    partyProfileId: string,
-    excludeTransactionId?: string | null,
+  private resolveOutstandingScope(scope: OutstandingScope) {
+    const passengerId = String(scope.passengerId ?? "").trim() || null;
+    const panNumber = normalizePan(scope.panNumber) || null;
+    if (passengerId) {
+      return { kind: "passengerId" as const, passengerId, panNumber: null };
+    }
+    if (panNumber) {
+      return { kind: "panNumber" as const, passengerId: null, panNumber };
+    }
+    return { kind: "none" as const, passengerId: null, panNumber: null };
+  }
+
+  private applyOutstandingScopeFilter(
+    qb: ReturnType<Repository<Transaction>["createQueryBuilder"]>,
+    scope: OutstandingScope,
   ) {
-    const qb = this.transactionRepository
-      .createQueryBuilder("transaction")
-      .select(
-        `COALESCE(SUM(
-          GREATEST(
-            COALESCE(transaction.finalAmount, 0)::numeric
-            - COALESCE(transaction.byCash, 0)::numeric
-            - COALESCE(transaction.byCheque, 0)::numeric
-            - COALESCE(transaction.byCard, 0)::numeric
-            - COALESCE(transaction.byTransfer, 0)::numeric
-            - COALESCE(transaction.byOther, 0)::numeric,
-            0
-          )
-        ), 0)`,
-        "outstanding",
-      )
-      .where("transaction.partyProfileId = :partyProfileId", {
+    const resolved = this.resolveOutstandingScope(scope);
+    const partyProfileId = String(scope.partyProfileId ?? "").trim() || null;
+    const transactionType =
+      scope.transactionType === TransactionType.SALE ||
+      scope.transactionType === TransactionType.PURCHASE
+        ? scope.transactionType
+        : null;
+
+    // Selected party + passenger/PAN + sale/purchase type.
+    // Same INDIVI profile can be reused with different PANs, so PAN is required.
+    // Branch is not applied (bills from any branch may be settled).
+    if (resolved.kind === "none" || !partyProfileId || !transactionType) {
+      return false;
+    }
+
+    qb.andWhere("transaction.deletedAt IS NULL")
+      .andWhere("transaction.isLatest = true")
+      .andWhere("transaction.status = :approvedStatus", {
+        approvedStatus: TransactionStatus.APPROVED,
+      })
+      .andWhere("transaction.partyProfileId = :partyProfileId", {
         partyProfileId,
       })
-      .andWhere("transaction.deletedAt IS NULL")
-      .andWhere("transaction.isLatest = true");
+      .andWhere("transaction.transactionType = :transactionType", {
+        transactionType,
+      })
+      .andWhere("transaction.slug IS NOT NULL")
+      .andWhere("UPPER(transaction.slug) NOT IN (:...excludedSlugs)", {
+        excludedSlugs: [...OUTSTANDING_EXCLUDED_TRANSACTION_SLUGS],
+      });
 
-    if (excludeTransactionId) {
+    if (resolved.kind === "passengerId") {
+      qb.andWhere("transaction.passengerId = :passengerId", {
+        passengerId: resolved.passengerId,
+      });
+    } else {
+      qb.andWhere(
+        `UPPER(COALESCE(transaction.passenger_snapshot->>'panNumber', '')) = :panNumber`,
+        { panNumber: resolved.panNumber },
+      );
+    }
+
+    if (scope.excludeTransactionId) {
       qb.andWhere("transaction.id <> :excludeTransactionId", {
-        excludeTransactionId,
+        excludeTransactionId: scope.excludeTransactionId,
       });
     }
+
+    return true;
+  }
+
+  private outstandingBalanceSql(alias = "transaction") {
+    // Same live formula as outstanding report when accountingDate = today
+    // (finalAmount - paidNow; paidAfter settlements are not added back).
+    return `GREATEST(
+      COALESCE(${alias}.finalAmount, 0)::numeric
+      - COALESCE(${alias}.byCash, 0)::numeric
+      - COALESCE(${alias}.byCheque, 0)::numeric
+      - COALESCE(${alias}.byCard, 0)::numeric
+      - COALESCE(${alias}.byTransfer, 0)::numeric
+      - COALESCE(${alias}.byOther, 0)::numeric,
+      0
+    )`;
+  }
+
+  /**
+   * Existing outstanding: selected party + passengerId/PAN + sale/purchase type.
+   * Branch is not applied.
+   */
+  async getPassengerOutstanding(scope: OutstandingScope) {
+    const resolved = this.resolveOutstandingScope(scope);
+    const partyProfileId = String(scope.partyProfileId ?? "").trim() || null;
+    const transactionType =
+      scope.transactionType === TransactionType.SALE ||
+      scope.transactionType === TransactionType.PURCHASE
+        ? scope.transactionType
+        : null;
+
+    if (resolved.kind === "none" || !partyProfileId || !transactionType) {
+      return 0;
+    }
+
+    const balanceSql = this.outstandingBalanceSql("transaction");
+    const qb = this.transactionRepository
+      .createQueryBuilder("transaction")
+      .select(`COALESCE(SUM(${balanceSql}), 0)`, "outstanding");
+
+    this.applyOutstandingScopeFilter(qb, scope);
 
     const row = await qb.getRawOne<{ outstanding?: string }>();
     return toNumber(row?.outstanding);
   }
 
-  async getOldestOutstandingTransactionDate(
-    partyProfileId: string,
-    excludeTransactionId?: string | null,
-  ) {
+  async getOldestOutstandingTransactionDate(scope: OutstandingScope) {
+    const resolved = this.resolveOutstandingScope(scope);
+    const partyProfileId = String(scope.partyProfileId ?? "").trim() || null;
+    const transactionType =
+      scope.transactionType === TransactionType.SALE ||
+      scope.transactionType === TransactionType.PURCHASE
+        ? scope.transactionType
+        : null;
+    if (resolved.kind === "none" || !partyProfileId || !transactionType) {
+      return null;
+    }
+
+    const balanceSql = this.outstandingBalanceSql("transaction");
     const qb = this.transactionRepository
       .createQueryBuilder("transaction")
       .select("MIN(transaction.transactionDate)", "oldestDate")
-      .where("transaction.partyProfileId = :partyProfileId", {
-        partyProfileId,
-      })
-      .andWhere("transaction.deletedAt IS NULL")
-      .andWhere("transaction.isLatest = true")
-      .andWhere(
-        `GREATEST(
-          COALESCE(transaction.finalAmount, 0)::numeric
-          - COALESCE(transaction.byCash, 0)::numeric
-          - COALESCE(transaction.byCheque, 0)::numeric
-          - COALESCE(transaction.byCard, 0)::numeric
-          - COALESCE(transaction.byTransfer, 0)::numeric
-          - COALESCE(transaction.byOther, 0)::numeric,
-          0
-        ) > 0`,
-      );
+      .andWhere(`${balanceSql} > 0`);
 
-    if (excludeTransactionId) {
-      qb.andWhere("transaction.id <> :excludeTransactionId", {
-        excludeTransactionId,
-      });
-    }
+    this.applyOutstandingScopeFilter(qb, scope);
 
     const row = await qb.getRawOne<{ oldestDate?: string | Date | null }>();
     if (!row?.oldestDate) {
@@ -196,6 +280,18 @@ export class PartyCreditService {
     }
 
     return parseDateOnly(row.oldestDate);
+  }
+
+  private outstandingScopeFromInput(
+    input: PartyCreditValidationInput,
+  ): OutstandingScope {
+    return {
+      partyProfileId: input.partyProfileId,
+      transactionType: input.transactionType,
+      passengerId: input.passengerId,
+      panNumber: input.panNumber,
+      excludeTransactionId: input.excludeTransactionId,
+    };
   }
 
   private async isOutstandingAllowed(transactionType: TransactionType) {
@@ -285,11 +381,11 @@ export class PartyCreditService {
 
     const creditConfigured = this.isCreditConfigured(party);
 
+    const outstandingScope = this.outstandingScopeFromInput(input);
+
     if (!creditConfigured) {
-      const existingOutstanding = await this.getPartyOutstanding(
-        input.partyProfileId,
-        input.excludeTransactionId,
-      );
+      const existingOutstanding =
+        await this.getPassengerOutstanding(outstandingScope);
 
       return {
         allowed: true,
@@ -311,10 +407,8 @@ export class PartyCreditService {
 
     const applicableCreditLimit = this.resolveApplicableCreditLimit(party);
     const applicableCreditDays = this.resolveApplicableCreditDays(party);
-    const existingOutstanding = await this.getPartyOutstanding(
-      input.partyProfileId,
-      input.excludeTransactionId,
-    );
+    const existingOutstanding =
+      await this.getPassengerOutstanding(outstandingScope);
     const totalExposure = existingOutstanding + currentOutstanding;
     const availableCredit = Math.max(
       0,
@@ -349,10 +443,8 @@ export class PartyCreditService {
 
     if (applicableCreditDays !== null) {
       const transactionDate = parseDateOnly(input.transactionDate);
-      const oldestOutstandingDate = await this.getOldestOutstandingTransactionDate(
-        input.partyProfileId,
-        input.excludeTransactionId,
-      );
+      const oldestOutstandingDate =
+        await this.getOldestOutstandingTransactionDate(outstandingScope);
 
       if (transactionDate && oldestOutstandingDate) {
         const dueDate = startOfUtcDay(oldestOutstandingDate);
