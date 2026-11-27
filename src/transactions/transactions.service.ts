@@ -97,7 +97,6 @@ import {
   roundMoney,
 } from "./transaction-accounting.util";
 import {
-  isCorporateIndividualTransactionContext,
   isCorporateIndividualTransactionSlug,
   normalizeTransactionSlug,
 } from "./transaction-slug.util";
@@ -3745,20 +3744,8 @@ export class TransactionsService {
           : [];
       const payableTotal = String(refreshedTransaction.finalAmount ?? "0");
       const payableTotalAmount = Number(payableTotal || 0);
-      const requiresPaymentRows = isCorporateIndividualTransactionContext(
-        transactionPayload.slug,
-        transactionPayload.transactionPartyProfileType ??
-          transactionPartyProfileType,
-        passengerPayload?.entityType,
-      );
-      if (
-        !isFakeCurrency &&
-        requiresPaymentRows &&
-        payableTotalAmount > 0 &&
-        paymentRows.length === 0
-      ) {
-        throw new BadRequestException("At least one payment row is required");
-      }
+      // Payment details stay optional for all sale/purchase flows (including
+      // corporate/individual). Auto-filled rows may still be submitted when present.
 
       const totalPaidPreview =
         this.partyCreditService.sumPaymentAmounts(paymentRows);
@@ -3775,6 +3762,12 @@ export class TransactionsService {
           payableAmount: payableTotalAmount,
           payments: paymentRows,
           excludeTransactionId: refreshedTransaction.id,
+          passengerId,
+          panNumber:
+            passengerPayload?.panNumber ??
+            (passengerSnapshot as { panNumber?: string | null } | null)
+              ?.panNumber ??
+            null,
         });
 
         if (!creditPreview.allowed) {

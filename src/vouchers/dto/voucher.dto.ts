@@ -55,6 +55,17 @@ export class OutstandingBillsQueryDto extends PaginationQueryDto {
   @IsString()
   @IsNotEmpty()
   slug: string;
+  @ApiProperty({
+    description:
+      "Outstanding bills are scoped by passenger PAN (not party profile id)",
+  })
+  @EmptyStringToUndefined()
+  @IsString()
+  @IsNotEmpty()
+  @Matches(/^[A-Z]{5}[0-9]{4}[A-Z]$/i, {
+    message: "PAN Number must be a valid 10-character Indian PAN",
+  })
+  panNumber: string;
   @ApiProperty() @IsUUID() branchId: string;
   @ApiProperty() @IsUUID() counterId: string;
   @ApiProperty() @IsDateString() transactionDate: string;

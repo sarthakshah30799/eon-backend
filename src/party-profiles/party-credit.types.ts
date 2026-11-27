@@ -29,6 +29,12 @@ export type PartyCreditValidationInput = {
   payableAmount: number;
   payments?: Array<{ amount?: string | number | null }> | null;
   excludeTransactionId?: string | null;
+  /**
+   * Outstanding bills: selected party + passenger id (else PAN) + sale/purchase type.
+   * Branch is not applied. PAN separates different individuals on the same party profile.
+   */
+  passengerId?: string | null;
+  panNumber?: string | null;
 };
 
 export type PartyCreditProfile = {
